@@ -1,14 +1,29 @@
-//! 星表 (xīngbiǎo) — the shared declared-workspace-data substrate.
+//! 星表 (xīngbiǎo) — the single reader of truth for **what the workspace tree IS**.
 //!
 //! Reads `cargo metadata --no-deps` and looks up packages and their crate-root source files:
 //! the tabulated catalog every observation dimension references before it observes. Spawns
-//! `cargo` and parses its JSON (`serde_json` + std only, no `syn`). Also carries the shared
-//! path-identity primitives ([`canonicalize_or_fail`], [`try_visit`]) a module-graph cycle/dedup
-//! guard needs — the same "single reader of truth" role, one file-identity notch finer than
-//! which file is a crate root.
+//! `cargo` and parses its JSON (`serde_json` + std only, no `syn`).
 //!
-//! Sits beneath static (圭表) and semantic (渾儀) dimensions as a single reader of truth,
-//! preventing twin-drift in target resolution across observation dimensions.
+//! **The criterion, because this charter has widened twice and an enumeration of what it holds goes
+//! stale.** A fact belongs here when every dimension must agree on it *before* observing, and it is a
+//! fact about the tree rather than a reading of what the tree contains. Which packages exist and where
+//! their roots are; whether two paths are one file; whether a path is there at all, and whether being
+//! unable to tell is the same answer as its absence. Each of those is asked by 圭表, 渾儀 and 漏刻
+//! alike, and a dimension answering it privately is how three readers came to disagree about one tree.
+//!
+//! **What the criterion refuses** is as load-bearing as what it admits: an interpretation of source is a
+//! dimension's own observation, not a fact about the tree. `cargo metadata` says which file is a crate
+//! root; what the tokens in that file mean is 圭表's or 渾儀's answer and belongs to whichever is
+//! asking. The line is between *what is there* and *what it says*.
+//!
+//! The widenings are named rather than left to be inferred: the path-identity primitives
+//! ([`canonicalize_or_fail`], [`try_visit`]) arrived for a module-graph cycle guard, and the
+//! filesystem-answer policy ([`is_absence`] and its readers) arrived after all three dimensions were
+//! measured collapsing *absent* into *unreadable* — each is one notch finer than the last, on the same
+//! question of what the tree holds.
+//!
+//! Sits beneath all three observation dimensions — static (圭表), semantic (渾儀) and runtime (漏刻,
+//! through its CI-only `audit` face) — preventing twin-drift in what they take the tree to be.
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

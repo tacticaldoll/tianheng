@@ -335,7 +335,18 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
 - **Module Resolution & Safety Key Disambiguation.** Keyed identity for *governance* (what to report a violation under) and keyed identity for *safety/resolution bookkeeping* (what counts as "the same thing open", or where a file's own children live) are separate keys. A fix must target the underlying shared model rather than a single reported instance (the 0.2.2 module resolution lesson).
 - **圭表's source concern is the declared layer; the resolved layer is cargo-deny's.** Tianheng governs the declared per-target layer (manifest hygiene, declared imports); resolved whole-graph build-provenance belongs to `cargo-deny`.
 - **`xuanji` is an internal refactor (reaction model), `serde_json`-only.** Holds dimension-agnostic types (`Violation`, `Report`, `Baseline`, `Outcome`) beneath all dimensions without observation engines.
-- **`xingbiao` is the shared workspace-data substrate.** Cargo metadata reading logic is consolidated into `xingbiao` below the 三儀 to prevent twin-drift.
+- **`xingbiao` is the single reader of truth for what the workspace tree IS.** Cargo metadata reading was
+  the first thing consolidated there below the 三儀 to prevent twin-drift, and the charter has widened twice
+  since — path identity for a module-graph cycle guard, then the filesystem-answer policy separating an
+  absent path from one no reader could stat. Both were earned by the same failure: a dimension answering
+  privately, and three readers then disagreeing about one tree.
+
+  **So the decision is the criterion rather than the instance.** A fact belongs there when every dimension
+  must agree on it *before* observing AND it is a fact about the tree rather than a reading of what the tree
+  contains. What that refuses is the load-bearing half: an interpretation of source is a dimension's own
+  observation. `cargo metadata` says which file is a crate root; what the tokens in that file mean belongs
+  to whichever dimension is asking. The line is between *what is there* and *what it says*, and a widening
+  that cannot be argued across it is a new crate's job, not this one's.
 - **The semantic capability-admission test (the gate against lints).** A semantic capability is admissible in 渾儀 iff: (1) declarative-not-lint; (2) no essential gap on local-crate AST; (3) anchorable to a `syn`-resolvable element.
 - **Name resolution is a 渾儀-internal shared layer (`hunyi::resolve`).** `guibiao` (syn-free scanner) and `hunyi` (`syn` AST) retain separate resolution engines to maintain the syn quarantine.
 - **漏刻 (runtime) is identity-coherent.** Prod face (`assert_boundary!`) is std-light and fail-closed; CI face (`audit_probe_coverage`) is feature-gated behind `audit` (`xingbiao` dependency). The shipped default sink never panics on a broken stderr write, and never silently loses that failure either: it counts it (`dropped_sink_events`), a single infallible atomic add, so an adopter who never calls `set_sink` can still detect the loss from outside the process.
