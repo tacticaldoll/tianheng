@@ -378,6 +378,22 @@ identifier `cfg_attr`; every other parenthesised group carries none.
 - **PINNED-BY** `a_cfg_attr_predicate_is_not_an_applied_module_target`
 - **PINNED-BY** `a_path_inside_a_compound_predicate_is_still_a_predicate`
 
+**The attribute admitting applied metas is the built-in `cfg_attr`, whose path is exactly that one
+segment.** A group is an applied-meta position only where its `(` follows that path, so a qualified
+look-alike — `foo::cfg_attr(a, path = "…")` — carries no module target, and neither does any other
+attribute taking a `path` argument of its own. **Trivia SHALL NOT decide what a path is**: whether a
+segment is reached through `::` is a fact about the token before it, and a reader answering it by looking
+behind over whitespace alone read `foo::/**/cfg_attr` as unqualified, restoring the same over-read through
+a third spelling. A comment between the separator and the segment is trivia and changes nothing.
+
+#### Scenario: A qualified look-alike is not the built-in attribute
+
+- **WHEN** a declaration carries `#[cfg_attr(any(), foo::cfg_attr(a, path = "bogus"), path = "real.rs")]`,
+  with or without a comment between `::` and `cfg_attr`, and `bogus` exists and holds a probe
+- **THEN** only `real.rs` is read, so the probe in `bogus` is not coverage and a declared seam with no
+  other probe reacts
+- **PINNED-BY** `a_path_qualified_look_alike_is_not_cfg_attr`
+
 The identical union SHALL apply to a `cfg_attr`-wrapped `#[path]` on an **inline** `mod name { ... }`
 (a body, not a `;`-terminated declaration), where it governs the **base directory** `name`'s own
 nested items resolve from rather than a file to read (the body itself is already present in source
