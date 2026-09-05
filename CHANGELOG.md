@@ -493,6 +493,27 @@ them.
 
 ### Self-governance
 
+- **The sweep's third pass, and the sweep wrote an instance of the class it was measuring.** Four more
+  entries evaluated. The one that matters is the relative-anchor bound, whose corpus command was re-run: it
+  answers three live offences against ten at the previous reading, and **one of the three had been written
+  minutes earlier by the sweep's own repair** — inside the paragraph whose subject is a figure attached to
+  the wrong corpus. All three are anchored to `0.6.0` now. The count falling is not the finding; *the class
+  is produced by the hand repairing it* was already recorded once and has now held for a second window
+  running, at an interval of minutes rather than days. Nothing observed any of it, which is what the declared
+  bound says will happen.
+
+  The other three are negatives with their measurements, recorded because a trigger nobody re-reads is a
+  stale answer whichever way it points. *Every commit on the release branch came through a pull request* —
+  101 of 101, asked of the API per commit rather than matched against a listing, which is the direction that
+  cannot miss one a listing's limit truncated. *The two irreversible-act wrappers have not diverged* —
+  `merge-pr.sh` grew 58 lines while `publish.sh` was untouched, which is the shape a divergence would arrive
+  in, and every named shared construct is still present in both with the structural ones matching in count;
+  the growth is the pull-request re-reads, which the publish side has no counterpart for. *And no stolen doc
+  changed what a reader did* — but that entry had moved its trigger off a count on the ground that it was
+  *a count nothing produces*, and this window produced two more instances of the class, both found by review
+  and repaired where they were made. The count is produced; what nothing produces is a reaction that
+  produces it, and the entry now says the second rather than the first.
+
 - **The sweep continued over the rest of the live entries, and `PROJECT.md` was refuted by its own next
   decision.** Three more findings, each a claim rather than a reaction — nothing behaved differently, which is
   why nothing caught them.

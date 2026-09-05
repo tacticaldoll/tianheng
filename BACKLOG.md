@@ -811,8 +811,8 @@ consumer for an undemonstrated deduplication.
   *after the release was cut*, which is what makes a window's ratio a fact about a window; a mid-window
   reading recorded in the same sentence shape is a figure attached to an incomplete corpus. Nothing
   disagreed with it because nobody re-ran it. Both readings are kept, each stating the count it was taken
-  over, so the next comparison is against a number that says when. **The figure for this window is the one
-  taken after the cut, and neither of these is it.**
+  over, so the next comparison is against a number that says when. **`0.6.0`'s figure is the one taken after
+  its cut, and neither of these is it.**
 
   ```bash
   git log --format='@%H' --name-only <previous-release-commit>..<release-branch> | awk '
@@ -1055,7 +1055,14 @@ consumer for an undemonstrated deduplication.
   did. *Risk:* the cost is recorded verbatim by `hermetic_git.rs`'s own header for its own extraction — *the
   undocumented copy was then given a doc written without reading the other, and that doc overclaimed*.
   *Promotion trigger:* a second divergence between the two wrappers' shared constructs, or a defect found in
-  one copy and not the other. *Version class:* patch; both scripts reach no tarball. *Authority:*
+  one copy and not the other. **Not fired, measured 2026-09-06** — the reading matters because `merge-pr.sh`
+  grew by 58 lines in `0.6.0` while `publish.sh` was not touched at all, which is the shape a divergence
+  would arrive in. Every named shared construct is present in both and the structural ones match in count
+  (`require_a_verdict`, `require_one_pass`, the `mktemp`, and the ERR and EXIT traps); the growth is the
+  post-gate re-reads of a pull request's base and head, which `publish.sh` has no counterpart for because it
+  judges no pull request. The race those close does exist on the publish side and is filed separately as one
+  the wrapper can only narrow — found in both and answered differently for a stated reason, which is not the
+  drift this trigger watches for. *Version class:* patch; both scripts reach no tarball. *Authority:*
   `repository-checks`. *Shape:* one sourced library under `scripts/` holding the shared constructs and the
   verdict-file lifecycle, with `gate_exit_classes` widened to assert **one** definition site rather than two
   agreeing copies. Filed rather than done because the extraction lands at a release cut and the two
@@ -1189,9 +1196,11 @@ consumer for an undemonstrated deduplication.
   worktree-building `pin_bites`. Filed rather than done because this repository's own rule is evidence before
   promotion, and the evidence measured zero.
 
-  **Not fired, swept 2026-09-01.** Every commit on `release/0.6.0` resolves to a merged pull request, checked
-  the same way as the `0.4.0` measurement — each commit's hash against the merge commit of every merged pull
-  request. The structural gap is unchanged; the evidence still measures zero.
+  **Not fired, swept 2026-09-01 and re-swept 2026-09-06 at 101 commits.** Every commit on `release/0.6.0`
+  resolves to a merged pull request, asked of the API per commit
+  (`gh api repos/:owner/:repo/commits/<sha>/pulls`) rather than by matching against a listing, which is the
+  direction that cannot miss a pull request the listing's limit truncated. **101 of 101.** The structural gap
+  is unchanged; the evidence still measures zero.
 
 - **WATCH: The declared MSRV is observable only in CI.** *Class:* WATCH. *Observed pressure:* `rust-version =
   "1.85"` lives in `Cargo.toml` and nothing pins the local toolchain, so the Definition of Done compiles on
@@ -1432,6 +1441,17 @@ consumer for an undemonstrated deduplication.
   doc rather than a wrong verdict. *Promotion trigger,* restated so it does not rest on a count nothing
   produces: an instance where the stolen doc changed what a reader **did**, rather than what they would have
   read — a repair made against the wrong function, or a bound declared from a doc describing something else.
+
+  **Evaluated 2026-09-06: the restated trigger did not fire, and the premise for restating it did.** No
+  stolen doc changed what a reader **did** in `0.6.0`. But the trigger was moved off a count on the ground
+  that it was *a count nothing produces*, and `0.6.0` produced two more instances of the class: a paragraph
+  describing `declared_dependencies` sitting above the helper it was not about, and `run`'s extraction
+  history opening `run_exact`'s doc — the second caught only because a delegation would have made it worse
+  rather than better. Both were found by review and repaired in the window that made them. So the count is
+  produced; what nothing produces is a **reaction** that produces it, and those are different sentences. The
+  restated trigger stands, because *a repair made against the wrong function* remains the thing worth
+  promoting on, but the reason recorded for restating it is corrected here rather than left to read as
+  measured.
 
   **What this entry could not do for itself.** Its trigger was written, both halves fired, and the entry sat
   unchanged for a full round of review — because nothing evaluates a promotion trigger. A `WATCH` is carried
@@ -2255,6 +2275,19 @@ consumer for an undemonstrated deduplication.
   carried ten and `AGENTS.md` one, every one of them written by the hand that had just repaired the class
   elsewhere. Nothing observed it, which is this bound, working as declared.
 
+  **Re-measured 2026-09-06 over the same corpus, and the sweep that ran it added one.** The command answers
+  five in `BACKLOG.md` and one in `AGENTS.md`, against eleven at the previous reading. The `AGENTS.md` hit is
+  its own declaring row; of the five, one sits in the closed reproduction records and one is anchored by
+  naming its release in the same clause, both exempt by the dispositions below — leaving **three offences**,
+  down from ten. Two are `0.6.0`'s lexical and substrate entries and **one was written by the promotion-trigger
+  sweep itself**, in the very repair whose subject is a figure attached to the wrong corpus. All three are
+  anchored to `0.6.0` now.
+
+  The count falling is not the interesting half. *The class is produced by the hand repairing it, again* —
+  which the previous reading already recorded and which held for a second window running, and the shortest
+  interval yet was minutes rather than days. Nothing observed any of it; the bound says so, and the bound is
+  the only thing that did.
+
   *And the disposition of all thirteen occurrences is sharper than the earlier sweep suggested.* That sweep
   reported that most of what a widened reaction would see is not an offence. Counted this time: one is
   `AGENTS.md`'s own row **declaring** the phrases, two sit in the closed reproduction records this file
@@ -2394,13 +2427,13 @@ consumer for an undemonstrated deduplication.
   it stands, and the repository already treats independent hand-written implementations as a feature
   rather than a cost — `cfg_if_transparency_conformance` exists to hold two of them in step rather than
   merge them, and `PROJECT.md` records the `cfg_if` carve-out as *each hand-written*. *Against:* the same
-  lexical logic is written twice, and this window measured what that produces — 圭表 and 漏刻 each missed
+  lexical logic is written twice, and `0.6.0` measured what that produces — 圭表 and 漏刻 each missed
   a different subset, and neither was the correct one. Duplication is not neutral here; it is the
   mechanism that generated two distinct hole sets from one question.
 
   **Option B — one lexical substrate below the dimensions.** *For:* `xingbiao` exists for precisely this
   failure mode — `PROJECT.md` records it as the shared workspace-data substrate *consolidated below the
-  三儀 to prevent twin-drift* — and this window put `is_absence` there for the same reason, after the same
+  三儀 to prevent twin-drift* — and `0.6.0` put `is_absence` there for the same reason, after the same
   collapse was found in all three. One owner means a new spelling is one fix. *Against:* two costs, and
   the second is the one that decides it. First, `xingbiao`'s stated job is workspace data; a Rust
   tokenizer is not that, so either its charter widens or a crate is born — and the drift law admits a
