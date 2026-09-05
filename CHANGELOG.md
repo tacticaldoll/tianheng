@@ -30,6 +30,12 @@ them.
   wherever a baseline is kept, and re-apply any `owner` / `tracker` annotations onto the newly observed
   facts. `#[cfg_attr(unix, cfg_attr(a, path = "x.rs"), cfg_attr(b, path = "y.rs"))]` is the shape; several
   SEPARATE `cfg_attr` attributes carrying one `path` each were already unioned and are unaffected.
+- **Regenerate any recorded baseline if a boundary declares a module path, allowlist entry, or confined
+  crate name with a raw identifier (`r#name`).** Those rules keyed on the spelling as written while the
+  evaluation folded it, so the two forms were one boundary to the matcher and two identities to the
+  baseline. They are now one: run `tianheng check --write-baseline <file>` wherever a baseline is kept and
+  re-apply any `owner` / `tracker` annotations. A declaration carrying no `r#` anywhere is unaffected —
+  every key is byte-identical.
 - **Make every module target readable, or expect exit `2` naming it.** A module file or directory the audit
   cannot open is no longer tolerated as an absent one. Where a `#[cfg]`-gated declaration sat over an
   unreadable subtree, the audit previously reported the seam inside it as unprobed — or passed clean where
@@ -40,6 +46,25 @@ them.
   accepts; it now resolves, and no baseline existed to move.
 
 ### Semantic and runtime
+
+- **BREAKING** — **A rule's key canonicalizes every module path it carries, as its evaluation already did.**
+  `module_check` maps `canonical_module_path` over an allowlist so a boundary may be written with `r#name`
+  or `name` and match either way, and folds a confined crate the same way. Two key arms did not:
+  `canonical_module_set` sorted and deduped the spellings it was given without deciding which spellings are
+  one path, and `ConfineExternalCrate` keyed on `package_name_to_import_ident` alone, which replaces `-`
+  with `_` and nothing else — so a raw prefix survived it.
+
+  Measured, each taken alone because the first assertion to fail hides the rest:
+  `allowed: "[\"crate::r#type\"]"` against `"[\"crate::type\"]"`, and `crate: "r#gen"` against `"gen"`.
+  So a declaration rewritten between the two spellings — a rename to a reader and to the evaluator — moved
+  the identity every recorded violation is filed under. That is the class the trait-impl-locality entry in
+  `BACKLOG.md` closed by re-keying, in two arms it did not reach.
+
+  Both specifications already ended their canonicalization scenarios with *having been canonicalized to one
+  identity*, and both spoke only of **matching**. They now say the recorded identity too.
+
+  **Why a minor:** an adopter whose declaration carries `r#` anywhere has a baseline that no longer
+  describes their tree. One carrying none is unaffected — every key is byte-identical.
 
 - **BREAKING** — **A module target this reader cannot read is refused, never tolerated as an absent one.**
   `is_file()` answers `false` for two different facts. Measured as uid 1000: a directory at mode `000`
