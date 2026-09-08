@@ -1,0 +1,65 @@
+# The ambient channels a hermetic `git` must not follow, one per line, as behavioural cases.
+#
+# A row opens with its kind. A `case` row carries four more TAB-separated fields — the channel's name, how it
+# is injected, the observation it moves, and what an isolated command reads. A `baseline` row carries one: a
+# variable to clear before any case runs. Blank lines and lines opening with `#` are prose.
+#
+# **One inventory, consumed by every builder.** `kanhe::hermetic_git` owns the isolation and two `shengmo`
+# test targets transcribe it, because `kanhe` depends on `shengmo` and the edge would close a cycle. A matrix
+# written out per site is a matrix that diverges per site: the first spelling of these cases covered four
+# channels in one file and the same four in the other, and the configuration channels beyond
+# `GIT_CONFIG_PARAMETERS` were in neither. The cases live here so a channel added here is a case every
+# builder starts owing.
+#
+# An isolated reading that is empty is spelled `(empty)`: a field left blank ends the line with a tab, which
+# this repository's whitespace check refuses — and a sentinel a reader decodes is clearer than a field whose
+# absence has to be inferred.
+#
+# Injection: `git-dir`, `work-tree`, `index` and `config-file` name a path in the decoy repository the
+# runner builds; `literal:<value>` is passed as written; `indexed:<key>=<value>` occupies git's indexed
+# configuration channel, which is three variables spelling one channel.
+#
+# Observation: `log` reads the subject of HEAD, `status` the worktree against the index, `ls-files` the
+# index, and `config-probe-marker` the configuration git resolves.
+#
+# **Two sets, not one.** A `case` row names a channel to attack; a `baseline` row names a variable that must
+# be cleared before any case runs. They were the same list, and deriving the baseline from the attack cases
+# left `GIT_CONFIG_NOSYSTEM` in the inherited environment — a variable the builder sets and no case attacks,
+# which suppresses the system-config channel and so changes what the `GIT_CONFIG_SYSTEM` case's control
+# reads. What may be attacked and what must be emptied are different questions about the same names.
+#
+# Each case carries its own control: the same reading taken by a bare `Command` must differ from the
+# isolated one, or the case demonstrates no channel and its assertion would hold for the wrong reason.
+#
+# **A case names a channel, not one line of the builder.** Deleting a single guard and watching a case is
+# what says which line carries it, and two of the answers were not what the builder's own header claimed.
+# Measured, one variable at a time:
+#
+#   GIT_CONFIG_SYSTEM alone removed        still green   -- NOSYSTEM carries it
+#   GIT_CONFIG_NOSYSTEM alone removed      still green   -- SYSTEM carries it
+#   both removed                           BITES         -- they are redundant with each other
+#   GIT_CONFIG_COUNT alone removed         still green
+#   GIT_CONFIG_KEY_0 alone removed         BITES         -- occupying index 0 is what closes the channel
+#
+# So the indexed channel is closed by taking the KEY, not by pinning the COUNT, which is the opposite of
+# what `hermetic`'s header said; and the system file has two guards where one would do. Both are recorded
+# rather than tidied: redundancy that has been measured is a different fact from redundancy nobody checked.
+case	GIT_DIR	git-dir	log	judged
+case	GIT_WORK_TREE	work-tree	status	(empty)
+case	GIT_INDEX_FILE	index	ls-files	judged.txt
+case	GIT_CONFIG_PARAMETERS	literal:'probe.marker=ambient-probe'	config-probe-marker	isolated
+case	GIT_CONFIG	config-file	config-probe-marker	isolated
+case	GIT_CONFIG_GLOBAL	config-file	config-probe-marker	isolated
+case	GIT_CONFIG_SYSTEM	config-file	config-probe-marker	isolated
+case	GIT_CONFIG_COUNT	indexed:probe.marker=ambient-probe	config-probe-marker	isolated
+baseline	GIT_DIR
+baseline	GIT_WORK_TREE
+baseline	GIT_INDEX_FILE
+baseline	GIT_CONFIG
+baseline	GIT_CONFIG_PARAMETERS
+baseline	GIT_CONFIG_GLOBAL
+baseline	GIT_CONFIG_SYSTEM
+baseline	GIT_CONFIG_NOSYSTEM
+baseline	GIT_CONFIG_COUNT
+baseline	GIT_CONFIG_KEY_0
+baseline	GIT_CONFIG_VALUE_0

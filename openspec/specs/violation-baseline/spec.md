@@ -1,0 +1,193 @@
+# violation-baseline Specification
+
+## Purpose
+
+Let a dirty project adopt a boundary without first fixing every pre-existing violation. A baseline
+is a generated snapshot of accepted violations, not policy; the gate suppresses recorded violations,
+fails only on new drift, and reports stale entries so accepted debt can ratchet down.
+
+## Subject
+
+- `crates/xuanji/src/baseline.rs`
+- `crates/tianheng/tests/baseline_cli.rs`
+
+## Requirements
+
+### Requirement: Baseline records accepted violations
+
+A baseline SHALL record a set of accepted violations using the exact semantic format
+`tianheng.baseline/structured-facts`. Each entry SHALL be identified by its governed target,
+semantic rule key, and structured fact identity, and SHALL retain human rule/finding presentation
+for diagnosis. The baseline SHALL be a generated reaction snapshot, never policy: boundaries,
+rules, severity, and reasons remain declared in Rust. Presentation, reason, severity, file, anchor,
+polarity, diagnostics, `owner`, and `tracker` SHALL NOT enter identity.
+
+The JSON document SHALL carry `format` and an identity-sorted `violations` array; it SHALL NOT carry
+a numeric Tianheng baseline version. Entries SHALL support optional string `owner` and `tracker`
+governance annotations, emitted only when set. Entries SHALL be sorted and de-duplicated by full
+structured identity; for duplicate identities, the first occurrence in the parsed document SHALL
+be kept before identity sorting.
+
+Only the exact semantic format SHALL parse. A numeric v1/v2 document, an unmarked document, a
+different semantic format, or malformed data SHALL be an error rather than a legacy identity mode.
+
+#### Scenario: A semantic baseline round-trips through JSON
+
+- **WHEN** a baseline of known violations is written and read
+- **THEN** it retains the semantic format, structured identities, presentations, and optional annotations
+
+#### Scenario: Presentation and annotations do not affect matching
+
+- **WHEN** an entry's presentation, owner, or tracker changes but its target/rule/fact identity does not
+- **THEN** it suppresses exactly the same violation
+
+#### Scenario: A duplicate identity keeps the first entry
+
+- **WHEN** two entries have the same target, rule key, and fact but different presentation or annotations
+- **THEN** parsing de-duplicates them and keeps the first document occurrence's attached data before identity sorting
+
+#### Scenario: A legacy or unknown format is an error
+
+- **WHEN** a baseline is numeric v1/v2, unmarked, malformed, or declares another semantic format
+- **THEN** parsing fails loud rather than matching through presentation or assuming a migration generation
+
+### Requirement: Optional baseline metadata has a strict input type
+
+For each semantic baseline entry, the parser SHALL accept `owner` and `tracker` only when absent,
+JSON null, or a JSON string. Absent and null SHALL mean no annotation; a string SHALL be preserved.
+Any other JSON type SHALL make the baseline malformed. Generated baselines SHALL omit unset fields.
+
+#### Scenario: Omitted and null metadata are absent
+
+- **WHEN** an entry omits owner/tracker or supplies JSON null
+- **THEN** parsing records no annotation and serialization omits the unset field
+
+#### Scenario: String metadata is preserved
+
+- **WHEN** an entry supplies an owner or tracker string
+- **THEN** the exact string survives parse and serialization
+
+#### Scenario: Wrong-typed metadata invalidates the baseline
+
+- **WHEN** owner or tracker is a number, boolean, array, or object
+- **THEN** parsing fails with an error identifying the malformed annotation
+
+### Requirement: Gate suppresses baselined violations and fails only on new ones
+
+In gate mode the system SHALL classify current violations by exact structured identity. A matching
+violation SHALL be accepted and SHALL NOT cause failure. An unmatched violation SHALL react by its
+severity. Exit 1 SHALL occur only when an unmatched enforce-severity violation exists; warn and
+accepted violations SHALL NOT fail. No text-matching fallback SHALL exist.
+
+#### Scenario: A structured pre-existing violation does not fail
+
+- **WHEN** every current enforce violation has a matching target/rule/fact identity
+- **THEN** the gate exits 0 even if presentation or diagnostics changed
+
+#### Scenario: Presentation equality cannot substitute for fact identity
+
+- **WHEN** a current violation has the same displayed text but a different structured identity
+- **THEN** it is new and reacts according to severity
+
+#### Scenario: A new enforce violation fails
+
+- **WHEN** an enforce violation has no exact structured baseline identity
+- **THEN** the gate exits 1 and reports it as new
+
+### Requirement: Stale baseline entries are reported but do not fail
+
+The system SHALL report every semantic baseline entry whose structured identity matches no current
+violation as stale. A stale entry SHALL retain its presentations and annotations for diagnosis and
+SHALL NOT cause failure.
+
+#### Scenario: A fixed violation leaves a stale entry
+
+- **WHEN** a baseline identity matches no current violation
+- **THEN** the system reports its target, rule key, fact identity, presentation, and annotations as stale without failing
+
+### Requirement: Writing a baseline records the current violations
+
+The write action SHALL record current violations in `tianheng.baseline/structured-facts` and exit 0,
+because recording is not judging. It SHALL refuse to write and exit 2 when the constitution cannot
+be evaluated. If the target is missing, it SHALL create the semantic baseline. If the target is a
+valid supported baseline, it SHALL regenerate the snapshot and carry owner/tracker forward across
+exact identity matches; new entries receive no annotations and stale entries are dropped.
+
+If an existing target is unreadable, malformed, unmarked, numeric v1/v2, or another semantic
+format, the action SHALL fail loud and SHALL NOT overwrite it. Its error SHALL tell the adopter to
+preserve desired annotations, move or delete the unsupported file, and invoke the same write action
+again. It SHALL NOT attempt automatic migration or reconstruct identity from presentation.
+
+A **zero-length** target is the single exception, and SHALL be recorded afresh rather than refused.
+The refusal above protects hand-authored owner/tracker annotations, which no rerun can reconstruct;
+zero bytes cannot hold any, so refusing protects nothing while requiring the adopter to move a file
+by hand — and it is precisely the shape an interrupted create leaves, since the create path
+publishes its directory entry before its first byte. The action SHALL report that it found the
+target empty and recorded a fresh snapshot, so the recovery is not silent. The exception SHALL be
+bounded to zero length: whitespace-only or partially-written content might have held annotations
+before it was damaged, and SHALL stay refused. The gate action (`--baseline`) SHALL NOT share this
+tolerance — a declared baseline it cannot parse remains a scan error that exits 2, because gating
+consumes a declaration the adopter wrote rather than a snapshot it may regenerate.
+
+#### Scenario: Write records current violations in the semantic format
+
+- **WHEN** the write action targets a missing path and observation succeeds
+- **THEN** it writes the current structured identities with the semantic format and exits 0
+
+#### Scenario: Rewriting a supported baseline preserves matching metadata
+
+- **WHEN** a supported entry remains present by exact identity
+- **THEN** regeneration carries its owner/tracker forward even if presentation changed
+
+#### Scenario: A resolved violation drops its metadata
+
+- **WHEN** a previously accepted violation no longer occurs
+- **THEN** regeneration omits the stale entry and its annotations
+
+#### Scenario: Write refuses to overwrite a legacy file
+
+- **WHEN** the target exists as numeric v1/v2, unmarked, unknown-format, malformed, or unreadable data
+- **THEN** the action exits 2 without modifying the file and prints actionable regeneration guidance
+
+#### Scenario: Write records afresh over a zero-length target
+
+- **WHEN** the write action targets an existing file of zero length, as an interrupted create leaves
+- **THEN** it records the current violations, reports that the target was empty and is being recorded afresh, and exits 0 — it does not refuse, because a zero-byte file holds no annotations to preserve
+
+#### Scenario: Write still refuses partially-written content
+
+- **WHEN** the write action targets an existing file holding whitespace or truncated JSON
+- **THEN** it refuses and exits 2 with the preserve-and-move guidance, leaving the file byte-for-byte unchanged, because partial content may have held annotations before it was damaged
+
+#### Scenario: The gate does not tolerate a zero-length baseline
+
+- **WHEN** the gate action is given `--baseline` pointing at a zero-length file
+- **THEN** it reports an invalid baseline and exits 2, rather than reading it as an empty set of accepted violations
+
+#### Scenario: Write refuses on a constitution error
+
+- **WHEN** the constitution cannot be evaluated
+- **THEN** the action exits 2 without writing a baseline
+
+### Requirement: A completed baseline write is durable
+
+The write action SHALL NOT report success before the bytes it recorded are flushed to stable storage. When overwriting an existing baseline it SHALL stage the merged document at a temp path, flush that file, and only then atomically replace the target — so a crash leaves either the previous baseline with its carried-forward owner/tracker annotations fully intact, or the complete new document, never a truncated or empty file in place of either. The ordering is part of the requirement rather than an implementation detail: an atomic replace orders the directory entry alone, so flushing after it would leave exactly the window this closes, and a baseline's hand-authored annotations are not reconstructible from a rerun.
+
+The action SHALL additionally *attempt* to flush the directory entry that the create or the replace published, so a write it already reported as succeeded is not undone by a later crash. That attempt is explicitly best-effort and its failure SHALL NOT fail the write: it strengthens a write that has already landed, and the ways it can be unavailable are platform and filesystem capability limits rather than storage faults, so reporting "cannot write baseline" for a baseline sitting correctly on disk would be the worse outcome. The strict guarantee is therefore the file flush; the directory flush is an unconditional attempt.
+
+The in-place create path protects a reported success only: it publishes its directory entry before its first byte, so a crash mid-create can leave a file with no bytes in it, or with some. The two outcomes SHALL NOT be treated alike, and the zero-length exception stated above is what separates them: a zero-length residue SHALL be recorded afresh by the next write action, which reports what it found and exits 0, because zero bytes cannot hold the annotations the refusal exists to protect. A partially-written or whitespace-only residue SHALL still be refused as unsupported (exit 2) with its remedy named, since it may have held annotations before it was damaged and no rerun can tell. The create path therefore needs no manual step for the state it can actually leave most often, and keeps the loud one for the state that genuinely needs an adopter's judgment.
+
+#### Scenario: An overwrite flushes the staged document before replacing the target
+
+- **WHEN** the write action overwrites an existing supported baseline
+- **THEN** it flushes the staged temp file to stable storage before the atomic replace, and attempts the containing directory's flush after it
+
+#### Scenario: An unflushable directory does not fail a landed write
+
+- **WHEN** the containing directory cannot be flushed — a filesystem that does not support it, or a directory that is writable but not readable
+- **THEN** the write still reports success, because the recorded bytes were flushed and the baseline is in place
+
+#### Scenario: A newly created baseline is flushed before success is reported
+
+- **WHEN** the write action creates a baseline at a missing path
+- **THEN** it flushes the written file, and the containing directory, before reporting that it wrote the baseline

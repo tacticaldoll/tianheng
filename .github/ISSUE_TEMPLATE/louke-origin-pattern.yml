@@ -1,0 +1,40 @@
+name: "漏刻 (louke) — discuss a runtime origin pattern"
+description: Discuss a runtime seam / origin-governance pattern the runtime dimension should express.
+labels: ["louke", "runtime", "discussion"]
+title: "[漏刻] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        漏刻 is the **runtime** dimension — it reacts *in your binary, against live objects*: the
+        concrete type behind a `dyn Trait` crossing an architectural seam, which static and
+        semantic analysis structurally cannot see. This is a **discussion** template (not a bug
+        report): the runtime dimension's demand is the least-proven of the three, so tell us about
+        the seam you want to govern and how you reach it.
+  - type: dropdown
+    id: adoption
+    attributes:
+      label: How did you arrive at 漏刻?
+      description: The runtime dimension's natural path is top-down (through the composed shell), so this signal matters — it tells us whether runtime governance is a primary reason for adoption.
+      options:
+        - "via tianheng (the composed shell) — runtime is a primary reason"
+        - "via tianheng — but runtime is secondary"
+        - "louke standalone (I wire the prod face into my binary directly)"
+        - "just evaluating"
+    validations:
+      required: true
+  - type: textarea
+    id: seam
+    attributes:
+      label: The seam and the pattern
+      description: The `dyn` seam you want to govern, the trait behind it, and which origins should (and should not) cross. Why can static/semantic analysis not see this?
+    validations:
+      required: true
+  - type: textarea
+    id: shape
+    attributes:
+      label: The shape you'd declare (if you have one)
+      description: A sketch of the `RuntimeBoundary::at(...).only_origins([...])` you'd want, or what is missing from today's API.
+      render: rust
+    validations:
+      required: false

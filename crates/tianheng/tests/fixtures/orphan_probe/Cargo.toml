@@ -1,0 +1,11 @@
+# In-repo fixture: a member whose source carries an `assert_boundary!` probe but whose
+# constitution declares no runtime boundary — the orphan-probe case the CI audit must catch.
+# `[workspace]` makes this its own workspace root, decoupled from Tianheng's.
+[package]
+name = "orphan-probe"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+
+[workspace]

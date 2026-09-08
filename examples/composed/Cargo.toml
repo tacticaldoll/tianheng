@@ -1,0 +1,20 @@
+# The composed example — 天衡 (tianheng) as the funnel target: one app governed by all 三儀.
+#
+# Two dependencies, the honest adopter setup: `tianheng` is the CI shell (composes the static
+# 圭表 + semantic 渾儀 + runtime 漏刻 into one `check`), and `louke` is the runtime dimension's
+# **prod face** — an adopter wires it into their own binary (`install` + `assert_boundary!`), so it
+# is a direct dependency here, not reached through the shell.
+#
+# Its own workspace so its deliberate faults are not swept by Tianheng's workspace-wide gates;
+# CI runs it in isolation through `crates/shengmo/tests/examples_suite.rs` with the family patched to local source.
+[package]
+name = "composed_app"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+tianheng = "0.6"
+louke = "0.6"
+
+[workspace]

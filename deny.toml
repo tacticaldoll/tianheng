@@ -1,0 +1,50 @@
+# cargo-deny supply-chain policy — Tianheng gates its own dependency surface, the same
+# spirit as `crates/shengmo/src/law.rs`. This file is repo tooling (it
+# lives at the workspace root, outside the crates, so it is never packaged).
+#
+# Run: `cargo deny check`. Wired into CI as the `supply-chain` job.
+
+[advisories]
+version = 2
+# Deny known-vulnerable and yanked crates (RUSTSEC). No ignores: a real advisory must be
+# fixed or consciously ignored here with a rationale, never silently.
+ignore = []
+# `yanked`'s own default is "warn" (confirmed against a real yanked crate: cargo-deny
+# prints `warning[yanked]` and the run still exits 0), which silently contradicts the
+# claim above — a yanked dependency must fail the `Supply chain (cargo-deny)` CI gate,
+# not merely warn past it.
+yanked = "deny"
+
+[licenses]
+version = 2
+# All four are permissive. **Which crate carries which is not written here** — `cargo deny list`
+# enumerates it against the graph as it is, and a hand-kept copy beside a producer is the shape this
+# repository removes. One stood here, claimed to be exhaustive, and had drifted.
+#
+# What an enumeration cannot carry, and so stays:
+#   Unicode-3.0 — `unicode-ident` is licensed `(MIT OR Apache-2.0) AND Unicode-3.0`. The SPDX `AND`
+#                 means the Unicode term must be accepted explicitly rather than satisfied by the
+#                 permissive half, which is why a fourth entry appears in an otherwise MIT/Apache
+#                 list. Reviewed and accepted: it ships no code we author, only Unicode's own
+#                 character-class data.
+# Adding a dependency under any other license fails CI until it is reviewed here.
+allow = ["MIT", "Apache-2.0", "Unlicense", "Unicode-3.0"]
+confidence-threshold = 0.9
+
+[bans]
+# New external dependencies are already governed by Tianheng's own reaction (the 圭表
+# core is serde_json-only; see crates/shengmo/src/law.rs); here we only flag accidental
+# duplicate versions so the tiny tree stays tidy.
+multiple-versions = "warn"
+
+[sources]
+# This section owns resolved / whole-graph source provenance — what the build *actually* pulls
+# from after the lockfile and [patch]/[source] replace-with, so a [patch]->git redirect surfaces
+# here. Tianheng's crate-source-boundary governs the complementary *declared*, per-target source
+# kind (manifest hygiene / publishability; sees optional-git, blind to [patch] by design). The
+# division is deliberate — resolved is cargo-deny's lane, declared is Tianheng's — which is why
+# resolved build-provenance (would-be capability B) is declined, not a Tianheng feature; see
+# PROJECT.md. (Inverse of [bans] above, where Tianheng governs and cargo-deny only tidies.)
+# Only crates.io and known git sources; an unknown registry/source fails loud.
+unknown-registry = "deny"
+unknown-git = "deny"

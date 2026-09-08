@@ -1,0 +1,43 @@
+# Declared mutations: the perturbation each pinning citation must die under.
+#
+# Four TAB-separated fields — cited test name, tracked path, `from`, `to`. `\n` and `\t` are unescaped in the
+# two substrings, so a perturbation spanning lines is still one record. Blank lines and lines opening with `#`
+# are prose.
+#
+# `from` must occur EXACTLY once in the file it names. An anchor matching twice names a set rather than a site,
+# and `crates/kanhe/tests/pin_bites.rs` refuses to judge rather than substituting the first occurrence.
+#
+# A record is added only after it has been RUN and seen to kill the pin it names. A mutation that fails to
+# perturb the pinned point reports a biting pin as a dead one — the safe direction, but it is noise, and the
+# gate's own matrix is what proves the refusal rather than a record standing in for it.
+a_trait_object_on_a_continuation_line_is_not_recognized	crates/kanhe/tests/observer_protocol.rs	trimmed.starts_with("pub ") && trimmed.contains("dyn ")	trimmed.contains("dyn ")
+the_derived_origin_honors_its_stated_shape_bounds	crates/louke/src/dsl.rs	    let head = match type_path.find('<') {\n        Some(open) => &type_path[..open],\n        None => type_path,\n    };	    let head = type_path;
+a_comment_naming_every_member_for_another_reason_is_refused	crates/kanhe/src/restatement.rs	    !allowlist.is_empty() && allowlist.iter().all(|member| names(block, member))	    !allowlist.is_empty() && allowlist.iter().any(|member| names(block, member))
+a_doc_example_of_the_dependency_dsl_is_refused	crates/kanhe/src/restatement.rs	    line.contains("restrict_dependencies_to(")	    line.contains("restrict_dependencies_to(guibiao")
+# Added for every bound this window declared. Measured before they were written: 61 `PINNED-BY` citations
+# were added since the last release and **no** record was, so a pin was proven to resolve and almost never
+# to bite -- which is how two bounds shipped citing a test about a different stop, each found by review
+# rather than here.
+#
+# **What a window owes is its own bounds, not the standing set.** Paying a record for every citation the
+# repository already carries is not affordable and paying one for each bound a window declares is, so the
+# obligation rides the act that creates the debt: a new bound owes a record.
+#
+# No count is written here, and the reason is that one was. A figure typed into this header named how many
+# bounds the window had declared: true on the day it was typed, and an understatement of the same set
+# before the window closed -- in the file whose own subject is that a hand-written figure outlives its
+# measurement. `pin_bites` prints the figures on every clean run (`N declared mutation(s) covering N of M
+# cited test(s)`), so a reader takes them from the run rather than from a comment that can disagree with it.
+a_repeated_paragraph_in_a_prose_file_is_outside_the_corpus	crates/kanhe/tests/repeated_paragraph.rs	        if !path_str.ends_with(".rs") {	        if !path_str.ends_with(".rs") && !path_str.ends_with(".md") {
+a_repetition_split_by_code_is_not_read	crates/kanhe/tests/repeated_paragraph.rs	    let lines: Vec<&str> = text.lines().collect();\n    let shadowed = shadowed_by_a_literal(text);	    let lines: Vec<&str> = text.lines().filter(|l| l.trim_start().starts_with("//")).collect();\n    let shadowed = shadowed_by_a_literal(text);
+#
+# `hermetic_invocations.rs` reads Rust as tokens, and two of its bounds have no record because of it.
+# `a-git-named-in-prose-is-not-read` and `a-git-constructed-inside-a-string-literal-is-not-read` are what a
+# token stream IS -- comments are discarded, and a literal's contents are not a stream -- so perturbing
+# either means giving that reader a text path back, which is the defect rather than a perturbation of it.
+# Named rather than counted: a denominator here is a count of that target's bounds, and that count grew
+# before the window closed while a figure written beside it did not. Stated so the two are not silent gaps
+# in the table.
+a_construction_through_a_program_value_is_not_read	crates/kanhe/tests/hermetic_invocations.rs	&& string_of(&node.args[0]).as_deref() == Some("git")	&& string_of(&node.args[0]).as_deref() != Some("cargo")
+a_construction_through_a_rename_or_inside_a_macro_is_read	crates/kanhe/tests/hermetic_invocations.rs	                if renamed.ident == "Command" && Self::is_std_process(prefix) =>	                if renamed.ident == "NotCommand" && Self::is_std_process(prefix) =>
+a_worktree_holding_an_undecodable_path_is_not_judged_clean_or_dirty	crates/kanhe/src/publish_source_gate.rs	    git(repo, args).map_err(|err| {\n        cannot_judge_at(\n            "publish-source-integrity#worktree-state-unreadable",\n            format!("could not read the worktree {what}: {err}"),\n        )\n    })	    let _ = what;\n    Ok(git(repo, args).unwrap_or_default())

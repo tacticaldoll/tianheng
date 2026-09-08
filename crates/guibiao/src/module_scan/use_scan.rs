@@ -1,0 +1,945 @@
+//! The `use`-import scan: given a file's source and its module, extract the internal
+//! `crate::…` module paths it imports via `use` — grouped/glob forms expanded, raw
+//! identifiers canonicalized, external crates and out-of-scope forms (bare path
+//! expressions, macro-generated imports) dropped. A `::*` glob is observed at its **base**
+//! module (`use a::b::*;` → `a::b`) and retains its glob shape, so `must_not_import` can react
+//! fail-closed when that base is equal to or an ancestor of a forbidden module. Inline
+//! `mod name { … }` nesting is tracked so `self`/`super` resolve against the real enclosing
+//! module. Depends downward
+//! on [`super::lexer`] (hygiene / token boundaries) and [`super::path_vocab`] (segment
+//! canonicalization, the `mod`-keyword test); pure string processing, no model type.
+
+use super::lexer::{keyword_starts_at, strip_comments_and_strings, strip_macro_bodies};
+use super::path_vocab::{
+    brace_content, canonical_segment, effective_module, fold_canonical_segments, inline_mod_at,
+    is_crate_root_shadow, resolve_self_super, split_top_commas,
+};
+
+/// One normalized internal import path, retaining **which form** the source wrote: a glob so boundary
+/// evaluation can distinguish a direct import from an ancestor-glob hazard, and a `{self}` leaf so it
+/// can tell an import of a module from an import of something in it.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct ImportedPath {
+    pub path: String,
+    pub is_glob: bool,
+    /// The source wrote the path as a `{self}` leaf — `use m::foo::{self};`, or `{self as f}`.
+    ///
+    /// Recorded because the normalized path cannot show it: a `{self}` leaf normalizes to its prefix
+    /// module, so `use m::foo::{self};` and a bare `use m::foo;` are byte-identical afterward while
+    /// binding different things.
+    pub is_self_leaf: bool,
+}
+
+impl ImportedPath {
+    /// Whether this import form can bind a **value** declared in the path's parent module.
+    ///
+    /// Only a plain leaf can. Both other forms are ruled out by the language, not by likelihood:
+    ///
+    /// - a **glob** imports the *contents* of the named module and never the name itself, so with
+    ///   `mod foo` and `fn foo` both declared, `use m::foo::*;` then calling `foo()` is
+    ///   `error[E0425]: cannot find function 'foo' in this scope`;
+    /// - a **`{self}` leaf** imports the named module, so the same declarations give
+    ///   `error[E0423]: expected function, found module 'foo'` while `foo::INSIDE` compiles.
+    ///
+    /// One question with two source facts behind it, named here so a reader of the inbound
+    /// value-namespace reaction meets the language rule rather than two ad-hoc conditions — the second
+    /// of which was missed when the first was added.
+    pub(crate) fn can_bind_a_value(&self) -> bool {
+        !self.is_glob && !self.is_self_leaf
+    }
+
+    #[cfg(test)]
+    pub(crate) fn plain(path: impl Into<String>) -> Self {
+        ImportedPath {
+            path: path.into(),
+            is_glob: false,
+            is_self_leaf: false,
+        }
+    }
+
+    /// A `{self}` leaf: the same path a plain import of this module would normalize to, with the form
+    /// recorded — which is the whole distinction, since the paths are otherwise identical.
+    #[cfg(test)]
+    pub(crate) fn self_leaf(path: impl Into<String>) -> Self {
+        ImportedPath {
+            path: path.into(),
+            is_glob: false,
+            is_self_leaf: true,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn glob(path: impl Into<String>) -> Self {
+        ImportedPath {
+            path: path.into(),
+            is_glob: true,
+            is_self_leaf: false,
+        }
+    }
+}
+
+impl std::ops::Deref for ImportedPath {
+    type Target = str;
+    fn deref(&self) -> &str {
+        &self.path
+    }
+}
+
+/// Each internal import paired with the **module that actually declares it** — inline-aware, so a
+/// `use` inside an inline `mod inner { … }` is attributed to `{current_module}::inner`, not the
+/// file's module. The inbound rules (`MustNotBeImportedBy` / `MustOnlyBeImportedBy`) test the
+/// *importer's* identity, and so do the OUTBOUND rules since their finding carries the importing module
+/// too — one accessor for both families, so they cannot disagree about who imported something. An
+/// import inside an inline `mod inner { … }` is attributed to that module, not the containing file's.
+/// Sorted + deduped by `(importer, import)`.
+pub(crate) fn imports_with_importers(
+    source: &str,
+    current_module: &str,
+    root_modules: &[String],
+) -> Result<Vec<(String, ImportedPath)>, String> {
+    let cleaned = strip_macro_bodies(&strip_comments_and_strings(source));
+    let mut pairs = Vec::new();
+    for (module, tree) in use_trees_with_modules(&cleaned, current_module) {
+        for (leaf, is_glob, is_self_leaf) in expand_use_tree(&tree)? {
+            if let Some(absolute) = normalize_module_path(&leaf, &module, root_modules) {
+                pairs.push((
+                    module.clone(),
+                    ImportedPath {
+                        path: absolute,
+                        is_glob,
+                        is_self_leaf,
+                    },
+                ));
+            }
+        }
+    }
+    pairs.sort();
+    pairs.dedup();
+    Ok(pairs)
+}
+
+/// Each importer module paired with the **external** crate it imports — the mirror of
+/// [`imports_with_importers`] for the one rule that observes external imports (confinement),
+/// instead of dropping them. Same lexical pipeline (comment/string/macro strip, inline-`mod`
+/// attribution, group/glob expansion); the only difference is [`external_crate_head`] in place
+/// of `normalize_module_path`, so an external head is captured **exactly when** the internal
+/// scan would have discarded it as external. Sorted + deduped by `(importer, external crate)`.
+pub(crate) fn external_imports_with_importers(
+    source: &str,
+    current_module: &str,
+    root_modules: &[String],
+) -> Result<Vec<(String, String)>, String> {
+    let cleaned = strip_macro_bodies(&strip_comments_and_strings(source));
+    let mut pairs = Vec::new();
+    for (module, tree) in use_trees_with_modules(&cleaned, current_module) {
+        for (leaf, _is_glob, _is_self_leaf) in expand_use_tree(&tree)? {
+            if let Some(head) = external_crate_head(&leaf, &module, root_modules) {
+                pairs.push((module.clone(), head));
+            }
+        }
+    }
+    pairs.sort();
+    pairs.dedup();
+    Ok(pairs)
+}
+
+/// Each `use … ;` statement paired with the module that lexically encloses it. The
+/// walk tracks inline `mod name { … }` nesting by brace depth, so a `use` inside an
+/// inline submodule is attributed to that submodule (e.g. `crate::a::inner`) rather
+/// than the file's module (`crate::a`); `self`/`super` then resolve against the real
+/// enclosing module, and a bare first segment inside an inline submodule is external
+/// even when the file is the crate root. A `mod name;` with no inline body encloses
+/// nothing. The text is already comment/string/macro-stripped, so every brace is
+/// structural; a `use … ;` is consumed whole, so its own group braces
+/// (`use a::{b, c};`) never perturb the depth.
+fn use_trees_with_modules(source: &str, base_module: &str) -> Vec<(String, String)> {
+    let bytes = source.as_bytes();
+    let mut trees = Vec::new();
+    // (inline module name, enclosing brace depth).
+    let mut mod_stack: Vec<(String, usize)> = Vec::new();
+    let mut depth = 0usize;
+    let mut i = 0;
+    while i < bytes.len() {
+        if keyword_starts_at(bytes, i, b"use") {
+            match super::lexer::scan_use_statement(bytes, source, i) {
+                super::lexer::UseStatementScan::Statement { body, next } => {
+                    trees.push((effective_module(base_module, &mod_stack), body));
+                    i = next;
+                    continue;
+                }
+                super::lexer::UseStatementScan::NotAStatement { resume_at } => {
+                    i = resume_at;
+                    continue;
+                }
+                super::lexer::UseStatementScan::Unterminated => break,
+            }
+        }
+        if let Some((name_start, name_end, brace)) = inline_mod_at(bytes, i) {
+            mod_stack.push((
+                canonical_segment(source[name_start..name_end].trim()).to_string(),
+                depth,
+            ));
+            i = brace; // let the `{` arm below increment the depth
+            continue;
+        }
+        match bytes[i] {
+            b'{' => depth += 1,
+            b'}' => {
+                depth = depth.saturating_sub(1);
+                while mod_stack.last().is_some_and(|(_, d)| *d == depth) {
+                    mod_stack.pop();
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    trees
+}
+
+/// Expand a use tree into leaf paths: `a::{b, c::d}` -> `a::b`, `a::c::d`; drop
+/// `::*` and ` as alias`; `{self}` resolves to the prefix module.
+fn expand_use_tree(tree: &str) -> Result<Vec<(String, bool, bool)>, String> {
+    expand_use_tree_depth(tree, 0)
+}
+
+/// A brace-nesting depth cap so a pathologically nested `use a::{b::{c::{ … }}}` cannot overflow
+/// the stack — a DoS backstop set far beyond any real or lint-clean source (rustfmt-formatted
+/// `use`s nest a handful of levels). Past the cap, fail loud (a scan error) rather than silently
+/// dropping the sub-tree: a real, compilable `use` nested past this depth would otherwise vanish
+/// from observation with no report — the false negative PROJECT.md's core contract forbids.
+const MAX_USE_NEST_DEPTH: usize = 128;
+
+fn expand_use_tree_depth(tree: &str, depth: usize) -> Result<Vec<(String, bool, bool)>, String> {
+    if depth >= MAX_USE_NEST_DEPTH {
+        return Err(format!(
+            "cannot judge a `use` tree nested past {MAX_USE_NEST_DEPTH} brace levels: '{tree}'"
+        ));
+    }
+    let tree = tree.trim();
+    match tree.find('{') {
+        Some(open) => {
+            let prefix = tree[..open].trim();
+            let inner = brace_content(&tree[open..]);
+            let mut out = Vec::new();
+            for part in split_top_commas(&inner) {
+                let part = part.trim();
+                if part.is_empty() {
+                    continue;
+                }
+                // `self` — bare or aliased (`self as x`) — names the prefix module itself, not a
+                // child. Strip a trailing ` as <alias>` before the check so `{self as cfg}` resolves
+                // to the prefix module rather than falling through to the leaf branch and leaving a
+                // phantom `…::self` segment.
+                let head = match part.find(" as ") {
+                    Some(idx) => part[..idx].trim(),
+                    None => part,
+                };
+                if head == "self" {
+                    let module = prefix.trim_end_matches(':').trim();
+                    if !module.is_empty() {
+                        // A `{self}` leaf denotes the PREFIX MODULE, so it normalizes to a path
+                        // indistinguishable from a bare import of that module. The form is recorded
+                        // rather than inferred: `use m::foo::{self};` binds the module `foo`, never a
+                        // `fn foo` beside it, and the normalized path cannot say which was written.
+                        out.push((module.to_string(), false, true));
+                    }
+                } else {
+                    out.extend(expand_use_tree_depth(
+                        &format!("{prefix}{part}"),
+                        depth + 1,
+                    )?);
+                }
+            }
+            Ok(out)
+        }
+        None => {
+            let leaf = match tree.find(" as ") {
+                Some(idx) => &tree[..idx],
+                None => tree,
+            };
+            let (leaf_path, is_glob) = match leaf.trim().strip_suffix("::*") {
+                Some(stripped) => (stripped, true),
+                None => (leaf.trim(), false),
+            };
+            let leaf_path = leaf_path.trim_end_matches(':');
+            if leaf_path.is_empty() {
+                Ok(Vec::new())
+            } else {
+                Ok(vec![(leaf_path.to_string(), is_glob, false)])
+            }
+        }
+    }
+}
+
+/// Resolve a use path to an absolute `crate::…` module path, or `None` if it refers
+/// to an external crate. A first segment of `crate`/`self`/`super` resolves as usual.
+/// A first segment that names a crate-root module (`root_modules`) resolves to
+/// `crate::…` **only when the importing file is the crate root** (`current_module ==
+/// "crate"`): there a sibling `mod` is in scope and shadows the extern prelude, so a
+/// bare `use foo::…` is the local module. In a submodule a bare first segment reaches
+/// only the extern prelude (a bare crate-root-module path there is either an external
+/// crate or a compile error), so it is external. A path written with a leading `::`
+/// (`use ::foo::…`) is explicitly the external/global crate and is always external. Any
+/// other first segment is external (`None`).
+/// Split `path` on `::` into canonicalized (raw-identifier-stripped, trimmed), non-empty
+/// segments — the shared pipeline [`normalize_module_path`] and [`external_crate_head`] both
+/// start from, so a canonicalization fix cannot land in one and not the other.
+fn split_canonical_segments(path: &str) -> Vec<&str> {
+    path.split("::")
+        .map(|segment| canonical_segment(segment.trim()))
+        .filter(|segment| !segment.is_empty())
+        .collect()
+}
+
+fn normalize_module_path(
+    path: &str,
+    current_module: &str,
+    root_modules: &[String],
+) -> Option<String> {
+    // A leading `::` is an explicit external/global path (`use ::serde::…`): it bypasses
+    // the local-module shadow, so it is external even if a crate-root module shares the
+    // name. Checked before segments are split so the marker is not lost.
+    if path.trim_start().starts_with("::") {
+        return None;
+    }
+    let segments = split_canonical_segments(path);
+    let (first, _rest) = segments.split_first()?;
+    match *first {
+        "crate" => fold_canonical_segments(&segments),
+        // `self`/`super` relative resolution — incl. the `super` over-pop guard — lives once in
+        // `path_vocab::resolve_self_super`, shared with the symbol-scan resolvers.
+        "self" | "super" => resolve_self_super(current_module, &segments),
+        other => {
+            // A bare first segment names a crate-root module only at the crate root,
+            // where a sibling `mod` is in scope and shadows the extern prelude — there a
+            // bare `use foo::…` is the local module, so resolve to `crate::…`. In a
+            // submodule the same bare path reaches only the extern prelude (it is an
+            // external crate, or a compile error), so it is external. Gating on
+            // `current_module == "crate"` keeps a submodule's `use serde::…` external
+            // even when a `mod serde;` exists at the crate root. (Explicit external is
+            // written `::name`, handled above.)
+            if is_crate_root_shadow(current_module, other, root_modules) {
+                let mut out = vec!["crate"];
+                out.extend(segments.iter().copied());
+                Some(out.join("::"))
+            } else {
+                None
+            }
+        }
+    }
+}
+
+/// The **external** crate a use path names, or `None` if the path is internal or degenerate.
+/// The precise inverse of [`normalize_module_path`]'s external branch: it returns `Some(name)`
+/// exactly when that function returns `None` *because the head is an external crate* — and
+/// `None` for the non-external cases (`crate`/`self`/`super`, a crate-root module reached bare
+/// at the crate root, an empty path, an over-popped `super`). It reuses the identical
+/// leading-`::`, `crate`/`self`/`super`, and crate-root-module-shadowing resolution, so
+/// "external" has one definition shared with the internal scan, never a divergent one.
+fn external_crate_head(
+    path: &str,
+    current_module: &str,
+    root_modules: &[String],
+) -> Option<String> {
+    // A leading `::` is the explicit external/global form (`use ::libc::…`): the head is the
+    // first real segment, external even when a crate-root module shares the name — the exact
+    // mirror of the early-return `normalize_module_path` makes for the same marker.
+    if path.trim_start().starts_with("::") {
+        return split_canonical_segments(path)
+            .into_iter()
+            .next()
+            .map(str::to_string);
+    }
+    let segments = split_canonical_segments(path);
+    let (first, _rest) = segments.split_first()?;
+    match *first {
+        // Internal roots (or a degenerate/over-popped `super`) — never an external crate.
+        "crate" | "self" | "super" => None,
+        other => {
+            // A bare first segment naming a crate-root module, at the crate root, is the
+            // internal module (the sibling `mod` shadows the extern prelude) — not external,
+            // exactly as `normalize_module_path` resolves it to `crate::…`. Everywhere else a
+            // bare first segment reaches the extern prelude: it is the external crate.
+            if is_crate_root_shadow(current_module, other, root_modules) {
+                None
+            } else {
+                Some(other.to_string())
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// The import PATHS of a source, deduplicated and sorted — derived here from
+    /// [`imports_with_importers`], which production now uses for both rule families.
+    ///
+    /// This was a production accessor until the outbound rules began carrying their importing module
+    /// in identity; with both families reading importers, a paths-only accessor had no caller left. The
+    /// assertions below are the specification of path NORMALIZATION, which is unchanged, so they keep
+    /// their subject through this derivation rather than being deleted with the accessor.
+    fn imported_module_paths(
+        source: &str,
+        current_module: &str,
+        root_modules: &[String],
+    ) -> Result<Vec<ImportedPath>, String> {
+        let mut paths: Vec<ImportedPath> =
+            imports_with_importers(source, current_module, root_modules)?
+                .into_iter()
+                .map(|(_importer, import)| import)
+                .collect();
+        paths.sort();
+        paths.dedup();
+        Ok(paths)
+    }
+
+    use super::*;
+
+    #[test]
+    fn scanner_expands_groups_and_resolves_relative_imports() {
+        let source = r#"
+            // a line comment mentioning use crate::ignored::me;
+            use crate::a::{b, c::d};
+            use super::sibling::X;
+            use self::inner::Y;
+            use serde::Deserialize;
+            use crate::z::*;
+        "#;
+        let imports = imported_module_paths(source, "crate::kernel", &[]).unwrap();
+        assert!(
+            imports.contains(&ImportedPath::plain("crate::a::b")),
+            "{imports:?}"
+        );
+        assert!(
+            imports.contains(&ImportedPath::plain("crate::a::c::d")),
+            "{imports:?}"
+        );
+        // `super` from crate::kernel resolves to crate.
+        assert!(
+            imports.contains(&ImportedPath::plain("crate::sibling::X")),
+            "{imports:?}"
+        );
+        // `self` resolves against the current module.
+        assert!(
+            imports.contains(&ImportedPath::plain("crate::kernel::inner::Y")),
+            "{imports:?}"
+        );
+        // glob keeps the module prefix.
+        assert!(
+            imports.contains(&ImportedPath::glob("crate::z")),
+            "{imports:?}"
+        );
+        // external first segment is ignored, and commented-out imports are not seen.
+        assert!(!imports.iter().any(|p| p.contains("serde")), "{imports:?}");
+        assert!(
+            !imports.iter().any(|p| p.contains("ignored")),
+            "{imports:?}"
+        );
+    }
+
+    #[test]
+    fn a_block_comment_between_use_and_its_path_does_not_fuse_the_keyword() {
+        // A block comment wedged between the `use` keyword and its path must not fuse them —
+        // `use/*re-export*/crate::secret::Thing;` stripped to `usecrate::secret::Thing;` would
+        // leave `use` unrecognized and the import dropped.
+        assert_eq!(
+            imported_module_paths("use/*re-export*/crate::secret::Thing;", "crate", &[]).unwrap(),
+            vec![ImportedPath::plain("crate::secret::Thing")],
+            "a block comment after `use` must not swallow the import",
+        );
+    }
+
+    #[test]
+    fn a_self_alias_in_a_use_group_resolves_to_the_prefix_module() {
+        // `use crate::config::{self as cfg, Setting};` imports the
+        // module `crate::config` (under the alias) plus `crate::config::Setting`. The `self as cfg`
+        // form must resolve to the prefix module, not leave a phantom `crate::config::self` segment.
+        //
+        // The resolved PATH is what it always was; what is added is that the `{self}` form is now
+        // recorded on the import rather than erased by normalization. It has to be: a `{self}` leaf
+        // binds the module, a plain leaf can bind a value beside it, and the two normalize to the same
+        // string — so the inbound value-namespace reaction could not tell them apart and reacted to
+        // both (see `ImportedPath::can_bind_a_value`).
+        let source = "use crate::config::{self as cfg, Setting};";
+        let imports = imported_module_paths(source, "crate", &[]).unwrap();
+        assert_eq!(
+            imports,
+            vec![
+                ImportedPath::self_leaf("crate::config"),
+                ImportedPath::plain("crate::config::Setting"),
+            ],
+            "a `self as alias` in a group resolves to the prefix module: {imports:?}"
+        );
+        // A lone `{self as x}` likewise resolves to the prefix module, never `…::self`.
+        assert_eq!(
+            imported_module_paths("use crate::config::{self as cfg};", "crate", &[]).unwrap(),
+            vec![ImportedPath::self_leaf("crate::config")],
+        );
+        // And the sibling leaf beside it is a plain import, so the form is per-leaf rather than
+        // per-statement — a `{self}` in one group does not mark the group's other leaves.
+        assert!(
+            !imports[1].is_self_leaf && imports[1].can_bind_a_value(),
+            "a sibling leaf keeps the plain form: {imports:?}"
+        );
+    }
+
+    #[test]
+    fn super_past_the_crate_root_is_not_an_internal_module() {
+        // `crate::a` has one ancestor (`crate`); `super::super` over-pops past the root.
+        // Such a path names no internal module (and does not compile), so it must not be
+        // observed — never a malformed root-less path like "other::X".
+        let over = "use super::super::other::X;\n";
+        assert!(
+            imported_module_paths(over, "crate::a", &[])
+                .unwrap()
+                .is_empty(),
+            "over-popped super must yield no import: {:?}",
+            imported_module_paths(over, "crate::a", &[]).unwrap()
+        );
+        // A single `super` from `crate::a` still resolves to `crate::other::X`.
+        let ok = "use super::other::X;\n";
+        assert_eq!(
+            imported_module_paths(ok, "crate::a", &[]).unwrap(),
+            vec![ImportedPath::plain("crate::other::X")],
+        );
+    }
+
+    #[test]
+    fn scanner_ignores_comments_and_string_literals() {
+        // A `//` inside a string must not eat a real `use` later on the same line.
+        let url = r#"let u = "http://example.com"; use crate::real::A;"#;
+        let imports = imported_module_paths(url, "crate::kernel", &[]).unwrap();
+        assert!(
+            imports.contains(&ImportedPath::plain("crate::real::A")),
+            "{imports:?}"
+        );
+
+        // A `use …;` written inside a string is not a real import.
+        let in_string = r#"let s = "use crate::ghost::Z;";"#;
+        assert!(
+            imported_module_paths(in_string, "crate::kernel", &[])
+                .unwrap()
+                .is_empty(),
+            "a use inside a string must not be observed"
+        );
+
+        // A quote-bearing char literal must not open a spurious string and swallow code.
+        let quote_char = r#"let q = '"'; use crate::real::B;"#;
+        let imports = imported_module_paths(quote_char, "crate::kernel", &[]).unwrap();
+        assert!(
+            imports.contains(&ImportedPath::plain("crate::real::B")),
+            "{imports:?}"
+        );
+
+        // A lifetime must not break use detection or produce a spurious path.
+        let lifetime = "fn f<'a>(x: &'a str) {} use crate::a::b;";
+        let imports = imported_module_paths(lifetime, "crate::kernel", &[]).unwrap();
+        assert_eq!(
+            imports,
+            vec![ImportedPath::plain("crate::a::b")],
+            "{imports:?}"
+        );
+    }
+
+    #[test]
+    fn scanner_handles_nested_block_comments() {
+        // Rust nests block comments. Commenting out code that itself contains a
+        // `/* */` must not let the inner `*/` re-expose the rest as live code: a
+        // `use` inside the (nested) comment must not be observed, while a real `use`
+        // after the outer close still is.
+        let source = r#"
+            /*
+            fn old() {
+                /* tweak later */
+                use crate::legacy::Thing;
+            }
+            */
+            use crate::current::A;
+        "#;
+        let imports = imported_module_paths(source, "crate::kernel", &[]).unwrap();
+        assert!(
+            imports.contains(&ImportedPath::plain("crate::current::A")),
+            "the real use after the nested comment must be observed: {imports:?}"
+        );
+        assert!(
+            !imports.iter().any(|p| p.contains("legacy")),
+            "a use inside a nested block comment must not be observed: {imports:?}"
+        );
+    }
+
+    #[test]
+    fn scanner_resolves_root_relative_bare_use() {
+        // A root-relative bare `use kernel::…` (legal only at the crate root) names a
+        // crate-root module, not an external crate, so it resolves to `crate::kernel::…`.
+        // An unknown first segment is still external. With no root modules known, the
+        // bare path stays external (the conservative behavior).
+        let source = "use kernel::Thing; use serde::Deserialize;";
+        let roots = vec!["kernel".to_string()];
+        let imports = imported_module_paths(source, "crate", &roots).unwrap();
+        assert!(
+            imports.contains(&ImportedPath::plain("crate::kernel::Thing")),
+            "a bare use of a crate-root module must resolve to crate::…: {imports:?}"
+        );
+        assert!(
+            !imports.iter().any(|p| p.contains("serde")),
+            "an unknown first segment stays external: {imports:?}"
+        );
+        assert!(
+            imported_module_paths(source, "crate", &[])
+                .unwrap()
+                .iter()
+                .all(|p| !p.contains("kernel")),
+            "with no root modules known, the bare path is treated as external"
+        );
+    }
+
+    #[test]
+    fn scanner_treats_leading_colon_path_as_external() {
+        // `use ::serde::…` is an explicit external/global path: the leading `::` bypasses
+        // the local-module shadow, so it is external even when a crate-root module shares
+        // the name. (Dropping the leading `::` would mis-resolve it as the internal
+        // `crate::serde::…`.)
+        let roots = vec!["serde".to_string()];
+        assert!(
+            imported_module_paths("use ::serde::Deserialize;", "crate", &roots)
+                .unwrap()
+                .is_empty(),
+            "a leading-:: path must be external even when its head matches a root module"
+        );
+        // Sanity: without the leading `::`, the same head IS the local module, because a
+        // crate-root module shadows the extern prelude in a bare `use` path.
+        assert!(
+            imported_module_paths("use serde::Deserialize;", "crate", &roots)
+                .unwrap()
+                .contains(&ImportedPath::plain("crate::serde::Deserialize")),
+            "a bare head matching a root module resolves locally (shadowing rule)"
+        );
+    }
+
+    #[test]
+    fn scanner_resolves_root_relative_use_only_at_crate_root() {
+        // The crate-root-module shadow holds ONLY at the crate root. In a submodule a
+        // bare `use serde::…` reaches the extern prelude (external), even when `serde`
+        // is a crate-root module — matching the compiler. Resolving it to
+        // `crate::serde::…` would be a false positive that fails a module boundary.
+        let roots = vec!["serde".to_string()];
+        assert!(
+            imported_module_paths("use serde::Value;", "crate", &roots)
+                .unwrap()
+                .contains(&ImportedPath::plain("crate::serde::Value")),
+            "at the crate root, a bare crate-root-module path resolves locally"
+        );
+        assert!(
+            imported_module_paths("use serde::Value;", "crate::sub", &roots)
+                .unwrap()
+                .is_empty(),
+            "in a submodule, a bare first segment is external even if it matches a root module"
+        );
+    }
+
+    #[test]
+    fn scanner_preserves_non_ascii_module_paths() {
+        // strip is UTF-8 safe: a non-ASCII module path survives stripping intact.
+        let source = "use crate::café::Item;";
+        let imports = imported_module_paths(source, "crate::kernel", &[]).unwrap();
+        assert!(
+            imports.contains(&ImportedPath::plain("crate::café::Item")),
+            "{imports:?}"
+        );
+    }
+
+    #[test]
+    fn scanner_ignores_raw_and_byte_strings() {
+        // A `use …;` inside a raw string (any hash count) is not an import.
+        for src in [
+            r##"let s = r"use crate::ghost::Z;";"##,
+            r##"let s = r#"use crate::ghost::Z;"#;"##,
+            r##"let s = br#"use crate::ghost::Z;"#;"##,
+            r#"let s = b"use crate::ghost::Z;";"#,
+        ] {
+            assert!(
+                imported_module_paths(src, "crate::kernel", &[])
+                    .unwrap()
+                    .is_empty(),
+                "a use inside a (raw/byte) string must not be observed: {src}"
+            );
+        }
+
+        // A `//` and an inner `"#` inside a raw string must not eat a following use.
+        // (Two outer hashes so the inner `"#` does not close it.)
+        let tricky = r####"let s = r##"http://x "# inside"##; use crate::real::C;"####;
+        let imports = imported_module_paths(tricky, "crate::kernel", &[]).unwrap();
+        assert!(
+            imports.contains(&ImportedPath::plain("crate::real::C")),
+            "{imports:?}"
+        );
+
+        // `r` / `b` as ordinary identifiers (not raw-string prefixes) are unaffected.
+        let idents = "let r = 1; let b = 2; use crate::real::D;";
+        assert_eq!(
+            imported_module_paths(idents, "crate::kernel", &[]).unwrap(),
+            vec![ImportedPath::plain("crate::real::D")]
+        );
+    }
+
+    #[test]
+    fn scanner_ignores_raw_c_strings() {
+        // A `use …;` inside a raw C-string (`cr"…"` / `cr#"…"#`, stable Rust 1.79) is not observed.
+        for src in [
+            r##"let s = cr"use crate::ghost::Z;";"##,
+            r##"let s = cr#"use crate::ghost::Z;"#;"##,
+        ] {
+            assert!(
+                imported_module_paths(src, "crate::kernel", &[])
+                    .unwrap()
+                    .is_empty(),
+                "a use inside a raw C-string must not be observed: {src}"
+            );
+        }
+
+        // The desync guard: a raw C-string with an **odd** number of inner unescaped `"` (raw
+        // strings do not escape) must not swallow a following `use`. Before the `cr#` prefix was
+        // recognized, the leading `c` made `raw_string_prefix` decline (and the following `r` sat
+        // after an identifier byte, so it declined too), so `#"a"b"#` was scanned as code + plain
+        // strings: `"a"` closed as one plain string, then the `"` before `#` opened an unterminated
+        // one that ran to EOF, silently dropping the import (a false negative in FFI-flavoured
+        // code). An odd inner-quote count is required to leave that final `"` unpaired; an even
+        // count re-pairs into balanced plain strings and does not desync — so the test uses an odd
+        // count (one inner `"` here) to actually fail on unfixed code, not merely pass on it.
+        let tricky = r##"let s = cr#"a"b"#; use crate::real::C;"##;
+        let imports = imported_module_paths(tricky, "crate::kernel", &[]).unwrap();
+        assert!(
+            imports.contains(&ImportedPath::plain("crate::real::C")),
+            "a use after a raw C-string with an odd inner-quote count must be observed: {imports:?}"
+        );
+
+        // A non-raw `c"…"` C-string (ordinary escaping) also hides an inner use and does not
+        // desync — handled by the plain-string branch, the `c` prefix byte emitted as code.
+        let cstr = r#"let s = c"use crate::ghost::Z;"; use crate::real::E;"#;
+        assert_eq!(
+            imported_module_paths(cstr, "crate::kernel", &[]).unwrap(),
+            vec![ImportedPath::plain("crate::real::E")]
+        );
+
+        // `c` as an ordinary identifier (not a C-string prefix) is unaffected.
+        let idents = "let c = 1; use crate::real::D;";
+        assert_eq!(
+            imported_module_paths(idents, "crate::kernel", &[]).unwrap(),
+            vec![ImportedPath::plain("crate::real::D")]
+        );
+    }
+
+    #[test]
+    fn use_inside_a_macro_body_is_not_observed() {
+        // A `use` written inside a macro — a `macro_rules!` definition OR a macro
+        // invocation — is a macro-generated import (out of scope): it must not be
+        // observed. A real `use` outside the macro still is.
+        let source = r#"
+            macro_rules! m {
+                () => { use crate::ghost::Thing; };
+                ($x:tt) => {{ use crate::ghost::Other; }};
+            }
+            with_imports! { use crate::ghost::FromInvocation; }
+            use crate::real::A;
+        "#;
+        let imports = imported_module_paths(source, "crate", &[]).unwrap();
+        assert_eq!(
+            imports,
+            vec![ImportedPath::plain("crate::real::A")],
+            "macro definition and invocation bodies are skipped; the real use is kept: {imports:?}"
+        );
+        // Every body delimiter form ({}, (), []) is skipped, for both definitions and
+        // invocations.
+        for body in [
+            "macro_rules! m { () => { use crate::ghost::T; }; }",
+            "macro_rules! m ( () => { use crate::ghost::T; }; )",
+            "macro_rules! m [ () => { use crate::ghost::T; }; ]",
+            "some_macro! { use crate::ghost::T; }",
+            "some_macro!( use crate::ghost::T; )",
+            "some_macro![ use crate::ghost::T; ]",
+        ] {
+            assert!(
+                imported_module_paths(body, "crate", &[])
+                    .unwrap()
+                    .is_empty(),
+                "no import observed from a macro body: {body}"
+            );
+        }
+        // `!=` and unary `!` are not macro invocations — a following real use is kept.
+        let not_macros = "let _ = a != b; let _ = !flag; use crate::real::B;";
+        assert!(
+            imported_module_paths(not_macros, "crate", &[])
+                .unwrap()
+                .contains(&ImportedPath::plain("crate::real::B")),
+            "`!=` / unary `!` must not be treated as a macro invocation"
+        );
+    }
+
+    #[test]
+    fn a_precise_capturing_use_bound_does_not_swallow_the_following_use() {
+        // `-> impl Trait + use<…>` (stable Rust) is a precise-capturing bound, not an import.
+        // The scanner must not treat it as a `use` statement and consume to the next `;`, which
+        // would swallow the real `use` that follows — a false negative that silently disables the
+        // module boundary. Cover the empty, parameterized, whitespace, and comment forms.
+        for header in [
+            "fn iter() -> impl Iterator<Item = u8> + use<> { std::iter::empty() }",
+            "fn iter<'a, T>() -> impl Iterator<Item = &'a T> + use<'a, T> { loop {} }",
+            "fn iter() -> impl Iterator<Item = u8> + use <> { std::iter::empty() }",
+            "fn iter() -> impl Iterator<Item = u8> + use /*c*/ <> { std::iter::empty() }",
+        ] {
+            let src = format!("{header}\nuse crate::forbidden::Thing;");
+            assert_eq!(
+                imported_module_paths(&src, "crate", &[]).unwrap(),
+                vec![ImportedPath::plain("crate::forbidden::Thing")],
+                "the `use<…>` bound must be skipped so the following real use is observed: {header:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_use_bound_as_the_last_token_neither_panics_nor_drops_a_preceding_use() {
+        // Control: a plain `use` is unaffected. And a `use<>` bound as the file's final token
+        // (no trailing `;`) must not panic (bounds-safe peek) and must not drop the real `use`
+        // that precedes it.
+        assert_eq!(
+            imported_module_paths("use crate::x::Y;", "crate", &[]).unwrap(),
+            vec![ImportedPath::plain("crate::x::Y")],
+            "a plain use is unaffected by the bound-skip"
+        );
+        assert_eq!(
+            imported_module_paths(
+                "use crate::x::Y;\nfn f() -> impl Sized + use<>",
+                "crate",
+                &[],
+            )
+            .unwrap(),
+            vec![ImportedPath::plain("crate::x::Y")],
+            "a trailing use<> bound must not drop the preceding real use or panic"
+        );
+    }
+
+    #[test]
+    fn use_inside_an_inline_module_is_attributed_to_that_module() {
+        // A `self`/`super` import inside an inline `mod inner { … }` resolves against the
+        // inline submodule, not the file's module: `self` -> crate::a::inner::…, and
+        // `super` from crate::a::inner -> crate::a.
+        let source = "mod inner { use self::leaf::Thing; use super::sibling::X; }";
+        let imports = imported_module_paths(source, "crate::a", &[]).unwrap();
+        assert!(
+            imports.contains(&ImportedPath::plain("crate::a::inner::leaf::Thing")),
+            "self must resolve against the inline submodule: {imports:?}"
+        );
+        assert!(
+            imports.contains(&ImportedPath::plain("crate::a::sibling::X")),
+            "super from the inline submodule resolves to crate::a: {imports:?}"
+        );
+        // A bare first segment inside an inline submodule is external even when the file
+        // IS the crate root (the enclosing module is crate::inner, not crate).
+        let bare = imported_module_paths(
+            "mod inner { use kernel::Thing; }",
+            "crate",
+            &["kernel".to_string()],
+        )
+        .unwrap();
+        assert!(
+            bare.is_empty(),
+            "a bare use inside an inline submodule is external: {bare:?}"
+        );
+        // A top-level use (no inline module) is unchanged.
+        assert_eq!(
+            imported_module_paths("use self::leaf::Thing;", "crate::a", &[]).unwrap(),
+            vec![ImportedPath::plain("crate::a::leaf::Thing")]
+        );
+    }
+
+    #[test]
+    fn escaped_quote_char_literal_is_consumed_whole() {
+        // `'\''` must be skipped as a whole so the following string's fake `use` is still
+        // stripped and the real `use` after it is observed (a regression guard for the
+        // escaped-char skip against leaking the closing quote).
+        let src = r#"let _q = '\''; let _s = "use crate::ghost::Z;"; use crate::real::A;"#;
+        assert_eq!(
+            imported_module_paths(src, "crate::kernel", &[]).unwrap(),
+            vec![ImportedPath::plain("crate::real::A")],
+            "an escaped-quote char literal must not leak and expose a fake use"
+        );
+    }
+
+    #[test]
+    fn external_scan_captures_external_heads_with_the_shared_resolution() {
+        // The external scan is the exact mirror of the internal one: it captures a head
+        // precisely when the internal scan would drop it as external, using one resolution.
+        // A submodule's bare first segment is external; a leading `::` is explicitly external.
+        let pairs = external_imports_with_importers(
+            "use libc::c_int;\nuse ::winapi::HANDLE;\nuse crate::domain::Thing;",
+            "crate::service",
+            &[],
+        )
+        .unwrap();
+        assert_eq!(
+            pairs,
+            vec![
+                ("crate::service".to_string(), "libc".to_string()),
+                ("crate::service".to_string(), "winapi".to_string()),
+            ],
+            "external heads captured, the internal `crate::…` import dropped: {pairs:?}"
+        );
+        // A bare first segment naming a crate-root module, at the crate root, is the internal
+        // module (the sibling `mod` shadows the extern prelude) — NOT external. This is the
+        // no-false-positive guarantee: the external scan must not observe it either.
+        let shadowed =
+            external_imports_with_importers("use libc::helper;", "crate", &["libc".to_string()])
+                .unwrap();
+        assert!(
+            shadowed.is_empty(),
+            "a shadowed crate-root module is internal, not an external head: {shadowed:?}"
+        );
+        // `crate`/`self`/`super` are internal roots, never external heads.
+        let internal = external_imports_with_importers(
+            "use crate::a::B;\nuse self::x::Y;\nuse super::z::W;",
+            "crate::m",
+            &[],
+        )
+        .unwrap();
+        assert!(
+            internal.is_empty(),
+            "internal roots yield no external heads: {internal:?}"
+        );
+        // A `use` inside a string literal or a macro body is stripped before scanning.
+        let masked = external_imports_with_importers(
+            "fn f() { let _s = \"use libc::c_int;\"; }\nmacro_rules! m { () => { use libc::c_void; }; }",
+            "crate::service",
+            &[],
+        ).unwrap();
+        assert!(
+            masked.is_empty(),
+            "a use inside a string or macro body is not an observed external head: {masked:?}"
+        );
+    }
+
+    #[test]
+    fn cfg_if_macro_body_is_unstripped_and_observed() {
+        // Transparent control-flow macros (`cfg_if!`) wrap human-authored items without
+        // transforming identities; their bodies are preserved so enclosed `use` declarations
+        // are observed statically (closing the false-negative gap).
+        let src = r#"
+            cfg_if::cfg_if! {
+                if #[cfg(unix)] {
+                    use crate::unix_module::UnixThing;
+                } else {
+                    use crate::win_module::WinThing;
+                }
+            }
+        "#;
+        let paths = imported_module_paths(src, "crate", &[]).unwrap();
+        assert_eq!(
+            paths,
+            vec![
+                ImportedPath::plain("crate::unix_module::UnixThing"),
+                ImportedPath::plain("crate::win_module::WinThing"),
+            ],
+            "imports inside cfg_if! macro bodies are observed: {paths:?}"
+        );
+    }
+}

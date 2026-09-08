@@ -1,0 +1,17 @@
+pub enum Decision {
+    Disagrees,
+    Unreadable,
+}
+
+pub struct Verdict {
+    pub decision: Decision,
+    pub message: String,
+}
+
+fn disagrees(message: String) -> Verdict {
+    Verdict { decision: Decision::Disagrees, message }
+}
+
+fn unreadable(message: String) -> Verdict {
+    Verdict { decision: Decision::Unreadable, message }
+}

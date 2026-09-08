@@ -1,0 +1,55 @@
+name: "圭表 (guibiao) — static false-negative / layer rule"
+description: A static import/dependency boundary that should have reacted but did not, or a layer rule you need.
+labels: ["guibiao", "static"]
+title: "[圭表] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        圭表 is the **static** dimension — imports and dependencies read from `cargo metadata`
+        and a source `use` scan. Use this for a boundary that missed a real violation (a false
+        negative) or a declared-layer rule you want. Known stated bounds (not bugs): bare path
+        expressions, macro-generated imports, and `#[path]`-remapped modules are outside the
+        token scanner.
+  - type: dropdown
+    id: adoption
+    attributes:
+      label: How are you using 圭表?
+      description: This tells us whether the static dimension is being adopted on its own — a signal we weigh when deciding what graduates to a stable 0.2.0.
+      options:
+        - "guibiao standalone (I depend on the guibiao crate directly)"
+        - "via tianheng (the composed shell)"
+        - "just evaluating"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The `guibiao` (or `tianheng`) version.
+      placeholder: "0.1.6"
+    validations:
+      required: true
+  - type: textarea
+    id: constitution
+    attributes:
+      label: The declared boundary
+      description: The `ModuleBoundary` / `CrateBoundary` you declared (with its `.because(...)`).
+      render: rust
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: The code that should have reacted
+      description: A minimal `use` / dependency that the boundary should have caught but did not.
+      render: rust
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Observed vs expected
+      description: What reaction you got (paste `check --format json` if you can) and what you expected.
+    validations:
+      required: true

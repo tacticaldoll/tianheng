@@ -1,0 +1,149 @@
+//! Trait-impl-locality declaration DSL — [`TraitImplBoundary`] and its draft chain.
+
+use xuanji::{RuleKey, Severity};
+
+/// A trait-impl-locality boundary: within a target crate, the named trait may be
+/// implemented **only** inside the declared allowed module location(s). An
+/// `impl <Trait> for <Type>` block outside them is a violation. Declared in Rust (the
+/// single source of truth) and composed with the other dimensions at the gate. This
+/// governs *impl locality* — the complement of exposure ([`SignatureBoundary`]) and of the
+/// static import boundary. It governs only the target crate's own impl sites; it makes no
+/// claim about downstream crates (that would be external trait sealing, an essential gap).
+///
+/// [`SignatureBoundary`]: crate::SignatureBoundary
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TraitImplBoundary {
+    pub(crate) crate_package: String,
+    pub(crate) trait_path: String,
+    pub(crate) allowed_locations: Vec<String>,
+    pub(crate) reason: String,
+    pub(crate) anchor: Option<String>,
+    pub(crate) severity: Severity,
+}
+
+impl TraitImplBoundary {
+    /// Stable semantic identity for this trait-implementation locality rule, keyed on the trait
+    /// **as declared**. This is the projection's view — what the adopter wrote.
+    ///
+    /// A reaction uses the crate-internal `rule_key_for_anchor` instead, keyed on the anchor the
+    /// declaration actually resolves to, so the same trait reached through a re-export spelling and
+    /// through its canonical one produce one identity rather than two. Both go through the one
+    /// constructor below, so the key's shape cannot drift between the two callers.
+    pub fn rule_key(&self) -> RuleKey {
+        self.rule_key_for_anchor(&super::canonical_path(&self.trait_path))
+    }
+
+    /// [`Self::rule_key`] keyed on a caller-resolved trait anchor — the reaction's view.
+    ///
+    /// `allowed_locations` stays in the key, and that is a deliberate trade rather than an oversight:
+    /// it is what keeps two boundaries governing the SAME trait with different allowed sets from
+    /// producing one identity for one misplaced impl (which would let a baseline accepting the first
+    /// suppress the second's never-accepted violation). The cost is that editing the allowed set
+    /// changes this key, so a still-misplaced impl re-fires as new while the old entry reports stale —
+    /// loud churn, never masking, and the direction this project prefers when it must choose.
+    pub(crate) fn rule_key_for_anchor(&self, trait_anchor: &str) -> RuleKey {
+        RuleKey::of(
+            "tianheng.rule/hunyi/trait-impl-locality",
+            [
+                (
+                    "allowed_locations",
+                    super::canonical_path_set(&self.allowed_locations),
+                ),
+                ("trait", trait_anchor.to_string()),
+            ],
+        )
+    }
+
+    /// Begin a trait-impl-locality boundary in the crate named `package`.
+    pub fn in_crate(package: &str) -> TraitImplCrateDraft {
+        TraitImplCrateDraft {
+            crate_package: package.to_string(),
+        }
+    }
+
+    /// The governed trait's path (e.g. `crate::command::Command`).
+    pub fn trait_(&self) -> &str {
+        &self.trait_path
+    }
+
+    /// The allowed module-location prefixes where the trait MAY be implemented.
+    pub fn allowed_locations(&self) -> &[String] {
+        &self.allowed_locations
+    }
+
+    /// The human-readable reason recorded with the boundary (the repair hint).
+    pub fn reason(&self) -> &str {
+        &self.reason
+    }
+}
+
+crate::dsl::boundary_common!(TraitImplBoundary, TraitImplBoundaryDraft);
+
+/// A trait-impl-locality boundary awaiting its trait anchor.
+#[doc(hidden)]
+pub struct TraitImplCrateDraft {
+    crate_package: String,
+}
+
+impl TraitImplCrateDraft {
+    /// Anchor the boundary to a trait path within the crate (e.g. `crate::command::Command`).
+    /// The anchor must resolve to a `trait` item defined in the crate (directly or via a
+    /// local `pub use`); an unresolvable anchor is a constitution error (exit 2).
+    pub fn trait_(self, trait_path: &str) -> TraitImplTraitDraft {
+        TraitImplTraitDraft {
+            crate_package: self.crate_package,
+            trait_path: trait_path.to_string(),
+        }
+    }
+}
+
+/// A trait-anchored boundary awaiting its first allowed location.
+#[doc(hidden)]
+pub struct TraitImplTraitDraft {
+    crate_package: String,
+    trait_path: String,
+}
+
+impl TraitImplTraitDraft {
+    /// Allow the trait to be implemented under the given module path or prefix
+    /// (`::`-delimited containment, so `crate::commands` also allows
+    /// `crate::commands::greet`). Implementations outside the allowed location(s) react.
+    pub fn only_implemented_in(self, location: &str) -> TraitImplBoundaryDraft {
+        TraitImplBoundaryDraft {
+            crate_package: self.crate_package,
+            trait_path: self.trait_path,
+            allowed_locations: vec![location.to_string()],
+            severity: Severity::Enforce,
+        }
+    }
+}
+
+/// A boundary awaiting more allowed locations (optional), severity (optional), and reason.
+#[doc(hidden)]
+pub struct TraitImplBoundaryDraft {
+    crate_package: String,
+    trait_path: String,
+    allowed_locations: Vec<String>,
+    severity: Severity,
+}
+
+impl TraitImplBoundaryDraft {
+    /// Also allow the trait to be implemented under another module path / prefix (a
+    /// boundary MAY allow more than one location).
+    pub fn and_in(mut self, location: &str) -> Self {
+        self.allowed_locations.push(location.to_string());
+        self
+    }
+
+    /// Finish the boundary with its human-readable reason (the repair hint).
+    pub fn because(self, reason: &str) -> TraitImplBoundary {
+        TraitImplBoundary {
+            crate_package: self.crate_package,
+            trait_path: self.trait_path,
+            allowed_locations: self.allowed_locations,
+            reason: reason.to_string(),
+            anchor: None,
+            severity: self.severity,
+        }
+    }
+}

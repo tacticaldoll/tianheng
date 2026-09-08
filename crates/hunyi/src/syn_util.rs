@@ -1,0 +1,925 @@
+//! Small `syn`-level predicates and renderers shared across capabilities and sibling modules:
+//! the `#[path]` attribute probe, the bare-`pub` visibility test, and the public-item /
+//! `use`-tree descriptions the visibility capability reports. Pure `syn` reading; the only
+//! non-`syn` dependency is [`crate::resolve::strip_raw`] for raw-identifier canonicalization.
+
+use std::collections::{HashMap, HashSet};
+
+use crate::resolve::strip_raw;
+
+/// Whether `path` is the single-segment built-in `name`, **in either spelling** — an attribute's own name,
+/// or a `cfg` predicate's combinator.
+///
+/// **Named for its reach rather than for its first caller.** It was named for attributes alone while one
+/// call site asks it about `not`, which is a `cfg` predicate's combinator and not an attribute at all — a
+/// name wider than the thing it names, which is the standard this family holds every other name to.
+///
+/// **`Path::is_ident` compares the ident as written.** proc-macro2's `PartialEq<str>` requires the
+/// compared string to carry `r#` when the ident is raw, so `r#path` is not equal to `"path"` for it and
+/// `r#cfg_attr` is not equal to `"cfg_attr"`. rustc reads the two spellings as one name: `r#` changes an
+/// identifier's lexical spelling and not the name it spells, which is what 圭表's and 漏刻's own byte
+/// scanners already say in so many words for the identical shape.
+///
+/// Measured against rustc 1.96.0, edition 2021, `--crate-type lib`:
+/// `#[cfg_attr(unix, r#path = "imp_unix.rs")] pub mod plat;` compiles with only `imp_unix.rs` on disk, and
+/// so does `#[cfg_attr(unix, r#cfg_attr(target_os = "linux", path = "imp_linux.rs"))]` with only
+/// `imp_linux.rs`. With **both** `plat.rs` and the remap target present it is the remapped file rustc
+/// compiles — so a reader that misses the remap governs a file the build does not contain, while whatever
+/// the build does contain goes unobserved.
+///
+/// Single-segment, like `is_ident`: the built-in is the unqualified path, so `foo::cfg_attr` is somebody
+/// else's attribute and `get_ident` declines it — the same narrowing both sibling dimensions state.
+pub(crate) fn is_builtin_name(path: &syn::Path, name: &str) -> bool {
+    path.get_ident()
+        .is_some_and(|ident| strip_raw(&ident.to_string()) == name)
+}
+
+/// The file path of an **unconditional** `#[path = "…"]` remap (the direct name-value form only),
+/// or `None`. This is the value both `crate::scan`'s whole-crate walks and
+/// `crate::module_resolve`'s targeted resolver *follow* to observe a relocated module's source
+/// (closing the coverage false negative where its `unsafe` sites / items were silently dropped).
+/// A `cfg_attr`-wrapped `path` is deliberately **excluded** here: both walkers instead extract it
+/// separately via [`cfg_attr_path_values`] and union it with the conventional file. A module has at
+/// most one applied unconditional `#[path]`, so the first match is the value.
+pub(crate) fn direct_path_value(attrs: &[syn::Attribute]) -> Option<String> {
+    attrs.iter().find_map(|attr| {
+        if !is_builtin_name(attr.path(), "path") {
+            return None;
+        }
+        match &attr.meta {
+            syn::Meta::NameValue(syn::MetaNameValue {
+                value:
+                    syn::Expr::Lit(syn::ExprLit {
+                        lit: syn::Lit::Str(s),
+                        ..
+                    }),
+                ..
+            }) => Some(s.value()),
+            _ => None,
+        }
+    })
+}
+
+/// Whether any attribute is a BARE `#[cfg(...)]` — the conservative, predicate-blind "might
+/// legitimately be absent on this build" signal a missing conventional file is checked against.
+/// See `module-boundary`'s "A plain module declaration resolves to exactly one conventional
+/// file" requirement for the full rationale
+/// (why a bare `#[cfg]` tolerates an absent file but `cfg_attr` does not — verified against a
+/// real `rustc` build: `cfg_attr` never removes the `mod` item, so a missing file behind one with
+/// no `path` remap is a genuine E0583 in every configuration). Shared by both of this crate's
+/// module walkers (`scan::resolve_child_modules` and `module_resolve::descend`)
+/// so they agree on this policy consistently. A `cfg_attr`
+/// wrapping `path` specifically is a different, already-handled case ([`cfg_attr_path_values`]).
+/// 漏刻's CI-audit scanner independently hand-rolls the identical bare-`cfg`-only distinction for
+/// the same reason (`louke::audit::scan::mod_preamble_attrs`).
+pub(crate) fn has_cfg_attr(attrs: &[syn::Attribute]) -> bool {
+    attrs.iter().any(|attr| is_builtin_name(attr.path(), "cfg"))
+}
+
+/// The one macro whose body this dimension reads as ordinary code: `cfg_if!`. See
+/// `semantic-signature-coupling`'s "Transparent control-flow macro arm contents are observed"
+/// requirement for why gating on the macro **name** is load-bearing rather than conservative
+/// (the `wrap! { impl Foo { … } }` false-positive this restriction avoids) and for the stated
+/// bound on any other body-wrapping macro. Mirrors 圭表's own
+/// `guibiao::module_scan::…::is_transparent_macro_name` so the two dimensions cannot silently
+/// disagree on which source is a real declaration.
+fn is_transparent_macro(item: &syn::ItemMacro) -> bool {
+    // `ident.is_none()` excludes a definition (`macro_rules! cfg_if { … }`, whose invocation path
+    // is `macro_rules`) from ever being read as an invocation of it. Matched on the LAST segment,
+    // so the qualified `cfg_if::cfg_if! { … }` spelling counts — the same test 圭表 applies.
+    //
+    // **Compared through `strip_raw`, because `r#cfg_if!` invokes the same macro.** `cfg_if` is not a
+    // keyword, so the prefix escapes nothing and only changes the spelling — measured against rustc
+    // 1.96.0, edition 2021, `--crate-type lib`, an item declared inside `r#cfg_if! { … }` is produced
+    // and can be referenced. `syn` carries the rawness, and a raw `Ident` is not equal to the plain
+    // string, so this read the invocation as an opaque macro and everything in its arms went
+    // unobserved. Note this is NOT the rule for a keyword: `r#mut` is an identifier named `mut` and is
+    // precisely not the keyword, so the readers that match Rust keywords compare as written and must.
+    item.ident.is_none()
+        && item
+            .mac
+            .path
+            .segments
+            .last()
+            .is_some_and(|seg| strip_raw(&seg.ident.to_string()) == "cfg_if")
+}
+
+/// The items of every arm of a transparent macro invocation, in source order, kept **separate
+/// per arm** (not one flattened list): [`flatten_transparent_macros`] needs each arm's own
+/// identity to tag its items with an [`ArmKey`], since two arms of the SAME invocation are
+/// provably never compiled together while a nested invocation's own arms are a distinct question.
+///
+/// `cfg_if!`'s grammar is `if #[cfg(a)] { items } else if #[cfg(b)] { items } else { items }`, so
+/// the body's top-level **brace** groups are exactly the arms: a `#[cfg(…)]` predicate is a `#`
+/// followed by a *bracket* group, and `if` / `else` are bare identifiers. Each arm is parsed as a
+/// [`syn::File`] — the same parse the crate applies to a real source file, so an arm's items are
+/// observed identically to top-level ones.
+///
+/// A body that does not parse as items yields **nothing** for that arm rather than failing the
+/// scan: a same-named macro that is not `cfg_if!` at all (or a `cfg_if!` invocation whose arm
+/// holds statements) is then invisible, which is the pre-existing state for every macro — never a
+/// hard error on source rustc accepts. Arms are independent, so one unparseable arm does not cost
+/// the others their items (an empty `Vec` is pushed for it so later arms keep their own index).
+///
+/// **Item position only** (see the spec requirement above for the full impl/trait-body bound):
+/// inside an `impl`/`trait` body `syn` gives an `ImplItem::Macro`/`TraitItem::Macro` reached
+/// through a different set of walkers, so such an invocation is not flattened here (pinned by
+/// `a_cfg_if_inside_an_impl_body_is_a_stated_bound`). A `cfg_if!` in a **function body** never
+/// reaches here at all: `syn` places it as a statement, not an item.
+fn transparent_macro_arms(mac: &syn::Macro) -> Vec<Vec<syn::Item>> {
+    mac.parse_body_with(parse_transparent_arms)
+        .unwrap_or_default()
+}
+
+fn parse_transparent_arms(input: syn::parse::ParseStream) -> syn::Result<Vec<Vec<syn::Item>>> {
+    let mut arms = Vec::new();
+    while !input.is_empty() {
+        if input.peek(syn::token::Brace) {
+            let arm;
+            syn::braced!(arm in input);
+            match arm.parse::<syn::File>() {
+                Ok(file) => arms.push(file.items),
+                // Drain the arm buffer: syn reports a partially-consumed nested buffer as an
+                // "unexpected token" error against the ENCLOSING parse, which would discard the
+                // arms that did parse. Still push an (empty) arm slot so a later arm's index is
+                // unaffected by an earlier arm's parse failure.
+                Err(_) => {
+                    drain(&arm)?;
+                    arms.push(Vec::new());
+                }
+            }
+        } else {
+            skip_token(input)?;
+        }
+    }
+    Ok(arms)
+}
+
+fn drain(input: syn::parse::ParseStream) -> syn::Result<()> {
+    while !input.is_empty() {
+        skip_token(input)?;
+    }
+    Ok(())
+}
+
+/// Advance one token tree, whatever it is — the predicate attributes and `if` / `else` keywords
+/// between arms. Never names a `proc_macro2` type: 渾儀's dependency surface is `syn` only
+/// (`crates/shengmo/src/law.rs`'s own crate boundary), so the cursor's token tree is stepped over rather
+/// than matched on.
+fn skip_token(input: syn::parse::ParseStream) -> syn::Result<()> {
+    input.step(|cursor| match cursor.token_tree() {
+        Some((_, rest)) => Ok(((), rest)),
+        None => Err(cursor.error("unexpected end of macro body")),
+    })
+}
+
+/// Which `cfg_if!` invocation, and which of its arms, an item was reached through. Two items
+/// sharing the same `invocation` but a different `arm` are provably never compiled together —
+/// `cfg_if!`'s whole point. Two items from *different* invocations carry unrelated `invocation`
+/// values and are never compared as an arm pair (see [`provably_mutually_exclusive`]): this
+/// dimension does not attempt to relate two independent `cfg_if!` calls to each other.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct ArmKey {
+    invocation: u32,
+    arm: u32,
+}
+
+/// An item observed after transparent-macro flattening, paired with how it was reached.
+#[derive(Clone)]
+pub(crate) struct FlatItem {
+    pub(crate) item: syn::Item,
+    /// Reached through a transparent macro arm, hence **conditionally compiled by construction**:
+    /// every `cfg_if!` arm is gated by a predicate in the macro header (the trailing `else` by the
+    /// negation of all the others). The module walkers treat this exactly like a bare `#[cfg]` on
+    /// the item itself — 圭表's settled rule, adopted rather than re-derived so the two dimensions
+    /// cannot disagree on one shape (the 0.2.2 lesson, found once as a silent divergence).
+    pub(crate) in_transparent_arm: bool,
+    /// `Some` exactly when `in_transparent_arm` is (kept alongside it, set by the same
+    /// constructor, rather than re-derived, so the two can never drift apart) — the specific
+    /// invocation+arm [`provably_mutually_exclusive`] compares. `None` outside any arm, INCLUDING
+    /// for a plain `#[cfg(...)]`-gated item that carries no `cfg_if!` arm at all (that shape is
+    /// compared by its own bare attribute instead, not through this field).
+    arm_key: Option<ArmKey>,
+}
+
+impl FlatItem {
+    pub(crate) fn plain(item: syn::Item) -> Self {
+        Self {
+            item,
+            in_transparent_arm: false,
+            arm_key: None,
+        }
+    }
+
+    fn in_arm(mut self, key: ArmKey) -> Self {
+        self.in_transparent_arm = true;
+        // A nested `cfg_if!`'s own recursive flattening already tags its items with ITS OWN
+        // (innermost) key before this outer call wraps them; keep that innermost key rather than
+        // overwrite it with the outer one — an item's most specific arm membership is the one
+        // whose sibling arm it is actually exclusive with.
+        self.arm_key = self.arm_key.or(Some(key));
+        self
+    }
+}
+
+/// `items` with every transparent-macro invocation replaced by its arms' items, recursively (a
+/// nested `cfg_if!` inside an arm is flattened too). The invocation itself is dropped: no
+/// capability observes `syn::Item::Macro`, so keeping it would only be a duplicate the arms
+/// already cover. Idempotent — a flattened list holds no transparent invocation left to expand.
+///
+/// Flattening is **shallow** with respect to module bodies: an inline `mod x { … }` inside an arm
+/// is returned as one item, and the arm tag does not propagate into its body (that body is
+/// flattened on its own when the walk descends into it, with `in_transparent_arm` false). This is
+/// deliberate — it is exactly how a bare `#[cfg] mod x { … }` already behaves here, where the
+/// gate on the outer `mod` does not tolerate an absent file for an inner `mod y;` — so arm
+/// membership introduces no divergence from the existing rule.
+pub(crate) fn flatten_transparent_macros(items: &[syn::Item]) -> Vec<FlatItem> {
+    let mut next_invocation = 0u32;
+    flatten_transparent_macros_tagged(items, &mut next_invocation)
+}
+
+fn flatten_transparent_macros_tagged(
+    items: &[syn::Item],
+    next_invocation: &mut u32,
+) -> Vec<FlatItem> {
+    let mut out = Vec::new();
+    for item in items {
+        match item {
+            syn::Item::Macro(mac) if is_transparent_macro(mac) => {
+                let invocation = *next_invocation;
+                *next_invocation += 1;
+                for (arm, arm_items) in transparent_macro_arms(&mac.mac).into_iter().enumerate() {
+                    let key = ArmKey {
+                        invocation,
+                        arm: arm as u32,
+                    };
+                    out.extend(
+                        flatten_transparent_macros_tagged(&arm_items, next_invocation)
+                            .into_iter()
+                            .map(|flat| flat.in_arm(key)),
+                    );
+                }
+            }
+            other => out.push(FlatItem::plain(other.clone())),
+        }
+    }
+    out
+}
+
+/// [`flatten_transparent_macros`] for the observers that only read items and never judge a
+/// module's absent source file, so arm membership is not theirs to consult.
+pub(crate) fn flatten_transparent_macro_items(items: &[syn::Item]) -> Vec<syn::Item> {
+    flatten_transparent_macros(items)
+        .into_iter()
+        .map(|flat| flat.item)
+        .collect()
+}
+
+/// Every `impl` block written as a **direct statement of the outermost body** of a `const`
+/// initializer or a `fn` in `items` — the "const-eval trick" idiom
+/// (`const _: () = { impl Foo { … } };`, used for a compile-time trait assertion or a doctest/
+/// dogfooding scratch impl) and its fn-body-nested sibling (`fn _also() { impl Foo { … } }`). See
+/// `semantic-signature-coupling`'s "An impl nested in a const or fn body is observed" requirement
+/// for the full rationale (why this is the one item kind where "a body is opaque" is unsound
+/// rather than merely incomplete) and its exact recovery bound: one level deep, `const`/`fn`
+/// initializer bodies only (a bare `{ … }` block, not a wrapped one), never a `static` initializer,
+/// never a further-nested `impl`, and never any item kind other than `impl`.
+pub(crate) fn body_nested_impls(items: &[syn::Item]) -> Vec<syn::Item> {
+    let mut out = Vec::new();
+    for item in items {
+        let stmts: &[syn::Stmt] = match item {
+            syn::Item::Const(c) => match c.expr.as_ref() {
+                syn::Expr::Block(block) if block.label.is_none() => &block.block.stmts,
+                _ => continue,
+            },
+            syn::Item::Fn(f) => &f.block.stmts,
+            _ => continue,
+        };
+        out.extend(stmts.iter().filter_map(|stmt| match stmt {
+            syn::Stmt::Item(item @ syn::Item::Impl(_)) => Some(item.clone()),
+            _ => None,
+        }));
+    }
+    out
+}
+
+/// The two views every one of this dimension's module walkers needs from **one** flattening pass
+/// of `items`: `flat` — [`flatten_transparent_macros`]'s tagged output, arm membership intact —
+/// and `nested_impls` — every [`body_nested_impls`] finds directly inside a `const`/`fn` among
+/// `flat`'s plain projection (post-macro-flattening, so an `impl` nested inside a `cfg_if!` arm's
+/// own `const`/`fn` is covered too, the two mechanisms composing without special-casing). Produced
+/// together so no caller re-derives one from the other — flattening twice would erase the arm
+/// membership the second time, and computing `nested_impls` from anything but `flat`'s own plain
+/// projection would silently skip an arm-nested `const`/`fn`.
+///
+/// `flat` is returned **exactly as [`flatten_transparent_macros`] produced it — never itself
+/// extended with `nested_impls`**: nothing that consults `FlatItem`'s arm-membership tag
+/// (`resolve_child_modules`, `collect_reexports`) ever matches an `Item::Impl`, so giving one a
+/// synthetic arm tag would be an unearned claim about membership this walk never observed. Each
+/// recovered impl is implicitly attributed to the SAME enclosing module/file/`use`-map as the
+/// `const`/`fn` that lexically holds it — correct, since extraction never crosses a file or module
+/// boundary.
+///
+/// Deliberately returns the two views SEPARATELY rather than one pre-merged list: every caller
+/// needs `nested_impls` folded in somehow, but they differ in whether `flat`'s own tags survive
+/// into their result — the crate-wide walk needs both `flat` untouched (returned on its own) AND a
+/// separately-merged plain list; the anchored resolver discards `flat`'s tags entirely and chains a
+/// plain projection with `nested_impls`; its cfg-tag-preserving sibling keeps `flat` chained with
+/// `nested_impls` re-wrapped as untagged [`FlatItem::plain`]. That final wrapping is each caller's
+/// own local business, not shared here.
+pub(crate) fn flatten_with_body_nested_impls(
+    items: &[syn::Item],
+) -> (Vec<FlatItem>, Vec<syn::Item>) {
+    let flat = flatten_transparent_macros(items);
+    let plain: Vec<syn::Item> = flat.iter().map(|f| f.item.clone()).collect();
+    let nested_impls = body_nested_impls(&plain);
+    (flat, nested_impls)
+}
+
+/// The child-**module** declarations among `items`, each paired with the [`FlatItem`] of its OWN
+/// declaration (attrs + `cfg_if!` arm membership) — the item-level companion to
+/// [`crate::crate_scope::child_module_names`]'s flat name set. Needed wherever a re-export's own
+/// cfg-gating must be compared against a shadowing `mod`'s cfg-gating (see
+/// [`reexport_externs_for`]) rather than assumed to always coexist with it.
+pub(crate) fn child_module_decls(items: &[FlatItem]) -> Vec<(String, FlatItem)> {
+    items
+        .iter()
+        .filter_map(|flat| match &flat.item {
+            syn::Item::Mod(m) => Some((strip_raw(&m.ident.to_string()), flat.clone())),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Whether two items' own cfg-gating provably means they never compile together in any one real
+/// build: either they are two different arms of the IDENTICAL `cfg_if!` invocation, or each
+/// carries exactly one bare `#[cfg(...)]` attribute and one is the syntactic negation of the
+/// other (`#[cfg(P)]` / `#[cfg(not(P))]`). Everything else — unrelated predicates, arms of two
+/// different `cfg_if!` invocations, more than one bare `#[cfg]` on either side, a bare `#[cfg]`
+/// beside a `cfg_if!` arm — is conservatively **not** proven exclusive (the pre-existing,
+/// cfg-blind "may coexist" default): this dimension runs no general SAT solver over arbitrary
+/// `cfg` predicates, so anything less syntactically direct than these two shapes is a stated
+/// residual bound (see the spec) rather than a guess dressed as an observation.
+pub(crate) fn provably_mutually_exclusive(a: &FlatItem, b: &FlatItem) -> bool {
+    match (a.arm_key, b.arm_key) {
+        (Some(ka), Some(kb)) if ka.invocation == kb.invocation => ka.arm != kb.arm,
+        _ => bare_cfg_negates(item_own_attrs(&a.item), item_own_attrs(&b.item)),
+    }
+}
+
+/// The child `mod` names that genuinely shadow `use_flat` (a specific `pub use` item): every
+/// entry of `child_mods` EXCEPT one [`provably_mutually_exclusive`] with `use_flat` — in which
+/// case the two never compile together, so that `mod` does not shadow this `pub use`'s own head.
+/// Shared by [`reexport_externs_for`] and [`reexport_renames_for`], which apply the identical
+/// exclusion to two different maps (the extern-name set and the rename-alias map).
+fn shadowed_child_mod_names<'a>(
+    child_mods: &'a [(String, FlatItem)],
+    use_flat: &FlatItem,
+) -> HashSet<&'a str> {
+    child_mods
+        .iter()
+        .filter(|(_, mod_flat)| !provably_mutually_exclusive(mod_flat, use_flat))
+        .map(|(name, _)| name.as_str())
+        .collect()
+}
+
+/// The extern-crate name set a specific `pub use` item's own bare head should resolve against:
+/// `externs` with every same-named child `mod` declaration removed, UNLESS that particular `mod`
+/// is [`provably_mutually_exclusive`] with `use_flat` — in which case the two never compile
+/// together, so the `mod` does not genuinely shadow this `pub use`'s own head and must not
+/// suppress it. `child_mods` pairs each declared child module's name with the [`FlatItem`] of ITS
+/// OWN declaration (from [`child_module_decls`]), so a same-named module declared more than once
+/// under different cfg-gating is tested individually rather than as one flat name.
+pub(crate) fn reexport_externs_for(
+    externs: &HashSet<String>,
+    child_mods: &[(String, FlatItem)],
+    use_flat: &FlatItem,
+) -> HashSet<String> {
+    let shadowed = shadowed_child_mod_names(child_mods, use_flat);
+    externs
+        .iter()
+        .filter(|e| !shadowed.contains(e.as_str()))
+        .cloned()
+        .collect()
+}
+
+/// The crate-root `extern crate X as Y;` rename map a specific `pub use` item's own bare head
+/// should resolve against: `renames` with every same-named child `mod` declaration's alias
+/// removed under the same [`provably_mutually_exclusive`] carve-out — the rename-alias analogue
+/// of [`reexport_externs_for`]. See `semantic-reexport-exposure`'s "External-crate re-exports are
+/// observed by default" requirement for why the rename-map half cannot stay cfg-blind while the
+/// extern-name half is fixed (a rename alias like `wc` has no fallback candidate in the externs
+/// set, so a cfg-blindly-shadowed alias drops resolution outright rather than merely
+/// under-shadowing). `child_mods` pairs each declared child module's name with the [`FlatItem`] of
+/// ITS OWN declaration (from [`child_module_decls`]), exactly as `reexport_externs_for` does.
+pub(crate) fn reexport_renames_for(
+    renames: &HashMap<String, String>,
+    child_mods: &[(String, FlatItem)],
+    use_flat: &FlatItem,
+) -> HashMap<String, String> {
+    let shadowed = shadowed_child_mod_names(child_mods, use_flat);
+    renames
+        .iter()
+        .filter(|(alias, _)| !shadowed.contains(alias.as_str()))
+        .map(|(a, b)| (a.clone(), b.clone()))
+        .collect()
+}
+
+/// The attributes an item carries directly on itself — only the two kinds
+/// [`provably_mutually_exclusive`] ever compares (a child `mod` declaration and a `pub use`
+/// re-export), so this is not a general item-attrs accessor.
+fn item_own_attrs(item: &syn::Item) -> &[syn::Attribute] {
+    match item {
+        syn::Item::Mod(m) => &m.attrs,
+        syn::Item::Use(u) => &u.attrs,
+        _ => &[],
+    }
+}
+
+/// Whether `attrs_a` and `attrs_b` each carry exactly one bare `#[cfg(...)]` attribute and the
+/// two predicates are syntactic negations of one another. More than one bare `#[cfg]` on either
+/// side is a stated residual bound (see [`provably_mutually_exclusive`]), not analyzed here.
+fn bare_cfg_negates(attrs_a: &[syn::Attribute], attrs_b: &[syn::Attribute]) -> bool {
+    match (
+        sole_bare_cfg_predicate(attrs_a),
+        sole_bare_cfg_predicate(attrs_b),
+    ) {
+        (Some(pa), Some(pb)) => meta_is_negation(&pa, &pb) || meta_is_negation(&pb, &pa),
+        _ => false,
+    }
+}
+
+/// The parsed predicate of an item's SOLE bare `#[cfg(...)]` attribute — `None` if the item
+/// carries no bare `#[cfg]`, more than one (a stated bound: chained bare `#[cfg(A)] #[cfg(B)]`
+/// attributes are rustc-ANDed, but proving a negation across a conjunction needs more machinery
+/// than this dimension carries), or one whose argument fails to parse as a `Meta`.
+fn sole_bare_cfg_predicate(attrs: &[syn::Attribute]) -> Option<syn::Meta> {
+    let cfg_attrs: Vec<&syn::Attribute> = attrs
+        .iter()
+        .filter(|attr| is_builtin_name(attr.path(), "cfg"))
+        .collect();
+    match cfg_attrs.as_slice() {
+        [one] => one.parse_args::<syn::Meta>().ok(),
+        _ => None,
+    }
+}
+
+/// Whether `b` is the syntactic negation `not(a)` — a literal `not(...)` wrapper only; `all`/`any`
+/// combinators are not analyzed for a decidable negation and stay a stated bound (see
+/// [`provably_mutually_exclusive`]).
+///
+/// **Through [`is_builtin_name`], because the wrapper's name is a name and not a spelling.**
+/// `Path::is_ident` compares the ident as written, so `r#not` was not `not` here while
+/// [`meta_path_eq`] — the reader of the very predicates this wrapper encloses — already stripped the
+/// prefix off every segment. One comparison family, two answers about the same grammar.
+///
+/// The outcome is the forbidden one rather than a noisy one. This decides whether a same-named child
+/// `mod` genuinely shadows a `pub use`'s bare head, and a missed negation leaves that shadow
+/// standing, so the re-export is never resolved against the extern prelude and its exposure is
+/// dropped. Measured against rustc 1.96.0, edition 2021, `--crate-type lib`, with the module's file
+/// absent: `#[cfg(r#not(unix))] pub mod a;` compiles and `#[cfg(r#not(windows))] pub mod a;` fails
+/// `E0583` verbatim as `#[cfg(not(windows))]` does — so the two spellings are one predicate to the
+/// build, and a reader that separates them governs a configuration nobody compiles.
+fn meta_is_negation(a: &syn::Meta, b: &syn::Meta) -> bool {
+    match b {
+        syn::Meta::List(list) if is_builtin_name(&list.path, "not") => list
+            .parse_args::<syn::Meta>()
+            .is_ok_and(|inner| meta_eq(a, &inner)),
+        _ => false,
+    }
+}
+
+/// Structural equality between two parsed `cfg` predicates. `syn::Meta`'s payload carries no
+/// `PartialEq` (a `Meta::List`'s arguments are an unparsed token stream), so this recurses on the
+/// parsed shape instead of comparing source text — immune to a whitespace/formatting difference a
+/// plain string compare would wrongly treat as distinct. Covers the predicate grammar `cfg`
+/// actually accepts: a bare flag (`unix`), a name-value (`feature = "x"`), and a nested combinator
+/// (`all(..)` / `any(..)` / `not(..)`, each a comma-separated `Meta` list).
+fn meta_eq(a: &syn::Meta, b: &syn::Meta) -> bool {
+    match (a, b) {
+        (syn::Meta::Path(pa), syn::Meta::Path(pb)) => meta_path_eq(pa, pb),
+        (syn::Meta::List(la), syn::Meta::List(lb)) => {
+            meta_path_eq(&la.path, &lb.path)
+                && match (
+                    la.parse_args_with(cfg_attr_metas),
+                    lb.parse_args_with(cfg_attr_metas),
+                ) {
+                    (Ok(args_a), Ok(args_b)) => {
+                        args_a.len() == args_b.len()
+                            && args_a.iter().zip(args_b.iter()).all(|(x, y)| meta_eq(x, y))
+                    }
+                    _ => false,
+                }
+        }
+        (syn::Meta::NameValue(nva), syn::Meta::NameValue(nvb)) => {
+            meta_path_eq(&nva.path, &nvb.path) && expr_str_lit_eq(&nva.value, &nvb.value)
+        }
+        _ => false,
+    }
+}
+
+fn meta_path_eq(a: &syn::Path, b: &syn::Path) -> bool {
+    a.segments.len() == b.segments.len()
+        && a.segments
+            .iter()
+            .zip(b.segments.iter())
+            .all(|(x, y)| strip_raw(&x.ident.to_string()) == strip_raw(&y.ident.to_string()))
+}
+
+fn expr_str_lit_eq(a: &syn::Expr, b: &syn::Expr) -> bool {
+    match (a, b) {
+        (
+            syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Str(sa),
+                ..
+            }),
+            syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Str(sb),
+                ..
+            }),
+        ) => sa.value() == sb.value(),
+        _ => false,
+    }
+}
+
+type MetaList = syn::punctuated::Punctuated<syn::Meta, syn::Token![,]>;
+
+fn cfg_attr_metas(input: syn::parse::ParseStream) -> syn::Result<MetaList> {
+    MetaList::parse_terminated(input)
+}
+
+/// Every file path named by a `path = "…"` remap wrapped in `#[cfg_attr(<pred>, …, path = "…")]`
+/// (including arbitrarily nested `cfg_attr`) — one module may carry more than one SEPARATE (not
+/// nested) `cfg_attr`-wrapped `#[path]` attribute, each gated by its own predicate for a different
+/// platform/feature (`#[cfg_attr(windows, path = "win.rs")] #[cfg_attr(target_os = "macos", path =
+/// "mac.rs")] mod foo;`), and every one is a candidate a cfg-blind walker must union — taking only
+/// the first (found on adversarial review: a `find_map` silently dropped every candidate but the
+/// first-declared) would silently drop whichever platform's file wasn't first. Unlike
+/// [`direct_path_value`] (the unconditional `#[path = "…"]` form, followed as the sole source), the
+/// module declaration itself is never removed by `cfg_attr` (unlike a bare `#[cfg]`) — so these are
+/// candidates among several a cfg-blind walker must union: the conventional file may equally be the
+/// one a given build actually compiles.
+pub(crate) fn cfg_attr_path_values(attrs: &[syn::Attribute]) -> Vec<String> {
+    attrs
+        .iter()
+        .filter(|attr| is_builtin_name(attr.path(), "cfg_attr"))
+        .filter_map(|attr| {
+            attr.parse_args_with(cfg_attr_metas)
+                .ok()
+                .map(|metas| applied_metas_path_values(&metas))
+        })
+        .flatten()
+        .collect()
+}
+
+/// The **applied** metas of a `cfg_attr` (all but the first, which is the predicate): **every**
+/// `path = "…"` name-value among them, including those nested inside a further `cfg_attr`.
+///
+/// **The union has two axes and the earlier repair reached one.** [`cfg_attr_path_values`]'s own doc
+/// records a `find_map` that silently dropped every candidate but the first-declared, and it was
+/// corrected across ATTRIBUTES. Within one attribute a second `find_map` did the same thing, so
+/// `#[cfg_attr(unix, cfg_attr(target_os = "macos", path = "mac.rs"), cfg_attr(target_os = "linux",
+/// path = "linux.rs"))]` answered `mac.rs` and nothing else — measured against rustc, that declaration
+/// compiles on Linux with only `linux.rs` present.
+fn applied_metas_path_values(metas: &MetaList) -> Vec<String> {
+    metas.iter().skip(1).flat_map(meta_path_values).collect()
+}
+
+fn meta_path_values(meta: &syn::Meta) -> Vec<String> {
+    match meta {
+        syn::Meta::NameValue(syn::MetaNameValue {
+            path,
+            value:
+                syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(s),
+                    ..
+                }),
+            ..
+        }) if is_builtin_name(path, "path") => vec![s.value()],
+        syn::Meta::List(list) if is_builtin_name(&list.path, "cfg_attr") => list
+            .parse_args_with(cfg_attr_metas)
+            .ok()
+            .map(|metas| applied_metas_path_values(&metas))
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    }
+}
+
+pub(crate) fn is_public(vis: &syn::Visibility) -> bool {
+    matches!(vis, syn::Visibility::Public(_))
+}
+
+/// The declared-visibility **rank** of an item, most (3) to least (0) visible:
+/// `pub`=3 · `pub(crate)`=2 · `pub(super)`=1 · private / `pub(self)`=0. A visibility boundary
+/// reacts when an item's rank is strictly above its ceiling. See `semantic-visibility-boundary`'s
+/// "Bare-pub item observation" requirement for the full `pub(in P)` ranking rule and its
+/// conservative-upper-bound rationale (why an unrecognized or multi-segment path ranks Crate
+/// rather than under-reacting). The catch-all is why we never index `segments[0]`.
+pub(crate) fn visibility_rank(vis: &syn::Visibility) -> u8 {
+    match vis {
+        syn::Visibility::Public(_) => 3,
+        syn::Visibility::Restricted(r) => {
+            let single = if r.path.leading_colon.is_none() && r.path.segments.len() == 1 {
+                r.path.segments.first().map(|s| s.ident.to_string())
+            } else {
+                None
+            };
+            match single.as_deref() {
+                Some("crate") => 2,
+                Some("super") => 1,
+                Some("self") => 0,
+                _ => 2,
+            }
+        }
+        syn::Visibility::Inherited => 0,
+    }
+}
+
+/// Render an item's declared-visibility keyword for a finding: `pub`, `pub(crate)`,
+/// `pub(super)`, `pub(self)`, or `pub(in a::b)`. `Inherited` (private) never reaches a finding
+/// (rank 0 passes every ceiling), so its empty rendering is unreachable.
+fn vis_prefix(vis: &syn::Visibility) -> String {
+    match vis {
+        syn::Visibility::Public(_) => "pub".to_string(),
+        syn::Visibility::Restricted(r) => {
+            let path: Vec<String> = r
+                .path
+                .segments
+                .iter()
+                .map(|s| strip_raw(&s.ident.to_string()))
+                .collect();
+            let joined = path.join("::");
+            // `pub(in crate|super|self)` is equivalent to the keyword form; render it as such.
+            if r.in_token.is_some() && !matches!(joined.as_str(), "crate" | "super" | "self") {
+                format!("pub(in {joined})")
+            } else {
+                format!("pub({joined})")
+            }
+        }
+        syn::Visibility::Inherited => String::new(),
+    }
+}
+
+/// The `(visibility, "kind name")` of a direct item whose visibility this capability governs, or
+/// `None` for an item with no governed visibility. The description carries **no** visibility
+/// prefix (the caller prepends it, so a bare-`pub` item under the Crate ceiling renders exactly
+/// `pub fn foo` as before). `pub use` (including a glob) is observed as a raw `Item::Use`;
+/// attribute-derived public surface (`#[macro_export]`, `#[no_mangle]`, `pub macro`) is out of
+/// scope (stated bounds). See `semantic-visibility-boundary`'s "Bare-pub item observation"
+/// requirement for why a `pub fn`/`pub static`/`pub type` inside an `extern` block reuses
+/// `VisibleItemKind::Fn`/`Static`/`Type` verbatim rather than a new kind (see
+/// [`item_observation_parts`]'s `Item::ForeignMod` arm) — the identical reasoning
+/// `collect_item_exposures`'s own `ForeignMod` arm applies for exposure.
+pub(crate) struct VisibleItem<'a> {
+    pub(crate) visibility: &'a syn::Visibility,
+    pub(crate) kind: VisibleItemKind,
+    pub(crate) name: String,
+}
+
+/// The finite visibility-fact vocabulary. Its labels are published `item_kind` wire;
+/// keeping the variants typed makes a new governed item kind an explicit compatibility decision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum VisibleItemKind {
+    Fn,
+    Struct,
+    Enum,
+    Union,
+    Type,
+    Const,
+    Static,
+    Trait,
+    TraitAlias,
+    Mod,
+    ExternCrate,
+    Use,
+}
+
+impl VisibleItemKind {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Fn => "fn",
+            Self::Struct => "struct",
+            Self::Enum => "enum",
+            Self::Union => "union",
+            Self::Type => "type",
+            Self::Const => "const",
+            Self::Static => "static",
+            Self::Trait => "trait",
+            Self::TraitAlias => "trait_alias",
+            Self::Mod => "mod",
+            Self::ExternCrate => "extern_crate",
+            Self::Use => "use",
+        }
+    }
+}
+
+/// Direct items carry at most one governed visibility (`item_observation_parts`'s non-`ForeignMod`
+/// arms), but an `extern` block is one `syn::Item` holding an arbitrary number of foreign items,
+/// each with its own independent visibility — so the per-source-item result is a `Vec`, not an
+/// `Option`, even though every arm but `ForeignMod` produces at most one entry.
+fn item_observation_parts(item: &syn::Item) -> Vec<VisibleItem<'_>> {
+    let observed = |visibility, kind, name| VisibleItem {
+        visibility,
+        kind,
+        name,
+    };
+    match item {
+        syn::Item::Fn(i) => vec![observed(
+            &i.vis,
+            VisibleItemKind::Fn,
+            i.sig.ident.to_string(),
+        )],
+        syn::Item::Struct(i) => vec![observed(
+            &i.vis,
+            VisibleItemKind::Struct,
+            i.ident.to_string(),
+        )],
+        syn::Item::Enum(i) => vec![observed(&i.vis, VisibleItemKind::Enum, i.ident.to_string())],
+        syn::Item::Union(i) => vec![observed(
+            &i.vis,
+            VisibleItemKind::Union,
+            i.ident.to_string(),
+        )],
+        syn::Item::Type(i) => vec![observed(&i.vis, VisibleItemKind::Type, i.ident.to_string())],
+        syn::Item::Const(i) => vec![observed(
+            &i.vis,
+            VisibleItemKind::Const,
+            i.ident.to_string(),
+        )],
+        syn::Item::Static(i) => vec![observed(
+            &i.vis,
+            VisibleItemKind::Static,
+            i.ident.to_string(),
+        )],
+        syn::Item::Trait(i) => vec![observed(
+            &i.vis,
+            VisibleItemKind::Trait,
+            i.ident.to_string(),
+        )],
+        syn::Item::TraitAlias(i) => vec![observed(
+            &i.vis,
+            VisibleItemKind::TraitAlias,
+            i.ident.to_string(),
+        )],
+        syn::Item::Mod(i) => vec![observed(&i.vis, VisibleItemKind::Mod, i.ident.to_string())],
+        syn::Item::ExternCrate(i) => vec![observed(
+            &i.vis,
+            VisibleItemKind::ExternCrate,
+            i.ident.to_string(),
+        )],
+        syn::Item::Use(i) => vec![observed(
+            &i.vis,
+            VisibleItemKind::Use,
+            format!(
+                "{}{}",
+                if i.leading_colon.is_some() { "::" } else { "" },
+                use_tree_desc(&i.tree)
+            ),
+        )],
+        // An `extern` block's `pub fn`/`pub static`/`pub type` is a real item in the enclosing
+        // module's own namespace — exactly as visible as a same-shaped ordinary item, and Rust
+        // cannot declare both an ordinary item and a foreign one under the same name in one
+        // module, so there is no identity collision in reusing `Fn`/`Static`/`Type` verbatim (the
+        // identical reasoning `collect_item_exposures`'s own `ForeignMod` arm already applies for
+        // exposure). `ForeignItem::Macro` (a macro invocation, no visibility keyword) and
+        // `ForeignItem::Verbatim` (unparsed tokens `syn` cannot introspect) carry no readable
+        // visibility syntax and stay out of scope, the same nature as this function's existing
+        // attribute-derived/opaque-token bounds.
+        syn::Item::ForeignMod(item) => item
+            .items
+            .iter()
+            .filter_map(|foreign_item| match foreign_item {
+                syn::ForeignItem::Fn(f) => Some(observed(
+                    &f.vis,
+                    VisibleItemKind::Fn,
+                    f.sig.ident.to_string(),
+                )),
+                syn::ForeignItem::Static(s) => Some(observed(
+                    &s.vis,
+                    VisibleItemKind::Static,
+                    s.ident.to_string(),
+                )),
+                syn::ForeignItem::Type(t) => {
+                    Some(observed(&t.vis, VisibleItemKind::Type, t.ident.to_string()))
+                }
+                _ => None,
+            })
+            .collect(),
+        _ => vec![],
+    }
+}
+
+/// Describe every direct observation of `item` whose declared-visibility rank is **strictly
+/// above** `ceiling_rank` (the boundary's ceiling), each rendered `{visibility} {kind} {name}`.
+/// Empty when the item has no governed visibility or none of its observations exceed the ceiling.
+/// Under the Crate ceiling (rank 2) only bare `pub` (rank 3) reacts and renders `pub {kind}
+/// {name}`, byte-identical to the prior rule for every item kind but `ForeignMod`, which the prior
+/// rule did not observe at all (an `extern` block can hold more than one independently-visible
+/// foreign item, hence a `Vec` rather than the prior `Option`).
+pub(crate) fn item_observation(
+    item: &syn::Item,
+    ceiling_rank: u8,
+) -> Vec<(String, VisibleItemKind, String)> {
+    item_observation_parts(item)
+        .into_iter()
+        .filter(|observed| visibility_rank(observed.visibility) > ceiling_rank)
+        .map(|observed| {
+            (
+                vis_prefix(observed.visibility),
+                observed.kind,
+                observed.name,
+            )
+        })
+        .collect()
+}
+
+/// Render a `use` tree to a stable description for a finding (`crate::db::Handle`,
+/// `crate::db::*`, `a as b`, `{x, y}`), reusing path-segment joining — no `quote`.
+fn use_tree_desc(tree: &syn::UseTree) -> String {
+    match tree {
+        syn::UseTree::Path(p) => {
+            format!(
+                "{}::{}",
+                strip_raw(&p.ident.to_string()),
+                use_tree_desc(&p.tree)
+            )
+        }
+        syn::UseTree::Name(n) => strip_raw(&n.ident.to_string()),
+        syn::UseTree::Rename(r) => format!(
+            "{} as {}",
+            strip_raw(&r.ident.to_string()),
+            strip_raw(&r.rename.to_string())
+        ),
+        syn::UseTree::Glob(_) => "*".to_string(),
+        syn::UseTree::Group(g) => {
+            let inner: Vec<String> = g.items.iter().map(use_tree_desc).collect();
+            format!("{{{}}}", inner.join(", "))
+        }
+    }
+}
+
+/// One impl-site-authored generics position, as the syntax a caller should collect from.
+///
+/// The caller decides *what* to collect (exposed type paths, `dyn` shapes, returned `impl Trait`s);
+/// this only says where the observable positions are and how to key them, so the three collectors
+/// that walk an impl block's generics cannot drift on either question.
+pub(crate) enum GenericsPosition<'a> {
+    /// A generic parameter's own bounds (`impl<T: crate::infra::Secret>`) or a where-predicate's
+    /// right-hand bounds.
+    Bounds(&'a syn::punctuated::Punctuated<syn::TypeParamBound, syn::Token![+]>),
+    /// A const parameter's type annotation (`impl<const N: crate::infra::X>`) or a where-predicate's
+    /// bounded left-hand type (`where crate::infra::X: Clone` leaks as surely as the bound side).
+    Type(&'a syn::Type),
+}
+
+/// Every impl-site-authored position in an impl block's generics, each paired with the key that
+/// distinguishes it from its siblings **within that same block**.
+///
+/// The key is the bounded thing's own name — a parameter's identifier, or a where-predicate's
+/// rendered bounded type — never the position's index, because `semantic-signature-coupling` forbids
+/// identity resting on scan order or item ordinal. A bounded type that cannot be rendered falls back
+/// to an internal positional sentinel built from the enclosing item's `ordinal` and the predicate's
+/// own index, which is never published: it exists only to keep two unrenderable bounds in one block
+/// from sharing a key, and the shared `reject_positional_identity` gate turns it into a loud refusal.
+///
+/// Completeness rests on a language rule, verified against a real `rustc` rather than assumed: an
+/// `impl` block's generic parameters cannot carry defaults ("defaults for generic parameters are not
+/// allowed here"), so a parameter contributes only its bounds — or, for a const parameter, its type
+/// annotation. Lifetime parameters and lifetime where-predicates name no type, so they contribute
+/// nothing. That is why walking positions loses nothing against walking the whole `Generics` node,
+/// which is what a caller keying by position replaces.
+pub(crate) fn impl_generics_positions(
+    generics: &syn::Generics,
+    ordinal: usize,
+) -> Vec<(String, Vec<GenericsPosition<'_>>)> {
+    let mut positions: Vec<(String, Vec<GenericsPosition<'_>>)> = Vec::new();
+    for param in &generics.params {
+        match param {
+            syn::GenericParam::Type(tp) => positions.push((
+                strip_raw(&tp.ident.to_string()),
+                vec![GenericsPosition::Bounds(&tp.bounds)],
+            )),
+            syn::GenericParam::Const(cp) => positions.push((
+                strip_raw(&cp.ident.to_string()),
+                vec![GenericsPosition::Type(&cp.ty)],
+            )),
+            syn::GenericParam::Lifetime(_) => {}
+        }
+    }
+    if let Some(where_clause) = &generics.where_clause {
+        for (bound_ordinal, predicate) in where_clause.predicates.iter().enumerate() {
+            if let syn::WherePredicate::Type(pt) = predicate {
+                let key = crate::resolve::type_to_string(&pt.bounded_ty)
+                    .unwrap_or_else(|| format!("_#{ordinal}.{bound_ordinal}"));
+                positions.push((
+                    key,
+                    vec![
+                        GenericsPosition::Type(&pt.bounded_ty),
+                        GenericsPosition::Bounds(&pt.bounds),
+                    ],
+                ));
+            }
+        }
+    }
+    positions
+}

@@ -1,0 +1,130 @@
+//! `::`-delimited path containment and leaf/self-type helpers shared by every capability's
+//! subtree / forbidden / allowed test — the single home of the containment rule, so no copy
+//! drifts to a bare `starts_with` that would admit a sibling (a false positive on the allowed
+//! side, a false negative on the forbidden side). Name resolution itself lives in
+//! [`crate::resolve`].
+
+use std::collections::HashSet;
+
+use crate::resolve::{
+    AliasMap, BareFallback, ReexportMap, UseMap, expand_canonical_paths, is_shadowed_param_path,
+    resolve_path_all, strip_raw,
+};
+
+/// Sibling-safe `::`-path containment: `path` equals `prefix` or sits strictly beneath it
+/// (`crate::a` contains `crate::a::b`, never the sibling `crate::ab`). (The module doc carries the
+/// why — single home, no bare `starts_with`.)
+fn path_within(path: &str, prefix: &str) -> bool {
+    path == prefix || path.starts_with(&format!("{prefix}::"))
+}
+
+/// A canonical path is under `subtree` — [`path_within`] read with subtree-containment naming at
+/// the call site (`crate::a` contains `crate::a::b`, never the sibling `crate::ab`).
+pub(crate) fn under_subtree(canonical: &str, subtree: &str) -> bool {
+    path_within(canonical, subtree)
+}
+
+/// The leaf identifier of a `::`-delimited path string, raw-canonicalized (`r#Trait` → `Trait`) so
+/// a declared marker written with a raw identifier compares equal to the observed [`path_leaf`],
+/// which strips it. (Trait names are never keywords, so this is defensive symmetry, not a live gap.)
+pub(crate) fn leaf_of(path: &str) -> &str {
+    let leaf = path.rsplit_once("::").map_or(path, |(_, leaf)| leaf);
+    leaf.strip_prefix("r#").unwrap_or(leaf)
+}
+
+/// The leaf identifier of a `syn::Path` (raw-canonicalized).
+pub(crate) fn path_leaf(path: &syn::Path) -> String {
+    path.segments
+        .last()
+        .map(|s| strip_raw(&s.ident.to_string()))
+        .unwrap_or_default()
+}
+
+/// Resolve an `impl`'s self-type to the canonical path of the type it **lands on** — its
+/// definition — or `None` when it is not a placeable nominal path (a reference/tuple/complex
+/// shape — a stated bound). For a `Type::Path` (incl. a generic `Wrapper<T>`, governed by the
+/// outer `Wrapper`), the leading path resolves via the impl module's `use`s / current-module,
+/// then is followed through the re-export (`pub use` facade) and type-alias closures to the
+/// definition it denotes: `impl M for crate::facade::T` where `crate::facade` re-exports `T`, and
+/// `impl M for Bar` where `type Bar = Real`, both land on the real definition (to coherence a
+/// re-export/alias denotes the same type, so the marker genuinely lands there).
+///
+/// `impl_type_params` shadows the impl block's OWN declared generic type-parameter names
+/// (`impl<T> Marker for T {}`'s `T`), the identical shadowing the exposure collectors already
+/// apply ([`crate::collect::exposure::type_param_names`]) for every OTHER impl-site position — see
+/// `semantic-forbidden-marker`'s "Anchor resolution and observation bounds" requirement (the
+/// blanket-impl/projection/qualified-path shadow scenarios) for the full rationale. Without the
+/// shadow, a blanket `impl<T> Marker for T {}` beside an unrelated `use
+/// crate::domain::Innocent as T;` fabricated a marker-acquisition finding on `Innocent`, which the
+/// source never actually impls the marker for.
+///
+/// The canonicalization is folded in **here** so a self-type is canonical *by construction*: a
+/// caller cannot resolve a self-type and forget to close the re-export/alias hop (the sibling
+/// capabilities' shared-canonicalizer discipline, made structural at the one self-type resolver).
+/// Routed through the crate's own [`expand_canonical_paths`] rather than a second hand-rolled
+/// fixpoint, so this resolver shares that function's hop cap (bounding a divergent, non-cycling
+/// rewrite chain that an exact-repeat guard alone cannot catch — a gap a hand-rolled loop here once
+/// had) and its longest-prefix alias rewrite (so a member reached *through* an aliased prefix, not
+/// just an exact alias key, still lands — closing a second, narrower false negative the same swap
+/// fixed). `alias_targets` carries the `CurrentModule`-fallback landing, so an alias to a bare local
+/// struct (`type Bar = Real`) is caught — which the `Ignore`-built exposure alias map deliberately
+/// does not, the reason this is not the exposure canonicalizer. A defining path is never a key in
+/// either map (an alias/re-export name cannot clash with a definition in its module), so the
+/// fixpoint never over-follows past a definition.
+///
+/// Returns **every** landing candidate, cfg-blind like the exposure pipeline's own
+/// `expand_canonical_paths`: a self type whose head, or whose `type X = Y;` alias target, is a
+/// mutually-exclusive `#[cfg]`-gated `use` name must not have its other candidate silently
+/// dropped (found on adversarial review of `hunyi-cfg-branch-use-reexport-merging`: the
+/// marker-acquisition self-type landing missed a forbidden self type this way).
+pub(crate) fn resolve_self_type(
+    self_ty: &syn::Type,
+    uses: &UseMap,
+    module: &str,
+    alias_targets: &AliasMap,
+    reexports: &ReexportMap,
+    impl_type_params: &HashSet<String>,
+) -> Vec<String> {
+    let bases = match self_ty {
+        syn::Type::Path(tp) => {
+            // A QUALIFIED-path self type (`<T>::Item`, `<T as Trait>::Item`) stores its own
+            // dependent type in `qself.ty`, entirely OUTSIDE `path.segments` — even when that
+            // dependent type is the impl's own generic parameter, `is_shadowed_param_path` (which
+            // only inspects `path`) cannot see it. Mirrors `canonical_self_owner`'s own
+            // `qself.is_none()` guard: a qself'd self type is never a placeable nominal path either
+            // way, so it is dropped here as a declared bound.
+            if tp.qself.is_some() {
+                return Vec::new();
+            }
+            // A self type naming the impl's own type parameter — bare (`T`) or a projection off it
+            // (`T::Assoc`) — is a parameter use, never a nominal type: dropped before any resolution
+            // is attempted, via the SAME leading-segment shadow check the sibling exposure
+            // collectors use (`is_shadowed_param_path`), not a narrower single-segment-only copy —
+            // matching `impl<T> ... for T {}` OR `impl<T> ... for T::Assoc {}` here would otherwise
+            // resolve `T` through an unrelated same-named alias in scope.
+            if is_shadowed_param_path(&tp.path, impl_type_params) {
+                return Vec::new();
+            }
+            resolve_path_all(&tp.path, uses, module, BareFallback::CurrentModule)
+        }
+        _ => return Vec::new(),
+    };
+    bases
+        .iter()
+        .flat_map(|base| expand_canonical_paths(base, alias_targets, reexports))
+        .collect()
+}
+
+/// `::`-delimited containment: a canonical path is forbidden when it equals a forbidden
+/// entry or sits beneath it (so `crate::infra` matches `crate::infra::db::Pool` but never
+/// the sibling `crate::infrastructure`).
+pub(crate) fn matches_forbidden(canonical: &str, forbidden: &[String]) -> bool {
+    forbidden.iter().any(|entry| path_within(canonical, entry))
+}
+
+/// `::`-delimited containment at allowed-vs-location polarity: a module location is
+/// allowed when it equals an allowed entry or sits beneath it (so `crate::commands`
+/// allows `crate::commands::greet` but never the sibling `crate::commandeer`).
+pub(crate) fn matches_allowed(location: &str, allowed: &[String]) -> bool {
+    allowed.iter().any(|entry| path_within(location, entry))
+}

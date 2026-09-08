@@ -1,0 +1,7 @@
+# In-repo fixture: a violating target where a forbidden child module is imported via an ancestor wildcard.
+[package]
+name = "example-core"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]

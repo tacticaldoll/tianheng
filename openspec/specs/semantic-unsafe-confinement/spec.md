@@ -1,0 +1,244 @@
+# semantic-unsafe-confinement Specification
+
+## Purpose
+
+The 渾儀 (semantic) dimension's `unsafe`-confinement capability: declare in Rust that a crate's `unsafe` (blocks, `unsafe fn`/`impl`/`trait`, `unsafe extern`) may appear **only under** a declared subtree — the auditability boundary of a layered crate ("all `unsafe` lives behind `crate::ffi`"). It governs *where* `unsafe` lives (architectural intent), not *whether* it may exist: the crate-wide "no `unsafe`" case is `#![forbid(unsafe_code)]`'s (compile-time, stronger), so an empty or crate-root allowed set is a constitution error. Observed via the AST (`syn`), a whole-crate scan of the forbidden-marker family. This is confinement, the non-compiler-expressible complement of the attribute.
+
+## Subject
+
+- `crates/hunyi/src/*.rs`
+- `crates/hunyi/src/tests/*.rs`
+
+## Requirements
+### Requirement: Unsafe confinement declared in Rust
+
+An unsafe-confinement boundary SHALL be expressed as Rust code and is part of the single source of truth. An `UnsafeBoundary` SHALL name a target crate, one or more **allowed subtree** module paths via `only_under([...])`, a human-readable reason, and a severity. The rule confines `unsafe` to the allowed subtree(s): a `unsafe` site outside all of them reacts. It governs *where* `unsafe` may live, never *whether* it may exist. The system MUST NOT require TOML, YAML, Markdown, or any generated policy file.
+
+The confinement-only scope SHALL be enforced as a constitution error (exit 2), never a silent degeneracy:
+
+- An **empty** allowed set (`only_under([])`) SHALL be a constitution error whose message directs the adopter to `#![forbid(unsafe_code)]` — a crate-wide "no `unsafe`" is the compiler's stronger job, not this rule's.
+- An allowed set naming the **crate root** (`crate`) SHALL be a constitution error — `unsafe` would be permitted everywhere (the rule could never react).
+
+#### Scenario: Boundary declared in Rust
+
+- **WHEN** a developer writes `UnsafeBoundary::in_crate("app").only_under(["crate::ffi"]).because("unsafe lives only behind the ffi module")`
+- **THEN** a boundary is held, confining `unsafe` in crate `app` to the subtree `crate::ffi`, with a non-empty reason and a default `enforce` severity
+
+#### Scenario: Empty allowed set is a constitution error
+
+- **WHEN** a boundary declares `only_under([])`
+- **THEN** the system emits a constitution error (exit 2) pointing at `#![forbid(unsafe_code)]`, never treating it as a silent no-op or a crate-wide reaction
+
+#### Scenario: Crate-root allowed set is a constitution error
+
+- **WHEN** a boundary declares `only_under(["crate"])`
+- **THEN** the system emits a constitution error (exit 2), because `unsafe` would be permitted in the whole crate and the rule could never react
+
+### Requirement: A malformed `::`-path allowed-subtree entry is a constitution error
+
+An allowed-subtree entry given to `only_under([...])` SHALL be rejected as a **constitution error**
+(exit 2) when its `::`-delimited spelling has any empty segment — a leading `::`, a trailing `::`, a
+doubled `::`, or the empty string itself — checked alongside the empty-set and crate-root guards
+above, before any crate scanning. This is the identical restriction
+`semantic-signature-coupling`'s "A malformed `::`-path forbidden operand is a constitution error"
+requirement already places on the forbidden-operand family, read at the allowed-subtree polarity:
+`matches_allowed`'s `::`-delimited containment can never equal or prefix-contain a real module
+location against an operand shaped this way, so without this requirement a malformed entry would
+not silently pass the boundary — the containment check already fails loud, since a site outside
+every (non-matching) allowed entry is reported as a violation — but it would silently misreport
+every genuinely-confined `unsafe` site as a spurious violation, naming no cause, rather than a clear
+constitution error identifying the actual typo. There is no legitimate reason to write this shape:
+no canonical module path this system ever resolves carries an empty segment, so the spelling is
+always either inert or broken, never meaningfully different from the bare form.
+
+#### Scenario: A leading-`::` allowed-subtree entry is a constitution error
+
+- **WHEN** a boundary declares `only_under(["::crate::ffi"])` and the crate confines all `unsafe` genuinely inside `crate::ffi`
+- **THEN** the system reports a constitution error (exit 2) naming the malformed entry, rather than reporting the genuinely-confined site as a spurious violation
+
+#### Scenario: A trailing-`::` allowed-subtree entry is a constitution error
+
+- **WHEN** a boundary declares `only_under(["crate::ffi::"])` against the same crate
+- **THEN** the system reports a constitution error (exit 2), for the identical reason
+
+#### Scenario: A doubled-`::` allowed-subtree entry is a constitution error
+
+- **WHEN** a boundary declares `only_under(["crate::ffi::::raw"])` against the same crate
+- **THEN** the system reports a constitution error (exit 2), for the identical reason
+
+#### Scenario: The bare-string spelling is unaffected
+
+- **WHEN** a boundary declares `only_under(["crate::ffi"])` against the same crate
+- **THEN** the system reports no violation for the genuinely-confined site, exactly as before this requirement existed
+
+### Requirement: Unsafe-site observation
+
+The system SHALL walk the whole target crate (descending file-based `mod x;` and inline `mod x { … }` alike) and observe every `unsafe` **site**, attributing each to its enclosing module. The observed sites SHALL be: an `unsafe fn` (free function, inherent method, trait method declaration, or trait-impl method), an `unsafe impl`, an `unsafe trait`, an `unsafe extern` block (the `unsafe` keyword form), and an `unsafe {}` expression block (observed within item bodies, including bodies of `const`/`static` initializers, closures, and nested functions). A `mod` declared **inside a function or block body** (which the top-level module walk does not descend) SHALL still be observed — its `unsafe` attributed to the enclosing file module — so no body-nested `unsafe` is silently dropped. A site SHALL react iff its enclosing module is **not under** any allowed subtree (a module equal to or beneath an allowed subtree passes). Within the observed source there SHALL be no false negative: an observed `unsafe` site outside every allowed subtree MUST react.
+
+#### Scenario: An unsafe block outside the subtree is a violation
+
+- **WHEN** the crate has `only_under(["crate::ffi"])` and a function in `crate::net` contains an `unsafe { … }` block
+- **THEN** the system emits a violation naming the module `crate::net` and the `unsafe block`
+
+#### Scenario: An unsafe fn / impl / trait outside the subtree is a violation
+
+- **WHEN** the crate has `only_under(["crate::ffi"])` and `crate::net` declares `unsafe fn decode()`, an `unsafe impl` block, or an `unsafe trait`
+- **THEN** the system emits a violation for each, named by kind and (where present) name, qualified by `crate::net`
+
+#### Scenario: Two unsafe impls that differ in trait or self type stay distinct
+
+- **WHEN** `crate::net` (outside the subtree) declares `unsafe impl Send for Foo {}` alongside either `unsafe impl Sync for Foo {}` (a different trait) or `unsafe impl Send for Bar {}` (the same trait, a different self type)
+- **THEN** the system emits two distinct findings (both the trait **and** the self type are part of the finding), so neither masks the other under the baseline
+
+#### Scenario: Two same-named unsafe fns on different owners stay distinct
+
+- **WHEN** `crate::net` (outside the subtree) declares `impl Foo { unsafe fn m(&self) {} }` alongside `impl Bar { unsafe fn m(&self) {} }` (the same method name, different owners), or two traits each declaring `unsafe fn m`
+- **THEN** the system emits two distinct findings — each `unsafe fn` finding is qualified by its enclosing owner (`unsafe fn Foo::m`, the inherent-impl self type, or `unsafe fn A::m`, the declaring trait) — so neither masks the other under the baseline, the `unsafe fn` counterpart of the `unsafe impl` distinctness above
+
+#### Scenario: A trait-impl unsafe fn stays distinct from the inherent method on the same type
+
+- **WHEN** `crate::net` (outside the subtree) declares, on the **same** self type `Foo`, an inherent `impl Foo { unsafe fn m(&self) {} }` alongside `impl A for Foo { unsafe fn m(&self) {} }` and `impl B for Foo { unsafe fn m(&self) {} }` (safe traits `A`/`B`, so no independent `unsafe impl` finding)
+- **THEN** the system emits three distinct findings — a trait-impl `unsafe fn` is qualified by `<trait for self>` (`unsafe fn <A for Foo>::m`, `unsafe fn <B for Foo>::m`), distinct from the inherent `unsafe fn Foo::m` and from each other — because self-type qualification alone separates only *different* self types, so on one self type a baseline of the inherent method would otherwise mask a later-added trait-impl `unsafe fn` (a false negative)
+
+#### Scenario: Unsafe in a body-nested module is attributed to the enclosing module
+
+- **WHEN** the crate has `only_under(["crate::ffi"])` and a function in `crate::net` declares `mod raw { pub unsafe fn poke() {} }` (a `mod` inside a fn body)
+- **THEN** the system emits a violation for the `unsafe fn`, attributed to `crate::net`, never silently dropping it because the top-level walk did not descend a body-nested `mod`
+
+#### Scenario: Unsafe under the allowed subtree is clean
+
+- **WHEN** the crate has `only_under(["crate::ffi"])` and all `unsafe` (blocks, `fn`, `impl`, `trait`, `extern`) sits in `crate::ffi` or a submodule beneath it
+- **THEN** the system reports no violation
+
+#### Scenario: An observed unsafe site is never silently passed
+
+- **WHEN** an `unsafe` site the scan observes lies outside every allowed subtree
+- **THEN** the system emits a violation, never exit 0 for that boundary
+
+#### Scenario: Unsafe in an unconditionally #[path]-relocated module reacts
+
+- **WHEN** the crate has `only_under(["crate::ffi"])` and `crate::net` declares `#[path = "net_raw.rs"] mod raw;` where `net_raw.rs` contains an `unsafe fn`
+- **THEN** the walk follows the `#[path]` to `net_raw.rs` and emits a violation for the `unsafe fn` attributed to `crate::net::raw`, never silently dropping it as off the conventional path
+
+#### Scenario: Unsafe in a #[path] nested inside an inline module reacts at the accumulated file
+
+- **WHEN** the crate root declares `mod inline { #[path = "other.rs"] mod inner; }`, `inline/other.rs` holds an `unsafe fn`, and a same-named `other.rs` decoy sits beside the crate root
+- **THEN** the walk resolves `crate::inline::inner` to `inline/other.rs` (the enclosing inline-`mod` name accumulated onto the base, as rustc compiles it) and emits the `unsafe fn` violation, never reading the `other.rs` decoy and passing at exit 0 — the false negative this closes
+
+#### Scenario: Unsafe in a cfg_attr-wrapped-path inline module reacts
+
+- **WHEN** the crate has `only_under(["crate::ffi"])` and `crate::net` declares `#[cfg_attr(windows, path = "net_raw.rs")] mod raw { pub fn f() { unsafe {} } }` with no `net_raw.rs` present
+- **THEN** the walk observes `raw`'s body regardless — `#[path]`, cfg-wrapped or not, has no effect on an inline module's own content — and emits a violation for the `unsafe` block, never silently dropping the whole body
+
+#### Scenario: Unsafe in a cfg_attr-wrapped-path file module reacts, whichever candidate exists
+
+- **WHEN** the crate has `only_under(["crate::ffi"])` and `crate::net` declares `#[cfg_attr(any(), path = "never.rs")] mod raw;` where `raw.rs` (the conventional file, present) contains an `unsafe fn` and `never.rs` (the target, absent) does not exist
+- **THEN** the walk reads `raw.rs` — the file every build actually compiles here — and emits the violation, never treating the `cfg_attr` attribute as a bound to skip the module outright
+
+### Requirement: Crate and subtree resolution
+
+For each boundary the system SHALL resolve the target crate to a workspace member and its source root before evaluating it. A target crate absent from the workspace, an unreadable/unparseable source file, or a non-`#[cfg]` missing module file encountered during the walk SHALL be a **constitution error** (exit 2), failing loud and distinct from a violation (exit 1), so an ungovernable target is never reported as an unsafe violation and never silently passed. A module whose source file loops the current descent path back on itself — a symlinked module directory or a circular `#[path]` — SHALL be a constitution error, never a crash; but two sibling/cousin declarations legitimately resolving to one file (which rustc compiles) SHALL NOT be misreported as a cycle.
+
+#### Scenario: Unknown crate is a constitution error
+
+- **WHEN** a boundary targets a crate that is not a member of the workspace
+- **THEN** the system emits a constitution error (exit 2), never exit 0 or exit 1
+
+### Requirement: Observation bounds and scope
+
+The rule SHALL observe the executable-`unsafe` **code sites** (blocks, `fn`, `impl`, `trait`, `unsafe extern`); other lexical `unsafe` tokens and non-source `unsafe` SHALL be **stated bounds, never a silent claim of safety**:
+
+- **Peripheral `unsafe` keywords, out of scope by design:** an `unsafe(...)` **attribute** (`#[unsafe(no_mangle)]`, Rust 2024 — a linkage assertion, not a code region), a bare **`unsafe fn` pointer type** (`type H = unsafe fn(...)` — a type signature, not an execution), and a **plain `extern "C" { … }` block** carrying no `unsafe` keyword (only the `unsafe extern {}` form is a site; the plain block's foreign-fn *call sites* are `unsafe {}` and DO react). The rule confines executable-`unsafe` code sites, not every lexical `unsafe` token.
+- **Incidental bounds** (the dimension's inherited whole-crate-scan bounds): `unsafe` produced by a macro expansion or inside an unexpanded macro body is not observed; a module reached through an **unconditional** `#[path = "…"]` remap **is** observed (the walk follows it to its author-chosen file); a module reached only through a **`cfg_attr`-wrapped** `#[path]` is ALSO observed — an inline body regardless (the attribute has no effect on it), a file module's conventional file and its `cfg_attr` target both read when they exist on disk (cfg-blind union: neither is silently preferred), and only when NEITHER candidate exists, with no other cfg-conditional gate, is the module a genuine scan error; a `#[cfg]`-gated module absent when its feature is off is tolerated, while cfg-present code is observed **as written** (cfg-blind); a distinct `[lib] name` is a bound.
+
+The system makes no claim about `unsafe` outside these observed sites.
+
+#### Scenario: Macro-generated unsafe is a documented bound
+
+- **WHEN** an `unsafe` block is produced by a macro expansion in a module outside the allowed subtree
+- **THEN** the system does not claim to observe it (out of scope, the dimension's macro bound), rather than silently asserting the module is unsafe-free
+- **PINNED-BY** `unsafe_in_a_macro_body_is_a_stated_bound`
+
+### Requirement: CI reaction
+
+The system SHALL fold unsafe-confinement findings into the same exit-code contract as the other dimensions: **exit 0** when no enforce-severity boundary is violated; **exit 1** when one or more enforce-severity boundaries are violated; **exit 2** for a constitution or scan error. A run aggregating static and semantic boundaries SHALL produce one report and one outcome, and a constitution error on any boundary SHALL supersede any violation in the same run.
+
+#### Scenario: A clean boundary passes
+
+- **WHEN** all `unsafe` in the crate sits under the allowed subtree(s)
+- **THEN** the system reports the boundary satisfied and contributes exit 0
+
+#### Scenario: An unsafe-confinement violation fails CI
+
+- **WHEN** an enforce-severity unsafe-confinement boundary is violated
+- **THEN** the system prints a report and exits 1
+
+### Requirement: Severity and baseline parity
+
+An unsafe-confinement boundary SHALL carry a severity (`enforce` by default or `warn`) and SHALL gate
+against the shared semantic Baseline. Its violation identity SHALL combine the confined crate
+target, the stable unsafe-confinement rule key, and the structured unsafe-site fact. Human rule and
+finding presentation SHALL remain available but SHALL NOT define matching. The optional baseline
+owner/tracker annotations SHALL remain non-identity metadata.
+
+#### Scenario: A warn boundary reports without failing
+
+- **WHEN** a warn unsafe-confinement boundary is violated and no enforce boundary is violated
+- **THEN** the reaction reports the violation and exits 0
+
+#### Scenario: A baselined unsafe site does not fail
+
+- **WHEN** an enforce boundary's only violations have exact target/rule/fact matches
+- **THEN** the reaction reports them as accepted and exits 0 even if human wording changed
+
+#### Scenario: A different unsafe site is not masked
+
+- **WHEN** a current unsafe fact differs in any identity-bearing site role from an accepted entry
+- **THEN** it is new and reacts according to severity
+
+### Requirement: Human-readable violation report
+
+An unsafe-confinement violation report SHALL identify the confined crate, the rule (that `unsafe` is confined to the declared subtree(s), naming them), the offending site and its module (the finding), the boundary's reason, and SHALL indicate the reaction failed — the same report contract as the other boundaries.
+
+#### Scenario: Report explains the offending site
+
+- **WHEN** crate `app` confines `unsafe` to `crate::ffi` and `crate::net` contains an `unsafe` block
+- **THEN** the report names the crate `app`, the rule (confined to `crate::ffi`), the finding (`unsafe block in crate::net`), the reason, and indicates CI failed
+
+### Requirement: Unsafe-site identity is structurally decomposed
+
+Every unsafe-site fact SHALL encode its site form and enclosing module, plus each observed role
+needed for that form: owner kind and canonical owner for methods, trait and self type for impls,
+and item name where present. These roles SHALL be separate canonical fields rather than one rendered
+finding string. Human wording and complete syntax SHALL remain presentation/diagnosis only.
+
+An anonymous `unsafe {}` block SHALL retain deliberate per-module coalescing and SHALL NOT gain a
+per-block ordinal. No unsafe fact SHALL use traversal order, item index, impl ordinal, or a
+position-derived placeholder as public identity. When syntax cannot use its ordinary renderer, the
+observer SHALL use an observed structural discriminator or fail loud rather than conflate distinct
+sites.
+
+#### Scenario: Unsafe impl roles stay distinct
+
+- **WHEN** two unsafe impls differ by trait or self type in the same module
+- **THEN** their structured facts differ in the corresponding trait or owner field
+
+#### Scenario: Unsafe method owner roles stay distinct
+
+- **WHEN** same-named unsafe methods belong to different inherent, trait, or trait-impl owners
+- **THEN** owner kind, canonical owner, and trait role keep their identities distinct
+
+#### Scenario: Anonymous blocks coalesce by observed module
+
+- **WHEN** a module contains multiple anonymous unsafe blocks outside the allowed subtree
+- **THEN** they deliberately produce one stable per-module fact without a block ordinal
+
+#### Scenario: Reordering does not re-key an unsafe fact
+
+- **WHEN** declarations or impl blocks are reordered or an unrelated item is inserted
+- **THEN** every pre-existing unsafe-site identity remains unchanged
+
+#### Scenario: Unrenderable sites do not collapse by position
+
+- **WHEN** two distinct unsafe sites contain syntax outside the ordinary renderer
+- **THEN** they remain structurally distinct or scanning fails loud, never sharing an ordinal fallback
