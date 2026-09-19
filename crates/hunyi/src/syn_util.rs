@@ -76,25 +76,12 @@ pub(crate) fn has_cfg_attr(attrs: &[syn::Attribute]) -> bool {
     attrs.iter().any(|attr| is_builtin_name(attr.path(), "cfg"))
 }
 
-/// The one macro whose body this dimension reads as ordinary code: `cfg_if!`. See
-/// `semantic-signature-coupling`'s "Transparent control-flow macro arm contents are observed"
-/// requirement for why gating on the macro **name** is load-bearing rather than conservative
-/// (the `wrap! { impl Foo { … } }` false-positive this restriction avoids) and for the stated
-/// bound on any other body-wrapping macro. Mirrors 圭表's own
-/// `guibiao::module_scan::…::is_transparent_macro_name` so the two dimensions cannot silently
-/// disagree on which source is a real declaration.
+/// The one macro whose body this dimension reads as ordinary code: `cfg_if!`.
+///
+/// Gating on `ident.is_none()` excludes definitions (`macro_rules! cfg_if`).
+/// The macro name is matched on the last segment with raw identifiers stripped (`strip_raw`),
+/// so `cfg_if::cfg_if!` and `r#cfg_if!` both match.
 fn is_transparent_macro(item: &syn::ItemMacro) -> bool {
-    // `ident.is_none()` excludes a definition (`macro_rules! cfg_if { … }`, whose invocation path
-    // is `macro_rules`) from ever being read as an invocation of it. Matched on the LAST segment,
-    // so the qualified `cfg_if::cfg_if! { … }` spelling counts — the same test 圭表 applies.
-    //
-    // **Compared through `strip_raw`, because `r#cfg_if!` invokes the same macro.** `cfg_if` is not a
-    // keyword, so the prefix escapes nothing and only changes the spelling — measured against rustc
-    // 1.96.0, edition 2021, `--crate-type lib`, an item declared inside `r#cfg_if! { … }` is produced
-    // and can be referenced. `syn` carries the rawness, and a raw `Ident` is not equal to the plain
-    // string, so this read the invocation as an opaque macro and everything in its arms went
-    // unobserved. Note this is NOT the rule for a keyword: `r#mut` is an identifier named `mut` and is
-    // precisely not the keyword, so the readers that match Rust keywords compare as written and must.
     item.ident.is_none()
         && item
             .mac
@@ -139,10 +126,6 @@ fn parse_transparent_arms(input: syn::parse::ParseStream) -> syn::Result<Vec<Vec
             syn::braced!(arm in input);
             match arm.parse::<syn::File>() {
                 Ok(file) => arms.push(file.items),
-                // Drain the arm buffer: syn reports a partially-consumed nested buffer as an
-                // "unexpected token" error against the ENCLOSING parse, which would discard the
-                // arms that did parse. Still push an (empty) arm slot so a later arm's index is
-                // unaffected by an earlier arm's parse failure.
                 Err(_) => {
                     drain(&arm)?;
                     arms.push(Vec::new());
@@ -213,10 +196,6 @@ impl FlatItem {
 
     fn in_arm(mut self, key: ArmKey) -> Self {
         self.in_transparent_arm = true;
-        // A nested `cfg_if!`'s own recursive flattening already tags its items with ITS OWN
-        // (innermost) key before this outer call wraps them; keep that innermost key rather than
-        // overwrite it with the outer one — an item's most specific arm membership is the one
-        // whose sibling arm it is actually exclusive with.
         self.arm_key = self.arm_key.or(Some(key));
         self
     }
@@ -649,7 +628,6 @@ fn vis_prefix(vis: &syn::Visibility) -> String {
                 .map(|s| strip_raw(&s.ident.to_string()))
                 .collect();
             let joined = path.join("::");
-            // `pub(in crate|super|self)` is equivalent to the keyword form; render it as such.
             if r.in_token.is_some() && !matches!(joined.as_str(), "crate" | "super" | "self") {
                 format!("pub(in {joined})")
             } else {
@@ -776,15 +754,6 @@ fn item_observation_parts(item: &syn::Item) -> Vec<VisibleItem<'_>> {
                 use_tree_desc(&i.tree)
             ),
         )],
-        // An `extern` block's `pub fn`/`pub static`/`pub type` is a real item in the enclosing
-        // module's own namespace — exactly as visible as a same-shaped ordinary item, and Rust
-        // cannot declare both an ordinary item and a foreign one under the same name in one
-        // module, so there is no identity collision in reusing `Fn`/`Static`/`Type` verbatim (the
-        // identical reasoning `collect_item_exposures`'s own `ForeignMod` arm already applies for
-        // exposure). `ForeignItem::Macro` (a macro invocation, no visibility keyword) and
-        // `ForeignItem::Verbatim` (unparsed tokens `syn` cannot introspect) carry no readable
-        // visibility syntax and stay out of scope, the same nature as this function's existing
-        // attribute-derived/opaque-token bounds.
         syn::Item::ForeignMod(item) => item
             .items
             .iter()

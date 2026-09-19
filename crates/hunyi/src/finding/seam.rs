@@ -352,9 +352,6 @@ impl std::fmt::Display for PublicSeam {
                 trait_name,
                 name,
             } => write!(f, "{} trait {module}::{trait_name}::{name}", kind.as_str()),
-            // `module` is identity-only on both of these, exactly as it is on `InherentMethod` /
-            // `InherentAssoc`: the rendered sentence is unchanged by qualifying the identity, and
-            // two same-text violations stay separable by the `file` each one carries.
             Self::InherentGenerics { owner, bound, .. } => {
                 write!(f, "impl <{owner}> (generics: {bound})")
             }

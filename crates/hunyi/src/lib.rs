@@ -23,8 +23,6 @@ use std::path::Path;
 
 use serde_json::Value;
 
-// The reaction model is the shared 璇璣 crate, re-exported so a consumer can stay on
-// hunyi's surface; these names are also used internally below.
 pub use xuanji::{
     Baseline, BoundDecl, BoundId, BoundaryKind, Defence, Demonstrates, Extent, FactGranularity,
     Finding, Observer, Outcome, Owner, Polarity, Reached, Report, RuleKey, ScanDepth, Severity,
@@ -40,15 +38,9 @@ pub use observer::SemanticObserver;
 mod dsl;
 pub use dsl::*;
 
-// The canonical rule labels — one source per rule, re-exported so the 天衡 shell's `list`
-// projections stay on hunyi's surface (`hunyi::SIGNATURE_RULE`, …).
 mod rules;
 pub use rules::*;
 
-// The cargo-metadata reads live in 星表 (`xingbiao`), the shared substrate below the 三儀 — the
-// static and semantic dimensions read the workspace through one reader, not two drifting twins.
-
-// Already-decomposed helper substrates: resolution, collection, scanning, emission, errors, …
 mod collect;
 mod containment;
 mod crate_scope;
@@ -63,9 +55,6 @@ mod scan;
 mod shape_scan;
 mod syn_util;
 
-// The semantic capabilities, each a self-contained reaction (check → check_boundary →
-// findings). Their public `check_*` entries and crate-internal `*_findings` hearts are
-// re-exported at the crate root so both the shell and the tests keep their existing paths.
 mod async_exposure;
 mod dyn_trait;
 mod exposure;
@@ -84,9 +73,6 @@ pub use trait_impl::check_trait_impl_locality;
 pub use unsafe_confinement::check_unsafe_confinement;
 pub use visibility::check_visibility;
 
-// The pure-heart `*_findings` entries stay crate-internal; the test suite pulls the crate root via
-// `use super::*`, so re-export them here for tests only (they are called in-module by each
-// capability's `check_*_boundary`, so a non-test build never reaches them through the root).
 #[cfg(test)]
 pub(crate) use async_exposure::{async_exposure_module_findings, async_exposure_subtree_findings};
 #[cfg(test)]
@@ -114,8 +100,6 @@ use crate::impl_trait::check_impl_trait_boundary;
 use crate::trait_impl::check_trait_impl_boundary;
 use crate::unsafe_confinement::check_unsafe_boundary;
 use crate::visibility::check_visibility_boundary;
-
-// --- The 渾儀 dimension's boundary set ----------------------------------------
 
 /// The 渾儀 (semantic) dimension's boundaries, gathered so the shell takes the dimension as
 /// one unit rather than one parameter per capability. Each field is one capability's
@@ -261,8 +245,6 @@ impl SemanticBoundaries {
     }
 }
 
-// --- Composition: evaluate every declared capability with a single metadata read ------
-
 /// Evaluate every declared semantic capability against `metadata` into the one accumulator, in a
 /// fixed order (shared with [`SemanticBoundaries::capability_sets`]); the first constitution error
 /// short-circuits. Split out so [`check_all`] keeps the single-read + exit-2-supersedes contract
@@ -290,12 +272,6 @@ fn eval_all(
 /// `observer-protocol` states the asymmetry and why unifying it fails in both directions.
 pub fn check_all(boundaries: &SemanticBoundaries, manifest_path: &Path) -> Outcome {
     if boundaries.is_empty() {
-        // Declared nothing, reached nothing — and the subject says so, which is the whole reason the
-        // invariant is relational. A non-zero count would refuse this shape, and this shape is a
-        // static-only adoption: refusing it would make that adoption's every run exit 2.
-        //
-        // Still returned **before** the manifest is read: the subject is constructed from what this
-        // function already knows, not from an observation added to satisfy it.
         return Outcome::Clean(Subject::nothing_declared());
     }
     let metadata = match read_metadata(manifest_path) {

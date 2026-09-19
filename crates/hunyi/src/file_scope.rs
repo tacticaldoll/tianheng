@@ -48,8 +48,6 @@ pub(crate) fn resolve_crate_units<'m>(
         units.push((root_file, src_dir, unit));
     }
     if units.is_empty() {
-        // Metadata reporting no target is the shape synthetic metadata in a caller's own tests carries;
-        // the single-root resolution below is the fallback, and its unit is the conventional root.
         let root_file = crate_root_file(package).ok_or_else(|| missing_src_error(crate_package))?;
         let src_dir = root_file
             .parent()

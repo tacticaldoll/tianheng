@@ -293,11 +293,6 @@ impl SemanticFact {
                 return async_finding(&self, text, governing_package, unit);
             }
             SemanticFact::UnsafeSite { module, site } => {
-                // No `governing_package`: this capability's violation TARGET is already the package, so
-                // the declaring crate is encoded there (`structured-violation-identity`'s own carve-out).
-                // The compilation UNIT is not encoded anywhere, though, and it varies: `crate::m` in a
-                // library and `crate::m` in the `bin` beside it are two modules that would otherwise
-                // produce one identity, so an accepted unsafe site in one root would mask the other's.
                 return unsafe_site_finding(module, site, text, unit);
             }
             _ => {}
@@ -477,16 +472,13 @@ pub(crate) fn sort_attributed_facts(
     Ok(())
 }
 
+/// Reject findings carrying positional fallback sentinels (`_#`) in their key fields as errors.
+/// Names the failed field and specific cause (ambiguous alias or unsupported syntax) without echoing the sentinel.
 fn reject_positional_identity<'a>(
     facts: impl IntoIterator<Item = &'a SemanticFact>,
 ) -> Result<(), String> {
     for fact in facts {
         let identity = fact.clone().into_finding("app", "src/lib.rs");
-        // Name the field that failed and WHICH renderer gave up, so the adopter learns what to
-        // change. The sentinel value itself is never echoed: it encodes traversal position for the
-        // unsupported-syntax case, and publishing that is exactly what this gate exists to prevent
-        // (pinned by `!error.contains("_#")` in every fail-loud test). So the cause is named in
-        // words instead, keyed off the sentinel's own shape.
         if let Some((field, value)) = identity
             .key()
             .fields()
@@ -499,9 +491,6 @@ fn reject_positional_identity<'a>(
             } else {
                 "its syntax has no supported rendering, and scan position must not become identity"
             };
-            // The original sentence is kept verbatim as the prefix: several fail-loud tests pin it as
-            // the meaning of this reaction, and adding information should not invalidate a contract
-            // they assert correctly. The cause is appended, not substituted.
             return Err(format!(
                 "cannot identify semantic fact without a stable structural label: '{field}' — {cause}"
             ));
@@ -536,15 +525,6 @@ pub(crate) fn tag_paths(paths: Vec<syn::Path>, seam: &PublicSeam) -> Vec<PathExp
         })
         .collect()
 }
-
-// Seam labels — the public element an exposure lives at, in one vocabulary shared by all three
-// 渾儀 exposure collectors (signature-coupling, dyn, impl-trait) and disjoint-by-prefix with
-// async-exposure's `async fn …` identities, so no two element kinds ever render the same seam.
-// A free fn is `fn {module}::name`; an inherent method `fn <{SelfTy}>::name` (owner-qualified
-// like async, so `impl A`/`impl B` methods stay distinct); a trait method `fn trait
-// {module}::Trait::name`. A named item (struct/enum/union/trait/type/const/static) is `{kind}
-// {module}::name`; a field/variant is `{field|variant} {module}::Owner::name`; a trait associated
-// item `{type|const} trait {module}::Trait::name`.
 
 pub(crate) fn fn_seam(module: &str, name: &syn::Ident) -> PublicSeam {
     PublicSeam::FreeFn {
@@ -1092,8 +1072,6 @@ mod fact_tests {
                 owner: "crate::Api".into(),
                 name: "run".into(),
             },
-            // Same owner and method name as above, different declaring module — the two-module
-            // false negative this change closes: without the module field these would collide.
             PublicSeam::InherentMethod {
                 module: "crate::other_api".into(),
                 owner: "crate::Api".into(),
@@ -1105,7 +1083,6 @@ mod fact_tests {
                 owner: "crate::Api".into(),
                 name: "VALUE".into(),
             },
-            // Same owner, kind, and name as above, different declaring module.
             PublicSeam::InherentAssoc {
                 kind: AssocKind::Const,
                 module: "crate::other_api".into(),
@@ -1187,18 +1164,11 @@ mod fact_tests {
                 owner: "crate::Api".into(),
                 bound: "T".into(),
             },
-            // Same owner, different declaring module — the sibling of the two-module
-            // `InherentMethod` case above, for an impl block's OWN generics. Rust permits two
-            // inherent impl blocks for one self type in two modules, and nothing but the module
-            // distinguishes their generics seams.
             PublicSeam::InherentGenerics {
                 module: "crate::other_api".into(),
                 owner: "crate::Api".into(),
                 bound: "T".into(),
             },
-            // Same owner AND same module, different bounded parameter — the case module-plus-owner
-            // cannot separate, and the one this seam's own `bound` role exists for: two impl blocks
-            // in one module, each bounding a different parameter to the same forbidden type.
             PublicSeam::InherentGenerics {
                 module: "crate::api".into(),
                 owner: "crate::Api".into(),
@@ -1212,8 +1182,6 @@ mod fact_tests {
                 module: "crate::api".into(),
                 name: "port".into(),
             },
-            // Same republished crate, different declaring module: `pub extern crate port;` is
-            // legal in each of two modules, so the crate name alone is not an identity.
             PublicSeam::ExternCrate {
                 module: "crate::other_api".into(),
                 name: "port".into(),
@@ -1244,8 +1212,6 @@ mod fact_tests {
                 position: TraitImplPosition::MethodReturn("run".into()),
             },
         ];
-        // `ALL` must not list a shape twice: a duplicate would collapse in the set comparison
-        // below and quietly shrink the coverage the check believes it is demanding.
         let listed: std::collections::BTreeSet<_> = SeamKind::ALL.iter().copied().collect();
         assert_eq!(
             listed.len(),
@@ -1254,8 +1220,6 @@ mod fact_tests {
             SeamKind::ALL
         );
 
-        // Set equality, not a count: the failure names the shape that is missing a representative
-        // (or the one present but unlisted), instead of only reporting that two numbers differ.
         let observed: std::collections::BTreeSet<_> = seams.iter().map(seam_kind).collect();
         assert_eq!(
             observed, listed,
@@ -1263,13 +1227,6 @@ mod fact_tests {
              outside SeamKind::ALL"
         );
 
-        // The test's shape mapping and the published schema's own `seam_kind` label must agree
-        // one-for-one. A bijection needs BOTH directions checked, and one count does not give both:
-        // with every shape represented, the distinct (shape, label) pair count rises above the shape
-        // count only when one shape is rendered under two labels. Two shapes *sharing* one label
-        // leaves that count untouched — it is caught by comparing the distinct label count instead.
-        // Together they close the case a new variant mapped to an existing `SeamKind` would
-        // otherwise slip through: reading as already-covered while publishing its own label.
         let paired: std::collections::BTreeSet<_> = seams
             .iter()
             .map(|seam| (seam_kind(seam), published_seam_kind(seam)))
@@ -1551,11 +1508,6 @@ mod fact_tests {
                 site,
             };
             assert_semantic_fact_is_cataloged(&fact);
-            // The compilation-unit coordinate is required here even though `governing_package` is not:
-            // this capability's violation target IS the package, so the declaring crate is already
-            // encoded there, but the unit is encoded nowhere and it varies — `crate::m` in a library and
-            // `crate::m` in the `bin` beside it are two modules. Adding this assertion is what caught
-            // the omission; see `structured-violation-identity`'s coordinate derivation.
             assert!(
                 fields.iter().any(|(name, _)| *name == "unit"),
                 "an unsafe-site fact must carry the compilation-unit coordinate: {shape}"
@@ -1665,9 +1617,6 @@ mod fact_tests {
         let ty: syn::Type = syn::parse_str("Vec<crate::Port>").unwrap();
         assert_eq!(type_to_string(&ty).as_deref(), Some("Vec<crate::Port>"));
 
-        // canonical_self_owner + render_last_segment_args feed semantic owner / seam-owner / trait
-        // fields. Renderable forms are public identity; the positional sentinel is pinned only so
-        // the shared observation reaction can recognize and reject unsupported syntax.
         let uses: crate::resolve::UseMap = std::collections::HashMap::new();
         let no_params: std::collections::HashSet<String> = std::collections::HashSet::new();
         let owner: syn::Type = syn::parse_str("Repo<crate::Id>").unwrap();
@@ -1675,8 +1624,6 @@ mod fact_tests {
             crate::resolve::canonical_self_owner(&owner, &uses, "app::infra", 0, &no_params),
             "app::infra::Repo<crate::Id>"
         );
-        // Base resolves but the generic arg is an unrenderable const expression: the readable base
-        // is retained beside the internal sentinel that must never reach public identity.
         let const_owner: syn::Type = syn::parse_str("Arr<{ N + 1 }>").unwrap();
         assert_eq!(
             crate::resolve::canonical_self_owner(&const_owner, &uses, "app::infra", 7, &no_params),

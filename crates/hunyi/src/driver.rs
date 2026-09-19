@@ -19,6 +19,7 @@ use xingbiao::cargo_metadata;
 /// dominates Warn), so one architectural fact is reported once and the baseline-suppressed count is
 /// honest. Keeping the more severe is what stops a `warn` duplicate from masking an `enforce` one.
 /// This mirrors the 圭表 static dimension's dedup; each dimension owns its copy (三儀 ⊥ 三儀).
+/// If boundaries are declared over a workspace with no compilation root, it yields `ConstitutionError`.
 pub(crate) fn outcome_from(violations: Vec<Violation>, declared: usize, reached: usize) -> Outcome {
     let mut deduped: Vec<Violation> = Vec::new();
     for violation in violations {
@@ -32,9 +33,6 @@ pub(crate) fn outcome_from(violations: Vec<Violation>, declared: usize, reached:
         }
     }
     if deduped.is_empty() {
-        // Both figures come from the caller that already holds them — the bundle it was given and the
-        // compilation roots it read. `None` is boundaries declared over a workspace with no root to read them
-        // from, which is a misconfiguration rather than a clean workspace.
         match Subject::of(declared, reached) {
             Some(subject) => Outcome::Clean(subject),
             None => Outcome::ConstitutionError(format!(

@@ -29,21 +29,18 @@ pub fn check_dyn_trait(boundaries: &[DynTraitBoundary], manifest_path: &Path) ->
     run_boundaries(boundaries, manifest_path, check_dyn_trait_boundary)
 }
 
+/// Check a dyn-trait boundary against each compilation unit of its package.
+/// Dispatches to shape-only when `forbidden_operands` is empty, or operand-scoped when non-empty.
 pub(crate) fn check_dyn_trait_boundary(
     metadata: &Value,
     boundary: &DynTraitBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
     let (package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
-    // Each of a package's crate roots is its own compilation unit: same module path `crate`,
-    // separate module graph. Evaluated once per unit so an exposure in a `bin` beside a library
-    // is observed, with the unit carried into each finding's identity.
     over_each_unit(
         &units,
         &unknown_module_error(&boundary.module, &boundary.crate_package),
         |root_file, src_dir, unit| {
-            // Empty operand set ⇒ shape-only (any dyn), using the resolution-free path unchanged; a
-            // named set ⇒ operand-scoped, resolving each dyn's principal trait against the forbidden set.
             let findings = if boundary.forbidden_operands.is_empty() {
                 dyn_module_findings(
                     src_dir,

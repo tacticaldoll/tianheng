@@ -128,17 +128,10 @@ pub(crate) fn operand_module_findings(
         impl Fn(&syn::Item, &str, &UseMap, usize, &mut Vec<ShapeExposure>),
     ),
 ) -> Result<Vec<(SemanticFact, PathBuf)>, String> {
-    // A forbidden operand with an empty `::`-segment could never match a resolved canonical
-    // principal — checked before any resolution work, exactly as `exposure::module_findings`
-    // guards its own forbidden set (both share the identical `extern_verbatim_renamed` resolver,
-    // which never produces a leading-`::` canonical path).
     validate_path_operands(forbidden)?;
     let items_with_files =
         resolve_module_items_with_files(src_dir, root_file, module, crate_package)?;
     let uses_by_branch = uses_by_branch(&items_with_files);
-    // Per-branch, not crate-wide and not per-file: `externs_type`/`renames_bare` derive from a
-    // specific branch's own child-module names, so a #[cfg]-split module's several branches must
-    // never share one (see `file_extern_scope`'s doc).
     let items_by_branch = group_items_by_branch(&items_with_files);
     let resolution = extern_resolution(src_dir, root_file, crate_package, dep_names)?;
     let file_scopes: HashMap<usize, crate::crate_scope::FileExternScope> = items_by_branch
