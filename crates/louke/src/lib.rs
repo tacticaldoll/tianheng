@@ -25,10 +25,6 @@ pub use xuanji::{
 mod bounds;
 pub use bounds::observation_bounds;
 
-// Gated with the audit face it delegates to: `audit_probe_coverage` and the 星表 dependency it derives
-// its corpus from are both behind `audit`, so an audit-OFF build of this crate alone must not see this
-// module. CI's isolated `cargo clippy -p louke` is what caught the ungated version — the pass that exists
-// precisely because every `--workspace` run feature-unifies `audit` ON.
 #[cfg(feature = "audit")]
 mod observer;
 #[cfg(feature = "audit")]
@@ -39,15 +35,13 @@ mod finding;
 mod registry;
 mod tracked;
 
-// CI face (the non-default `audit` feature): the probe-coverage audit + source scanner, in its
-// own module so a prod dependency on louke compiles none of it. The prod face (the declaration
-// DSL, the write-once registry, and the fail-closed probe reaction) stays in this root module.
+/// CI face (the non-default `audit` feature): the probe-coverage audit and its source scanner,
+/// compiled only with the face it serves, so a prod dependency on louke builds none of it.
 #[cfg(feature = "audit")]
 mod audit;
 #[cfg(feature = "audit")]
 pub use audit::{audit_probe_coverage, audit_probe_coverage_with_markers};
 
-// Public re-exports — all previously-public items, same paths as before.
 pub use dsl::{OriginEntry, Posture, RuntimeBoundary, RuntimeBoundaryDraft, RuntimeSeamDraft};
 pub use registry::{__react, dropped_sink_events, install, set_sink};
 pub use tracked::Tracked;

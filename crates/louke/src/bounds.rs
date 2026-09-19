@@ -13,8 +13,6 @@
 //! is where a figure about this set belongs.
 
 use xuanji::{BoundDecl, BoundId, Extent, Reached};
-// Only the audit-scoped declarations name an owner or a fact granularity, so both imports are gated with
-// them. `cargo clippy -p louke` — the isolated audit-OFF pass — is what would report either as unused.
 #[cfg(feature = "audit")]
 use xuanji::{FactGranularity, Owner};
 
@@ -24,9 +22,6 @@ use xuanji::{FactGranularity, Owner};
 /// contain. See this module's header — and `tests.rs` for the counts, asserted in both directions rather than
 /// written here.
 pub fn observation_bounds() -> Vec<BoundDecl> {
-    // Mutable only where something extends it. The allow is scoped to the configuration where the statement
-    // below is compiled out, rather than blanket — `cargo clippy -p louke` reported this the moment the five
-    // audit declarations moved behind the gate, which is the pass that exists for exactly this class.
     #[cfg_attr(not(feature = "audit"), allow(unused_mut))]
     let mut bounds = vec![
         BoundDecl::pinned(
@@ -109,9 +104,6 @@ fn audit_bounds() -> Vec<BoundDecl> {
             Extent::Reached(Reached::UnderReacts {
                 because: "the root-file run reports the seam covered while the directory run reports it \
                           unprobed, so which entry point observed it decides the answer".into(),
-                // Not a value of its own: one entry-dependent instance does not earn one, and the direction
-                // that matters — a seam reported covered when it is not — is recorded either way. The entry
-                // point is the layer, so the ownership is inherited rather than this engine's.
                 owner: Owner::Inherited {
                     from: "the corpus entry point".into(),
                 },
