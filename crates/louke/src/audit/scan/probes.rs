@@ -1,10 +1,8 @@
 use super::lexer::*;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-// The two readers that separate an absent target from one this reader could not stat live in `xingbiao`,
-// because 圭表 and 渾儀 ask the same question and none of the three may ask another. This module's own
-// copies were the first of the three to exist; the substrate is where the answer belongs.
 use xingbiao::{is_directory, is_regular_file};
+
 
 /// What the source scan found for a probe occurrence (`assert_boundary!`).
 #[derive(Debug)]
@@ -94,6 +92,9 @@ pub(crate) fn read_dir_entries_sorted(dir: &Path) -> Result<Vec<(bool, PathBuf)>
 /// flag) before ever calling it. [`collect_reachable_probes`] also needs the source text
 /// afterward (to walk this file's own further module references), so it is returned rather than
 /// discarded.
+///
+/// When `absolute_reached` is true, the path label is preserved as written without relativization
+/// against `anchor` (see [`labeled`]).
 pub(crate) fn scan_rust_file(
     file: &Path,
     anchor: &Path,
@@ -104,7 +105,6 @@ pub(crate) fn scan_rust_file(
     let source = std::fs::read_to_string(file)
         .map_err(|e| format!("cannot read source {}: {e}", file.display()))?;
     let label = if absolute_reached {
-        // Keep the path as the literal wrote it — no relativization. See `labeled`.
         xingbiao::path_label(file)
     } else {
         labeled(file, anchor)
@@ -113,6 +113,8 @@ pub(crate) fn scan_rust_file(
     Ok(source)
 }
 
+/// Walks directory tree, passing `absolute_reached = false` since directory traversal does not
+/// resolve `#[path]` literals.
 pub(crate) fn collect_directory_probes(
     dir: &Path,
     anchor: &Path,
@@ -129,14 +131,19 @@ pub(crate) fn collect_directory_probes(
         } else if path.extension().and_then(|e| e.to_str()) == Some("rs")
             && xingbiao::try_visit(visited, &path)?
         {
-            // The legacy directory corpus reaches a file by walking the tree, never through a
-            // `#[path]` literal, so no file it finds is absolute-reached.
             scan_rust_file(&path, anchor, markers, probes, false)?;
         }
     }
     Ok(())
 }
 
+/// Collects probes reachable from `root` by traversing module declarations.
+///
+/// Tracks canonicalized visits to prevent cyclic loops on symlinks. Pending items carry
+/// `(file, child_base, absolute_reached)`: an absolute `#[path]` literal is inherited by
+/// child modules because they resolve relative to the absolute-reached file's directory.
+/// A non-inline `#[path]` resolves relative to the containing file's own directory rather
+/// than `child_base`.
 pub(crate) fn collect_reachable_probes(
     root: &Path,
     anchor: &Path,
@@ -146,21 +153,13 @@ pub(crate) fn collect_reachable_probes(
     let root_parent = root
         .parent()
         .ok_or_else(|| format!("source root has no parent: {}", root.display()))?;
-    // The third element is "reached through an ABSOLUTE `#[path]` literal", which decides whether this
-    // file's identity label may be relativized against the anchor. It is INHERITED by a file's
-    // children: they resolve from the absolute-reached file's own directory, so the same
-    // does-it-happen-to-lie-under-this-checkout's-anchor coincidence applies to them.
     let mut pending = vec![(root.to_path_buf(), root_parent.to_path_buf(), false)];
-    // Uses canonicalized path visit tracking to prevent cycle loops on symlinks.
     let mut visited: HashSet<PathBuf> = HashSet::new();
     while let Some((file, child_base, absolute_reached)) = pending.pop() {
         if !xingbiao::try_visit(&mut visited, &file)? {
             continue;
         }
         let source = scan_rust_file(&file, anchor, markers, probes, absolute_reached)?;
-        // rustc resolves a non-inline `#[path]` relative to the **containing file's own directory**,
-        // which differs from `child_base` (the conventional-child base `<dir>/name/`) for a non-mod-rs
-        // file. Pass the file's own directory so a relocated module resolves where rustc compiles it.
         let file_dir = file.parent().unwrap_or(child_base.as_path());
         let mut children = external_module_files(&source, &child_base, file_dir)?;
         children.sort();
@@ -174,6 +173,10 @@ pub(crate) fn collect_reachable_probes(
     Ok(())
 }
 
+/// Finds external module declarations within `source`.
+///
+/// Returns tuples of `(target_path, next_child_base, absolute_reached)` where `absolute_reached`
+/// records whether the target module path was formed from an absolute `#[path]` within this file.
 pub(crate) fn external_module_files(
     source: &str,
     child_base: &Path,
@@ -188,9 +191,6 @@ pub(crate) fn external_module_files(
         file_dir,
         &mut modules,
         false,
-        // A file's OWN bases are not absolute-reached by themselves; whether the FILE was reached that
-        // way is ORed in by `collect_reachable_probes` when it queues these children. This flag tracks
-        // only a base made absolute *within* the file, by an inline `mod`'s absolute `#[path]`.
         false,
         0,
     )?;
@@ -206,8 +206,9 @@ pub(crate) fn external_module_files(
 /// are unioned — cfg-blind observation cannot know which one a given build actually uses, so
 /// neither is silently preferred over the other. No file at any candidate location is tolerated
 /// when the declaration is `#[cfg]`-gated or arm-conditional (may legitimately compile no probes
-/// here); otherwise it is a real broken reference (exit 2). Pulled out of
-/// [`collect_scope_modules`]'s `mod name;` arm.
+/// here); otherwise it is a real broken reference (exit 2). Conventional child modules inherit
+/// `absolute_base` from their enclosing scope because their declaration carries no `#[path]`
+/// literal of its own. Pulled out of [`collect_scope_modules`]'s `mod name;` arm.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn resolve_external_mod_decl(
     bytes: &[u8],
@@ -243,9 +244,6 @@ pub(crate) fn resolve_external_mod_decl(
     }
     if let Some((file, next_base)) = resolve_external_module(child_base, name)? {
         has_backing_source = true;
-        // A conventional child's own EDGE is never an absolute literal, so its provenance is entirely
-        // inherited: from the enclosing file (ORed by the walk) and from the base it resolved against,
-        // which is absolute when an enclosing inline `mod` carried an absolute `#[path]`.
         modules.push((file, next_base, absolute_base));
     }
     if !(has_backing_source || absence_is_tolerated(&attrs, in_transparent_arm)) {
@@ -281,19 +279,17 @@ pub(crate) fn absence_is_tolerated(attrs: &ModPreambleAttrs, in_transparent_arm:
 /// resolves at all, fall back to the conventional base anyway (the pre-existing, un-remapped
 /// behavior) so a nested reference that is genuinely broken on every platform still fails loud
 /// rather than being silently dropped.
+///
+/// Returns tuples of `(base_dir, is_absolute_base)`. An absolute `#[path]` literal makes the base
+/// itself absolute, tracked directly on the base so children resolved from it inherit the non-portable
+/// identity. A conventional base carries `false` because whether it was reached absolutely is inherited
+/// from the enclosing caller's `absolute_base`.
 pub(crate) fn inline_mod_bases(
     attrs: &ModPreambleAttrs,
     name: &str,
     child_base: &Path,
     file_dir: &Path,
 ) -> Result<Vec<(PathBuf, bool)>, String> {
-    // The flag is "this base was reached through an ABSOLUTE `#[path]` literal", and it must ride with
-    // the base rather than be recovered later. `Path::join` discards its receiver exactly when the
-    // joinee is absolute, so an absolute literal makes the base itself absolute and the children
-    // resolved from it inherit the same already-non-portable construct. The walk's file-chain
-    // inheritance cannot supply this: the base is introduced WITHIN one file, so a conventionally
-    // declared child of the body was queued with `false` and its label relativized whenever the target
-    // happened to sit under this checkout's anchor — two identities for one committed literal.
     let mut inline_bases: Vec<(PathBuf, bool)> = Vec::new();
     match &attrs.path {
         Some(rel) => inline_bases.push((file_dir.join(rel), Path::new(rel).is_absolute())),
@@ -306,8 +302,6 @@ pub(crate) fn inline_mod_bases(
             }
             let conventional = child_base.join(name);
             if inline_bases.is_empty() || is_directory(&conventional)? {
-                // A conventional base derives from the enclosing base; whether THAT was absolute-reached
-                // is the caller's `absolute_base`, ORed in at the recursion below.
                 inline_bases.push((conventional, false));
             }
         }
@@ -325,6 +319,13 @@ pub(crate) fn inline_mod_bases(
 /// `guibiao::symbol_scan::MAX_SYMBOL_NEST_DEPTH`).
 const MAX_SCOPE_NEST_DEPTH: usize = 300;
 
+/// Traverses module declarations in `bytes[start..end]`.
+///
+/// Descends transparent macro arms without accumulating a directory component, inline `mod`
+/// bodies using their resolved `inline_base` as both `child_base` and `file_dir`, and arbitrary
+/// brace blocks (which may contain `#[path = "..."] mod name;` items) keeping enclosing bases.
+/// Propagates `absolute_base` across nested scopes. Arm membership is not inherited into inline
+/// `mod` bodies.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn collect_scope_modules(
     bytes: &[u8],
@@ -351,10 +352,6 @@ pub(crate) fn collect_scope_modules(
             continue;
         }
         if bytes[i] == b'!' && preceding_token_is_ident(bytes, i) {
-            // The one transparent macro's arms hold real declarations: descend each as its own
-            // scope instead of skipping the body. This must be a POSITIVE descent, not merely a
-            // skipped skip — the walk's own catch-all `{` handling below treats any other brace
-            // block as opaque, so a removed skip alone would still swallow the arm.
             let mut name_end = i;
             while name_end > 0 && bytes[name_end - 1].is_ascii_whitespace() {
                 name_end -= 1;
@@ -362,13 +359,6 @@ pub(crate) fn collect_scope_modules(
             if is_transparent_macro_name(bytes, name_end) {
                 if let Some(body_end) = foreign_macro_body_end(bytes, i) {
                     for (arm_start, arm_end) in transparent_arm_ranges(bytes, i, body_end) {
-                        // The ENCLOSING bases, unchanged: an arm is not a module and adds no
-                        // directory component the way an inline `mod` does. Accumulating one here
-                        // would resolve an arm-declared `mod net;` under a phantom directory and
-                        // drop every probe beneath it — the coverage false negative this walk
-                        // exists to prevent, one layer down. Everything found inside an arm is
-                        // cfg-conditional: the predicate lives in the macro's `if #[cfg(..)]`
-                        // header, not on the item.
                         collect_scope_modules(
                             bytes,
                             arm_start,
@@ -432,13 +422,6 @@ pub(crate) fn collect_scope_modules(
                 Some(b'{') => {
                     let close = balanced_brace_end(bytes, cursor, end);
                     let attrs = mod_preamble_attrs(bytes, start, i);
-                    // Descending an inline `mod x { … }`: x's children resolve from `inline_base` —
-                    // `<child_base>/name`, or `<file_dir>/dir` for an inline `#[path = "dir"]` remap.
-                    // rustc accumulates the inline-module name as a directory component, so this base
-                    // governs BOTH x's conventional file-children AND any `#[path]` nested in x's body
-                    // — i.e. `inline_base` becomes the body's `file_dir` too, NOT the enclosing
-                    // `file_dir`. (Threading the enclosing `file_dir` here dropped the inline
-                    // component and read a same-named orphan — a false negative.)
                     let inline_bases = inline_mod_bases(&attrs, name, child_base, file_dir)?;
                     for (inline_base, base_is_absolute) in &inline_bases {
                         collect_scope_modules(
@@ -448,13 +431,7 @@ pub(crate) fn collect_scope_modules(
                             inline_base,
                             inline_base,
                             modules,
-                            // Arm membership is NOT inherited into an inline `mod`'s body: a bare
-                            // `#[cfg]` on an outer `mod` does not tolerate an absent file for an
-                            // inner one either, in any of the three dimensions.
                             false,
-                            // Absolute-reached IS inherited, and accumulates: an absolute `#[path]` on
-                            // this inline `mod` makes its base absolute, and an enclosing one already
-                            // having done so carries through to a conventional base derived from it.
                             *base_is_absolute || absolute_base,
                             depth + 1,
                         )?;
@@ -466,18 +443,6 @@ pub(crate) fn collect_scope_modules(
             }
         }
         if bytes[i] == b'{' {
-            // Any other brace scope — a fn/const/static body, a bare block expression, a match
-            // arm, and so on — is descended into, not skipped as opaque: Rust permits a `mod`
-            // item statement inside any block scope, and the ONLY legal non-inline form there is
-            // a `#[path = "…"] mod name;` (a bare `mod name;` with no `#[path]` has no established
-            // file-path convention inside a block and does not compile) — but that legal form was
-            // previously invisible, since every brace here was treated as one opaque unit and never
-            // walked. `is_mod_keyword`'s own whole-word match means descending into an ordinary
-            // struct-literal/match-arm/expression body costs nothing: no real `mod` token exists
-            // there to misfire on. A `mod` found this way adds no directory component of its own
-            // (unlike a NAMED inline `mod x { … }`), so the enclosing file's own bases are threaded
-            // through unchanged; arm membership is inherited, since a block nested inside an arm is
-            // exactly as cfg-conditional as the arm itself.
             let close = balanced_brace_end(bytes, i, end);
             collect_scope_modules(
                 bytes,
@@ -487,8 +452,6 @@ pub(crate) fn collect_scope_modules(
                 file_dir,
                 modules,
                 in_transparent_arm,
-                // A block scope adds no directory component, so the enclosing base — and whether it was
-                // reached absolutely — carries through unchanged.
                 absolute_base,
                 depth + 1,
             )?;
