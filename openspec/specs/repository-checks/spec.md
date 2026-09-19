@@ -22,6 +22,48 @@ check had reached the vacuity its own bounds warned about, enumerating **zero** 
 
 ## Requirements
 
+### Requirement: An individual hygiene rule lives in its check, not in a capability specification
+
+A capability specification under `openspec/specs/` carries a capability's **requirement truth** — what SHALL
+be true of the product or of this repository's governance surface, with its observation evidence. An
+individual repository hygiene rule — trailing whitespace, a repeated comment paragraph, a line comment in a
+published crate's `src` — is **not** such a truth. It lives in the Kanhe test that enforces it, answering
+the family requirements this specification already carries — *a self-governance check SHALL be a Rust test
+that has been seen to fail*, *a check SHALL take the region it judges from the shared classifier* — never
+a specification section of its own.
+
+The reason is classification, not size: a hygiene rule is **repo style**, and style is what the product
+deliberately does not prescribe. Folding one into a specification would present it to an adopter as a
+capability the product offers, which is the misrepresentation the vocabulary requirement above exists to
+refuse. It would also invert the direction of authority: a Kanhe test is amended by whoever maintains the
+repository, while a specification clause is amended by the OpenSpec lifecycle, and a style rule should not
+pay that cost.
+
+**This requirement has no reaction, and the reason is measured rather than assumed.** A check over
+specification text that refused hygiene vocabulary would need to judge what a requirement is *about* — the
+prose instrument this repository designed, measured three times and rejected. A keyword blocklist
+(`trailing whitespace`, `tab`) would refuse a legitimate capability whose subject happens to name the same
+words, which is the false-positive shape this repository withdraws instruments over. So the rule is stated
+here for the human writing the next specification, and its enforcement is the review that reads it.
+
+#### Scenario: A new hygiene check is added — a stated bound
+
+- **WHEN** a change adds a Kanhe integration test enforcing a rule over this repository's tracked
+  content
+- **THEN** the rule lives in the test's own header and in no `openspec/specs/` document, and no
+  repository check fires — a stated bound: deciding whether a specification section is *about* a
+  hygiene rule is a judgment over prose, the instrument measured three times and rejected
+- **UNPINNED** `BACKLOG.md` — *a specification section about a single hygiene rule cannot be told from a capability requirement without a judgment over prose*
+
+#### Scenario: A specification is proposed for one hygiene rule — a stated bound
+
+- **WHEN** a change adds an `openspec/specs/` section whose subject is a single repository hygiene rule
+- **THEN** no repository check fires. The boundary is held by the review reading this requirement,
+  not by an instrument — a stated bound, for the same reason: naming a section's subject is prose
+  judgment, and a keyword blocklist would refuse a legitimate capability whose subject happens to
+  name the same words
+- **UNPINNED** `BACKLOG.md` — *a specification section about a single hygiene rule cannot be told from a capability requirement without a judgment over prose*
+
 ### Requirement: Repository governance vocabulary SHALL preserve product ownership
 
 Live project prose and self-descriptive source comments SHALL use **product** only for crates whose manifests

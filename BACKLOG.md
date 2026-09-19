@@ -476,6 +476,22 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH
 
+- **A specification section about a single hygiene rule cannot be told from a capability requirement
+  without a judgment over prose.** *Class:* WATCH — the residue is declared, not measured. *Observed
+  pressure:* the `repository-checks` requirement that a hygiene rule lives in its check rather than in
+  a specification states two scenarios no repository check can fire on, because deciding what a section
+  is *about* is the prose instrument this repository designed, measured three times and rejected; a
+  keyword blocklist (`trailing whitespace`, `tab`) would refuse a legitimate capability whose subject
+  happens to name the same words. *Observation source:* the requirement's own scenarios
+  (`a-new-hygiene-check-is-added-a-stated-bound`,
+  `a-specification-is-proposed-for-one-hygiene-rule-a-stated-bound`). *Current reaction or bound:*
+  none — enforcement is the review that reads the requirement. *Risk:* a contributor folds a hygiene
+  rule into a specification and the review misses it, presenting repo style to an adopter as a product
+  capability. *Promotion trigger:* a second instance of the fold is proposed — evidence that review
+  alone does not hold the line — or a classification signal short of prose judgment is identified (a
+  structural property of capability specifications that hygiene rules never carry). *Version class:*
+  patch; no crate is touched either way. *Authority:* this entry.
+
 - **The pinned validator sends an outbound telemetry request while a Definition of Done line runs, and
   nothing in this repository said so.** *Class:* WATCH — one measured instance, and what it carries is not
   measured. *Observed pressure:* `npx --no-install openspec validate --specs --strict` emits
