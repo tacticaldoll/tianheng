@@ -14,8 +14,6 @@ pub(super) use document::list_document;
 pub use gate::projection_gate;
 pub(super) use markdown::list_markdown;
 pub(super) use text::*;
-// Test-only: a projection test pins markdown's hand-maintained `STRUCTURAL` key list against
-// `boundary_json_base`'s emitted keys (guarding the list from drift).
 #[cfg(test)]
 pub(super) use markdown::boundary_params;
 

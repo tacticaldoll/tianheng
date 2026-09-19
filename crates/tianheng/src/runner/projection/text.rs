@@ -167,8 +167,6 @@ pub(in crate::runner) fn impl_trait_text(boundaries: &[ImplTraitBoundary]) -> St
         &boundaries
             .iter()
             .map(|b| {
-                // The subtree opt-in changes the reaction, so the projected law shows it (parity
-                // with the JSON/Markdown projections); a bare boundary's text stays byte-identical.
                 let scope = if b.including_submodules() {
                     " (including submodules)"
                 } else {
@@ -195,8 +193,6 @@ pub(in crate::runner) fn async_exposure_text(boundaries: &[AsyncExposureBoundary
         &boundaries
             .iter()
             .map(|b| {
-                // The subtree opt-in changes the reaction, so the projected law shows it (parity
-                // with the JSON/Markdown projections); a bare boundary's text stays byte-identical.
                 let scope = if b.including_submodules() {
                     " (including submodules)"
                 } else {
@@ -249,11 +245,6 @@ pub(in crate::runner) fn runtime_text(boundaries: &[RuntimeBoundary]) -> String 
     }
     let mut out = text_section("Runtime", boundaries.len());
     for boundary in boundaries {
-        // The full rule line comes from `louke::runtime_seam_rule_line` — the SAME formatter the
-        // prod reaction (`check_crossing`) uses — so the folded `… (only origins: …)` wording is
-        // written once, never hand-copied here (the twin-drift bug class). The folded style matches
-        // the dyn/impl text projection; the JSON projection keeps the label bare with origins as a
-        // field.
         out.push_str(&format!(
             "\n[{}] seam {} (reacts at runtime, not at check)\n  rule:    {}\n  posture: {}\n  reason:  {}\n",
             boundary.severity().as_str(),

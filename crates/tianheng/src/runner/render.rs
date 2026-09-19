@@ -20,9 +20,6 @@ pub(crate) fn disallow_stale_message(count: usize) -> String {
 /// and `clippy` keep diagnostics on stderr and leave stdout for consumable data.)
 pub(crate) fn report(outcome: &Outcome) {
     match outcome {
-        // The subject, not only the verdict. `clean` alone tells a reader — and an agent reading a CI log
-        // as context — nothing about whether their change was even in what was observed; a workspace found
-        // sound and one never reached printed the same sentence.
         Outcome::Clean(subject) => eprintln!(
             "Tianheng: clean — no boundary violated ({} declared, {} reached)",
             subject.declared(),
@@ -30,14 +27,12 @@ pub(crate) fn report(outcome: &Outcome) {
         ),
         Outcome::Violations(report) => report_violations(report),
         Outcome::ConstitutionError(message) => {
-            // The exit-2 diagnostic voice, distinct from a violation (exit 1). Presentation only.
             let style = Style::detect();
             eprintln!(
                 "{}",
                 style.error(&format!("Tianheng constitution error: {message}"))
             );
         }
-        // `Outcome` is non-exhaustive; the exit code (in guibiao) stays authoritative.
         _ => {}
     }
 }
@@ -85,7 +80,6 @@ pub(crate) fn violations_text_styled(report: &Report, style: Style) -> String {
         let (raw_header, reaction) = match violation.severity {
             Severity::Enforce => ("Tianheng violation", "CI failed."),
             Severity::Warn => ("Tianheng advisory", "warning only — CI not failed."),
-            // `Severity` is non-exhaustive; an unknown future rung reports as advisory.
             _ => ("Tianheng advisory", "warning only — CI not failed."),
         };
         let header = if violation.severity == Severity::Enforce {
@@ -104,14 +98,9 @@ pub(crate) fn violations_text_styled(report: &Report, style: Style) -> String {
             writeln!(out, "File:\n  {file}").unwrap();
         }
         if let Some(anchor) = &violation.anchor {
-            // The durable governance pointer, surfaced after the located facts and kept out of the
-            // reason-led opening; only present when the boundary declared one, so an anchor-less
-            // report stays byte-unchanged.
             writeln!(out, "Anchor:\n  {anchor}").unwrap();
         }
         if let Some(polarity) = violation.polarity {
-            // The repair-direction polarity, only for a boundary-drift violation (an audit-coverage
-            // violation carries none, so its block shows no polarity line rather than "none").
             writeln!(out, "Repair:\n  {}", polarity.as_str()).unwrap();
         }
         writeln!(out, "Reaction:\n  {reaction}").unwrap();
@@ -200,15 +189,10 @@ pub(crate) fn report_sarif_with_stale(
                     "tianheng/structured-fact-identity": canonical_identity,
                 });
                 if let Some(file) = &v.file {
-                    // File-level only: artifactLocation.uri, no `region` (line is not observed).
                     result["locations"] = json!([{
                         "physicalLocation": { "artifactLocation": { "uri": file } }
                     }]);
                 }
-                // The result property bag carries whatever metadata applies — the durable `anchor`
-                // and/or the repair-direction `polarity` (both SARIF-valid, ingester-agnostic). One
-                // shared bag: the two are merged, never overwritten. Emitted only when at least one
-                // applies, so a violation with neither keeps byte-unchanged SARIF.
                 let mut properties = serde_json::Map::new();
                 if let Some(anchor) = &v.anchor {
                     properties.insert("anchor".to_string(), json!(anchor));
@@ -231,7 +215,6 @@ pub(crate) fn report_sarif_with_stale(
                 }],
             }));
         }
-        // Clean (and any future outcome) contributes no results.
         _ => {}
     }
 
@@ -275,9 +258,3 @@ pub(crate) fn report_sarif_with_stale(
     });
     serde_json::to_string_pretty(&doc).expect("a serde_json::Value is always serializable")
 }
-
-// A GitHub-specific `::error::` workflow-command format is deliberately NOT a built-in: it would
-// couple the tool to one CI vendor's proprietary protocol (and invite an open-ended gitlab/azure/…
-// set). SARIF — an open, vendor-neutral standard that GitHub and others ingest — is 垂象's CI
-// projection; turning it (or the JSON report) into vendor-specific annotations is a harness/CI-step
-// convention, not a tool feature (see the README recipe). This keeps the machine surfaces neutral.

@@ -42,53 +42,30 @@ pub use guibiao::{
     Severity, SourceKind, StructuredFactIdentity, Subject, Violation, ViolationId, check,
     workspace_member_src_dirs,
 };
-// The static 圭表 (gnomon) constitution — the static dimension's own declaration, reached under
-// its instrument name so the bare `Constitution` can be the unified shell-level type below. The
-// pure static core (`guibiao::check`) takes this type; the self-governance gate uses it directly.
+/// The static 圭表 (gnomon) constitution — the static dimension's own declaration, reached under
+/// its instrument name so the bare `Constitution` can be the unified shell-level type.
 pub use guibiao::Constitution as GnomonConstitution;
 
-// The declared-observation-bound model is reached through 渾儀 rather than a direct shell-to-璇璣
-// edge, preserving the dependency direction this crate governs itself by.
 pub use hunyi::{
     BoundDecl, BoundId, Defence, Demonstrates, Extent, FactGranularity, Observer, Owner, Reached,
 };
 
-// 三儀 as observation participants, so an adopter composes a run from the shell alone.
 pub use guibiao::StaticObserver;
 pub use hunyi::SemanticObserver;
 pub use louke::RuntimeObserver;
 
-// 渾儀 (semantic) dimension: the boundary DSL, re-exported so an adopter declares semantic
-// boundaries the same way as static ones, then folds them into the unified [`Constitution`].
-// `SemanticBoundaries` stays public (the runner reads it) but is off the prelude declaration path.
 pub use hunyi::{
     AsyncExposureBoundary, DynTraitBoundary, ForbiddenMarkerBoundary, ImplTraitBoundary,
     SemanticBoundaries, SignatureBoundary, TraitImplBoundary, UnsafeBoundary, VisibilityBoundary,
     VisibilityCeiling, check as check_semantic,
 };
-// The seven granular per-capability `check_*` entries are hunyi's own public API (a direct caller
-// may run one capability in isolation), but not something the shell's composed surface needs: the
-// adopter runs the whole semantic bundle through [`check_semantic`], and [`run`] reaches the full
-// set via the `hunyi::` path. So they are re-exported for direct callers but hidden from the shell's
-// *documented* surface — the 天衡 face an adopter reads is the composed one, not the per-capability
-// menu. Same intent as the intermediate-type hiding below; reversible, and commits no narrowing.
 #[doc(hidden)]
 pub use hunyi::{
     check_all, check_async_exposure, check_dyn_trait, check_forbidden_marker, check_impl_trait,
     check_trait_impl_locality, check_unsafe_confinement, check_visibility,
 };
-// 漏刻 (runtime) dimension DSL: declared here, then projected two ways — the CI probe-coverage
-// audit (composed by [`run`]) and the prod face (the adopter calls [`louke::install`] /
-// `assert_boundary!` directly; the `#[macro_export]` macros live at the `louke` root).
 pub use louke::{OriginEntry, Posture, RuntimeBoundary, Tracked, audit_probe_coverage};
 
-// The fluent-builder **intermediate** types (`*Draft` / `*Builder`) are `pub` only because the
-// DSL's method chain returns them — an adopter writes `CrateBoundary::crate_(…).because(…)` and
-// never names them. Removing them would be breaking, so this does not remove them; it only hides
-// them from the *documented* surface, so the API an adopter reads is the terminal builder types,
-// not the ~28 intermediates. Reversible, and it commits no narrowing (the demand-gated guibiao
-// pub-surface decision stays open — see BACKLOG). The `SemanticBoundaries` collection stays
-// visible because the runner reads it and an adopter composing semantic boundaries touches it.
 #[doc(hidden)]
 pub use guibiao::{
     CrateBoundaryBuilder, CrateBoundaryDraft, DenyExternalDraft, ModuleBoundaryBuilder,
@@ -107,9 +84,6 @@ pub use hunyi::{
 #[doc(hidden)]
 pub use louke::{RuntimeBoundaryDraft, RuntimeSeamDraft};
 
-// The shell's own composed profiles: a convenience that folds boundaries into one declaration
-// (see [`Constitution::sans_io_pure`] / [`Constitution::no_existential_leak`]). The terminal types
-// are the documented surface; their builder intermediates are hidden like every other `*Draft`.
 pub use existential::NoExistentialLeak;
 #[doc(hidden)]
 pub use existential::{NoExistentialLeakCrateDraft, NoExistentialLeakModuleDraft};

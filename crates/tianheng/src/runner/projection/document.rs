@@ -71,8 +71,6 @@ pub(in crate::runner) fn semantic_boundary_json(boundary: &SignatureBoundary) ->
         boundary.anchor(),
     );
     object["forbidden"] = serde_json::json!(boundary.forbidden());
-    // Emit the opt-in only when set, so a bare boundary's JSON (and the Markdown derived from it via
-    // `boundary_params`) stays byte-unchanged; when set, Markdown surfaces it generically.
     if boundary.including_trait_impls() {
         object["including_trait_impls"] = serde_json::json!(true);
     }
@@ -164,9 +162,6 @@ pub(in crate::runner) fn dyn_trait_boundary_json(boundary: &DynTraitBoundary) ->
     )
 }
 pub(in crate::runner) fn impl_trait_boundary_json(boundary: &ImplTraitBoundary) -> Value {
-    // The subtree opt-in changes the reaction (whole subtree vs the anchored seam), so the
-    // projected law must show it. Emitted only when set, so a bare boundary's JSON (and the
-    // Markdown derived from it) stays byte-identical — mirrors async-exposure's own projection.
     subtree_scoped(
         shape_operand_boundary_json(
             boundary.module(),
@@ -181,9 +176,6 @@ pub(in crate::runner) fn impl_trait_boundary_json(boundary: &ImplTraitBoundary) 
     )
 }
 pub(in crate::runner) fn async_exposure_boundary_json(boundary: &AsyncExposureBoundary) -> Value {
-    // The subtree opt-in changes the reaction (whole subtree vs the anchored seam), so the
-    // projected law must show it. Emitted only when set, so a bare boundary's JSON (and the
-    // Markdown derived from it) stays byte-identical.
     subtree_scoped(
         semantic_module_json(
             boundary.module(),
