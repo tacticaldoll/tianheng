@@ -61,34 +61,21 @@ pub(crate) fn inline_symbol_findings(
     dependency_names: &[String],
 ) -> Result<Vec<InlineFinding>, String> {
     let prefix = canonical_module_path(prefix);
-    // Verbs are matched leaf-exact on the terminal segment; canonicalize raw-identifier forms.
     let verbs: Option<Vec<String>> =
         ending_with.map(|vs| vs.iter().map(|v| canonical_module_path(v)).collect());
 
-    // Pass 1 — build the crate-wide def / glob-reexport closure from every reachable file.
     let mut ctx = ResolveCtx {
         defs: HashMap::new(),
         glob_reexports: Vec::new(),
     };
     let mut file_text: HashMap<std::path::PathBuf, String> = HashMap::new();
     let mut use_maps: HashMap<std::path::PathBuf, HashMap<String, String>> = HashMap::new();
-    // The FULL local vocabulary backing the strict-external local-precedence ladder, built ONLY
-    // under the flag: (a) the complete crate module-path set — every reachable `(_, module)`, so a
-    // DEEP local `mod` (not just a crate-root child) is visible (rung iii); (b) item-definition
-    // names across all namespaces — a local `struct`/`fn`/plain `mod`/… named like a dependency
-    // (rung iv). `ctx.defs`/`root_modules` alone cannot back these rungs (defs holds only type-alias
-    // + `pub use`; root_modules only crate-root children), the first-cut flaw.
     let mut module_paths: HashSet<String> = HashSet::new();
     let mut item_defs: HashSet<String> = HashSet::new();
     for (file, module) in all_files {
         let raw = std::fs::read_to_string(file)
             .map_err(|err| crate::errors::unreadable_governed_file_error(file, &err.to_string()))?;
-        // Declarations (`type` / `pub use`) are read from macro-stripped text: an alias declared
-        // inside a macro body is a stated bound (in-macro-body alias), not observed here.
         let decl_text = strip_macro_bodies(&strip_comments_and_strings(&raw));
-        // The per-file `use`-map (alias-carrying): head identifier → target path. A `type`-alias
-        // or `pub use` target is resolved through it, so `use std::time::SystemTime; type Clock =
-        // SystemTime;` chases correctly.
         let use_map = collect_use_map(&decl_text, module, root_modules)?;
         collect_defs(&decl_text, module, root_modules, &use_map, &mut ctx)?;
         if external {
@@ -98,31 +85,22 @@ pub(crate) fn inline_symbol_findings(
         use_maps.insert(file.clone(), use_map);
         file_text.insert(file.clone(), raw);
     }
-    // The declared-dependency import-identifier set (rung v).
     let dep_names: HashSet<String> = if external {
         dependency_names.iter().cloned().collect()
     } else {
         HashSet::new()
     };
-    // The head resolver consults this ONLY under `.strict_external()`; `None` keeps head resolution
-    // byte-identical to the default path (the local rungs act purely as a guard on whether the
-    // dependency match fires, still emitting the load-bearing `{module}::…` fallback otherwise).
     let external_vocab = external.then_some(ExternalVocab {
         module_paths: &module_paths,
         item_defs: &item_defs,
         dep_names: &dep_names,
     });
 
-    // Pass 2 — scan each governed file for offending calls / mentions and hazardous globs.
     let mut findings: Vec<InlineFinding> = Vec::new();
     for (file, module) in governed {
         let raw = &file_text[file];
         let use_map = &use_maps[file];
         let decl_text = strip_macro_bodies(&strip_comments_and_strings(raw));
-        // The chase map is the crate-wide def closure PLUS this file's own `use`-map (keyed by the
-        // alias's fully-qualified local name), so a two-hop `use`-re-alias resolves: `use
-        // std::time::SystemTime; use self::SystemTime as Clock;` → `Clock` → `crate::m::SystemTime`
-        // (use-map) → `std::time::SystemTime` (this file's other `use`, now in the chase map).
         let mut chase_defs = ctx.defs.clone();
         for (alias, target) in use_map {
             chase_defs
@@ -130,8 +108,6 @@ pub(crate) fn inline_symbol_findings(
                 .or_insert_with(|| target.clone());
         }
 
-        // (i) Glob-hazard: a glob import that can bring a prefix-resolving name into scope reacts
-        // fail-closed. Read from decl_text (a glob is a `use`, not a call).
         for glob_path in glob_import_paths(&decl_text)? {
             if let Some(resolved) = resolve_head(
                 &glob_path,
@@ -153,11 +129,8 @@ pub(crate) fn inline_symbol_findings(
             }
         }
 
-        // (ii) Call / mention scan: from comment/string-stripped text WITH macro bodies kept
-        // (real reads hide in `cfg_if!` / logging / async DSL bodies — scanned, never skipped).
         let call_text = strip_comments_and_strings(raw);
         for occurrence in path_occurrences(&call_text, module, external) {
-            // A glob has no call terminal segment; narrowing / call-vs-mention apply to paths only.
             let Some(resolved) = resolve_head(
                 &occurrence.segments,
                 module,
@@ -166,7 +139,7 @@ pub(crate) fn inline_symbol_findings(
                 root_modules,
                 external_vocab.as_ref(),
             ) else {
-                continue; // unresolved head — not matched by leaf (would be a false positive)
+                continue;
             };
             let resolved = chase_closure(&resolved, &chase_defs, &mut HashSet::new());
             if !path_within(&resolved, &prefix) {
@@ -184,8 +157,6 @@ pub(crate) fn inline_symbol_findings(
         }
     }
 
-    // One violation per distinct finding (per-(canonical path / glob, module)); keep the first
-    // file after a deterministic sort, so a subtree spanning several files does not double-count.
     findings.sort_by(|a, b| a.fact.cmp(&b.fact).then(a.file.cmp(&b.file)));
     findings.dedup_by(|a, b| a.fact == b.fact);
     Ok(findings)
@@ -201,12 +172,7 @@ struct PathOccurrence {
     module: String,
 }
 
-/// Extract path occurrences from already comment/string-stripped source. A path is an identifier
-/// head (not preceded by an identifier byte or `.` — so a method / field access `x.now()` is not a
-/// head; a leading `::` or a struct-field `:` before the head is fine, the head is captured) with
-/// zero or more `::`-joined segments, tolerating interior whitespace and mid-path turbofish
-/// `::<…>`. A trailing `(` (after whitespace / a turbofish) marks a call. Interior `::`
-/// continuations are consumed greedily so a mid-path segment is never independently re-scanned.
+/// Scan all call and path-mention occurrences in `source`.
 ///
 /// Under `external` each occurrence carries its true (inline) module, tracked by inline
 /// `mod name { … }` nesting exactly as [`super::use_scan`]'s walk does (non-`mod` braces move the
@@ -217,8 +183,6 @@ fn path_occurrences(source: &str, base_module: &str, external: bool) -> Vec<Path
     let bytes = source.as_bytes();
     let mut out = Vec::new();
     let mut i = 0;
-    // Inline-`mod` nesting, populated ONLY under a strict-external boundary (each entry is `(name,
-    // enclosing brace depth)`).
     let mut depth = 0usize;
     let mut mod_stack: Vec<(String, usize)> = Vec::new();
     while i < bytes.len() {
@@ -229,7 +193,7 @@ fn path_occurrences(source: &str, base_module: &str, external: bool) -> Vec<Path
                         .to_string(),
                     depth,
                 ));
-                i = brace; // let the `{` arm below increment the depth
+                i = brace;
                 continue;
             }
             match bytes[i] {
@@ -253,14 +217,11 @@ fn path_occurrences(source: &str, base_module: &str, external: bool) -> Vec<Path
             i += 1;
             continue;
         }
-        // A head must not sit mid-identifier or after `.` (a method / field access — a stated
-        // bound). A preceding `:` (a leading `::` global path, or a struct-field colon) is fine.
         let prev = i.checked_sub(1).map(|p| bytes[p]);
         if prev.is_some_and(is_ident_byte) || prev == Some(b'.') {
             i = end_of_ident(bytes, i);
             continue;
         }
-        // Collect the path: ident ( ws? :: ws? (ident | turbofish `<…>`) )*.
         let start = i;
         let mut end = end_of_ident(bytes, i);
         loop {
@@ -275,15 +236,12 @@ fn path_occurrences(source: &str, base_module: &str, external: bool) -> Vec<Path
                     continue;
                 }
                 if bytes.get(after) == Some(&b'<') {
-                    // a mid-path turbofish `::<…>` — skip the balanced generics, continue the path
                     end = skip_angles(bytes, after);
                     continue;
                 }
             }
             break;
         }
-        // Build the canonical `::`-joined segments, dropping interior whitespace and turbofish
-        // `<…>` groups (generic args, not path segments).
         let segments = normalize_segments(&bytes[start..end]);
         let is_call = is_call_application(bytes, end);
         if segments.contains("::") || is_call {
@@ -505,11 +463,6 @@ fn expand_use_leaves(tree: &str) -> Result<Vec<(String, String)>, String> {
                 let inner = brace_content(&tree[open..]);
                 for part in split_top_commas(&inner) {
                     let part = part.trim();
-                    // `self` / `self as x` names the prefix module, not a child leaf, and introduces
-                    // no simple call head, so it is skipped. Strip a trailing ` as <alias>` and test
-                    // the head EXACTLY: a bare `starts_with("self")` also drops a legal import like
-                    // `self_utc` (a false negative — a confined inline call through the alias would
-                    // then pass unresolved). Mirrors `use_scan::expand_use_tree_depth`.
                     let head = match part.find(" as ") {
                         Some(idx) => part[..idx].trim(),
                         None => part,
@@ -555,7 +508,6 @@ fn collect_defs(
     use_map: &HashMap<String, String>,
     ctx: &mut ResolveCtx,
 ) -> Result<(), String> {
-    // `type Name = Target;`
     for (name, target) in type_aliases(source) {
         if let Some(canonical) = resolve_target(&target, module, use_map, root_modules) {
             ctx.defs.insert(
@@ -564,9 +516,6 @@ fn collect_defs(
             );
         }
     }
-    // `pub use …` — named re-exports feed `defs`; glob re-exports (incl. nested) feed
-    // `glob_reexports`, so a `pub use std::time::*;` inside a locally-globbed module is reachable
-    // by the recursive glob-hazard test.
     for tree in pub_use_statements(source) {
         let mut globs = Vec::new();
         glob_bases(&tree, &mut globs, 0)?;
@@ -673,8 +622,6 @@ fn extern_block_brace_at(bytes: &[u8], i: usize) -> Option<usize> {
         return None;
     }
     let mut cursor = skip_ws(bytes, i + b"extern".len());
-    // An optional ABI string. Comments and string literals are already stripped from this source, so a
-    // remaining quote can only be the ABI's own — its body is gone, leaving `""`.
     if bytes.get(cursor) == Some(&b'"') {
         cursor += 1;
         while cursor < bytes.len() && bytes[cursor] != b'"' {
@@ -685,6 +632,12 @@ fn extern_block_brace_at(bytes: &[u8], i: usize) -> Option<usize> {
     (bytes.get(cursor) == Some(&b'{')).then_some(cursor)
 }
 
+/// Collect item definition names declared in `source` for the given module.
+///
+/// Tracks inline `mod name { … }` nesting so items are qualified under their true enclosing
+/// module (`{module}::inner…::name`). An `extern` block's brace does not open a naming scope;
+/// its items remain top-level items of the enclosing module. Modifiers like `static mut` skip the
+/// unraw `mut` keyword to read the true declared name.
 fn collect_definition_names(
     module: &str,
     source: &str,
@@ -695,19 +648,9 @@ fn collect_definition_names(
     let bytes = source.as_bytes();
     let mut i = 0;
     let mut depth = 0usize;
-    // Inline `mod name { … }` nesting, mirroring `use_scan::use_trees_with_modules`: each entry is
-    // `(name, enclosing brace depth)`. A submodule item is keyed by its true (inline) module
-    // (`{module}::inner…::name`), so a submodule-local `fn rand` is `…::tests::rand`, not file-top.
     let mut mod_stack: Vec<(String, usize)> = Vec::new();
-    // Brace depths at which an `extern` block opened. Such a brace opens no naming scope, so an item one
-    // level inside it is still a top-level item of the enclosing module — see `extern_block_brace_at`.
-    // A stack rather than a flag so a malformed or unexpectedly nested block cannot leave the
-    // transparency latched on for the rest of the file.
     let mut extern_opens: Vec<usize> = Vec::new();
     while i < bytes.len() {
-        // Body-open depth of the CURRENT module (0 at file top, +1 per open inline `mod`); only
-        // items at exactly this depth are module-top-level bare-head names (see doc) — plus items
-        // inside an `extern` block opened at that depth, which the block's brace does not re-scope.
         let module_top = mod_stack.last().map_or(0, |(_, d)| d + 1);
         let top = if extern_opens.last() == Some(&module_top) {
             module_top + 1
@@ -716,22 +659,16 @@ fn collect_definition_names(
         };
         if let Some(brace) = extern_block_brace_at(bytes, i) {
             extern_opens.push(depth);
-            i = brace; // let the `{` arm below increment the depth
+            i = brace;
             continue;
         }
-        // An inline `mod name {`: its name is a top-level item of the CURRENT (enclosing) module —
-        // captured when the `mod` sits at that module's top level — and its body opens a new scope.
         if let Some((name_start, name_end, brace)) = inline_mod_at(bytes, i) {
             let name = normalize_segments(&bytes[name_start..name_end]);
-            // The stack push below is unconditional — the true-module qualification depends on it —
-            // while RECORDING the inline module's own name is the caller's choice.
-            // `module_top`, not `top`: an inline `mod` inside an extern block is not legal Rust, and
-            // widening this would record one as the enclosing module's item if it appeared.
             if capture_inline_mod_names && depth == module_top && !name.is_empty() {
                 out.insert(format!("{}::{name}", effective_module(module, &mod_stack)));
             }
             mod_stack.push((canonical_segment(name.trim()).to_string(), depth));
-            i = brace; // let the `{` arm below increment the depth
+            i = brace;
             continue;
         }
         match bytes[i] {
@@ -757,30 +694,11 @@ fn collect_definition_names(
             i += 1;
             continue;
         }
-        // Only a module-top-level item keyword introduces a bare-head name into the CURRENT inline
-        // module's scope; deeper keywords are associated / block-local items (see doc).
         if depth == top {
             if let Some(kw) = keywords
                 .iter()
                 .find(|kw| super::lexer::keyword_starts_at(bytes, i, kw))
             {
-                // The declared name is the identifier following the keyword (across whitespace),
-                // tolerating a raw-identifier `r#name`. A non-identifier there (e.g. `const _:`)
-                // captures nothing useful.
-                //
-                // An interposed MODIFIER token is skipped only where the recovery below cannot handle
-                // it. `const fn` / `async fn` / `unsafe fn` need no help: `fn` is itself an item keyword,
-                // so the walk's next iteration matches it and reaches the real name. `static mut` has no
-                // such second keyword — `mut` is not one — so the name read was `mut`, the module
-                // recorded a value by that name, and a real `use m::foo;` binding the `static mut foo`
-                // beside a `mod foo` passed silently: the false negative `PROJECT.md` forbids. By the
-                // grammar (`static [mut] NAME: TYPE`) this is the only item of that shape.
-                //
-                // Skipped UNRAW'D only. `pub static r#mut: u8` is legal and genuinely names the item
-                // `mut`, so skipping that spelling would attribute the following token — `:` — or the
-                // next declaration's name to this item, turning a fixed false negative into a false
-                // positive. `keyword_starts_at` matches at an identifier boundary, so `r#mut` and a name
-                // merely beginning with `mut` are both left alone.
                 let mut name_start = skip_ws(bytes, i + kw.len());
                 if kw == b"static" && super::lexer::keyword_starts_at(bytes, name_start, b"mut") {
                     name_start = skip_ws(bytes, name_start + b"mut".len());
@@ -814,9 +732,6 @@ fn type_aliases(source: &str) -> Vec<(String, String)> {
                 j += 1;
             }
             let name = source[name_start..j].to_string();
-            // Advance to the aliasing `=`, skipping a generic parameter list `<…>` whole (via the
-            // shared angle walker) so a defaulted parameter's own `=` (`type C<T = Default> = …`) is
-            // not mistaken for the alias `=`.
             while j < bytes.len() && bytes[j] != b'=' && bytes[j] != b';' {
                 if bytes[j] == b'<' {
                     j = skip_angles(bytes, j);
@@ -825,11 +740,8 @@ fn type_aliases(source: &str) -> Vec<(String, String)> {
                 }
             }
             if !name.is_empty() && bytes.get(j) == Some(&b'=') {
-                // The target runs to the top-level `;`, honoring `[]`/`()`/`{}` nesting and `<…>`
-                // groups so an inner `;` (an array type `[T; N]`) does not truncate it.
                 if let Some(end) = alias_target_end(bytes, j + 1) {
                     let target = source[j + 1..end].trim();
-                    // Take the leading path of the target (drop generic args / where-ish tails).
                     let target_path = leading_path(target);
                     if !target_path.is_empty() {
                         out.push((name, target_path));
@@ -898,7 +810,6 @@ fn pub_use_statements(source: &str) -> Vec<String> {
     while i < bytes.len() {
         if super::lexer::keyword_starts_at(bytes, i, b"pub") {
             let mut j = i + 3;
-            // optional `(crate)` / `(super)` / `(in path)` visibility qualifier
             while j < bytes.len() && bytes[j].is_ascii_whitespace() {
                 j += 1;
             }
@@ -930,10 +841,6 @@ fn pub_use_statements(source: &str) -> Vec<String> {
                         continue;
                     }
                     super::lexer::UseStatementScan::NotAStatement { resume_at } => {
-                        // Unreachable from here — a precise-capturing `use<…>` is a type bound and
-                        // `pub` cannot precede one — but answered rather than assumed, so this loop
-                        // owns no arm the shared reader does not. `resume_at` is past `j`, so the
-                        // loop still advances.
                         i = resume_at;
                         continue;
                     }
@@ -1021,12 +928,9 @@ fn resolve_head(
     let base: String = match head.as_str() {
         "std" | "core" | "alloc" => parts.join("::"),
         "crate" => fold_canonical_segments(&parts_str)?,
-        // `self`/`super` relative resolution (incl. the `super` over-pop guard, whose `None` is
-        // `?`-propagated) lives once in `path_vocab::resolve_self_super`.
         "self" | "super" => resolve_self_super(current_module, &parts_str)?,
         other => {
             if let Some(target) = use_map.get(other) {
-                // (i) alias / imported head → its target, then the remaining segments.
                 let mut base = target.clone();
                 for seg in rest {
                     base.push_str("::");
@@ -1034,17 +938,10 @@ fn resolve_head(
                 }
                 base
             } else if external.is_some_and(|v| {
-                // (ii)-(iv) local-shadow ladder vs the occurrence's true (inline) module, then
-                // (v) the declared-dependency match (see `head_is_external_dependency`).
                 head_is_external_dependency(other, occurrence_module, root_modules, v)
             }) {
-                // (v) strict-external: a fully-qualified, un-`use`d external head not shadowed by
-                // any local rung — keep the literal external path so it prefix-matches.
                 parts.join("::")
             } else {
-                // an un-imported bare head is a local item of the current module (a local `type`
-                // alias / definition); the closure rewrites it if it re-exports under the prefix.
-                // (Also every local rung under the flag lands here, staying local — no FP.)
                 format!("{current_module}::{}", parts.join("::"))
             }
         }
@@ -1054,21 +951,17 @@ fn resolve_head(
 
 /// Chase a candidate path through the `type`-alias / `pub use` closure to a fixpoint: repeatedly
 /// replace the longest local-name prefix that is a `defs` key with its target. Cycle-safe via the
-/// visited set.
+/// visited set, capped at 256 iterations to guarantee termination on self-referential definitions.
 fn chase_closure(
     path: &str,
     defs: &HashMap<String, String>,
     visited: &mut HashSet<String>,
 ) -> String {
     let mut current = path.to_string();
-    // A step cap in addition to the visited set: a self-referential def (`type A = A::B;`, which
-    // does not compile but is observable) rewrites to a strictly longer, never-repeating path each
-    // round, which the visited set cannot catch — the cap guarantees termination (never hang).
     for _ in 0..256 {
         if !visited.insert(current.clone()) {
-            return current; // cycle — stop
+            return current;
         }
-        // Longest-prefix def match: try the full path, then successively shorter `::` prefixes.
         let mut matched: Option<(String, String)> = None;
         let segments: Vec<&str> = current.split("::").collect();
         for take in (1..=segments.len()).rev() {
@@ -1089,7 +982,7 @@ fn chase_closure(
             None => return current,
         }
     }
-    current // step cap reached (pathological self-referential defs) — stop, never hang
+    current
 }
 
 /// Whether a glob whose resolved module path is `glob` can bring a name resolving under `prefix`
@@ -1104,13 +997,11 @@ fn glob_reaches_prefix(
     visited: &mut HashSet<String>,
 ) -> bool {
     if !visited.insert(glob.to_string()) {
-        return false; // cycle guard
+        return false;
     }
-    // (a) prefix or beneath, and (b) ancestor of the prefix.
     if path_within(glob, prefix) || path_within(prefix, glob) {
         return true;
     }
-    // (c) a local module whose named defs reach under the prefix.
     for (name, target) in &ctx.defs {
         if path_within(name, glob) {
             let resolved = chase_closure(target, &ctx.defs, &mut HashSet::new());
@@ -1119,7 +1010,6 @@ fn glob_reaches_prefix(
             }
         }
     }
-    // (c, recursive) a glob re-export in a module within `glob` whose own path reaches the prefix.
     let inner: Vec<String> = ctx
         .glob_reexports
         .iter()
@@ -1156,9 +1046,7 @@ fn resolve_written_path(
     match head.as_str() {
         "std" | "core" | "alloc" => Some(parts.join("::")),
         "crate" => fold_canonical_segments(&parts_str),
-        _ if global => Some(parts.join("::")), // `::name::…` — global/external, kept as written
-        // `self`/`super` relative resolution — incl. the `super` over-pop guard — lives once in
-        // `path_vocab::resolve_self_super`.
+        _ if global => Some(parts.join("::")),
         "self" | "super" => resolve_self_super(current_module, &parts_str),
         other => {
             if is_crate_root_shadow(current_module, other, root_modules) {
@@ -1166,8 +1054,6 @@ fn resolve_written_path(
                 out.extend(parts.iter().cloned());
                 Some(out.join("::"))
             } else {
-                // an external head (e.g. `std`-alike from another crate) — kept as written so the
-                // closure can still compare it literally against the prefix.
                 Some(parts.join("::"))
             }
         }
@@ -1212,11 +1098,11 @@ fn resolve_target(
 
 /// Decision helper for whether an occurrence (call or path mention) triggers a boundary reaction.
 ///
-/// The three narrowing dials `inline-symbol-path-confinement` declares, in the order they decide:
-/// `strict` widens past calls, `.ending_with([…])` narrows to declared read verbs, and the default
-/// sits between them. Each branch's own reason is stated at the branch — a reader deciding whether a
-/// shape should react must not have to reconstruct the policy from four bare booleans, and one of the
-/// four is a declared observation bound rather than an implementation choice.
+/// Order of evaluation:
+/// 1. `strict`: any path under the prefix reacts (whether call or mention).
+/// 2. Default (!strict): only calls react; a non-call mention passes.
+/// 3. If narrowed by read verbs (`verbs`), the terminal segment must match a declared verb leaf-exact.
+/// 4. Otherwise, every call under the prefix reacts.
 fn should_react_on_occurrence(
     strict: bool,
     is_call: bool,
@@ -1224,26 +1110,15 @@ fn should_react_on_occurrence(
     resolved: &str,
 ) -> bool {
     if strict {
-        // strict: any path under the prefix, call or not
         true
     } else if !is_call {
-        // default: only calls — a mention passes. Declared policy rather than an omission:
-        // `inline-symbol-path-confinement`'s "Call-vs-mention default" requirement states it (a type
-        // annotation and a constant each have their own passing scenario), and the value-capture
-        // corner of it is a registered observation bound
-        // (bound: inline-symbol-path-confinement/a-path-taken-as-a-value-is-a-documented-bound-under-the-default),
-        // pinned by `inline_value_capture_is_a_bound_under_the_default`. `.strict_prefix_only()` is
-        // what an adopter reaches for to close it, which is the `strict` arm above.
         false
     } else if let Some(verbs) = verbs {
-        // narrowed: the terminal segment must be a declared read verb (leaf-exact, never a prefix
-        // or substring match — `now_ish` is not `now`)
         let leaf = resolved
             .rsplit_once("::")
             .map_or(resolved, |(_, leaf)| leaf);
         verbs.iter().any(|v| v == leaf)
     } else {
-        // default call, no narrowing: every call under the prefix
         true
     }
 }

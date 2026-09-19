@@ -105,13 +105,13 @@ fn published_sources(root: &Path) -> Vec<(String, String)> {
 /// sources. A crate not yet listed is not exempt: it is next.
 ///
 /// **The list is hand-written, and each entry is a measurement made before the write.** `xuanji`,
-/// `xingbiao`, `louke`, and `tianheng` are here because their `//` count outside `tests.rs` was measured at zero
+/// `xingbiao`, `louke`, `tianheng`, and `guibiao` are here because their `//` count outside `tests.rs` was measured at zero
 /// before the entry landed; every later entry earns its place the same way — the crate's `//`
 /// population moved first, then its name was written here. The per-crate guard in the gate below
 /// refuses any listed name that contributes no file, so a typo or an unpublished crate cannot enter
 /// silently.
 fn enforced_crates() -> Vec<&'static str> {
-    vec!["louke", "tianheng", "xingbiao", "xuanji"]
+    vec!["guibiao", "louke", "tianheng", "xingbiao", "xuanji"]
 }
 
 /// The sources the enforced crates contribute to the sweep.
