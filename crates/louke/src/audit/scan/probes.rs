@@ -3,7 +3,6 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use xingbiao::{is_directory, is_regular_file};
 
-
 /// What the source scan found for a probe occurrence (`assert_boundary!`).
 #[derive(Debug)]
 pub(crate) enum Probe {

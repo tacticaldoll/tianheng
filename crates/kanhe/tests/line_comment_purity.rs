@@ -105,13 +105,15 @@ fn published_sources(root: &Path) -> Vec<(String, String)> {
 /// sources. A crate not yet listed is not exempt: it is next.
 ///
 /// **The list is hand-written, and each entry is a measurement made before the write.** `xuanji`,
-/// `xingbiao`, `louke`, `tianheng`, and `guibiao` are here because their `//` count outside `tests.rs` was measured at zero
+/// `xingbiao`, `louke`, `tianheng`, `guibiao`, and `hunyi` are here because their `//` count outside `tests.rs` was measured at zero
 /// before the entry landed; every later entry earns its place the same way — the crate's `//`
 /// population moved first, then its name was written here. The per-crate guard in the gate below
 /// refuses any listed name that contributes no file, so a typo or an unpublished crate cannot enter
 /// silently.
 fn enforced_crates() -> Vec<&'static str> {
-    vec!["guibiao", "louke", "tianheng", "xingbiao", "xuanji"]
+    vec![
+        "guibiao", "hunyi", "louke", "tianheng", "xingbiao", "xuanji",
+    ]
 }
 
 /// The sources the enforced crates contribute to the sweep.
@@ -296,6 +298,24 @@ fn the_reader_counts_lines_through_skipped_constructs() {
     }
 }
 
+/// Every tracked `.rs` file under `crates/` (including tests and unpublished crates),
+/// as `(path, text)`.
+fn all_tracked_sources(root: &Path) -> Vec<(String, String)> {
+    let listing = kanhe::hermetic_git::tracked_paths(root, &["crates"])
+        .unwrap_or_else(|failure| panic!("CannotJudge: `git ls-files` over `crates`: {failure:?}"));
+    listing
+        .iter()
+        .map(String::as_str)
+        .filter(|path| path.ends_with(".rs"))
+        .map(|path| {
+            let text = std::fs::read_to_string(root.join(path)).unwrap_or_else(|err| {
+                panic!("CannotJudge: cannot read the tracked file {path} ({err})")
+            });
+            (path.to_string(), text)
+        })
+        .collect()
+}
+
 /// Every comment reported over the real tree carries text that appears on the line it is
 /// reported at — the consistency property a `{path}:{line}` diagnostic lives or dies by.
 ///
@@ -309,7 +329,7 @@ fn every_reported_line_holds_its_own_text() {
         return;
     };
     let mut checked = 0usize;
-    for (path, text) in published_sources(&root) {
+    for (path, text) in all_tracked_sources(&root) {
         let lines: Vec<&str> = text.lines().collect();
         for comment in comment_scan::line_comments(&text) {
             checked += 1;

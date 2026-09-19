@@ -36,15 +36,15 @@ pub mod testing;
 
 pub use testing::GovernanceTest;
 
+/// The static 圭表 (gnomon) constitution — the static dimension's own declaration, reached under
+/// its instrument name so the bare `Constitution` can be the unified shell-level type.
+pub use guibiao::Constitution as GnomonConstitution;
 pub use guibiao::{
     Baseline, BaselineEntry, Boundary, BoundaryKind, CrateBoundary, CrateTarget, DependencyKind,
     Finding, ModuleBoundary, ModuleRule, Outcome, Polarity, Report, Rule, RuleKey, ScanDepth,
     Severity, SourceKind, StructuredFactIdentity, Subject, Violation, ViolationId, check,
     workspace_member_src_dirs,
 };
-/// The static 圭表 (gnomon) constitution — the static dimension's own declaration, reached under
-/// its instrument name so the bare `Constitution` can be the unified shell-level type.
-pub use guibiao::Constitution as GnomonConstitution;
 
 pub use hunyi::{
     BoundDecl, BoundId, Defence, Demonstrates, Extent, FactGranularity, Observer, Owner, Reached,

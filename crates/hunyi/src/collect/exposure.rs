@@ -1,9 +1,9 @@
-use syn::visit::Visit;
+//! The AST-collector cluster — the pure syntax-tree walkers that turn one parsed `syn::Item`
+//! into the exposure findings each semantic rule reacts to. Every collector observes only the
+//! public surface (via [`crate::syn_util::is_public`]), stamps each finding with its seam, and returns; the
+//! reaction/decision lives in `lib.rs`. This module holds no state and makes no I/O.
 
-// The AST-collector cluster — the pure syntax-tree walkers that turn one parsed `syn::Item`
-// into the exposure findings each semantic rule reacts to. Every collector observes only the
-// public surface (via [`crate::syn_util::is_public`]), stamps each finding with its seam, and returns; the
-// reaction/decision lives in `lib.rs`. This module holds no state and makes no I/O.
+use syn::visit::Visit;
 
 use crate::finding::{
     AssocKind, ItemKind, MemberKind, PathExposure, PublicSeam, SemanticFact, field_seam, fn_seam,
@@ -32,8 +32,6 @@ pub(crate) fn collect_item_return_impl_traits(
             out.extend(stamp_seam(impl_traits_in_return(&item.sig), &seam));
         }
         syn::Item::Trait(item) if is_public(&item.vis) => {
-            // A trait method's return is part of the public trait API (trait items carry no
-            // individual visibility); the trait DECLARES any RPIT here.
             let trait_name = strip_raw(&item.ident.to_string());
             for trait_item in &item.items {
                 if let syn::TraitItem::Fn(method) = trait_item {
@@ -252,6 +250,12 @@ pub(crate) fn collect_named_field_exposures<'f, E>(
     }
 }
 
+/// Collect the exposed type paths in one public item.
+///
+/// Recurses into fields (struct / tuple / enum / union with per-member seams),
+/// function signatures, constants, statics, trait definitions (supertraits, associated
+/// types, and methods), inherent `impl` blocks (generic bounds, pub methods, and pub
+/// associated items), `pub use` re-exports, `pub extern crate`, and public foreign items.
 pub(crate) fn collect_item_exposures(
     item: &syn::Item,
     module: &str,
@@ -288,10 +292,6 @@ pub(crate) fn collect_item_exposures(
                 paths_in_generics_scoped(&item.generics, &params),
                 &item_seam(ItemKind::Enum, module, &item.ident),
             ));
-            // Enum variants and their fields are as public as the enum itself. Each field
-            // carries a per-member seam (`variant {Enum}::{Variant}::{index|name}`), mirroring
-            // struct/union fields, so two forbidden fields of one variant stay distinct findings
-            // — never collapsing to one `(target, rule, finding)` and masking a new leak.
             for variant in &item.variants {
                 let owner = format!("{name}::{}", strip_raw(&variant.ident.to_string()));
                 collect_named_field_exposures(
@@ -351,11 +351,6 @@ pub(crate) fn collect_item_exposures(
                 paths_in_generics_scoped(&item.generics, &trait_params),
                 &trait_seam,
             ));
-            // Supertraits are part of the trait's public contract; walk them with the same
-            // full recursion (paths_in_bounds → PathCollector) every other position uses, so a
-            // forbidden type in a bound's generic argument (`Facade: AsRef<crate::infra::Secret>`)
-            // is observed too — not only the bound's head trait (which paths_in_bounds still pushes,
-            // preserving forbidden-supertrait-head detection).
             out.extend(tag_paths(paths_in_bounds(&item.supertraits), &trait_seam));
             for trait_item in &item.items {
                 match trait_item {
@@ -369,15 +364,6 @@ pub(crate) fn collect_item_exposures(
                     syn::TraitItem::Type(assoc) => {
                         let seam =
                             trait_assoc_seam(AssocKind::Type, module, &trait_name, &assoc.ident);
-                        // Full-recursion coverage for every bound position of a public associated
-                        // type: its own bounds (`: Into<crate::infra::Secret>`), its generic
-                        // parameters (GAT `<T: crate::infra::Marker>` + where-clause), and its
-                        // default target (`= crate::infra::Secret`, an observed type position the
-                        // `dyn` collector already walks) — so a forbidden generic argument here is
-                        // not silently dropped.
-                        // The trait's params AND the GAT's own params are in scope inside the GAT's
-                        // bounds/where-clause, so shadow both — a bare param there is a parameter,
-                        // not a nominal type reachable through a same-named alias.
                         let mut assoc_params = trait_params.clone();
                         assoc_params.extend(type_param_names(&assoc.generics));
                         out.extend(tag_paths(
@@ -389,7 +375,6 @@ pub(crate) fn collect_item_exposures(
                             &seam,
                         ));
                         if let Some((_, ty)) = &assoc.default {
-                            // The trait's and the GAT's own type params are in scope in the default.
                             out.extend(tag_paths(paths_in_type_scoped(ty, &assoc_params), &seam));
                         }
                     }
@@ -405,24 +390,9 @@ pub(crate) fn collect_item_exposures(
                 }
             }
         }
-        // Inherent `impl Type { … }` (no trait): its `pub` methods are public API the module
-        // authored. Trait impls (`impl Trait for Type`) carry `trait_` and are out of scope.
         syn::Item::Impl(item) if item.trait_.is_none() => {
             let impl_params = type_param_names(&item.generics);
             let owner = canonical_self_owner(&item.self_ty, uses, module, ordinal, &impl_params);
-            // The impl block's own generic-param bounds and where-clause are impl-site-authored
-            // public contract for the inherent API (`impl<T: crate::infra::Secret> Foo<T> { … }`),
-            // observed like a struct/enum/type def's generics (paths_in_generics_scoped) and the
-            // trait-impl collector's where-walk. Owner-qualified so it stays distinct from the
-            // block's methods / assoc items, and module-qualified — like the sibling method /
-            // assoc seams below — so two blocks for the SAME owner written in two different
-            // modules stay distinct too: an owner names what the impl is for, never where it is
-            // written, and inherent impls carry no coherence exclusion to lean on.
-            // Walked per POSITION rather than over the whole `Generics` node, so each exposure is
-            // keyed by the bounded thing it sits on: two impl blocks for one owner in one module,
-            // each bounding a different parameter to the same forbidden type, are two distinct sites
-            // and must not collapse onto one seam. The positions and their keys come from the shared
-            // `impl_generics_positions`, which trait-impl-exposure's own `where` walk also uses.
             for (bound, positions) in impl_generics_positions(&item.generics, ordinal) {
                 let seam = PublicSeam::InherentGenerics {
                     module: module.to_string(),
@@ -441,9 +411,6 @@ pub(crate) fn collect_item_exposures(
             }
             for impl_item in &item.items {
                 match impl_item {
-                    // A public method's signature. The impl's own `<T>` is in scope inside it, so
-                    // shadow it (plus the method's own params) to keep a param use from resolving
-                    // through a same-named alias.
                     syn::ImplItem::Fn(method) if is_public(&method.vis) => {
                         let seam = inherent_method_seam(module, &owner, &method.sig.ident);
                         out.extend(tag_paths(
@@ -451,7 +418,6 @@ pub(crate) fn collect_item_exposures(
                             &seam,
                         ));
                     }
-                    // A public associated `const`'s declared type is public API (`Foo::K`).
                     syn::ImplItem::Const(assoc) if is_public(&assoc.vis) => {
                         let seam =
                             inherent_assoc_seam(AssocKind::Const, module, &owner, &assoc.ident);
@@ -460,7 +426,6 @@ pub(crate) fn collect_item_exposures(
                             &seam,
                         ));
                     }
-                    // A public associated `type`'s target is public API (`Foo::T`).
                     syn::ImplItem::Type(assoc) if is_public(&assoc.vis) => {
                         let seam =
                             inherent_assoc_seam(AssocKind::Type, module, &owner, &assoc.ident);
@@ -473,10 +438,6 @@ pub(crate) fn collect_item_exposures(
                 }
             }
         }
-        // A bare `pub use` republishes what it names on the module's public surface — the most
-        // direct exposure (`semantic-reexport-exposure`). Restricted-visibility re-exports are
-        // internal, like a private field. The walked path flows through the same resolve →
-        // canonicalize → match pipeline as any exposed type.
         syn::Item::Use(item) if is_public(&item.vis) => {
             walk_reexport_tree(
                 &item.tree,
@@ -486,10 +447,6 @@ pub(crate) fn collect_item_exposures(
                 out,
             );
         }
-        // A `pub extern crate X [as Y];` republishes the external crate root `X` on the module's
-        // public surface — like `pub use ::X;`. The exposure names the **real** crate `X` (not the
-        // `as`-rename), a bare extern head (raw external set, `is_reexport`). `extern crate self`
-        // renames the current crate, not an external exposure.
         syn::Item::ExternCrate(item) if is_public(&item.vis) && item.ident != "self" => {
             let name = strip_raw(&item.ident.to_string());
             out.push(PathExposure {
@@ -501,12 +458,6 @@ pub(crate) fn collect_item_exposures(
                 is_reexport: true,
             });
         }
-        // A `pub fn`/`pub static` inside an `extern` block is a real item in this module's own
-        // namespace — the FFI declaration, not a definition, but still exactly as public as a
-        // same-shaped ordinary `Item::Fn`/`Item::Static` (Rust cannot even declare both under one
-        // name in the same module, so there is no identity collision to avoid by treating them
-        // differently). Reused verbatim so a forbidden type named only in an `extern` block's
-        // signature is not invisible to this query merely because it has no body.
         syn::Item::ForeignMod(item) => {
             for foreign_item in &item.items {
                 match foreign_item {
@@ -559,8 +510,6 @@ pub(crate) fn walk_reexport_tree(
         }
         syn::UseTree::Name(name) => {
             if is_self_segment(&name.ident) {
-                // `pub use crate::infra::{self, …}` re-exports the prefix module, bound under the
-                // prefix's final segment (never the literal `self`).
                 let exported = prefix.last().map(seg_name);
                 push_reexport(&prefix, exported.as_deref(), module, leading_colon, out);
             } else {
@@ -573,10 +522,9 @@ pub(crate) fn walk_reexport_tree(
         syn::UseTree::Rename(rename) => {
             let alias = seg_name(&rename.rename);
             if alias == "_" {
-                return; // `as _` binds no nameable path — a stated non-observed bound
+                return;
             }
             if is_self_segment(&rename.ident) {
-                // `pub use crate::infra::{self as fs}` — the prefix module, renamed.
                 push_reexport(&prefix, Some(&alias), module, leading_colon, out);
             } else {
                 let mut segs = prefix;
@@ -585,8 +533,6 @@ pub(crate) fn walk_reexport_tree(
             }
         }
         syn::UseTree::Glob(_) => {
-            // The glob root: reacts iff it resolves in/under the forbidden set (the pipeline
-            // decides). A sibling/ancestor root simply does not match — a stated glob bound.
             push_reexport(&prefix, Some("*"), module, leading_colon, out);
         }
         syn::UseTree::Group(group) => {
@@ -626,10 +572,6 @@ pub(crate) fn push_reexport(
         })
         .collect();
     out.push(PathExposure {
-        // Preserve the `use` item's leading `::`: `pub use ::dep::X;` is an unambiguous extern
-        // (resolved against the raw extern set by the query's leading-`::` branch), so it must stay
-        // distinguishable from a bare `pub use dep::X;` — the latter is shadowed by a same-named
-        // child `mod dep`, the former is not.
         path: syn::Path {
             leading_colon: leading_colon.then(<syn::Token![::]>::default),
             segments,

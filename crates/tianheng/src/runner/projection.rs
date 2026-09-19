@@ -12,10 +12,10 @@ mod text;
 
 pub(super) use document::list_document;
 pub use gate::projection_gate;
-pub(super) use markdown::list_markdown;
-pub(super) use text::*;
 #[cfg(test)]
 pub(super) use markdown::boundary_params;
+pub(super) use markdown::list_markdown;
+pub(super) use text::*;
 
 /// Render a constitution as the human- and agent-readable Markdown summary of its declared law —
 /// the same projection `list --format markdown` prints, returned as a `String` for library
