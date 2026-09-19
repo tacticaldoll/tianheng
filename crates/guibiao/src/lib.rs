@@ -56,10 +56,6 @@ use module_check::check_module_boundary;
 mod model;
 pub use model::*;
 
-// The shared reaction DSL lives in the dimension-agnostic `xuanji` (璇璣) crate,
-// re-exported here so `guibiao`'s public surface is unchanged after the extraction
-// (PROJECT.md). Only the per-type vocabulary moved; the report/constitution *assembly*
-// (projection.rs), which folds in the static `Coverage`, stays in this crate.
 pub use xuanji::{
     Baseline, BaselineEntry, BoundDecl, BoundId, BoundaryKind, Defence, Demonstrates, Extent,
     FactGranularity, Finding, Observer, Outcome, Owner, Polarity, Reached, Report, RuleKey,
@@ -84,10 +80,11 @@ pub fn check(constitution: &Constitution, manifest_path: &Path) -> Outcome {
 /// left to the caller so a single read can feed both evaluation and coverage (see
 /// [`check_and_cover`]). An unresolvable target or a scan error is a constitution
 /// error, never a silent pass.
+///
+/// Deduplicates violations by structured identity; when duplicates differ in severity,
+/// `Enforce` dominates `Warn`. A clean verdict states a [`Subject`] of declared boundaries
+/// and reached workspace members.
 fn evaluate(constitution: &Constitution, metadata: &Value) -> Outcome {
-    // The membership is an input like any other: read it, or say it could not be read. An empty set
-    // reached both consumers as *nothing to govern*, which is the silent pass this function's own doc
-    // forbids where it says a scan error is a constitution error.
     let workspace = match workspace_member_names(metadata) {
         Members::Read(names) => names,
         Members::Unreadable(why) => return Outcome::ConstitutionError(why),
@@ -112,16 +109,6 @@ fn evaluate(constitution: &Constitution, metadata: &Value) -> Outcome {
         }
     }
 
-    // Two identical crate boundaries (same target/rule/kind) declared on one constitution would
-    // each flag the same dependency, emitting duplicate violations with equal identity. The
-    // baseline already dedups by identity, so gating is unaffected, but the report and its count
-    // should not double-count a single architectural fact — dedup by structured identity.
-    // When duplicates differ in severity (the same rule declared once `warn` and once `enforce`
-    // on one crate — a plausible mid-promotion state), keep the **more severe** reaction: `id()`
-    // excludes severity, so the two collapse, and keeping first-seen would let a `warn` duplicate
-    // mask an `enforce` one — silently dropping an exit-1 to exit-0, the forbidden false negative.
-    // `Enforce` dominates `Warn`; `Severity` is `#[non_exhaustive]` with no `Ord`, so the
-    // domination is spelled out explicitly (module rules already dedup per finding upstream).
     let mut deduped: Vec<Violation> = Vec::new();
     for violation in std::mem::take(&mut violations) {
         match deduped.iter_mut().find(|kept| kept.id() == violation.id()) {
@@ -136,9 +123,6 @@ fn evaluate(constitution: &Constitution, metadata: &Value) -> Outcome {
     violations = deduped;
 
     if violations.is_empty() {
-        // The subject this dimension reached, from the two figures this function already holds: the
-        // boundaries it was given, and the workspace members it read. `None` is not a clean workspace — it
-        // is boundaries declared over a workspace with no member to observe, which is a misconfiguration.
         match Subject::of(constitution.boundaries().len(), workspace.len()) {
             Some(subject) => Outcome::Clean(subject),
             None => Outcome::ConstitutionError(format!(

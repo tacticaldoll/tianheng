@@ -4,6 +4,10 @@ use crate::cargo_metadata::find_package;
 use crate::errors::crate_not_found_error;
 use crate::{BoundaryKind, CrateBoundary, Violation, ViolationId};
 
+/// Check a single crate boundary against workspace metadata.
+///
+/// Violations carry no `file`: a crate-dependency violation is an edge in the dependency
+/// graph rather than a single source line, so `file` remains `None`.
 pub(crate) fn check_crate_boundary(
     metadata: &Value,
     workspace: &[String],
@@ -15,9 +19,6 @@ pub(crate) fn check_crate_boundary(
 
     for fact in boundary.rule.facts(package, workspace, boundary.kind) {
         let finding = fact.into_finding();
-        // No `with_file`: a crate-dependency violation is an edge in the dependency graph
-        // (a `Cargo.toml` manifest relation), not a single source line, so its `file` is a
-        // faithful `None` — the location already lives in `(target, finding)`.
         violations.push(
             Violation::new(
                 BoundaryKind::Crate,

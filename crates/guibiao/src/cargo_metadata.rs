@@ -3,11 +3,6 @@ use serde_json::Value;
 
 use crate::module_scan::package_name_to_import_ident;
 
-// The dimension-agnostic cargo-metadata reads (`cargo_metadata`, `find_package`, `crate_root_file`,
-// and `member_src_dirs`, a pure derivation of the latter) live in 星表 (`xingbiao`), the shared
-// substrate below the 三儀 — one reader, so the static and semantic dimensions cannot drift apart on
-// how they read the workspace. 圭表 keeps only its own *observation semantics* below (dependency
-// source/kind, workspace membership), which are not neutral infrastructure.
 pub(crate) use xingbiao::{
     cargo_metadata, compilation_unit_label, crate_root_file, crate_root_files, find_package,
     member_src_dirs,
@@ -69,10 +64,6 @@ pub(crate) fn workspace_member_names(metadata: &Value) -> Members {
 /// Whether a `cargo metadata` dependency belongs to the selected table. `kind` is
 /// null for normal deps, `"dev"` / `"build"` otherwise.
 fn kind_matches(dependency: &Value, kind: DependencyKind) -> bool {
-    // An unrecognized `kind` string (none exist today — cargo emits only null/dev/build)
-    // matches no `DependencyKind`, so such a dependency is observed by no boundary. This
-    // is deliberate and bounded: `DependencyKind` does not grow (see its model doc), so a
-    // new cargo table is a conscious amendment, not a silent gap to defend here.
     matches!(
         (kind, dependency["kind"].as_str()),
         (DependencyKind::Normal, None)
@@ -106,7 +97,7 @@ fn governed_dependencies(
 }
 
 /// Names of the target's dependencies in the selected table that resolve to a registry
-/// or git source. Path/internal dependencies, and dependencies in other tables, are
+/// or git source (any non-null source). Path/internal dependencies, and dependencies in other tables, are
 /// excluded.
 ///
 /// Names are package names, not local renames (`foo = { package = "bar" }` is
@@ -115,15 +106,7 @@ fn governed_dependencies(
 /// (PROJECT.md).
 pub(crate) fn external_dependencies(package: &Value, kind: DependencyKind) -> Vec<String> {
     let mut found: Vec<String> = governed_dependencies(package, kind, false)
-        // A path/internal dependency has a null `source`; any non-null source is
-        // external. Match on presence, not on a fixed `registry+`/`git+` prefix
-        // list, so a dependency from an alternative (e.g. `sparse+`) registry
-        // cannot slip through unclassified and silently pass the boundary.
         .filter(|dependency| !dependency["source"].is_null())
-        // A dependency always carries a string `name` in cargo's metadata schema;
-        // a present-but-non-string `name` (unexpected shape) is skipped rather
-        // than failed. This relies on the schema guarantee — if it could be
-        // violated, the loud path would be a scan error, not a silent skip.
         .filter_map(|dependency| dependency["name"].as_str().map(str::to_string))
         .collect();
     found.sort();
@@ -302,10 +285,10 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    /// Classifies declared source field values against standard cargo metadata shapes,
+    /// treating null or absent source as Path.
     #[test]
     fn classify_source_reads_the_declared_source_field() {
-        // The three classifications, against the exact source strings `cargo metadata
-        // --no-deps` emits (verified on a probe manifest).
         assert_eq!(
             classify_source(&json!({ "name": "localdep", "source": null })),
             SourceKind::Path,
@@ -331,7 +314,6 @@ mod tests {
             SourceKind::Registry,
             "a sparse+ alternative registry is the residual Registry, not misread as git/path",
         );
-        // An absent `source` key (Value::Null) classifies as Path, like a null one.
         assert_eq!(
             classify_source(&json!({ "name": "no_source_key" })),
             SourceKind::Path,

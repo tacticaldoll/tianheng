@@ -23,11 +23,10 @@ pub(crate) use reachability::{governed_files, reachable_modules};
 pub(crate) use symbol_scan::{InlineFinding, inline_symbol_findings, value_namespace_item_names};
 pub(crate) use use_scan::{ImportedPath, external_imports_with_importers, imports_with_importers};
 
-// Cross-cutting tests assert invariants that span the dimensions the scanner is split into:
-// the `use`-scan ([`use_scan`]) and the declaration walk ([`reachability`]) must share exactly
-// one lexical-hygiene pass ([`lexer`]) and one canonicalization ([`path_vocab`]), so both agree on
-// what a macro body, a raw identifier, or a Unicode identifier is. A single-dimension test lives
-// beside its own module; these deliberately reach across, so they stay at the seam.
+/// Cross-cutting tests assert invariants that span the dimensions the scanner is split into:
+/// the `use`-scan ([`use_scan`]) and the declaration walk ([`reachability`]) must share exactly
+/// one lexical-hygiene pass ([`lexer`]) and one canonicalization ([`path_vocab`]), so both agree on
+/// what a macro body, a raw identifier, or a Unicode identifier is.
 #[cfg(test)]
 mod tests {
     use super::lexer::{keyword_starts_at, strip_macro_bodies};
@@ -53,9 +52,9 @@ mod tests {
         Ok(paths)
     }
 
+    /// Truncated or malformed inputs must never panic.
     #[test]
     fn scanner_does_not_panic_on_odd_input() {
-        // Truncated / malformed inputs must never panic (robustness over precision).
         for src in [
             "r#\"unterminated raw string",
             "\"unterminated string",
@@ -75,12 +74,10 @@ mod tests {
         }
     }
 
+    /// A `macro_rules!` with a raw-identifier name (`r#try`) must have its body stripped
+    /// so that `use` or `mod` items inside are not observed.
     #[test]
     fn a_raw_identifier_macro_name_does_not_leak_its_body() {
-        // A `macro_rules!` with a raw-identifier name (`r#try`): `#` is not an identifier byte, so
-        // the name scan must tolerate the `r#` prefix — otherwise it stops at `r`, fails to locate
-        // the body, leaves it unstripped, and wrongly observes the `use`/`mod` inside the
-        // never-invoked definition (a false positive). Both scans share the macro-body stripping.
         let with_use = r#"
             macro_rules! r#try {
                 () => { use crate::ghost::Thing; };
@@ -100,17 +97,12 @@ mod tests {
         );
     }
 
+    /// Rust allows non-ASCII identifiers: `use貓` / `mod貓` are single identifiers, not keywords.
     #[test]
     fn keyword_detection_does_not_fire_inside_a_unicode_identifier() {
-        // Rust allows non-ASCII identifiers. `use貓` / `mod貓` are single identifiers, so
-        // the leading `use` / `mod` is NOT a keyword: the byte after it (the lead byte of
-        // `貓`, >= 0x80) is an identifier byte. A regression guard against an ASCII-only
-        // `is_ident_byte` splitting the identifier and firing a false keyword.
         assert!(!keyword_starts_at("use貓;".as_bytes(), 0, b"use"));
         assert!(!keyword_starts_at("mod貓 {}".as_bytes(), 0, b"mod"));
-        // The genuine keyword (followed by whitespace) is still detected.
         assert!(keyword_starts_at("use 貓;".as_bytes(), 0, b"use"));
-        // And nothing is observed as an import or a declared module from the identifier.
         assert!(
             imports_with_importers("fn use貓() {}", "crate", &[])
                 .unwrap()
@@ -119,10 +111,9 @@ mod tests {
         assert!(declared_modules("fn mod貓() {}").is_empty());
     }
 
+    /// `mod r#type;` compiles to `type.rs`, so `mod`, `use`, and file path all reduce to `type`.
     #[test]
     fn raw_identifiers_are_canonicalized() {
-        // `mod r#type;` compiles to `type.rs`, so the `mod` token, the `use` path, and
-        // the file path must all reduce to the same identity (`type`).
         assert_eq!(canonical_segment("r#type"), "type");
         assert_eq!(canonical_segment("type"), "type");
         assert_eq!(
