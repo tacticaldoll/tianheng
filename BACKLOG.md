@@ -3283,7 +3283,7 @@ it before assigning a horizon here; the entries below are horizons, not a second
 - **0.3.0 (shipped)** — stable rule identity (`RuleKey`), `StructuredFactIdentity`, unsafe-site decomposition, async seam identity.
 - **0.4.0 (shipped)** — every compiled root governed, identity-coordinate completeness, the `cfg_if!`
   and conditional-remap conformance across all three dimensions.
-- **The open window — minor-class (`0.5.0`).** It opened patch-class: packaging and
+- **0.5.0 (shipped) — minor-class.** Its planning window opened patch-class: packaging and
   hygiene, prose and specs, opt-in depth, performance, and diagnostics whose exit code and emitted documents
   do not move, with a false-negative closure explicitly deferred to the next minor. That deferral is what the
   window then spent. A bare-principal resolver closure landed carrying a `BREAKING CHANGE:` footer, and it
