@@ -24,12 +24,14 @@ check had reached the vacuity its own bounds warned about, enumerating **zero** 
 
 ### Requirement: Implementation prose SHALL stay out of governed published-crate source comments
 
-Implementation prose in a published crate's governed `src` files SHALL move to the DSL's `because`, test
-names, or specifications, where its claim has an owner. A code diff carrying such prose requires every reader
-to judge its meaning. `line_comment_purity` enforces this boundary for inner `//` comments. Its corpus is
-every publishable crate's tracked Rust source under `src`, excluding `src/tests/` and `src/tests.rs`; an
-inline test module in another file remains in the corpus. Doc comments carry an item's contract and are
-outside this rule. The reader distinguishes `//` from text inside a string or block comment.
+Implementation prose SHALL NOT appear in a published crate's governed `src` files. A code diff carrying
+such prose requires every reader to judge its meaning. `line_comment_purity` enforces this boundary for
+inner `//` comments. Its corpus is every publishable crate's tracked Rust source under `src`, excluding
+`src/tests/` and `src/tests.rs`; an inline test module in another file remains in the corpus. Doc comments
+carry an item's contract and are outside this rule. The reader distinguishes `//` from text inside a string
+or block comment. Where removed prose carries a claim worth keeping, the DSL's `because`, a test name and
+this specification are where that claim can have an owner — a direction for the author rather than a second
+contract, because no reaction observes where a removed comment went.
 
 #### Scenario: A governed source carries an inner line comment
 
