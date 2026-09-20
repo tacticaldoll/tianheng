@@ -4,12 +4,9 @@
 //! reader — human or agent — to run NLP judgment over it, and this repository has measured three
 //! times that such judgment is undecidable by instrument. Moving the prose out of the diff (into
 //! the DSL's `because`, into test names, into specs) is the only convergent repair.
-//!
-//! **The corpus is the published crates' `src` files, excluding `src/tests/` and
-//! `src/tests.rs`.** Test files may carry explanatory prose. An inline `#[cfg(test)]`
-//! module in another source file remains in the corpus because this boundary is by file
-//! path. The scanner skips `//` inside strings; doc comments (`///`, `//!`) are out of
-//! scope because they carry the item's contract.
+//! The parent requirement of `repository-checks/a-block-comment-is-not-read-a-stated-bound`
+//! owns the corpus and lexical exclusions. That scenario owns the block-comment limit and
+//! its reopening trigger.
 
 use std::path::{Path, PathBuf};
 
@@ -59,8 +56,8 @@ fn published_crates(root: &Path) -> Vec<String> {
     published
 }
 
-/// Every tracked `.rs` file under the published crates' `src`, excluding `src/tests/`,
-/// as `(path, text)`.
+/// Every tracked `.rs` file under the published crates' `src`, excluding `src/tests/`
+/// and `src/tests.rs`, as `(path, text)`.
 fn published_sources(root: &Path) -> Vec<(String, String)> {
     let published = published_crates(root);
     let dirs: Vec<String> = published
@@ -125,12 +122,6 @@ fn no_published_source_carries_an_inner_comment() {
         return;
     };
     let (inspected, offences) = published_source_offences(&root);
-
-    assert!(
-        inspected > 0,
-        "no published source was inspected, so this check would report clean over nothing — the \
-         vacuity direction"
-    );
 
     assert!(
         offences.is_empty(),

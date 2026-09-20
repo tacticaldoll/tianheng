@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**29 of 107 declared bounds have no pinning test.** That figure is the register's
+**28 of 106 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -341,17 +341,11 @@ fallback used where no manifest exists, which the register spec describes.
 
 ## repository-checks
 
-### `repository-checks/a-new-hygiene-check-is-added-a-stated-bound`
+### `repository-checks/a-block-comment-is-not-read-a-stated-bound`
 
-> the rule lives in the test's own header and in no `openspec/specs/` document, and no repository check fires — a stated bound: deciding whether a specification section is *about* a hygiene rule is a judgment over prose, the instrument measured three times and rejected
+> `line_comment_purity` reports no offence for that comment. Its reader finds `//` comments and skips block-comment spans, leaving this part of the requirement unobserved; widening this repository check waits for a live instance of block-comment implementation prose in the governed sources
 
-- **unpinned**, tracked by: `BACKLOG.md` — *a specification section about a single hygiene rule cannot be told from a capability requirement without a judgment over prose*
-
-### `repository-checks/a-specification-is-proposed-for-one-hygiene-rule-a-stated-bound`
-
-> no repository check fires. The boundary is held by the review reading this requirement, not by an instrument — a stated bound, for the same reason: naming a section's subject is prose judgment, and a keyword blocklist would refuse a legitimate capability whose subject happens to name the same words
-
-- **unpinned**, tracked by: `BACKLOG.md` — *a specification section about a single hygiene rule cannot be told from a capability requirement without a judgment over prose*
+- **unpinned**, tracked by: `BACKLOG.md` — *block comments carrying implementation prose in governed sources are outside line_comment_purity*
 
 ### `repository-checks/a-construction-shape-the-register-s-reader-does-not-model-a-stated-bound`
 

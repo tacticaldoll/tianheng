@@ -476,21 +476,19 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH
 
-- **A specification section about a single hygiene rule cannot be told from a capability requirement
-  without a judgment over prose.** *Class:* WATCH — the residue is declared, not measured. *Observed
-  pressure:* the `repository-checks` requirement that a hygiene rule lives in its check rather than in
-  a specification states two scenarios no repository check can fire on, because deciding what a section
-  is *about* is the prose instrument this repository designed, measured three times and rejected; a
-  keyword blocklist (`trailing whitespace`, `tab`) would refuse a legitimate capability whose subject
-  happens to name the same words. *Observation source:* the requirement's own scenarios
-  (`a-new-hygiene-check-is-added-a-stated-bound`,
-  `a-specification-is-proposed-for-one-hygiene-rule-a-stated-bound`). *Current reaction or bound:*
-  none — enforcement is the review that reads the requirement. *Risk:* a contributor folds a hygiene
-  rule into a specification and the review misses it, presenting repo style to an adopter as a product
-  capability. *Promotion trigger:* a second instance of the fold is proposed — evidence that review
-  alone does not hold the line — or a classification signal short of prose judgment is identified (a
-  structural property of capability specifications that hygiene rules never carry). *Version class:*
-  patch; no crate is touched either way. *Authority:* this entry.
+- **Block comments carrying implementation prose are outside the published-source line-comment check.**
+  *Class:* WATCH — the shape is observable, but no live instance was found in the governed source
+  corpus. *Observed pressure:* `line_comment_purity` refuses `//` implementation prose while its
+  scanner skips a `/* … */` span. *Observation source:* the same prose appended to a governed
+  published-crate source as `/* … */` left the check green; appended as `//`, it made the check
+  refuse. *Current reaction or bound:* `line_comment_purity` governs `//` comments; the
+  `repository-checks/a-block-comment-is-not-read-a-stated-bound` scenario declares the unobserved
+  block form. *Risk:* implementation prose in a block comment would escape this repository
+  hygiene check, while the published crate's runtime behaviour is unaffected. *Promotion trigger:*
+  a tracked, governed published-crate source contains a `/* … */` block comment carrying
+  implementation prose; evaluate that instance before widening the reader. *Version class:* patch;
+  repository check only. *Authority:* `repository-checks` and
+  `crates/kanhe/tests/line_comment_purity.rs`.
 
 - **The pinned validator sends an outbound telemetry request while a Definition of Done line runs, and
   nothing in this repository said so.** *Class:* WATCH — one measured instance, and what it carries is not
