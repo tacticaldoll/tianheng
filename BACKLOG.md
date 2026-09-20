@@ -531,6 +531,17 @@ consumer for an undemonstrated deduplication.
   `openspec/specs/reference-integrity/spec.md`, whose bare-filename requirement already states the
   discriminator, so what moved was the guards' grain and not the law.
 
+  **A fourth instance landed after this entry was filed, and it did not take the repair the three above
+  took.** `every_reported_line_holds_its_own_text`, added in the window rooted at the `v0.6.0` snapshot,
+  proves its own reach with `assert!(checked > 0)` counted over the `//` comments of every tracked `.rs`
+  file under `crates/` — repository-accumulated content, not a fixture. Each of the three above was repaired
+  by moving the reach floor onto a fixture and leaving the repository to the direction that judges it; this
+  one was written the other way. What makes it worth recording rather than repairing on sight is the
+  direction that window was travelling: its own subject was removing `//` comments from published sources,
+  so the corpus this floor stands on is one the repository is deliberately shrinking. Not fired — the corpus
+  is non-empty at this tree, read 2026-09-20 — and the class grew by one, which is the residue this entry
+  already calls unmeasured rather than absent.
+
 - **A pre-cut trigger reading records the entries it decided, and the count of entries it did not is a
   property of the reader.** *Class:* WATCH — the reading is a step someone performs and the attempt to check
   it is what failed, which this file already records; what follows is the reading of 2026-09-08 and what it
@@ -563,6 +574,22 @@ consumer for an undemonstrated deduplication.
   fired — the case that would mean the discipline is being performed and getting the answer wrong, as
   against not being performed. *Version class:* patch; this file ships in no crate. *Authority:* `AGENTS.md`'s
   *`BACKLOG.md`'s promotion triggers are read against the window before the cut*.
+
+  **The reading of 2026-09-20, and the reader failed one field earlier than last time.** The corpus is what
+  landed on the release branch after the previous reading: two squashes over seventy-four files, rooted at
+  the `v0.6.0` snapshot. Nineteen live entries — one fired, one grew its class without firing, one grew the
+  residue it already reports, seven were evaluated and not fired, eight were not moved by the delta, and one
+  is unobserved because its trigger asks a property of an installed package this reading did not open.
+
+  **The unreadable count came out 4, then 1, in one step, and the step was the reader.** Extracting
+  `*Promotion trigger:*` answered four entries carrying no readable condition; widening to any label
+  containing *trigger* answered one. Five distinct labels are in use across the eighteen entries that carry
+  one, and a single entry carries **two** of them, which a reader taking the first would have halved while
+  reporting nothing. That is the failure the paragraph above records for verdicts, moved one field earlier:
+  the trigger's own label has no canonical spelling either, so a reader keyed to the label is narrower than
+  the set it claims to read before any verdict is reached. The one entry with no trigger field in any
+  spelling is the un-reacted-SHALL entry — which is also the only entry this reading found **fired**, so the
+  single condition that mattered had to be taken from a heading rather than from a field.
 
 - **A codename index for a defect lives in the half of the corpus `doc_provenance` declares out of scope,
   and the token that would find it is shared with a measurement that must stay.** *Class:* WATCH — the
@@ -818,6 +845,19 @@ consumer for an undemonstrated deduplication.
   that cites more pins enlarges this entry unless it authors the mutations too. That is the economics this
   entry rests on, observed on itself.
 
+  **Two more additions in the window rooted at the `v0.6.0` snapshot, and the second one changes this
+  entry's arithmetic.** Three `PINNED-BY` citations landed with the line-comment requirement and declared no
+  mutation. Unlike the six above, the reason is structural rather than economic and the change stated it:
+  `every_declared_mutation_s_name_resolves_to_a_real_bound_id` refuses a record whose name resolves to no
+  bound id, so an ordinary scenario's citation **cannot** carry one. What that exposes is the second
+  addition. The figure `pin_bites` prints counts every distinct `PINNED-BY` name under `openspec/specs`,
+  while a mutation may only name a test that a **pinned bound** cites. Measured 2026-09-20, by extracting
+  the `PINNED-BY` names across `openspec/specs` and the `pinned by` names from the two bound projections and
+  comparing the distinct sets: **258 cited, 79 eligible**. Most of the remainder this gate reports is
+  therefore not coverage anyone can author — it is a denominator the numerator cannot reach by construction
+  — so *coverage grows one considered record at a time* is being measured against the wrong set until the
+  gate reports the eligible half on its own.
+
   **Not fired, measured 2026-09-08.** The obligation this entry settled on is that citing carries the
   mutation, so the sweep is what the window cited. Measured over the delta: `+.*PINNED-BY` in
   `openspec/**` answers **zero**, and new rows in `pin_mutations.tsv` answer **zero** — a window that added
@@ -858,6 +898,16 @@ consumer for an undemonstrated deduplication.
   authors actively watching for it. The third re-review then found the fourth through sixth post-sweep recurrences, again
   in requirements or scenarios written in the same window; two were removed as inert, and semantic delegation
   gained a source-shape reaction.
+
+  **A seventh post-sweep recurrence, in the window rooted at the `v0.6.0` snapshot, inside a requirement
+  written to close a different finding.** *Implementation prose SHALL stay out of governed published-crate
+  source comments* was added to give `line_comment_purity` the specification parent an earlier review found
+  missing, and its opening sentence read *implementation prose … SHALL move to the DSL's `because`, test
+  names, or specifications*. The heading's SHALL has a reaction and a declared bound; that one had neither,
+  because nothing observes where a removed comment went. Found by the pre-cut trigger reading of 2026-09-20
+  rather than by anything running, and repaired in the same change by demoting the clause to a direction for
+  the author. The recurrence is what it is evidence for: the requirement was written by an author closing a
+  review finding, in a window whose own subject was claims nothing holds, with this entry already open.
 
   *Current reaction or bound:* none. Only a **bound** carries a `PINNED-BY`; an ordinary requirement is bound to
   nothing, so no gate can tell a SHALL with a reaction from one without. *Risk:* the class recurring and being found
