@@ -318,7 +318,14 @@ had gone two releases without its rename and its own heading still said *the ope
 repository-setting value stood in **four** places at once, all four wrong while `main` carried no protection
 object at all. Both dissolved into their owners. A third candidate did not, and that is the more useful half
 of the measurement — the reachability list above was read the same way and the reaction refused it, so the
-count of removable copies here is two of three considered. This has no reaction of its own, for the reason
+count of removable copies here is two of three considered.
+
+**Dissolving one carries the retirement sweep with it, and that half was skipped here.** Removing a
+restated claim retires the thing other prose points at, so *Retiring a capability requires the same sweep*
+applies unchanged: grep every tracked live document for what was removed before closing the change. Skipped
+here, it left this file describing the deleted list's duty in the present tense one section above, found by
+review rather than by anything running. Seeds are what the removed thing was called and what it was said to
+do — a record carrier keeps its sentence, since a dated section is a measurement of its own moment. This has no reaction of its own, for the reason
 *Do not add a detector over prose* gives — deciding that a sentence describes a state is a judgement over prose — so it is a question
 asked when a sentence about *how things currently are* is written, and `BACKLOG.md` carries what it cannot.
 
@@ -392,9 +399,9 @@ or drop it: the claim almost never needs the number.
 This is not a style preference. Hand-written figures drifted **repeatedly in one release window, in every kind of
 place they can live**: a doc comment saying fifty-three declarations against a register holding fifty-four; a backlog entry citing
 fifty-five; a changelog sentence citing fifty-four with no time anchor; "eight files under `src/runner/`" in three
-files at once; "all five gate matrices" after a sixth gate arrived; and a version-horizon paragraph — the one that
-assigns the release number — whose measured commit count and "nothing else is packaged" claim the window itself
-falsified.
+files at once; "all five gate matrices" after a sixth gate arrived; and a version-horizon paragraph — then the
+place a release number was decided — whose measured commit count and "nothing else is packaged" claim the window
+itself falsified.
 
 **A figure inside a generated document is only safe if it is computed.** A literal in the template is the one place
 a projection cannot self-correct: the freshness check compares the generator's own text with itself, so
