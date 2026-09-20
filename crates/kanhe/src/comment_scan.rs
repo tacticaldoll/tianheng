@@ -6,8 +6,9 @@
 //! helpers below are copied from 圭表's `module_scan/lexer.rs` (whose copies are
 //! `pub(super)` inside `module_scan` and so not reachable from 勘合, which may not depend
 //! on 圭表); the two answer different questions through the same lexical rules — that one
-//! strips, this one finds. The copies are held in step by hand: the lexical rules are
-//! rustc's, so a divergence is a scanner bug in one of them.
+//! strips, this one finds. Both recognize the same lexical forms, but this finder slices
+//! skipped spans to count physical newlines. Its skip helpers return the first unread
+//! byte or the end of input, never a position past it.
 
 /// A line comment found in Rust source.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,7 +31,7 @@ pub struct LineComment {
 /// compiles, where `/// x` errors `expected item after doc comment`), so a fourth
 /// slash does not hide a comment from this sweep.
 ///
-/// Never panics on malformed input — an unterminated string or block comment runs to
+/// Never panics on malformed input — an unterminated literal or block comment runs to
 /// end of input, which is the only sound answer when the source does not compile.
 pub fn line_comments(source: &str) -> Vec<LineComment> {
     let bytes = source.as_bytes();
@@ -133,7 +134,7 @@ fn skip_string_literal(bytes: &[u8], mut i: usize, line: &mut usize) -> usize {
             if bytes.get(i + 1) == Some(&b'\n') {
                 *line += 1;
             }
-            i += 2;
+            i = (i + 2).min(bytes.len());
         } else {
             if bytes[i] == b'\n' {
                 *line += 1;
@@ -141,10 +142,10 @@ fn skip_string_literal(bytes: &[u8], mut i: usize, line: &mut usize) -> usize {
             i += 1;
         }
     }
-    i += 1;
-    i
+    (i + 1).min(bytes.len())
 }
 
+/// The returned cursor is always within `bytes`, including when the closing quote is absent.
 fn skip_char_literal(bytes: &[u8], i: usize) -> Option<usize> {
     if i + 1 < bytes.len() && bytes[i + 1] == b'\\' {
         let mut j = i + 2;
@@ -154,8 +155,7 @@ fn skip_char_literal(bytes: &[u8], i: usize) -> Option<usize> {
         while j < bytes.len() && bytes[j] != b'\'' {
             j += 1;
         }
-        j += 1;
-        Some(j)
+        Some((j + 1).min(bytes.len()))
     } else {
         simple_char_literal_scalar_len(bytes, i).map(|len| i + 1 + len + 1)
     }
@@ -383,5 +383,23 @@ mod tests {
     fn an_unterminated_block_comment_runs_to_eof() {
         let comments = line_comments("/* unterminated // not a comment");
         assert!(comments.is_empty());
+    }
+
+    #[test]
+    fn an_unterminated_escaped_char_literal_stays_within_input() {
+        let source = "'\\";
+        assert!(line_comments(source).is_empty());
+        assert_eq!(skip_char_literal(source.as_bytes(), 0), Some(source.len()));
+    }
+
+    #[test]
+    fn malformed_skip_spans_stop_at_end_of_input() {
+        let string = b"\"unterminated\\";
+        let block = b"/* unterminated";
+        let raw = b"r#\"unterminated";
+        let mut line = 1;
+        assert_eq!(skip_string_literal(string, 0, &mut line), string.len());
+        assert_eq!(skip_block_comment(block, 0, &mut line), block.len());
+        assert_eq!(skip_raw_string(raw, 2, 1, &mut line), raw.len());
     }
 }

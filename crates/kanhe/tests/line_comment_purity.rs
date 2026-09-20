@@ -5,11 +5,11 @@
 //! times that such judgment is undecidable by instrument. Moving the prose out of the diff (into
 //! the DSL's `because`, into test names, into specs) is the only convergent repair.
 //!
-//! **The corpus is the published crates' `src/*.rs` directly, not their `src/tests/`** — test
-//! fixtures carry `"// clean\n"` as string data, and excluding them is the boundary between
-//! "this file's code carries no prose" and "this file's test data happens to contain `//`".
-//! Doc comments (`///`, `//!`) are out of scope: they are the item's contract, not prose
-//! about the implementation.
+//! **The corpus is the published crates' `src` files, excluding `src/tests/` and
+//! `src/tests.rs`.** Test files may carry explanatory prose. An inline `#[cfg(test)]`
+//! module in another source file remains in the corpus because this boundary is by file
+//! path. The scanner skips `//` inside strings; doc comments (`///`, `//!`) are out of
+//! scope because they carry the item's contract.
 
 use std::path::{Path, PathBuf};
 
@@ -96,43 +96,8 @@ fn published_sources(root: &Path) -> Vec<(String, String)> {
     files
 }
 
-/// The crates the reaction currently holds to zero inner comments.
-///
-/// **Incremental rollout, not a baseline.** The published set carries a standing population of `//`
-/// comments that a single sweep cannot remove without a false-red start. Each crate enters this list
-/// only after its own `//` population has been moved out — falsifiers into test names, provenance
-/// dropped, product contracts into specs — and the gate below sweeps only the listed crates'
-/// sources. A crate not yet listed is not exempt: it is next.
-///
-/// **The list is hand-written, and each entry is a measurement made before the write.** `xuanji`,
-/// `xingbiao`, `louke`, `tianheng`, `guibiao`, and `hunyi` are here because their `//` count outside `tests.rs` was measured at zero
-/// before the entry landed; every later entry earns its place the same way — the crate's `//`
-/// population moved first, then its name was written here. The per-crate guard in the gate below
-/// refuses any listed name that contributes no file, so a typo or an unpublished crate cannot enter
-/// silently.
-fn enforced_crates() -> Vec<&'static str> {
-    vec![
-        "guibiao", "hunyi", "louke", "tianheng", "xingbiao", "xuanji",
-    ]
-}
-
-/// The sources the enforced crates contribute to the sweep.
-fn enforced_sources<'a>(
-    all_sources: &'a [(String, String)],
-    enforced: &[&str],
-) -> Vec<&'a (String, String)> {
-    all_sources
-        .iter()
-        .filter(|(path, _)| {
-            enforced
-                .iter()
-                .any(|krate| path.starts_with(&format!("crates/{krate}/src/")))
-        })
-        .collect()
-}
-
 /// Every offence in `sources`: one per inner comment, naming the path, the line, and the text.
-fn offences_of(sources: &[&(String, String)]) -> Vec<Refusal> {
+fn offences_of(sources: &[(String, String)]) -> Vec<Refusal> {
     let mut offences = Vec::new();
     for (path, text) in sources {
         for comment in comment_scan::line_comments(text) {
@@ -146,57 +111,32 @@ fn offences_of(sources: &[&(String, String)]) -> Vec<Refusal> {
     offences
 }
 
-/// Every enforced name that contributed no source — a typo, or an unpublished crate, which can
-/// never appear in the sweep at all. Returned rather than asserted so a direction can hold the
-/// guard against a name it knows is absent; asserted inline, a broken entry would report clean
-/// forever with no direction ever seeing the failure.
-fn missing_enforced_crates<'a>(
-    enforced: &[&'a str],
-    sources: &[&(String, String)],
-) -> Vec<&'a str> {
-    enforced
-        .iter()
-        .filter(|krate| {
-            let prefix = format!("crates/{krate}/src/");
-            !sources.iter().any(|(path, _)| path.starts_with(&prefix))
-        })
-        .copied()
-        .collect()
+/// Judge exactly the source set derived from publishable manifests.
+fn published_source_offences(root: &Path) -> (usize, Vec<Refusal>) {
+    let sources = published_sources(root);
+    let offences = offences_of(&sources);
+    (sources.len(), offences)
 }
 
-/// No published crate in the enforced set carries an inner comment in its `src/*.rs`.
+/// No published crate carries an inner comment in its governed `src` files.
 #[test]
 fn no_published_source_carries_an_inner_comment() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let enforced = enforced_crates();
-    let all_sources = published_sources(&root);
-    let sources = enforced_sources(&all_sources, &enforced);
+    let (inspected, offences) = published_source_offences(&root);
 
     assert!(
-        !sources.is_empty(),
-        "no enforced source was inspected, so this check would report clean over nothing — the \
+        inspected > 0,
+        "no published source was inspected, so this check would report clean over nothing — the \
          vacuity direction"
     );
 
-    // Per-crate vacuity: the corpus narrower than the claim, at one crate's granularity rather
-    // than the whole sweep's.
-    let missing = missing_enforced_crates(&enforced, &sources);
-    assert!(
-        missing.is_empty(),
-        "the enforced list names {} crate(s) no source entered the sweep for ({missing:?}) — a typo \
-         or an unpublished crate, and either way the sweep would report clean over a crate it never \
-         opened",
-        missing.len()
-    );
-
-    let offences = offences_of(&sources);
     assert!(
         offences.is_empty(),
         "{} published source file(s) inspected; an inner comment is prose in a code diff, and \
          prose in a code diff forces NLP judgment on every reader:\n{}",
-        sources.len(),
+        inspected,
         offences
             .iter()
             .map(|refusal| format!("  {:?}: {}", refusal.kind, refusal.message))
@@ -220,8 +160,7 @@ fn a_corpus_with_an_inner_comment_is_refused() {
             "fn head() {}\n// prose in the diff\n".to_string(),
         ),
     ];
-    let refs: Vec<&(String, String)> = sources.iter().collect();
-    let offences = offences_of(&refs);
+    let offences = offences_of(&sources);
     assert_eq!(offences.len(), 1);
     assert!(
         offences[0]
@@ -232,17 +171,42 @@ fn a_corpus_with_an_inner_comment_is_refused() {
     );
 }
 
-/// The per-crate guard, driven red: an enforced name no source backs is surfaced rather
-/// than silently ignored.
+/// A newly publishable crate enters the same corpus the gate judges; an unpublished one does not.
 #[test]
-fn an_enforced_crate_with_no_source_is_surfaced() {
-    let sources = [(
-        "crates/xuanji/src/lib.rs".to_string(),
-        "fn f() {}\n".to_string(),
-    )];
-    let refs: Vec<&(String, String)> = sources.iter().collect();
-    let missing = missing_enforced_crates(&["xuanji", "xuanji-typoed"], &refs);
-    assert_eq!(missing, ["xuanji-typoed"]);
+fn a_new_published_crate_with_an_inner_comment_is_refused() {
+    let root = std::env::temp_dir().join(format!(
+        "kanhe-line-comment-new-crate-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&root);
+    xingbiao::claim_scratch(&root).expect("create fixture root");
+    for (name, publish, source) in [
+        ("existing", "", "pub fn clean() {}\n"),
+        ("newly_published", "", "// newly published prose\n"),
+        ("unpublished", "publish = false\n", "// outside corpus\n"),
+    ] {
+        let dir = root.join("crates").join(name);
+        std::fs::create_dir_all(dir.join("src")).expect("create source directory");
+        std::fs::write(
+            dir.join("Cargo.toml"),
+            format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\n{publish}"),
+        )
+        .expect("write manifest");
+        std::fs::write(dir.join("src/lib.rs"), source).expect("write source");
+    }
+    let git = |args: &[&str]| kanhe::hermetic_git::fixture(&root, "git", args);
+    git(&["init", "-q", "."]);
+    git(&["add", "crates"]);
+
+    let (inspected, offences) = published_source_offences(&root);
+    let _ = std::fs::remove_dir_all(&root);
+    assert_eq!(inspected, 2);
+    assert_eq!(offences.len(), 1);
+    assert!(
+        offences[0]
+            .message
+            .contains("crates/newly_published/src/lib.rs:1")
+    );
 }
 
 /// The reader separates a comment from a string, a doc comment, and a block comment.
