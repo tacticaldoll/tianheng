@@ -13,7 +13,6 @@ use xuanji::{BoundDecl, BoundId, Extent, Owner, Reached};
 /// Every observation bound 圭表 declares, in the order its specs declare them.
 pub fn observation_bounds() -> Vec<BoundDecl> {
     vec![
-        // --- crate-source-boundary ---
         BoundDecl::pinned(
             BoundId::new(
                 "crate-source-boundary/a-git-plus-version-dependency-is-flagged-though-it-would-publish-a-stated-bound",
@@ -25,7 +24,6 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "source_rule_flags_every_git_source_outside_a_registry_or_path_allowlist",
         ),
-        // --- crate-dependency-boundary ---
         BoundDecl::pinned(
             BoundId::new(
                 "crate-dependency-boundary/an-optional-dependency-edge-is-observed-as-a-declared-one-a-stated-bound",
@@ -39,7 +37,6 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "an_optional_dependency_edge_is_observed_as_a_declared_one",
         ),
-        // --- external-crate-confinement ---
         BoundDecl::pinned(
             BoundId::new(
                 "external-crate-confinement/cfg-gated-code-is-observed-as-written-a-stated-bound",
@@ -73,7 +70,6 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "confine_ignores_an_extern_crate_declaration",
         ),
-        // --- inline-symbol-path-confinement ---
         BoundDecl::pinned(
             BoundId::new(
                 "inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound",

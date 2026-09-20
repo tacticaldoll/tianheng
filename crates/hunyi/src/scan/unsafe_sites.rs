@@ -19,20 +19,10 @@ struct UnsafeSiteCollector<'a> {
     module: &'a str,
     uses: &'a UseMap,
     local_types: &'a HashSet<String>,
-    // The enclosing `impl`'s self-type / `trait`'s name during the recursion, so an `unsafe fn`
-    // method is owner-qualified (`unsafe fn Foo::m`) — else two same-named `unsafe fn`s on
-    // different owners in one module collapse to one finding and a baseline of the first masks the
-    // second (a false negative), the same injectivity `unsafe impl` already guards.
-    // `Ok` where the enclosing impl's self type could be named, `Err` carrying WHY where it could not.
-    // Absent means no enclosing impl at all, which is a different fact again and was previously
-    // indistinguishable from an impl whose owner had no name.
+    /// The enclosing `impl`'s self-type or `trait`'s name during recursion for owner qualification.
     current_owner: Option<Result<String, OwnerUnnameable>>,
     current_trait: Option<String>,
-    // The trait of the enclosing *trait `impl`* (`None` for an inherent impl), so a trait-impl
-    // `unsafe fn` is qualified by `<trait for self>` — else `impl Foo { unsafe fn m }` and
-    // `impl A for Foo { unsafe fn m }` (same self type), or `impl A for Foo` and `impl B for Foo`
-    // (same self type, different trait), collapse to one `unsafe fn Foo::m` and a baseline of one
-    // masks the other (a false negative). Self-type alone only separates *different* self types.
+    /// The trait of the enclosing trait `impl` (`None` for an inherent impl) for `<trait for self>` qualification.
     current_impl_trait: Option<String>,
     current_impl_is_trait: bool,
 }
@@ -99,18 +89,10 @@ fn canonical_unsafe_owner(
                     .as_ref()
                     .is_some_and(|head| uses.contains_key(head) || local_types.contains(head));
             if should_resolve {
-                // The distinct-candidate count decides, not the first candidate: two
-                // mutually-exclusive `#[cfg]` branches can bind one alias to different types, and
-                // this owner is a dedup key, so collapsing them onto an arbitrarily-chosen candidate
-                // would merge two independent `unsafe` sites into one violation (see
-                // `resolve::shape`'s own ambiguity outcome for the full argument). `None` here reaches
-                // `unsupported`, the loud path this collector already has for an unnameable owner.
                 let mut candidates =
                     resolve_path_all(&tp.path, uses, module, BareFallback::CurrentModule);
                 candidates.sort();
                 candidates.dedup();
-                // Several candidates, never none: `resolve_path_all` with this fallback always yields
-                // at least one, so the empty case a first repair branched on could not be reached.
                 let [base] = candidates.as_slice() else {
                     return Err(OwnerUnnameable::AmbiguousAlias);
                 };
@@ -141,11 +123,6 @@ impl<'ast> Visit<'ast> for UnsafeSiteCollector<'_> {
     fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
         if node.sig.unsafety.is_some() {
             let name = strip_raw(&node.sig.ident.to_string());
-            // Qualify by the enclosing impl (set in `visit_item_impl`): a *trait* impl by
-            // `<trait for self>`, an inherent impl by its self type alone. Self-type alone only
-            // separates *different* self types, so a trait-impl method and an inherent (or
-            // other-trait) method with the same name on the *same* self type would otherwise
-            // collapse to one finding and a baseline of one mask the other (a false negative).
             match (
                 self.current_impl_is_trait,
                 &self.current_impl_trait,
@@ -166,10 +143,6 @@ impl<'ast> Visit<'ast> for UnsafeSiteCollector<'_> {
                     let why = *why;
                     self.unsupported("method owner", why);
                 }
-                // What remains is a trait impl whose TRAIT did not render, with a nameable owner —
-                // not a fact about the self type, so it takes the trait sentence. Handing it an
-                // `OwnerUnnameable` said the owner's syntax has no supported rendering about an owner
-                // that renders perfectly, which is the defect this cause exists to close.
                 _ => self.unsupported_trait("method owner's trait"),
             }
         }
@@ -179,8 +152,6 @@ impl<'ast> Visit<'ast> for UnsafeSiteCollector<'_> {
     fn visit_trait_item_fn(&mut self, node: &'ast syn::TraitItemFn) {
         if node.sig.unsafety.is_some() {
             let name = strip_raw(&node.sig.ident.to_string());
-            // Qualify by the declaring trait (set in `visit_item_trait`), so two traits each
-            // declaring `unsafe fn m` in one module do not collapse to one finding.
             match &self.current_trait {
                 Some(owner) => self.sites.push(UnsafeSiteFact::TraitMethod {
                     owner: owner.clone(),
@@ -193,12 +164,6 @@ impl<'ast> Visit<'ast> for UnsafeSiteCollector<'_> {
     }
 
     fn visit_item_impl(&mut self, node: &'ast syn::ItemImpl) {
-        // Owner-qualify by the implemented-for type so `unsafe impl Send for Foo` and
-        // `unsafe impl Send for Bar` in one module stay distinct findings — else a baseline of
-        // the first silently masks the second (a false negative). Lexical (`type_to_string`, no
-        // resolution — this is the light walk), mirroring the trait-path rendering above. If the
-        // self type cannot be rendered, an observed unsafe site fails loud rather than publishing
-        // traversal position as identity. The same owner also qualifies inner unsafe methods.
         let params = type_param_names(&node.generics);
         let owner = canonical_unsafe_owner(
             &node.self_ty,
@@ -207,8 +172,6 @@ impl<'ast> Visit<'ast> for UnsafeSiteCollector<'_> {
             self.module,
             &params,
         );
-        // The implemented trait (if any), rendered once — reused for the `unsafe impl` label and to
-        // qualify the impl's inner `unsafe fn` methods as `<trait for self>` (injectivity above).
         let impl_trait = node
             .trait_
             .as_ref()
@@ -282,7 +245,6 @@ pub(crate) fn scan_unsafe_sites(
         root.items,
         "crate".to_string(),
         src_dir.to_path_buf(),
-        // The crate root is mod-rs-like: its own directory is the `#[path]` base too.
         src_dir.to_path_buf(),
         root_file.to_path_buf(),
         crate_package,
@@ -306,11 +268,6 @@ fn walk_unsafe(
     sites: &mut Vec<UnsafeSite>,
 ) -> Result<(), String> {
     check_module_depth(depth, &module, crate_package)?;
-    // Feed the collector this module's items minus top-level `mod`s (walk-owned); body-nested
-    // `mod`s stay in and are caught by the collector's default `visit_item_mod` recursion. Arms
-    // flattened first, so an `unsafe` site written inside a `cfg_if!` arm is confined like any
-    // other — the collector visits items, and an unflattened `Item::Macro` is an opaque token
-    // stream it cannot see into.
     let (items, flat) = flatten_for_walk(&items);
     let uses = collect_uses(&items);
     let local_types = local_type_namespace_names(&items);

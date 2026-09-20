@@ -113,7 +113,6 @@ impl Constitution {
             reason,
         } = profile;
 
-        // 渾儀 — a written `-> impl Trait` (RPIT) leaks an unnameable existential.
         let impl_trait = ImplTraitBoundary::in_crate(&crate_package)
             .module(&module)
             .must_not_expose_impl_trait()
@@ -124,10 +123,6 @@ impl Constitution {
             impl_trait
         };
 
-        // 渾儀 — an `async fn`'s compiler-inserted `impl Future` is the same leak, implicit form.
-        // Subtree-scoped unconditionally (not an adopter choice) — exactly like `sans_io_pure`
-        // hardcodes its own async half — so there is only one place either half's subtree reach
-        // could silently drift out of sync with the other.
         let async_exposure = AsyncExposureBoundary::in_crate(&crate_package)
             .module(&module)
             .must_not_expose_async_fn()
@@ -148,9 +143,8 @@ mod tests {
     use super::*;
     use crate::constitution_markdown;
 
-    // The two boundaries `no_existential_leak` must expand into, written by hand — the faithful-
-    // composition reference. `no_existential_leak(...)` must be byte-identical to this (proven via
-    // the projection), mirroring `sans_io.rs`'s own `hand_composed`/`via_profile` test shape.
+    /// The two boundaries `no_existential_leak` must expand into, written by hand —
+    /// the faithful-composition reference.
     fn hand_composed(warn: bool) -> Constitution {
         let impl_trait = ImplTraitBoundary::in_crate("pacta-contract")
             .module("crate::core")
@@ -180,36 +174,32 @@ mod tests {
             .no_existential_leak(profile.because("no existential leaks from the core seam"))
     }
 
+    /// The profile expands to exactly the hand-composed impl-trait + async-exposure pair.
     #[test]
     fn no_existential_leak_composes_faithfully() {
-        // The profile expands to exactly the hand-composed impl-trait + async-exposure pair (every
-        // reaction-affecting field is in the projection, so projection-equality ⇒ object-equality).
         assert_eq!(
             constitution_markdown(&via_profile(false)),
             constitution_markdown(&hand_composed(false)),
         );
     }
 
+    /// `warn` threads to both composed boundaries and differs from enforce.
     #[test]
     fn no_existential_leak_threads_severity_to_both() {
-        // `warn` threads to BOTH composed boundaries (matches the hand-composed both-warn pair)…
         assert_eq!(
             constitution_markdown(&via_profile(true)),
             constitution_markdown(&hand_composed(true)),
         );
-        // …and severity is really carried, not a no-op: the warn projection differs from enforce.
         assert_ne!(
             constitution_markdown(&via_profile(true)),
             constitution_markdown(&via_profile(false)),
         );
     }
 
+    /// Neither half's subtree opt-in is adopter-visible on `NoExistentialLeak` itself;
+    /// the profile hardcodes it on both.
     #[test]
     fn no_existential_leak_hardcodes_subtree_scope_on_both_halves() {
-        // Neither half's subtree opt-in is adopter-visible on `NoExistentialLeak` itself; the
-        // profile hardcodes it on both. If a future edit silently dropped `.including_submodules()`
-        // from either half, the projection would stop matching a hand-composed reference that keeps
-        // it on both — this test is that reaction.
         let markdown = constitution_markdown(&via_profile(false));
         assert!(
             markdown.contains("including submodules") || markdown.contains("including_submodules"),

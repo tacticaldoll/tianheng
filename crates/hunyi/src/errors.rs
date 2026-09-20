@@ -5,9 +5,6 @@
 
 use std::path::Path;
 
-// Deliberate **verbatim** twin of guibiao's `unreadable_workspace_error` (the price of the
-// dimension split; a shared module would need a forbidden guibiao↔hunyi edge). MUST stay
-// byte-identical — an unreadable workspace reads the same in either dimension.
 pub(crate) fn unreadable_workspace_error(manifest_path: &Path, err: &str) -> String {
     format!(
         "a boundary is observed against a real workspace, so an unreadable one cannot be judged \
@@ -17,8 +14,6 @@ pub(crate) fn unreadable_workspace_error(manifest_path: &Path, err: &str) -> Str
     )
 }
 
-// Deliberate **verbatim** twin of guibiao's `crate_not_found_error` (dimension split; a shared
-// module would need a forbidden guibiao↔hunyi edge). MUST stay byte-identical.
 pub(crate) fn crate_not_found_error(crate_package: &str) -> String {
     format!(
         "a boundary must govern a real crate or it silently never reacts: target crate \
@@ -26,8 +21,6 @@ pub(crate) fn crate_not_found_error(crate_package: &str) -> String {
     )
 }
 
-// Deliberate **parallel** twin of guibiao's `missing_src_error`: same intent and structure,
-// differing only in the dimension noun ("semantic" here in 渾儀, "module" in 圭表).
 pub(crate) fn missing_src_error(crate_package: &str) -> String {
     format!(
         "a semantic boundary is observed from source, so with no src it could never react: cannot \
@@ -35,9 +28,6 @@ pub(crate) fn missing_src_error(crate_package: &str) -> String {
     )
 }
 
-// Deliberate **parallel** twin of guibiao's `unknown_module_error`: both carry the same principle
-// preamble and `— check the path` tail, differing only in the dimension-accurate detail (渾儀
-// descends declared `mod`s incl. inline; 圭表's graph is file-based reachability).
 pub(crate) fn unknown_module_error(module: &str, crate_package: &str) -> String {
     format!(
         "a boundary must anchor to a real module or it silently never reacts: module '{module}' is \
@@ -119,16 +109,10 @@ pub(crate) fn missing_module_file_error(module: &str, crate_package: &str) -> St
     )
 }
 
-// A plain `mod name;` backed by BOTH conventional forms at once. Deliberately NOT claimed as a twin
-// of 圭表's or 漏刻's own message for this shape: those two already differ from each other (a
-// quoted full module path vs a backticked bare name, and a trailing rule clause present in one and
-// absent in the other), so a parity claim here would pick a side while sounding like agreement. The
-// three dimensions agree on the *reaction* — exit 2, pinned by
-// `crates/tianheng/tests/dual_backed_module_conformance.rs` — never on the text.
-// `module` is the module being resolved (an anchor, which may be DEEPER than the ambiguous
-// declaration) and `declaration` is the ambiguous `mod` name itself — the two differ whenever an
-// ancestor is the dual-backed one, so naming only `module` would attribute both of this ancestor's paths to a
-// module they do not belong to.
+/// A plain `mod name;` backed by both flat (`<name>.rs`) and nested (`<name>/mod.rs`) forms at once.
+///
+/// `module` is the module being resolved (which may be deeper than the ambiguous declaration) and
+/// `declaration` is the ambiguous `mod` name itself.
 pub(crate) fn dual_backed_module_error(
     module: &str,
     declaration: &str,
@@ -149,9 +133,8 @@ pub(crate) fn unreadable_source_error(file: &Path, err: &str) -> String {
     format!("cannot read source file '{}': {err}", file.display())
 }
 
+/// A file that cannot be parsed fails loud as a scan error (exit 2) rather than silently skipping it.
 pub(crate) fn unparseable_source_error(file: &Path, err: &str) -> String {
-    // A file we cannot parse is "cannot judge", not "nothing to judge": skipping it could
-    // hide a real exposure. Fail loud as a scan error (exit 2), never a silent pass.
     format!("cannot parse source file '{}': {err}", file.display())
 }
 

@@ -31,6 +31,13 @@ them.
 
 ## [Unreleased]
 
+### Self-governance
+
+- **All published crate sources are held to zero inner comments.** `crates/kanhe/tests/line_comment_purity.rs`
+  enforces that no published crate's `src/*.rs` (outside tests) carries an inner (`//`) comment. Implementation
+  comments carrying prose have been moved into DSL contracts, specifications, and doc comments, with provenance
+  and defect histories dropped.
+
 ## [0.6.0] - 2026-09-09
 
 ### Governance

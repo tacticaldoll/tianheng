@@ -8,8 +8,6 @@ use std::collections::HashMap;
 /// resolution or a loud missing-file error, never a silent skip). Bytes accumulate so a UTF-8
 /// filename round-trips.
 pub(crate) fn read_path_string(bytes: &[u8], start: usize, end: usize) -> Option<String> {
-    // Advance past whitespace and comments to the value — but NOT over a string literal, which is
-    // exactly what we are here to read (`skip_preamble_trivia` would skip the literal as trivia).
     let mut i = start;
     while i < end {
         if bytes[i].is_ascii_whitespace() {
@@ -25,7 +23,6 @@ pub(crate) fn read_path_string(bytes: &[u8], start: usize, end: usize) -> Option
         break;
     }
     if bytes.get(i) == Some(&b'r') {
-        // Raw string `r#…"content"#…`: no escapes; the closing is `"` then the same `#` count.
         let mut hashes = 0usize;
         let mut j = i + 1;
         while bytes.get(j) == Some(&b'#') {
@@ -60,13 +57,7 @@ pub(crate) fn read_path_string(bytes: &[u8], start: usize, end: usize) -> Option
     let content_start = i;
     while i < end {
         match bytes[i] {
-            // Decode the literal's escapes through the crate's full decoder — the same set rustc
-            // and syn accept (incl. `\x` / `\u{}` / `\'`) — so 漏刻's `#[path]` value matches 渾儀's
-            // syn-derived `s.value()` on the same input (twin-drift parity). A residually
-            // undecodable form (e.g. a backslash-newline line continuation) yields `None` and the
-            // module falls back to non-relocated handling — fail-safe, never a mis-decoded path.
             b'"' => return decode_str_escapes(&bytes[content_start..i]),
-            // Skip the escaped byte so an escaped quote `\"` (or `\\`) does not end the literal early.
             b'\\' => i += 2,
             _ => i += 1,
         }
@@ -136,7 +127,6 @@ pub(crate) fn transparent_arm_ranges(
     if !matches!(b.get(open), Some(b'{') | Some(b'(') | Some(b'[')) {
         return arms;
     }
-    // Just inside the invocation's own delimiter, up to (not including) its closer.
     let limit = body_end.saturating_sub(1);
     let mut i = open + 1;
     while i < limit {
@@ -250,6 +240,9 @@ pub(crate) struct ModPreambleAttrs {
 /// (a preceding sibling item's own block body, or a macro invocation's body) is likewise skipped
 /// as one atomic unit via [`balanced_brace_end`], landing on its own matching `}` — the real
 /// boundary — rather than treating the interior's own bytes as candidates.
+/// Pre-parses module preamble attributes (`#[path = "..."]`, `#[cfg(...)]`, and
+/// `#[cfg_attr(..., path = "...")]`), including raw identifier forms `#[r#path = "..."]` and
+/// `#[r#cfg(...)]`.
 pub(crate) fn mod_preamble_attrs(
     bytes: &[u8],
     scope_start: usize,
@@ -268,9 +261,6 @@ pub(crate) fn mod_preamble_attrs(
                 open += 1;
             }
             if bytes.get(open) == Some(&b'[') {
-                // The whole attribute group is opaque here — its own `;`/`{`/`}` bytes (inside a
-                // token-tree argument) are content, never a boundary. Left in the scanned range
-                // for the second pass below, which is what actually matches it.
                 i = attr_group_end(bytes, open, mod_index);
                 continue;
             }
@@ -302,15 +292,6 @@ pub(crate) fn mod_preamble_attrs(
                 open += 1;
             }
             if bytes.get(open) == Some(&b'[') {
-                // The attribute's meta name is the first identifier inside the brackets.
-                //
-                // **A raw identifier is ONE segment**, here as much as inside a `cfg_attr`'s argument list,
-                // where `path_meta_values` already consumes the prefix with the segment it belongs to. `r#`
-                // changes a lexical spelling and not the name it spells, so `#[r#path = "…"]` IS the
-                // built-in remap and `#[r#cfg(…)]` IS the built-in `cfg` that removes the item — measured
-                // against rustc 1.96.0, edition 2021, `--crate-type lib`: the first compiles the remapped
-                // file even with the conventional one present, and the second leaves an absent backing file
-                // legal. Read as written, `r#path` lexed as the identifier `r` and matched no arm at all.
                 let mut name_start = skip_preamble_trivia(bytes, open + 1, mod_index);
                 if bytes[name_start..].starts_with(b"r#")
                     && bytes
@@ -330,37 +311,7 @@ pub(crate) fn mod_preamble_attrs(
                             attrs.path = read_path_string(bytes, eq + 1, mod_index);
                         }
                     }
-                    // A BARE `#[cfg(pred)]` genuinely removes the whole item when `pred` is false
-                    // — the file may legitimately be absent. `cfg_attr` does NOT: it only
-                    // conditionally applies its wrapped attribute(s); the `mod` item itself always
-                    // exists regardless of the predicate (verified against a real `rustc` build:
-                    // `#[cfg_attr(unix, allow(dead_code))] mod x;` with no `x.rs` is E0583 on every
-                    // platform) — this bare-`cfg` scope is only for the plain-missing-file
-                    // tolerance, so a `cfg_attr` sighting must never grant it (its own absence
-                    // tolerance is additive, via `cfg_attr_paths` below, not this flag).
                     b"cfg" => attrs.cfg = true,
-                    // `#[cfg_attr(<pred>, …, path = "…")]`: extract EVERY `path = "…"` value from
-                    // WITHIN this attribute's own argument list.
-                    //
-                    // The predicate of each group is skipped, so all three dimensions agree about which
-                    // positions are applied targets — see [`path_meta_values`] for what reading it cost.
-                    //
-                    // Two axes, and only one of them was covered. A module may carry more than one
-                    // SEPARATE `cfg_attr`-wrapped `#[path]`, one per platform predicate — this arm
-                    // fires once per occurrence of the outer loop, so every one is collected. But ONE
-                    // such attribute may also carry several, nested under one predicate, and reading
-                    // the first alone made the rest invisible. [`path_meta_values`] records what that
-                    // cost, measured against rustc.
-                    //
-                    // The reader tracks nesting, but only enough to answer two questions per open
-                    // group: is this group a `cfg_attr`'s own argument list, and has that group's
-                    // predicate been passed. A doubly- (or deeper-) nested
-                    // `#[cfg_attr(a, cfg_attr(b, path = "…"))]` therefore resolves the same way a
-                    // single-level one does — measured directly
-                    // (`a_doubly_nested_cfg_attr_path_is_followed_the_same_as_a_single_nesting`) —
-                    // while a predicate's own group answers neither. It said *anywhere in the argument
-                    // span rather than parsing nesting structure*, which is what read predicates as
-                    // targets.
                     b"cfg_attr" => {
                         let paren_open = skip_preamble_trivia(bytes, name_end, mod_index);
                         if bytes.get(paren_open) == Some(&b'(') {
@@ -424,6 +375,7 @@ pub(crate) fn paren_group_end(bytes: &[u8], open: usize, limit: usize) -> usize 
 /// conventional file behind it reported *cannot resolve reachable module* — **exit 2 over valid code**.
 /// The union is not a hypothesis here: 圭表 already collects every `path =` across nested groups, so
 /// answering the first was the one dimension of the three disagreeing about a shape rustc accepts.
+/// Matches only unqualified `cfg_attr` and `path` identifiers, respecting `r#` raw identifier prefixes.
 pub(crate) fn path_meta_values(
     bytes: &[u8],
     start: usize,
@@ -431,32 +383,15 @@ pub(crate) fn path_meta_values(
     mod_index: usize,
 ) -> Vec<String> {
     let mut found = Vec::new();
-    // One frame per open group: whether the group is a `cfg_attr`'s own argument list, and whether that
-    // group's PREDICATE has been passed.
-    //
-    // Both halves are needed and the first repair had only the second. `cfg_attr` takes its predicate
-    // first and its applied metas after the first comma AT THAT LEVEL — but a compound predicate is a
-    // parenthesised group too, so `all(unix, path = "bogus")` has a comma of its own, and a phase kept
-    // per group read `bogus` as applied. A comma inside `all(…)`, `any(…)` or `not(…)` belongs to the
-    // predicate grammar and says nothing about the surrounding `cfg_attr`.
-    //
-    // So a group is an applied-meta position only where its `(` follows the identifier `cfg_attr`.
-    // Anything else carries no module target — a compound predicate, and equally another attribute taking
-    // a `path` argument of its own.
     struct Group {
         applies_metas: bool,
         past_predicate: bool,
     }
-    // The span handed in IS a `cfg_attr`'s argument list, by this arm's own construction.
     let mut groups = vec![Group {
         applies_metas: true,
         past_predicate: false,
     }];
     let mut last_ident_was_cfg_attr = false;
-    // Whether the previous SIGNIFICANT token was a path separator. Tracked forward through trivia rather
-    // than reconstructed by looking behind: a look-behind over whitespace alone stopped at the `/` of
-    // `foo::/**/cfg_attr` and read the segment as unqualified, which is the same false coverage through a
-    // third spelling. A comment is trivia and must not change what a path IS.
     let mut after_path_sep = false;
     let mut i = start;
     while i < paren_close {
@@ -489,7 +424,6 @@ pub(crate) fn path_meta_values(
                 last_ident_was_cfg_attr = false;
                 after_path_sep = false;
                 if groups.is_empty() {
-                    // Unbalanced past this span's own group: nothing further is this attribute's.
                     return found;
                 }
                 i += 1;
@@ -507,12 +441,6 @@ pub(crate) fn path_meta_values(
             _ => {}
         }
         if is_ident_byte(bytes[i]) && (i == start || !is_ident_byte(bytes[i - 1])) {
-            // **A raw identifier is ONE path segment.** `r#` changes an identifier's lexical spelling and
-            // not its name, so `r#cfg_attr` names `cfg_attr`; it is not escaping a keyword, since
-            // `cfg_attr` is not one, and the form is admitted for any identifier. The prefix is therefore
-            // consumed with the segment it belongs to, and the name compared is the one it spells —
-            // taking `r`, `#` and `cfg_attr` for separate events would clear the qualification a
-            // path separator had set.
             let mut name_start = i;
             if bytes[i] == b'r' && bytes.get(i + 1) == Some(&b'#') {
                 let after = i + 2;
@@ -525,21 +453,6 @@ pub(crate) fn path_meta_values(
                 name_end += 1;
             }
             let name = &bytes[name_start..name_end];
-            // **The built-in is the SINGLE-segment path**, and matching the last identifier alone is not
-            // that: `foo::cfg_attr(a, path = "…")` ends in the same word while being somebody else's
-            // attribute, and reopening applied-meta scanning inside it restored the false coverage this
-            // reader had just closed. A segment reached through `::` carries no module target — and
-            // *reached through* is decided by the token before it, tracked forward past trivia, because a
-            // look-behind over whitespace alone read `foo::/**/cfg_attr` as unqualified.
-            // **The same narrowing, spent on the wrapper and not on the target.** The comment above
-            // states the rule — the built-in is the SINGLE-segment path — and the `path` arm below did
-            // not apply it: `after_path_sep` was cleared before that arm could read it, so
-            // `foo::path = "bogus.rs"` was collected as a module target. Measured against rustc 1.96.0,
-            // edition 2021, `--crate-type lib`:
-            // `#[cfg_attr(any(), foo::path = "bogus.rs", path = "real.rs")] mod plat;` compiles, because
-            // a false predicate expands no applied attribute and never resolves `foo::path`. A probe
-            // inside a file nobody's `path` names then counted as coverage, and the audit reported clean
-            // over a seam nothing probes on any real build.
             let qualified = after_path_sep;
             last_ident_was_cfg_attr = name == b"cfg_attr" && !qualified;
             after_path_sep = false;
@@ -593,7 +506,7 @@ pub(crate) fn attr_group_end(bytes: &[u8], open: usize, limit: usize) -> usize {
 /// original non-nested bug existed in *both* precisely because they were independent copies.
 pub(crate) fn skip_block_comment(b: &[u8], mut i: usize) -> usize {
     let mut depth = 1usize;
-    i += 2; // past the opening `/*`
+    i += 2;
     while i + 1 < b.len() && depth > 0 {
         if b[i] == b'/' && b[i + 1] == b'*' {
             depth += 1;
@@ -617,6 +530,12 @@ pub(crate) fn scan_source(source: &str, file: &str, probes: &mut Vec<Probe>) {
     scan_source_with_markers(source, file, DEFAULT_MARKERS, probes);
 }
 
+/// Walks source skipping comments, strings, and foreign macro bodies (while descending transparent
+/// macro bodies such as `cfg_if!`). When the probe marker appears in code at a left word boundary,
+/// records whether its seam argument is a string literal (auditable) or not (un-auditable).
+///
+/// Foreign macros tolerate a gap before `!` and support `r#keyword` macro names while ignoring
+/// Rust keywords preceding `!` in unary negation expressions.
 pub(crate) fn scan_source_with_markers(
     source: &str,
     file: &str,
@@ -624,20 +543,13 @@ pub(crate) fn scan_source_with_markers(
     probes: &mut Vec<Probe>,
 ) {
     let b = source.as_bytes();
-    // Resolved once per file: every `fn` body's byte range, owner-qualified (never a bare name —
-    // see `fn_scopes`), so an un-auditable probe's enclosing item is looked up by position below.
     let scopes = fn_scopes(b);
     let mut i = 0;
     while i < b.len() {
-        // Comments and string/char literals are skipped whole (one shared definition below), so
-        // a marker or delimiter inside them is never mis-read.
         if let Some(next) = skip_literal_or_comment(b, i) {
             i = next;
             continue;
         }
-        // A left word boundary: `my_assert_boundary!` / `xassert_boundary!` are unrelated user
-        // macros, not our probe. Require the preceding byte to be a non-identifier char so a
-        // marker embedded in a longer identifier is not mis-counted as a probe.
         let left_boundary = i == 0 || !is_ident_byte(b[i - 1]);
         if left_boundary {
             if let Some((rest, marker)) = match_probe_marker(b, i, markers) {
@@ -650,18 +562,7 @@ pub(crate) fn scan_source_with_markers(
                 continue;
             }
         }
-        // A foreign macro invocation / `macro_rules!` definition body is macro-generated or dead
-        // code: a probe lexically inside it must not count as coverage (the 圭表 strip_macro_bodies
-        // rule, reimplemented louke-locally — 三儀 ⊥ 三儀 forbids importing it). `assert_boundary!`'s
-        // own `!` is consumed by the marker branch above (and `capture_probe` advances past it), so
-        // a `!`-preceded-by-identifier reached here is always a FOREIGN macro; skip its balanced
-        // body (and any probe nested in it) in one jump.
         if b[i] == b'!' {
-            // A foreign macro's `!` may be separated from its name by whitespace (`some_macro !(…)`
-            // is valid Rust), mirroring the probe marker's own gap tolerance — so look back past
-            // whitespace for the name's last identifier byte before deciding this opens a macro
-            // body. (A comment between the name and `!` stays a documented bound: rustfmt removes
-            // it, and scanning back over a block comment is not worth the cost.)
             let mut name_end = i;
             while name_end > 0 && b[name_end - 1].is_ascii_whitespace() {
                 name_end -= 1;
@@ -670,24 +571,10 @@ pub(crate) fn scan_source_with_markers(
             while name_start > 0 && is_ident_byte(b[name_start - 1]) {
                 name_start -= 1;
             }
-            // A raw identifier `r#keyword` (e.g. a macro named `r#async`) escapes the keyword and IS
-            // a valid macro name — its body must still be skipped. The ident-run stops at the `#`
-            // (not an ident byte), so detect a preceding `r#` at a word boundary and exempt it from
-            // the keyword test below.
             let is_raw_ident = name_start >= 2
                 && b[name_start - 1] == b'#'
                 && b[name_start - 2] == b'r'
                 && (name_start == 2 || !is_ident_byte(b[name_start - 3]));
-            // Otherwise the name before `!` must be a real identifier that is NOT a keyword. A
-            // keyword there is unary negation in expression position (`return !(x)`, `if !(cond) {…}`,
-            // `match !(x)`), never a macro — treating its parenthesized operand as a macro body would
-            // skip real code (and drop any probe inside it). `macro_rules` is not a keyword, so it
-            // still reaches `foreign_macro_body_end`'s name-skip.
-            // The one transparent macro is NOT skipped: its arms hold real, compiled code, so the
-            // scan walks into the body and observes a probe (or a typo'd seam, or an un-auditable
-            // probe) there exactly as at top level. Ordering matters — a transparent invocation
-            // written inside a `macro_rules!` definition is never reached, because that outer body
-            // is skipped first, so the macro-definition exclusion is unaffected.
             if name_start < name_end
                 && !is_transparent_macro_name(b, name_end)
                 && (is_raw_ident || !is_rust_keyword(&b[name_start..name_end]))
@@ -708,7 +595,6 @@ pub(crate) fn scan_source_with_markers(
 /// Raw/byte strings are tested before plain strings (an inner `"` would otherwise desync), and a
 /// lifetime (`'a`) is deliberately NOT a literal (left to be walked as code).
 pub(crate) fn skip_literal_or_comment(b: &[u8], i: usize) -> Option<usize> {
-    // line comment
     if b[i] == b'/' && i + 1 < b.len() && b[i + 1] == b'/' {
         let mut j = i;
         while j < b.len() && b[j] != b'\n' {
@@ -716,15 +602,12 @@ pub(crate) fn skip_literal_or_comment(b: &[u8], i: usize) -> Option<usize> {
         }
         return Some(j);
     }
-    // block comment (nesting + drift rationale in `skip_block_comment`)
     if b[i] == b'/' && i + 1 < b.len() && b[i + 1] == b'*' {
         return Some(skip_block_comment(b, i));
     }
-    // raw / byte string literal (r"…", r#"…"#, b"…", br#"…"#) — before the plain-string case
     if let Some(end) = raw_or_byte_string_end(b, i) {
         return Some(end);
     }
-    // plain string literal
     if b[i] == b'"' {
         let mut j = i + 1;
         while j < b.len() && b[j] != b'"' {
@@ -735,7 +618,6 @@ pub(crate) fn skip_literal_or_comment(b: &[u8], i: usize) -> Option<usize> {
         }
         return Some((j + 1).min(b.len()));
     }
-    // char literal vs lifetime: only a clear char ('x' or '\n'); a lifetime ('a) is not a literal.
     if b[i] == b'\'' {
         let is_char =
             (i + 1 < b.len() && b[i + 1] == b'\\') || (i + 2 < b.len() && b[i + 2] == b'\'');
@@ -794,10 +676,6 @@ pub(crate) fn is_transparent_macro_name(b: &[u8], end: usize) -> bool {
 /// unterminated body at EOF returns `Some(len)`.
 pub(crate) fn foreign_macro_body_end(b: &[u8], bang: usize) -> Option<usize> {
     let mut i = skip_trivia(b, bang + 1);
-    // The name may be separated from `!` by whitespace (`macro_rules ! foo {…}` is valid Rust),
-    // exactly as the caller tolerates when deciding this `!` opens a macro. Skip back over that
-    // whitespace before the keyword test — anchoring at `bang` would miss the spaced form, leaving
-    // the body (and any probe inside it) unskipped and wrongly counted as coverage (a false negative).
     let mut name_end = bang;
     while name_end > 0 && b[name_end - 1].is_ascii_whitespace() {
         name_end -= 1;
@@ -808,16 +686,13 @@ pub(crate) fn foreign_macro_body_end(b: &[u8], bang: usize) -> Option<usize> {
             i += 1;
         }
         if i == name_start {
-            return None; // `macro_rules!` with no name — malformed, not a body to skip
+            return None;
         }
         i = skip_trivia(b, i);
     }
     if !matches!(b.get(i), Some(b'{') | Some(b'(') | Some(b'[')) {
         return None;
     }
-    // One depth counter over all three delimiter kinds: correct because the audit scans compilable
-    // Rust, whose token trees are properly nested (a `)` never closes a `{`). Literals/comments are
-    // skipped first each iteration, so a delimiter inside a string/char never perturbs the count.
     let mut depth = 0usize;
     while i < b.len() {
         if let Some(next) = skip_literal_or_comment(b, i) {
@@ -861,7 +736,6 @@ pub(crate) fn raw_or_byte_string_end(b: &[u8], i: usize) -> Option<usize> {
             return None;
         }
         j += 1;
-        // scan to the closing `"` followed by `hashes` `#`s
         while j < b.len() {
             if b[j] == b'"' {
                 let mut k = j + 1;
@@ -878,8 +752,6 @@ pub(crate) fn raw_or_byte_string_end(b: &[u8], i: usize) -> Option<usize> {
         }
         return Some(b.len());
     }
-    // a `b"…"` byte string (escaped like a normal string) — only when a `b` prefix was
-    // consumed and a quote immediately follows.
     if byte && j < b.len() && b[j] == b'"' {
         j += 1;
         while j < b.len() && b[j] != b'"' {
@@ -1017,7 +889,6 @@ pub(crate) fn is_rust_keyword(word: &[u8]) -> bool {
             | "while"
             | "async"
             | "await"
-            // reserved / edition keywords
             | "abstract"
             | "become"
             | "box"
@@ -1073,10 +944,6 @@ pub(crate) fn capture_probe(
     owner: &str,
 ) -> (Option<Probe>, usize) {
     let i = skip_trivia(b, i);
-    // Rust macros accept `( )`, `{ }`, or `[ ]` interchangeably; a probe written
-    // `assert_boundary!{"s", o}` or `["s", o]` is a real probe. Accept any of the three
-    // opening delimiters so a non-`()` probe is not silently dropped — a silent drop would let
-    // a typo'd seam escape the undeclared-seam check, a false negative.
     if !matches!(b.get(i), Some(&b'(') | Some(&b'{') | Some(&b'[')) {
         return (None, i);
     }
@@ -1084,9 +951,6 @@ pub(crate) fn capture_probe(
     if i >= b.len() {
         return (None, i);
     }
-    // The offending expression's own trimmed source text, captured once regardless of which
-    // un-auditable branch below is taken — this is the identity discriminator (never a byte
-    // offset), so two textually distinct non-literal probes never collapse to one finding.
     let unauditable = |b: &[u8]| -> Probe {
         let end = first_macro_arg_end(b, i);
         let expr = String::from_utf8_lossy(trim_bytes(&b[i..end])).into_owned();
@@ -1097,20 +961,12 @@ pub(crate) fn capture_probe(
             expr,
         }
     };
-    // A raw string `r"…"` / `r#"…"#` is a traceable literal — parse its value rather than
-    // rejecting it as un-auditable (which would mis-flag a legitimate probe and double-report).
     if b[i] == b'r' && matches!(b.get(i + 1), Some(b'"') | Some(b'#')) {
         if let Some((seam, next)) = raw_string_value(b, i) {
             return (Some(Probe::Literal(seam)), next);
         }
         return (Some(unauditable(b)), i);
     }
-    // A plain string literal. Find its end (the `\\`-skip only keeps a `\"` from ending the
-    // string early), then DECODE its escapes to the value the compiler produces — the declared
-    // seam set is compiler-decoded (`RuntimeBoundary::seam()`), so comparing the raw source bytes
-    // would let an escape-bearing seam diverge between the two faces (a false pair of reactions,
-    // and a false negative when two spellings decode to the same bytes). An escape the decoder
-    // cannot reproduce exactly reacts as un-auditable (loud), never a silently mismatched literal.
     if b[i] == b'"' {
         let mut j = i + 1;
         let start = j;
@@ -1128,7 +984,6 @@ pub(crate) fn capture_probe(
             None => (Some(unauditable(b)), j + 1),
         };
     }
-    // Anything else (a const, an expression, a byte string) cannot be traced to a declared seam.
     (Some(unauditable(b)), i)
 }
 
@@ -1459,17 +1314,11 @@ pub(crate) fn parse_impl_header(
 /// owner)` triples.
 struct FnScopeState {
     depth: usize,
-    // Accumulated inline `mod name { … }` nesting — an external `mod name;` (no body in this
-    // file) contributes nothing here, since its content is scanned separately, as its own file,
-    // where the outer `file` identity field already disambiguates it.
     mod_stack: Vec<(usize, String)>,
     context_stack: Vec<(usize, ImplOrTraitContext)>,
     fn_stack: Vec<(usize, usize, String)>,
     anonymous_stack: Vec<(usize, String)>,
     anonymous_siblings: HashMap<(String, String), usize>,
-    // Start of the current code header, advanced only by code delimiters observed by this
-    // literal/comment-aware walk. Punctuation inside skipped literals/comments never becomes an
-    // anonymous-scope boundary.
     anonymous_header_start: usize,
     out: Vec<(usize, usize, String)>,
 }
@@ -1663,7 +1512,7 @@ pub(crate) fn owner_for(scopes: &[(usize, usize, String)], pos: usize) -> String
 /// Parse a raw string literal `r"…"` / `r#…"…"#…` starting at `i`, returning `(value, next)`.
 /// `None` if it is not a well-formed raw string.
 pub(crate) fn raw_string_value(b: &[u8], i: usize) -> Option<(String, usize)> {
-    let mut j = i + 1; // past `r`
+    let mut j = i + 1;
     let mut hashes = 0;
     while b.get(j) == Some(&b'#') {
         hashes += 1;
@@ -1700,8 +1549,6 @@ pub(crate) fn raw_string_value(b: &[u8], i: usize) -> Option<(String, usize)> {
 /// seam-name caller's behavior. The escape set is the `&str` string-literal set only;
 /// byte-string-only escapes never reach here (byte strings are already un-auditable).
 pub(crate) fn decode_str_escapes(inner: &[u8]) -> Option<String> {
-    // The surrounding source compiled, so it is valid UTF-8; escapes are all ASCII, so iterating
-    // by `char` reconstructs any multi-byte content faithfully.
     let s = std::str::from_utf8(inner).ok()?;
     let mut out = String::with_capacity(s.len());
     let mut chars = s.chars().peekable();
@@ -1718,14 +1565,11 @@ pub(crate) fn decode_str_escapes(inner: &[u8]) -> Option<String> {
             '0' => out.push('\0'),
             '\'' => out.push('\''),
             '"' => out.push('"'),
-            // Backslash-newline line continuation (`\n` or `\r\n`): strip it and every
-            // subsequent leading whitespace character on the continued line.
             '\r' | '\n' => {
                 while matches!(chars.peek(), Some(' ' | '\t' | '\n' | '\r')) {
                     chars.next();
                 }
             }
-            // `\xHH`: exactly two hex digits, and (for a `&str`) a value in `0x00..=0x7F`.
             'x' => {
                 let hi = chars.next()?.to_digit(16)?;
                 let lo = chars.next()?.to_digit(16)?;
@@ -1735,7 +1579,6 @@ pub(crate) fn decode_str_escapes(inner: &[u8]) -> Option<String> {
                 }
                 out.push(char::from_u32(v)?);
             }
-            // `\u{ H..H }`: 1..=6 hex digits (`_` permitted as separators), a valid `char`.
             'u' => {
                 if chars.next()? != '{' {
                     return None;
@@ -1745,8 +1588,6 @@ pub(crate) fn decode_str_escapes(inner: &[u8]) -> Option<String> {
                 loop {
                     match chars.next()? {
                         '}' => break,
-                        // A leading `_` is "invalid start of unicode escape" in rustc; only
-                        // internal/trailing separators are legal, so match rustc exactly here.
                         '_' if digits == 0 => return None,
                         '_' => continue,
                         d => {
@@ -1764,7 +1605,6 @@ pub(crate) fn decode_str_escapes(inner: &[u8]) -> Option<String> {
                 }
                 out.push(char::from_u32(value)?);
             }
-            // An unrecognized escape: react loud.
             _ => return None,
         }
     }

@@ -43,15 +43,16 @@ pub fn check(boundaries: &[SignatureBoundary], manifest_path: &Path) -> Outcome 
     run_boundaries(boundaries, manifest_path, check_boundary)
 }
 
+/// Check a single signature boundary against the resolved crate compilation units.
+///
+/// Evaluates each unit separately so unit-varying modules and exposed types (e.g. in binaries)
+/// are observed with unit identity.
 pub(crate) fn check_boundary(
     metadata: &Value,
     boundary: &SignatureBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
     let (package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
-    // Each of a package's crate roots is its own compilation unit: same module path `crate`,
-    // separate module graph. Evaluated once per unit so an exposure in a `bin` beside a library
-    // is observed, with the unit carried into each finding's identity.
     over_each_unit(
         &units,
         &unknown_module_error(&boundary.module, &boundary.crate_package),
@@ -174,9 +175,6 @@ fn collect_all_exposures(
         let uses = &scopes[branch].uses;
         let mut buf = Vec::new();
         collect_item_exposures(&flat.item, module, uses, ordinal, &mut buf);
-        // Opt-in depth: also observe the module's trait `impl` blocks' impl-site-authored
-        // positions (`semantic-trait-impl-exposure`). The same resolve → canonicalize → match →
-        // `{type} exposed by {seam}` pipeline below applies unchanged; only the seam differs.
         if include_trait_impls {
             collect_trait_impl_exposures(&flat.item, module, uses, ordinal, &mut buf);
         }
@@ -191,6 +189,10 @@ fn collect_all_exposures(
 /// Resolve one exposure's path against the in-scope `use`s, the crate-wide re-export/alias
 /// closure, and the extern-crate oracle, then match the resolved canonical paths against the
 /// forbidden set.
+///
+/// Leading `::` paths bypass the use-map and resolve directly against the raw extern set.
+/// Bare heads check use-map candidates, then local type aliases, and finally external crates
+/// accounting for child-module shadowing and extern-crate renames.
 #[allow(clippy::too_many_arguments)]
 fn resolve_exposure_to_findings(
     exposure: &PathExposure,
@@ -207,30 +209,11 @@ fn resolve_exposure_to_findings(
 ) -> Vec<(SemanticFact, PathBuf)> {
     let scope = &scopes[&branch];
     let uses = &scope.uses;
-    // `resolve_path_all` returns no candidates for a bare head (not `crate`-relative, not
-    // in the `use`-map); the extern oracle then fires for an external-crate head, resolving
-    // the inline extern path to itself. Ordering guarantees a local `use … as <dep>`
-    // alias (found in the `use`-map) still wins over a dependency of the same name. A
-    // re-export head uses the child-module-excluded set (a same-named child `mod` shadows a
-    // bare `pub use` head) — computed against THIS exposure's own `origin` tag, so a
-    // same-named `mod` that is provably mutually exclusive with this exposure's own
-    // cfg-gating (a different `#[cfg]`/`cfg_if!` arm, never compiled alongside it) does not
-    // suppress it; a type-position head uses the full type-namespace-excluded set, unchanged.
     let type_externs: Cow<HashSet<String>> = if exposure.is_reexport {
         Cow::Owned(reexport_externs_for(externs, &scope.mod_decls, origin))
     } else {
         Cow::Borrowed(&scope.externs_type)
     };
-    // The crate-root extern-crate-rename shadow gets the identical cfg-aware treatment for
-    // a re-export exposure's own bare head (found by an independent adversarial review of
-    // the fix above): `extern_verbatim_renamed` checks the rename map BEFORE the externs
-    // set, and a rename alias (`wc` from `extern crate serde as wc;`) is never itself a
-    // member of the externs set (only the real crate name `serde` is) — so leaving
-    // `renames_bare` cfg-blind here does not merely under-shadow a re-export through a
-    // rename alias, it drops the resolution outright once the shadowed alias falls through
-    // to an externs-set fallback with no candidate for it at all. A type-position head
-    // keeps the branch-wide, cfg-blind `renames_bare` unchanged (an explicit non-goal,
-    // matching `externs_type`'s own scope).
     let renames_for_item: Cow<HashMap<String, String>> = if exposure.is_reexport {
         Cow::Owned(reexport_renames_for(
             extern_renames,
@@ -240,24 +223,6 @@ fn resolve_exposure_to_findings(
     } else {
         Cow::Borrowed(&scope.renames_bare)
     };
-    // A leading `::` is an unambiguous extern (edition 2018+): resolve against the RAW
-    // extern set (with the crate-root `extern crate … as` rename applied, so a
-    // `::<rename>::Type` head still resolves to its real crate), bypassing the `use`-map
-    // and the local type-namespace shadow, as a HARD short-circuit — a non-dependency
-    // `::head` stays unresolved (a bound), never mis-attributed through the `use`-map.
-    // `extern_verbatim_renamed` ignores `leading_colon` (it iterates the segments), so
-    // the raw set makes it react to `::serde` under a local `mod serde` (the shadow case)
-    // while the rename hop is preserved; a local `mod` is never a rename, so no FP. This
-    // path is a deterministic syntactic short-circuit (no `use`-map involved), so it stays
-    // single-valued — cfg-blind multi-candidate resolution has nothing to disambiguate here.
-    // Otherwise: `resolve_path_all` returns every candidate the head resolves to through
-    // the `use`-map (cfg-blind: two mutually-exclusive `#[cfg]` branches' conflicting `use
-    // ... as Name;` are never compiled together, so neither candidate may be silently
-    // dropped in favor of the other purely because of source order). When the `use`-map has
-    // no candidate at all, the single-valued fallbacks apply exactly as before: a bare
-    // single-segment local `type` alias resolves before the extern oracle (a local alias
-    // shadows a same-named dependency), and the combined closure follows alias→alias /
-    // alias→re-export hops.
     let resolved: Vec<String> = if exposure.path.leading_colon.is_some() {
         extern_verbatim_renamed(&exposure.path, externs, extern_renames)
             .into_iter()
@@ -269,10 +234,6 @@ fn resolve_exposure_to_findings(
             use_map_candidates
         } else {
             bare_local_alias(&exposure.path, module, aliases)
-                // The bare-head extern-rename rewrite uses `renames_for_item`: a `Y::…`
-                // head shadowed by this module's own child `mod Y` is not rewritten to the
-                // crate (rustc resolves it to the local module), while an unshadowed `Y::…`
-                // still rewrites (no FN) — cfg-aware for a re-export exposure, as above.
                 .or_else(|| {
                     extern_verbatim_renamed(&exposure.path, &type_externs, &renames_for_item)
                 })
@@ -307,6 +268,8 @@ fn resolve_exposure_to_findings(
 /// deduplicated canonical paths that fall within the forbidden set. Each finding pairs with the
 /// real file its own item's branch was resolved from — never a single first-branch file for the
 /// whole module, which would misattribute a finding produced by a non-first `#[cfg]`-split branch.
+///
+/// Forbidden operands are validated to ensure they contain valid `::`-delimited path segments.
 pub(crate) fn module_findings(
     src_dir: &Path,
     root_file: &Path,
@@ -316,9 +279,6 @@ pub(crate) fn module_findings(
     include_trait_impls: bool,
     dep_names: &[String],
 ) -> Result<Vec<(SemanticFact, PathBuf)>, String> {
-    // A forbidden operand with an empty `::`-segment (leading, trailing, doubled, or the empty
-    // string) could never match a resolved canonical path — checked before any resolution work,
-    // like `unsafe_findings`'s own guard for its allowed set's analogous "could never react" shape.
     validate_path_operands(forbidden)?;
     let items_with_files =
         resolve_module_items_with_cfg_tags(src_dir, root_file, module, crate_package)?;
@@ -329,24 +289,10 @@ pub(crate) fn module_findings(
             .or_default()
             .push(flat.clone());
     }
-    // The external-crate name set: declared dependencies (`-`→`_` normalized, rename-aware) ∪
-    // the sysroot crates. A bare head in it denotes an external crate, so an inline extern path
-    // resolves to itself verbatim and reacts — closing the extern-path false negative. Applied
-    // only in the bare-fallback branch (after `use`-map / `crate`-relative), and only here + the
-    // re-export closure. Crate-wide, not per-file: dependencies are declared once for the crate.
     let externs = external_crate_set(dep_names);
-    // The re-export and alias closures are crate-wide: a forbidden type exposed through a
-    // `pub use` facade or a `type X = <path>;` alias must canonicalize to its defining path
-    // before matching. The re-export closure retains an extern-headed target (raw set — a bare
-    // `pub use` head is extern by grammar), so a local facade chain terminating at an extern
-    // type canonicalizes to it; the alias closure follows resolvable-nominal-path aliases.
     let scan = scan_crate(src_dir, root_file, crate_package, &externs)?;
     let reexports = scan.reexports;
     let aliases = scan.aliases;
-    // Source-level crate-root `extern crate X as Y;` renames: a renamed head resolves to the real
-    // crate before the extern check (the whole walk completes before we resolve, so the map is
-    // fully populated — no ordering hazard). Crate-wide: such a rename binds via the extern
-    // prelude for the whole crate, not per-branch.
     let extern_renames = scan.extern_renames;
     let scopes = build_file_scopes(&items_by_branch, &externs, &extern_renames);
     let forbidden: Vec<String> = forbidden.iter().map(|f| canonical_path_str(f)).collect();

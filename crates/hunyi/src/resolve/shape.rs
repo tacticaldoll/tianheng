@@ -304,6 +304,9 @@ fn generic_argument_to_string(arg: &syn::GenericArgument) -> Option<String> {
 /// uses `quote`/`syn`'s `printing` feature, which would breach 渾儀's dependency allowlist. Covers
 /// the common shapes; a shape it cannot render returns `None`, and the caller falls back to a
 /// location-only finding identity.
+///
+/// Array lengths are rendered (`[u8; 4]`), with unrenderable complex const expressions falling back to `_`
+/// (`[elem; _]`) to preserve element-type identity.
 pub(crate) fn type_to_string(ty: &syn::Type) -> Option<String> {
     match ty {
         syn::Type::Path(tp) => {
@@ -330,14 +333,6 @@ pub(crate) fn type_to_string(ty: &syn::Type) -> Option<String> {
             Some(format!("({})", parts?.join(", ")))
         }
         syn::Type::Slice(s) => Some(format!("[{}]", type_to_string(&s.elem)?)),
-        // Render the length too (`[u8; 4]` vs `[u8; 8]`) so literal-length-differing arrays stay
-        // distinct findings. A complex const length (`N + 1`) is unrenderable: keep the ELEMENT type
-        // and mark only the length `_` — never propagate `None` for the whole array. Propagating
-        // `None` would route the array into the caller's single shared `_` seam bucket, colliding
-        // `[u8; N+1]` with `[u16; N*2]` (losing even the element-type distinction) so a baseline
-        // masks a second forbidden exposure. `[elem; _]` keeps distinct element types distinct; two
-        // complex-length arrays of the SAME element type still share it — the documented
-        // render-granularity bound (one finding, never zero), matching the `dyn` `_` bound.
         syn::Type::Array(a) => {
             let elem = type_to_string(&a.elem)?;
             match expr_to_string(&a.len) {
@@ -347,9 +342,6 @@ pub(crate) fn type_to_string(ty: &syn::Type) -> Option<String> {
         }
         syn::Type::Group(g) => type_to_string(&g.elem),
         syn::Type::Paren(p) => type_to_string(&p.elem),
-        // A nested trait-object renders through the same `dyn …` form, so a `dyn` hidden inside
-        // another type (`Box<dyn crate::Foo<Box<dyn crate::Bar>>>`) keeps a distinct, stable
-        // finding rather than collapsing to a degenerate placeholder.
         syn::Type::TraitObject(t) => Some(trait_object_to_string(t)),
         syn::Type::Ptr(p) => {
             let inner = type_to_string(&p.elem)?;
@@ -360,9 +352,6 @@ pub(crate) fn type_to_string(ty: &syn::Type) -> Option<String> {
             }
         }
         syn::Type::Never(_) => Some("!".to_string()),
-        // A macro-typed argument renders by its macro *name* (`bar!`), so `dyn Foo<bar!()>` and
-        // `dyn Foo<baz!()>` stay distinct; the macro's *arguments* are unobservable without
-        // expansion (the stated macro bound), so two `bar!(…)` with different args share a render.
         syn::Type::Macro(m) => Some(format!("{}!", path_to_string(&m.mac.path)?)),
         syn::Type::BareFn(f) => {
             let inputs: Option<Vec<String>> =
@@ -373,8 +362,6 @@ pub(crate) fn type_to_string(ty: &syn::Type) -> Option<String> {
             };
             Some(format!("fn({}){output}", inputs?.join(", ")))
         }
-        // An impl-Trait, `verbatim`, or other exotic self-type is not rendered; the caller falls
-        // back to a location-only (trait-impl) or `_`-bound (dyn) finding — a stated bound.
         _ => None,
     }
 }
@@ -487,10 +474,6 @@ fn resolved_path_owner_parts(
     if tp.qself.is_some() || is_shadowed_param_path(&tp.path, impl_type_params) {
         return Ok(None);
     }
-    // `resolve_path` is `resolve_path_all(..).next()` — it silently takes the first of however many
-    // candidates the head binds to. For a MATCHING decision that is a safe over-approximation the
-    // exposure pipeline already handles by checking every candidate; for an IDENTITY component it is
-    // the collapse above, so the distinct-candidate count is checked here rather than discarded.
     let mut candidates = resolve_path_all(&tp.path, uses, module, BareFallback::CurrentModule);
     candidates.sort();
     candidates.dedup();
@@ -514,16 +497,9 @@ pub(crate) fn canonical_self_owner(
     match resolved_path_owner_parts(self_ty, uses, module, impl_type_params) {
         Ok(Some((base, args))) => match args {
             Some(args) => format!("{base}{args}"),
-            // Base resolved but a generic arg is unrenderable: preserve the readable base
-            // beside the internal sentinel that the observation path rejects.
             None => format!("{base}<_#{ordinal}>"),
         },
-        // A cfg-collided alias (see `AmbiguousOwnerAlias`): carry the refusal through the same `_#`
-        // sentinel the renderer failures use, so the shared `reject_positional_identity` gate turns
-        // it into a constitution error instead of letting two sites share one owner. The sentinel
-        // names its own cause rather than a traversal position, so the gate's message is actionable.
         Err(AmbiguousOwnerAlias) => AMBIGUOUS_ALIAS_SENTINEL.to_string(),
-        // A non-path self type: render it if possible, else return the rejected internal sentinel.
         Ok(None) => type_to_string(self_ty).unwrap_or_else(|| format!("_#{ordinal}")),
     }
 }
@@ -584,10 +560,6 @@ pub(crate) fn path_to_string(path: &syn::Path) -> Option<String> {
                     args.args.iter().map(generic_argument_to_string).collect();
                 segs.push(format!("{ident}<{}>", rendered?.join(", ")));
             }
-            // A parenthesized `Fn(…) -> …` argument list (the boxed-closure family — the most
-            // common exposed trait object) renders to its full shape, so `dyn Fn(i32) -> i32`
-            // and `dyn FnMut(String) -> bool` stay **distinct** findings instead of both
-            // collapsing to a degenerate placeholder that would collide under the baseline.
             syn::PathArguments::Parenthesized(args) => {
                 let inputs: Option<Vec<String>> = args.inputs.iter().map(type_to_string).collect();
                 let output = match &args.output {

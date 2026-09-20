@@ -39,23 +39,21 @@ pub fn check_impl_trait(boundaries: &[ImplTraitBoundary], manifest_path: &Path) 
     run_boundaries(boundaries, manifest_path, check_impl_trait_boundary)
 }
 
+/// Check an impl-trait boundary against each compilation unit of its package.
+/// Dispatches to subtree walk when `including_submodules()` is enabled, else single-module;
+/// resolves principal traits when `forbidden_operands` is non-empty.
 pub(crate) fn check_impl_trait_boundary(
     metadata: &Value,
     boundary: &ImplTraitBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
     let (package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
-    // Each of a package's crate roots is its own compilation unit: same module path `crate`,
-    // separate module graph. Evaluated once per unit so an exposure in a `bin` beside a library
-    // is observed, with the unit carried into each finding's identity.
     over_each_unit(
         &units,
         &unknown_module_error(&boundary.module, &boundary.crate_package),
         |root_file, src_dir, unit| {
             let rule_key = boundary.rule_key();
 
-            // Subtree opt-in: descend the anchored module's whole subtree, emitting per-module findings.
-            // The default path governs only the anchored module's own seam (byte-identical to before).
             if boundary.including_submodules() {
                 let findings = if boundary.forbidden_operands.is_empty() {
                     impl_trait_subtree_findings(
@@ -92,8 +90,6 @@ pub(crate) fn check_impl_trait_boundary(
                 return Ok(());
             }
 
-            // Empty operand set ⇒ shape-only (any returned impl Trait), via the resolution-free path; a
-            // named set ⇒ operand-scoped, resolving each returned impl Trait's principal trait.
             let findings = if boundary.forbidden_operands.is_empty() {
                 impl_trait_module_findings(
                     src_dir,
@@ -171,9 +167,6 @@ pub(crate) fn impl_trait_operand_subtree_findings(
     crate_package: &str,
     dep_names: &[String],
 ) -> Result<Vec<(SemanticFact, String, PathBuf)>, String> {
-    // A forbidden operand with an empty `::`-segment could never match a resolved canonical
-    // principal — checked before any resolution work, exactly as the non-subtree operand path
-    // (`shape_scan::operand_module_findings`) guards its own forbidden set.
     validate_path_operands(forbidden)?;
     let modules = walk_subtree_modules(src_dir, root_file, module, crate_package)?;
     let resolution = extern_resolution(src_dir, root_file, crate_package, dep_names)?;

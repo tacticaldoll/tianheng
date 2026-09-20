@@ -44,16 +44,10 @@ pub(super) fn strip_macro_bodies_tracked(
     let mut i = 0;
     while i < bytes.len() {
         if let Some(end) = macro_rules_body_end(bytes, i) {
-            // `macro_rules! name <delim>…<delim>` — drop the name and the body.
             out.push(b' ');
             positions.push(input_positions[i]);
             i = end;
         } else if bytes[i] == b'!' && preceding_macro_name(bytes, i) {
-            // A macro invocation `path ! <delim>…<delim>`: keep the `!`, drop the body. Rust allows
-            // whitespace between the macro path and its `!` (`cfg_if ! { … }`), so the macro name is
-            // found across whitespace by `preceding_macro_name`. Transparent control-flow macros
-            // (`cfg_if!`) wrap human-authored items without transforming identities; their bodies
-            // are preserved so enclosed `use`, `mod`, and call expressions are observed statically.
             if is_transparent_macro_name(bytes, i) {
                 out.push(bytes[i]);
                 positions.push(input_positions[i]);
@@ -85,7 +79,8 @@ pub(super) fn strip_macro_bodies_tracked(
 
 /// If a `macro_rules! name <delim>…<delim>` definition begins at `i`, return the index
 /// just past its balanced closing delimiter; otherwise `None`. `macro_rules` must be a
-/// standalone word, followed by `!`, a macro name, and an opening `{`/`(`/`[`.
+/// standalone word, followed by `!`, a macro name, and an opening `{`/`(`/`[`. Tolerates
+/// raw-identifier macro names (`r#try`).
 fn macro_rules_body_end(bytes: &[u8], i: usize) -> Option<usize> {
     const KW: &[u8] = b"macro_rules";
     if !bytes[i..].starts_with(KW) || (i > 0 && is_ident_byte(bytes[i - 1])) {
@@ -102,10 +97,6 @@ fn macro_rules_body_end(bytes: &[u8], i: usize) -> Option<usize> {
         return None;
     }
     j = skip_ws(j + 1);
-    // The macro name — identifier bytes, tolerating a raw-identifier prefix
-    // (`macro_rules! r#try`): `#` is not an identifier byte, so a plain ident scan would stop at
-    // `r`, `balanced_group_end` would then decline at `#`, and the definition body would be left
-    // unstripped — wrongly observing a `use`/`mod` inside a never-invoked macro definition.
     if bytes[j..].starts_with(b"r#") {
         j += 2;
     }
@@ -251,7 +242,6 @@ fn is_rust_keyword(word: &[u8]) -> bool {
             | "while"
             | "async"
             | "await"
-            // reserved / edition keywords
             | "abstract"
             | "become"
             | "box"
@@ -325,8 +315,8 @@ fn skip_line_comment(bytes: &[u8], mut i: usize) -> usize {
 }
 
 /// Drop a `/* … */` block comment. Rust nests these, so track depth and drop through to the
-/// `*/` that closes the outermost one — otherwise commented-out code that itself contains a
-/// `/* */` would re-expose a `use` after the inner close.
+/// `*/` that closes the outermost one. Unterminated comments consume through EOF to avoid
+/// dangling UTF-8 fragments.
 fn skip_block_comment(bytes: &[u8], mut i: usize) -> usize {
     i += 2;
     let mut depth = 1usize;
@@ -342,17 +332,6 @@ fn skip_block_comment(bytes: &[u8], mut i: usize) -> usize {
         }
     }
     if depth > 0 {
-        // Unterminated (Rust itself would reject this as a compile error, but observation
-        // must still react 0/1/2, never panic or corrupt state): the loop above stops
-        // peeking once fewer than two bytes remain, which can leave exactly one trailing
-        // byte unconsumed — and that byte may be the orphaned tail of a multi-byte UTF-8
-        // character whose lead byte(s) were already dropped inside the (still-open)
-        // comment. Left in place, the outer loop would re-scan that lone byte as ordinary
-        // code and push it into `out` on its own, an invalid UTF-8 fragment that
-        // `String::from_utf8_lossy` below then *lengthens* (one byte becomes the 3-byte
-        // U+FFFD), desynchronizing `positions` from the string it maps into and panicking
-        // the next stage's indexing. An unterminated comment logically extends to EOF, so
-        // consume through EOF rather than leaving anything dangling to be re-read as code.
         i = bytes.len();
     }
     i
@@ -382,13 +361,10 @@ fn skip_string_literal(bytes: &[u8], mut i: usize) -> usize {
 }
 
 /// A char literal must be skipped whole so a quote it contains (`'"'`) cannot open a spurious
-/// string. `None` for a lifetime (`'a`) or stray quote, which the caller emits as ordinary text.
+/// string. Handles escaped characters and multi-byte UTF-8 scalars. `None` for a lifetime (`'a'`)
+/// or stray quote, which the caller emits as ordinary text.
 fn skip_char_literal(bytes: &[u8], i: usize) -> Option<usize> {
     if i + 1 < bytes.len() && bytes[i + 1] == b'\\' {
-        // Escaped char literal (`'\n'`, `'\''`, `'\u{…}'`): skip the opening quote and the
-        // backslash, then the escaped character itself (which may be a `'`, as in `'\''`), then
-        // scan to the closing quote. Skipping the escaped character first is what keeps `'\''`
-        // from ending on its own escaped quote and leaking the real closing quote.
         let mut j = i + 2;
         if j < bytes.len() {
             j += 1;
@@ -399,17 +375,6 @@ fn skip_char_literal(bytes: &[u8], i: usize) -> Option<usize> {
         j += 1;
         Some(j)
     } else {
-        // Simple char literal (`'x'`, `'"'`, or a non-ASCII scalar like `'«'`/`'未'`): skip the
-        // opening quote, the scalar's full UTF-8 encoding, and the closing quote. Measuring the
-        // scalar's real byte length (rather than assuming exactly one, as `'x'` alone would
-        // suggest) matters: a multi-byte scalar's closing quote sits further away, and
-        // mis-locating it treats the opening quote as a lone stray quote instead — whereupon the
-        // scalar's raw bytes leak into the cleaned text as ordinary code, and (if two such
-        // literals sit adjacent, as in `['«','{']`) a *later* literal's own closing/opening quote
-        // pair can then be misread as a fake 3-byte char literal, silently swallowing the
-        // intervening comma and the next literal's opening quote — which unprotects that next
-        // literal's payload, leaking a real `{`/`}` byte into the cleaned text as a spurious
-        // structural brace. `None` here (no scalar found) means a lifetime or stray quote.
         simple_char_literal_scalar_len(bytes, i).map(|len| i + 1 + len + 1)
     }
 }
@@ -424,11 +389,6 @@ pub(super) fn strip_comments_and_strings_tracked(source: &str) -> (String, Vec<u
             i = skip_line_comment(bytes, i);
         } else if bytes[i] == b'/' && i + 1 < bytes.len() && bytes[i + 1] == b'*' {
             i = skip_block_comment(bytes, i);
-            // Emit a separator so a comment wedged between two tokens does not fuse them: without
-            // it, `use/*c*/crate::X;` becomes `usecrate::X;` and the `use` keyword is no longer
-            // recognized (its following byte is an identifier byte), silently dropping the import.
-            // (A line comment leaves its `\n`, which already separates; `strip_macro_bodies` emits
-            // the same separator space for the same reason.)
             out.push(b' ');
             positions.push(i);
         } else if let Some((hashes, quote)) = raw_string_prefix(bytes, i) {
@@ -499,8 +459,6 @@ fn raw_string_prefix(bytes: &[u8], i: usize) -> Option<(usize, usize)> {
         return None;
     }
     let mut j = i;
-    // An optional single byte-string (`b`) or C-string (`c`) prefix before the raw `r` — Rust has
-    // no `bc`/`cb` combination, so at most one applies.
     if matches!(bytes.get(j), Some(&b'b') | Some(&b'c')) {
         j += 1;
     }
@@ -561,15 +519,13 @@ pub(super) enum UseStatementScan {
 /// re-export closure's feed) and `use_trees_with_modules` (use_scan.rs's inline-module-aware walk) — the
 /// one place all three interpret "what is a `use` statement's body" identically; each still owns its own
 /// surrounding loop, since their module/brace and visibility tracking around this scan genuinely differ.
+///
+/// A precise-capturing bound `-> impl Trait + use<'a, T>` (stable Rust) puts a `use` token inside
+/// a type bound: it is followed by `<`, whereas a `use` statement is always followed by a path. So
+/// a `<` here returns [`UseStatementScan::NotAStatement`] with resume position `i + 3`, allowing
+/// `<…>` to be walked as ordinary bytes rather than swallowing past a following real `use`.
 pub(super) fn scan_use_statement(bytes: &[u8], source: &str, i: usize) -> UseStatementScan {
     let start = i + 3;
-    // A precise-capturing bound `-> impl Trait + use<'a, T>` (stable Rust) puts a `use` token
-    // inside a type bound: it is followed by `<`, whereas a `use` *statement* is always followed
-    // by a path (ident / `{` / `*` / `::` / `crate`/`self`/`super`). So a `<` here means this is
-    // a bound, not an import — the caller resumes scanning from `start` (letting the `<…>` be
-    // walked as ordinary bytes) rather than scanning to the next `;`, which would swallow the
-    // following real `use` (a false negative). A comment between `use` and `<` is already
-    // removed by the upstream comment/string strip.
     let mut p = start;
     while p < bytes.len() && bytes[p].is_ascii_whitespace() {
         p += 1;
@@ -597,12 +553,10 @@ fn is_raw_ident_prefixed(bytes: &[u8], pos: usize) -> bool {
         && (pos == 2 || !is_ident_byte(bytes[pos - 3]))
 }
 
+/// Whether `byte` is an identifier byte. Any non-ASCII byte (`>= 0x80`) is treated as an
+/// identifier byte (UTF-8 lead or continuation byte of a Unicode identifier) so keyword detection
+/// does not match a prefix of a non-ASCII identifier like `use貓`.
 pub(super) fn is_ident_byte(byte: u8) -> bool {
-    // Any non-ASCII byte (>= 0x80) is a UTF-8 lead/continuation byte of a Unicode
-    // identifier character (Rust allows non-ASCII identifiers, e.g. `use貓`). Treating
-    // it as an identifier byte keeps keyword detection (`use`, `mod`) from firing inside
-    // a Unicode identifier: `keyword_at("use貓;", …, "use")` must be `None`, since `use貓`
-    // is one identifier, not the `use` keyword.
     byte == b'_' || byte.is_ascii_alphanumeric() || byte >= 0x80
 }
 
@@ -660,7 +614,6 @@ pub(super) fn read_path_string(bytes: &[u8], start: usize, end: usize) -> Option
         break;
     }
     if bytes.get(i) == Some(&b'r') {
-        // Raw string `r#*"…"#*`: no escapes; the closing is `"` then the same `#` count.
         let mut hashes = 0usize;
         let mut j = i + 1;
         while bytes.get(j) == Some(&b'#') {
@@ -696,8 +649,6 @@ pub(super) fn read_path_string(bytes: &[u8], start: usize, end: usize) -> Option
     while i < end {
         match bytes[i] {
             b'"' => return decode_str_escapes(&bytes[content_start..i]),
-            // Skip the escaped byte so an escaped quote `\"` (or `\\`) does not end the literal
-            // early.
             b'\\' => i += 2,
             _ => i += 1,
         }
@@ -728,12 +679,6 @@ fn decode_str_escapes(inner: &[u8]) -> Option<String> {
             '0' => out.push('\0'),
             '\'' => out.push('\''),
             '"' => out.push('"'),
-            // A backslash immediately followed by a newline (`\n`, or `\r\n`) is a line
-            // continuation: it and every subsequent leading whitespace character on the
-            // continued line are stripped, contributing nothing to the decoded value — verified
-            // against a real `rustc` build (`"a\` + newline + indentation + `b"` decodes to
-            // `"ab"`). Never a literal `\r`/`\n` push; that would only apply to the plain `r`/`n`
-            // letter escapes above.
             '\r' | '\n' => {
                 while matches!(chars.peek(), Some(' ' | '\t' | '\n' | '\r')) {
                     chars.next();

@@ -43,6 +43,7 @@ pub mod bound_register_parse;
 pub mod bounds;
 pub mod capability_subjects;
 pub mod census;
+pub mod comment_scan;
 pub mod fixture;
 pub mod gate_identity;
 pub mod hermetic_git;

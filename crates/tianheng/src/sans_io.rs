@@ -148,7 +148,6 @@ impl Constitution {
             reason,
         } = profile;
 
-        // 圭表 — the core reads no ambient clock; time is injected, not read.
         let clock = ModuleBoundary::in_crate(&crate_package)
             .module(&module)
             .must_not_call_inline(&time_prefix)
@@ -159,9 +158,6 @@ impl Constitution {
             clock
         };
 
-        // 渾儀 — the public seam is synchronous; async lives at the edges. Subtree-scoped (opts in
-        // via `including_submodules`): a seam-only async guard would silently miss a submodule's
-        // async fn (see the struct doc for how the two halves' subtree reach differs).
         let sync_api = AsyncExposureBoundary::in_crate(&crate_package)
             .module(&module)
             .must_not_expose_async_fn()
@@ -182,8 +178,8 @@ mod tests {
     use super::*;
     use crate::constitution_markdown;
 
-    // The two boundaries `sans_io_pure` must expand into, written by hand — the faithful-composition
-    // reference. `sans_io_pure(...)` must be byte-identical to this (proven via the projection).
+    /// The two boundaries `sans_io_pure` must expand into, written by hand —
+    /// the faithful-composition reference.
     fn hand_composed(prefix: &str, verbs: &[&str], warn: bool) -> Constitution {
         let clock = ModuleBoundary::in_crate("pacta-contract")
             .module("crate::kernel")
@@ -208,35 +204,31 @@ mod tests {
         Constitution::new("pacta").sans_io_pure(profile.because("the kernel stays sans-I/O"))
     }
 
+    /// The profile expands to exactly the hand-composed clock + async pair.
     #[test]
     fn sans_io_pure_composes_faithfully() {
-        // The profile expands to exactly the hand-composed clock + async pair (every
-        // reaction-affecting field is in the projection, so projection-equality ⇒ object-equality).
         assert_eq!(
             constitution_markdown(&via_profile("std::time", &["now"], false)),
             constitution_markdown(&hand_composed("std::time", &["now"], false)),
         );
     }
 
+    /// `warn` threads to both composed boundaries and differs from enforce.
     #[test]
     fn sans_io_pure_threads_severity_to_both() {
-        // `warn` threads to BOTH composed boundaries (matches the hand-composed both-warn pair)…
         assert_eq!(
             constitution_markdown(&via_profile("std::time", &["now"], true)),
             constitution_markdown(&hand_composed("std::time", &["now"], true)),
         );
-        // …and severity is really carried, not a no-op: the warn projection differs from enforce.
         assert_ne!(
             constitution_markdown(&via_profile("std::time", &["now"], true)),
             constitution_markdown(&via_profile("std::time", &["now"], false)),
         );
     }
 
+    /// Non-canonical prefix/verbs must thread through unchanged.
     #[test]
     fn sans_io_pure_bakes_no_defaults() {
-        // Non-canonical prefix/verbs must thread through unchanged — guarding the design decision
-        // that nothing is baked in. An implementation hardcoding `std::time`/`["now"]` (the canonical
-        // set the other tests use) would pass those yet fail here.
         assert_eq!(
             constitution_markdown(&via_profile("quanta::clock", &["fetch", "raw"], false)),
             constitution_markdown(&hand_composed("quanta::clock", &["fetch", "raw"], false)),

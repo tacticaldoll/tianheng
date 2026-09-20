@@ -32,23 +32,20 @@ pub fn check_async_exposure(boundaries: &[AsyncExposureBoundary], manifest_path:
     run_boundaries(boundaries, manifest_path, check_async_exposure_boundary)
 }
 
+/// Check an async-exposure boundary against each compilation unit of its package.
+/// Evaluates across submodules when `including_submodules()` is enabled, else governs the anchor module.
 pub(crate) fn check_async_exposure_boundary(
     metadata: &Value,
     boundary: &AsyncExposureBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
     let (_package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
-    // Each of a package's crate roots is its own compilation unit: same module path `crate`,
-    // separate module graph. Evaluated once per unit so an exposure in a `bin` beside a library
-    // is observed, with the unit carried into each finding's identity.
     over_each_unit(
         &units,
         &unknown_module_error(&boundary.module, &boundary.crate_package),
         |root_file, src_dir, unit| {
             let rule_key = boundary.rule_key();
 
-            // Subtree opt-in: descend the anchored module's whole subtree, emitting per-module findings.
-            // The default path governs only the anchored module's own seam (byte-identical to before).
             if boundary.including_submodules() {
                 let findings = async_exposure_subtree_findings(
                     src_dir,
@@ -147,8 +144,6 @@ pub(crate) fn async_exposure_module_findings(
     module: &str,
     crate_package: &str,
 ) -> Result<Vec<(SemanticFact, PathBuf)>, String> {
-    // async collectors emit owner-qualified `String` identities directly, so the shared shape heart
-    // renders with the identity function (no `shape_finding` map, unlike the dyn / impl-trait path).
     shape_module_findings(
         src_dir,
         root_file,

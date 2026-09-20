@@ -141,10 +141,6 @@ fn collect_use_tree(tree: &syn::UseTree, prefix: String, map: &mut UseMap) {
         syn::UseTree::Name(name) => {
             let ident = strip_raw(&name.ident.to_string());
             if ident == "self" {
-                // `use a::b::{self}` binds the prefix module itself under its final segment
-                // (never the literal `self`) — mirror `walk_reexport_tree`'s reaction side so the
-                // closure and the direct walk agree. A `self` under no prefix cannot arise from a
-                // legal `use`.
                 if let Some(last) = prefix.rsplit("::").next().filter(|s| !s.is_empty()) {
                     push_candidate(map, last.to_string(), prefix.clone());
                 }
@@ -156,9 +152,7 @@ fn collect_use_tree(tree: &syn::UseTree, prefix: String, map: &mut UseMap) {
             let ident = strip_raw(&rename.ident.to_string());
             let alias = strip_raw(&rename.rename.to_string());
             if alias == "_" {
-                // `as _` binds no nameable path — mirror `walk_reexport_tree`'s stated bound.
             } else if ident == "self" {
-                // `use a::b::{self as x}` binds the prefix module itself, renamed.
                 if !prefix.is_empty() {
                     push_candidate(map, alias, prefix.clone());
                 }
@@ -166,7 +160,6 @@ fn collect_use_tree(tree: &syn::UseTree, prefix: String, map: &mut UseMap) {
                 push_candidate(map, alias, join(&prefix, &ident));
             }
         }
-        // A glob brings no nameable leaf into the map — a documented out-of-scope bound.
         syn::UseTree::Glob(_) => {}
         syn::UseTree::Group(group) => {
             for item in &group.items {
@@ -255,17 +248,12 @@ pub(crate) fn resolve_path_all(
                 } else {
                     format!("{full}::{}", rest.join("::"))
                 };
-                // The use-target may itself be `crate`/`self`/`super`-relative (e.g.
-                // `use super::x::Y`); canonicalize it against the module so it compares as an
-                // absolute path. A bare-headed target (an external crate, edition 2018+) is
-                // left as written — it cannot match a local anchor/forbidden path anyway.
                 let combined_segs: Vec<String> = combined.split("::").map(strip_raw).collect();
                 resolve_crate_relative(&combined_segs, module).unwrap_or(combined)
             })
             .collect(),
         None => match bare {
             BareFallback::Ignore => Vec::new(),
-            // A name needs no `use` in its own module: resolve against `module`.
             BareFallback::CurrentModule => {
                 vec![if module.is_empty() {
                     format!("crate::{}", segs.join("::"))
@@ -415,10 +403,6 @@ pub(crate) fn collect_reexports(
         }
         let mut local = UseMap::new();
         collect_use_tree(&use_item.tree, String::new(), &mut local);
-        // A leading `::` on the `use` item marks an unambiguous extern head — unshadowed by any
-        // same-named child `mod`, so it keeps the raw sets; a bare head uses THIS item's own
-        // cfg-aware child-excluded sets (`reexport_externs_for` / `reexport_renames_for`). The
-        // flag lives on `ItemUse`, not the `UseTree` `collect_use_tree` walked.
         let externs_bare = reexport_externs_for(externs, child_mods, flat);
         let renames_bare = reexport_renames_for(renames, child_mods, flat);
         let (head_externs, head_renames) = if use_item.leading_colon.is_some() {
@@ -426,25 +410,12 @@ pub(crate) fn collect_reexports(
         } else {
             (&externs_bare, &renames_bare)
         };
-        // `local` maps each name this ONE use item's tree brings in to its single written
-        // target — Rust rejects two same-named leaves within one item (E0252), so `written`
-        // never actually holds more than one candidate here; `collect_use_tree`'s multi-valued
-        // shape only matters once `out` accumulates across items/branches below.
         for (name, written) in local {
             let alias = format!("{module}::{name}");
             for written in &written {
                 if let Some(target) =
                     canonicalize_use_target(written, module, head_externs, head_renames)
                 {
-                    // Skip a self-referential entry (`target == alias`) and — critically — one
-                    // whose alias key is a strict `::`-prefix of its own target (`pub use
-                    // self::x::x;` → `crate::x -> crate::x::x`, a same-name value re-export
-                    // nested under a same-named module). The latter is meaningless for
-                    // type-path canonicalization (the module path `crate::x` still denotes the
-                    // module; rewriting would fabricate a nonexistent `crate::x::x::…`) and,
-                    // left in the map, makes the longest-prefix rewrite re-fire on its own
-                    // monotonically-growing output forever — the exact-repeat `seen` guard
-                    // cannot catch a never-repeating sequence.
                     if target != alias && !is_strict_path_prefix(&alias, &target) {
                         push_candidate(out, alias.clone(), target);
                     }
@@ -512,6 +483,10 @@ fn rewrite_targets(
         .or_else(|| rewrite_longest_alias_prefixes(current, reexports))
 }
 
+/// Iterative post-order DFS over the alias/re-export graph to compute all landing canonical paths.
+///
+/// Cycle detection uses `in_stack` (for exact node cycles) and `depth >= max_steps`
+/// (`aliases.len() + reexports.len() + 1`) to terminate self-growing prefix loops.
 pub(crate) fn expand_canonical_paths(
     path: &str,
     aliases: &AliasMap,
@@ -520,14 +495,6 @@ pub(crate) fn expand_canonical_paths(
     if aliases.is_empty() && reexports.is_empty() {
         return vec![path.to_string()];
     }
-    // Iterative post-order DFS over the alias/re-export graph.
-    //
-    // Each stack entry is `(node, returning, depth)`. On the first visit (`returning = false`) we push the
-    // node's children (unresolved dependencies) and then push a `returning = true` sentinel that
-    // fires only after all children have been resolved. Cycle detection uses `in_stack` (for exact
-    // node cycles) and `depth >= max_steps` (where `max_steps = aliases.len() + reexports.len() + 1`,
-    // the mathematical maximum path length in a non-looping rewrite system) to terminate self-growing
-    // prefix loops (such as `crate::a -> crate::a::b`).
     let max_steps = aliases.len() + reexports.len() + 1;
     let mut memo: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
     let mut in_stack: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -559,21 +526,17 @@ pub(crate) fn expand_canonical_paths(
             continue;
         }
 
-        // Pre-visit.
         if memo.contains_key(&current) {
             continue;
         }
         if in_stack.contains(&current) || depth >= max_steps {
-            // Active-path cycle or self-growing prefix loop cap reached.
             continue;
         }
 
         in_stack.insert(current.clone());
 
-        // Push the returning sentinel first (processed after all children).
         work.push((current.clone(), true, depth));
 
-        // Push unresolved children (reversed so the first target is processed first).
         if let Some(targets) = rewrite_targets(&current, aliases, reexports) {
             for target in targets.into_iter().rev() {
                 if !memo.contains_key(&target) {
@@ -664,8 +627,6 @@ mod tests {
                 elem: Box::new(ty),
             });
         }
-        // Leak the adversarially deep fixture so its recursive syn-owned drop cannot become the
-        // native-stack behavior under test; production AST lifetime is owned by the parsed file.
         let ty = Box::leak(Box::new(ty));
         let mut targets = Vec::new();
 

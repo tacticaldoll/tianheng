@@ -118,6 +118,13 @@ struct ChildSources {
     conditional: Vec<ConditionalPathSource>,
 }
 
+/// Collect child module declarations across the given scan sources.
+///
+/// A direct `#[path]` takes precedence over sibling `cfg_attr` paths and relocates the base outright.
+/// With no direct attribute, every `cfg_attr(…, path = …)` target is a candidate base unioned in
+/// [`register_inline_sources`]. For non-inline declarations, candidates that physically exist prove a
+/// configuration compiles via that remap, granting tolerance to absence of the conventional file.
+/// Unreadable targets return an error immediately via [`xingbiao::is_regular_file`].
 fn collect_children(scan_sources: &[ScanSource]) -> Result<BTreeMap<String, ChildSources>, String> {
     let mut children: BTreeMap<String, ChildSources> = Default::default();
     for source in scan_sources {
@@ -132,14 +139,7 @@ fn collect_children(scan_sources: &[ScanSource]) -> Result<BTreeMap<String, Chil
                         read_path_string(loaded.text.as_bytes(), orig_eq + 1, loaded.text.len())?;
                     Some(loaded.path_base.join(rel))
                 };
-                // A **direct** `#[path]` takes precedence over any sibling `cfg_attr` paths and
-                // relocates the base outright — one base, replacing the conventional one.
                 let relocated_base = declared.direct_path_eq.and_then(base_at);
-                // With no direct attribute, every `cfg_attr(…, path = …)` target is a **candidate**
-                // base rather than the base: the scanner is cfg-blind and cannot know which arm a
-                // given build compiles, so preferring one would silently drop the other's children.
-                // Collected here and unioned in `register_inline_sources`, which owns the
-                // existence rule.
                 let candidate_bases: Vec<PathBuf> = match relocated_base {
                     Some(_) => Vec::new(),
                     None => declared
@@ -162,17 +162,6 @@ fn collect_children(scan_sources: &[ScanSource]) -> Result<BTreeMap<String, Chil
                 }
                 continue;
             }
-            // Resolve every `cfg_attr(path)` candidate THIS declaration carries before deciding
-            // below whether its plain conventional file is required: `cfg_attr` never removes
-            // the item, but a candidate that physically exists is proof SOME real configuration
-            // compiles this declaration through that remap rather than the conventional file —
-            // the same "might legitimately be absent on this build" signal a bare `#[cfg]` or a
-            // `cfg_if!` arm already carries (`declared.is_cfg_conditional`), just discovered from
-            // the filesystem instead of the source text. Neither candidate existing (every
-            // `cfg_attr(path)` target absent, same as none declared at all) leaves the
-            // conventional-file requirement exactly as strict as it already is — this only adds a
-            // tolerance, never removes the existing one. 渾儀/漏刻 already apply the identical rule
-            // to their own crate-wide walk (三儀 ⊥ 三儀: the same rule, not the same function).
             let mut resolved_conditional = Vec::new();
             for &eq_cleaned in &declared.conditional_path_eqs {
                 if let Some(&orig_eq) = loaded.positions.get(eq_cleaned) {
@@ -180,8 +169,6 @@ fn collect_children(scan_sources: &[ScanSource]) -> Result<BTreeMap<String, Chil
                         read_path_string(loaded.text.as_bytes(), orig_eq + 1, loaded.text.len())
                     {
                         let candidate_target = loaded.path_base.join(&rel);
-                        // An unreadable target is not an absent one; registering neither would drop
-                        // this source and everything it reaches, in silence.
                         if xingbiao::is_regular_file(&candidate_target)? {
                             resolved_conditional.push(ConditionalPathSource {
                                 relative: PathBuf::from(rel),
@@ -259,8 +246,6 @@ fn register_inline_sources(
             Some(base) => vec![base.clone()],
             None if body.candidate_bases.is_empty() => vec![conventional],
             None => {
-                // Which candidate bases exist, refusing rather than dropping one this reader could
-                // not stat: a base filtered out here takes its whole subtree with it.
                 let mut present: Vec<PathBuf> = Vec::new();
                 for base in body
                     .candidate_bases
@@ -295,6 +280,11 @@ fn register_inline_sources(
     Ok(())
 }
 
+/// Resolve plain file sources for `child` (`child.rs` or `child/mod.rs`).
+///
+/// Refuses ambiguity if both exist. If neither exists and the declaration is cfg-conditional, it is
+/// tolerated; otherwise an error is returned. An unreadable candidate fails immediately via
+/// [`xingbiao::is_regular_file`].
 fn resolve_plain_sources(
     child: &str,
     child_path: &str,
@@ -314,10 +304,6 @@ fn resolve_plain_sources(
         } = plain_source;
         let flat = base.join(format!("{child}.rs"));
         let nested = base.join(child).join("mod.rs");
-        // An unreadable candidate is not an absent one: `is_file` answers `false` for both, and the
-        // cfg tolerance below is what an absence is owed, so a target this reader could not stat was
-        // swallowed with whatever its subtree holds. `xingbiao` owns the criterion for all three
-        // dimensions.
         let flat_present = xingbiao::is_regular_file(&flat)?;
         let nested_present = xingbiao::is_regular_file(&nested)?;
         if flat_present && nested_present {
@@ -557,6 +543,13 @@ fn root_scan_sources(root_files: &[&PathBuf], src_dir: &Path) -> Result<Vec<Scan
 /// Resolves the set of module paths reachable from the crate root via `mod` declarations.
 /// Returns `(reachable, inline_only, remapped, remap_shadowed)`.
 /// Unreachable orphan files are excluded; unreadable reachable files return a scan error.
+///
+/// File lookup is indexed by literal path to check walk presence without symlink canonicalization
+/// aliasing. Every declared source for a child is additive and cfg-blind, carrying its own
+/// source-local ancestor set to prevent false cycle reports across mutually-exclusive cfg arms.
+/// An inline body's own declarations are re-scanned even if sibling plain-file or remapped sources
+/// exist. `inline_only` excludes stray same-named conventional files only when no plain file
+/// actually resolved.
 #[allow(clippy::type_complexity)]
 pub(crate) fn reachable_modules(
     src_dir: &Path,
@@ -572,17 +565,11 @@ pub(crate) fn reachable_modules(
     String,
 > {
     let by_module = index_files_by_module(files, src_dir, root_relative);
-    // Indexed by literal path to check walk presence without symlink canonicalization aliasing.
     let files_literal: HashSet<&PathBuf> = files.iter().collect();
 
     let mut reachable = std::collections::BTreeSet::new();
     let mut inline_only = std::collections::BTreeSet::new();
     let mut graph = GraphSources::default();
-    // A module path whose ONLY file-form source is an unconditional `#[path]` remap (no plain
-    // sibling declaration under any `#[cfg]` arm) — the case where a same-named conventional file
-    // really is the orphan-shadow hazard `governed_files` must exclude. When a plain-file sibling
-    // ALSO exists (the per-platform shim pattern), that file is real and must NOT be excluded, so
-    // this is tracked separately from mere membership in `remapped`.
     reachable.insert("crate".to_string());
     if let Some(root_files) = by_module.get("crate") {
         graph
@@ -592,10 +579,8 @@ pub(crate) fn reachable_modules(
     let mut queue = vec!["crate".to_string()];
     while let Some(module) = queue.pop() {
         let Some(scan_sources) = graph.by_module.get(&module).cloned() else {
-            continue; // no file backs this module and it declared no inline body; nothing to read
+            continue;
         };
-        // Classify each child across this module's source(s) before descending. All declarations
-        // remain additive and cfg-blind, while their ancestor sets stay source-local.
         let children = collect_children(&scan_sources)?;
         for (child, child_sources) in children {
             let ChildSources {
@@ -607,42 +592,9 @@ pub(crate) fn reachable_modules(
                 conditional,
             } = child_sources;
             let child_path = format!("{module}::{child}");
-            // Every declared source for a name is additive, cfg-blind, never mutually exclusive —
-            // a mutually-exclusive `#[cfg]` per-platform shim can legitimately pair ANY two (or
-            // three) of a plain conventional file, an inline body, and a `#[path]` remap under the
-            // same name, and the scanner does not evaluate `#[cfg]`, so it must observe every
-            // variant's own real content (never picking one and silently dropping the others'
-            // children). The inline body's OWN declarations are therefore re-scanned whenever it
-            // is declared at all, regardless of a plain-file or `#[path]` sibling — dropping them
-            // whenever any sibling existed was a real false negative (a per-platform shim pairing
-            // an inline body with a sibling silently lost the inline body's own children).
-            //
-            // Critically, each new source below carries ITS OWN ancestor set — the descent path
-            // that reached exactly that file — rather than a set merged across this child's other
-            // sources. Two mutually-exclusive `#[cfg]` arms of the SAME name are never
-            // simultaneously open in any real build, so treating one arm's target as an "ancestor"
-            // while scanning the OTHER arm's target would misreport a real, cross-arm `#[path]`
-            // reference as a cycle (see the lesson recorded in `PROJECT.md`'s Decisions).
             if seen_inline {
-                // rustc accumulates the inline-module name as a directory component: a
-                // `#[path]` (or further nested inline `mod`) inside THIS body — or a further
-                // plain child of it — resolves from `<parent's child_base>/<child>`, not the
-                // parent's own `path_base` (which, for an ordinary flat file, is a DIFFERENT,
-                // shallower directory — see the `ScanSource` doc above) — UNLESS an
-                // unconditional `#[path]` preceded this inline header, in which case
-                // `relocated_base` (resolved above) is authoritative instead. An inline body
-                // opens no new file and is itself mod-rs-like either way, so `path_base` and
-                // `child_base` coincide for it; it simply carries forward whichever source
-                // declared it — its own ancestor set is already correct as-is.
                 register_inline_sources(&child, &child_path, bodies, &mut graph)?;
             }
-            // Whether at least one plain declaration for this child actually resolved to a real
-            // file — NOT merely whether one was declared: a bare-`#[cfg]`-tolerated declaration
-            // (tolerated below) can be declared yet resolve to nothing, and that must not count as
-            // "a real plain file exists" for the `inline_only` decision. An inline arm paired with
-            // an entirely-tolerated-away plain arm must still be recognized as `inline_only`
-            // (reporting `inline_module_target_error` rather than `unknown_module_error`). Defaults
-            // to `false` when no plain declaration exists at all.
             let plain_file_resolved = if seen_plain_file {
                 resolve_plain_sources(
                     &child,
@@ -656,13 +608,6 @@ pub(crate) fn reachable_modules(
             } else {
                 false
             };
-            // `inline_only` is narrower than "inline was declared": it drives ONLY the
-            // orphan-shadow exclusion for a STRAY same-named conventional file that no
-            // declaration brings into scope. That question is live only when no plain file
-            // ACTUALLY RESOLVED (a merely-declared-but-tolerated-away plain arm is not real) —
-            // independent of whether a `#[path]` sibling also exists, since a `#[path]` target
-            // relocates to an entirely different file and never competes with `x`'s own
-            // conventional path.
             if seen_inline && !plain_file_resolved {
                 inline_only.insert(child_path.clone());
             }
