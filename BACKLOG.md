@@ -3332,6 +3332,17 @@ it before assigning a horizon here; the entries below are horizons, not a second
 
   The property that survives, and the only one this entry needed: **the gate reads versions, never a branch
   name** — grep the reaction for one and there is none — so the rename changed nothing it judges.
+- **0.6.0 (shipped) — minor-class.** Its dated `CHANGELOG.md` section marks false-negative closures,
+  rule-key identity changes, and wider module resolution as `**BREAKING**`, with migration steps for
+  recorded baselines. Those changes require adopter action, which earns a minor under `AGENTS.md`'s
+  version rule. The release snapshot is this repository's root commit, so its predecessor is described by
+  the shipped change record rather than a comparison to an absent parent here.
+- **Work rooted at the `v0.6.0` snapshot — patch-class as measured 2026-09-20.** The release-branch diff
+  adds a repository check for inner comments, moves implementation comments out of published-crate
+  sources, and corrects check code, specifications, and prose. Published-crate edits change comments only;
+  no public API, default-on observation, baseline or report identity, or wire format moves. No adopter
+  action is required by that measured diff. Reassess the complete release diff before cutting it: a later
+  change requiring adopter action would change the class.
 - **Next breaking window (if earned)** — requires real adopter or correctness pressure.
 
 ### Closed — reproduction records
