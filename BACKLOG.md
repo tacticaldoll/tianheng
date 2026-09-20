@@ -476,6 +476,28 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH
 
+- **A sentence describing a current state has no owner for the event that falsifies it.** *Class:* WATCH —
+  three candidates measured, two dissolved and one refused by a reaction, and the remaining surface is
+  unmeasured rather than absent.
+  *Observed pressure:* a hand-written claim about a state is correct when written and silently wrong after
+  the next release, settings change, or generated document; nothing goes red because the falsifying event is
+  in no check's corpus. *Observation source:* measured 2026-09-21 — the shipped-version list in this file had
+  gone two releases without its rename while its own heading still read *the open window*; the branch
+  protection value stood in four documents at once, all four wrong for an entire release window during which
+  `main` carried no protection object. The third candidate is the one that did not dissolve: `AGENTS.md`'s
+  list of generated documents was read the same way and
+  `every_generated_document_is_reachable_from_where_a_reader_is_sent` refused its removal, because that list
+  carries reachability rather than a duplicate enumeration and was already held both ways. *Current reaction
+  or bound:* none for this class — the two that dissolved went into their owners (`git tag` with
+  `CHANGELOG.md`, and a structural fact about how GitHub behaves) rather than being checked against them,
+  and `AGENTS.md` states the question to ask. *Risk:* a fourth shape grows
+  where no owner exists to dissolve into, and it reads as correct for as long as nobody performs the
+  falsifying event in front of a reader. *Promotion trigger:* a fourth instance whose state has no owner to
+  dissolve into — which is what would show that removing the second copy is not always available and an
+  instrument is owed — or a decidable form is identified that tells a sentence about a state from a sentence
+  about a property. *Version class:* patch; these carriers ship in no crate. *Authority:* `AGENTS.md`'s
+  *Bind a claim to its measurement*.
+
 - **Block comments carrying implementation prose are outside the published-source line-comment check.**
   *Class:* WATCH — the shape is observable, but no live instance was found in the governed source
   corpus. *Observed pressure:* `line_comment_purity` refuses `//` implementation prose while its
@@ -3324,75 +3346,29 @@ consumer for an undemonstrated deduplication.
 The version follows SemVer honesty (`AGENTS.md`), not milestone size: **non-breaking →
 patch, breaking → minor**, and never a vanity minor bump. `AGENTS.md`'s *Versioning* section owns what
 counts as breaking — any change the adopter has to act on, a stale recorded baseline included — so read
-it before assigning a horizon here; the entries below are horizons, not a second definition.
+it before assigning a horizon here. What this section carries is the forward horizon and the properties
+that outlive a window, never a second definition and never a record of what shipped.
 
-- **0.2.x (shipped)** — additive depth on an existing observation source, false-negative closures. A
-  historical record, not a precedent: those closures were classified as patch-class before the 0.4.0
-  window settled that a change requiring adopter action earns a minor. The same work today is
-  minor-class.
-- **0.3.0 (shipped)** — stable rule identity (`RuleKey`), `StructuredFactIdentity`, unsafe-site decomposition, async seam identity.
-- **0.4.0 (shipped)** — every compiled root governed, identity-coordinate completeness, the `cfg_if!`
-  and conditional-remap conformance across all three dimensions.
-- **0.5.0 (shipped) — minor-class.** Its planning window opened patch-class: packaging and
-  hygiene, prose and specs, opt-in depth, performance, and diagnostics whose exit code and emitted documents
-  do not move, with a false-negative closure explicitly deferred to the next minor. That deferral is what the
-  window then spent. A bare-principal resolver closure landed carrying a `BREAKING CHANGE:` footer, and it
-  earns a minor on the definition above rather than on its diff size. Stated against the **shipped** baseline,
-  which is the only one a version answers to: in `0.4.0` a bare single-segment principal did not resolve at
-  all, and now one the governed module declares does — new depth reacting by default, so a recorded baseline
-  no longer describes the adopter's tree and regenerating it is work they did not choose. The window's own
-  intermediate states (a fallback that over-reached, then the canonicalization that fixed it) are not the
-  reason and must not be quoted as one: neither shipped, so neither is an upgrade anyone performs.
-  `CHANGELOG.md` marks it `**BREAKING**` accordingly, and states the same delta from the same baseline.
+**Shipped versions are not listed here, deliberately.** What each release contained, and what earns its
+class, already have one owner apiece: `CHANGELOG.md`'s dated section carries the contents, its
+`**BREAKING**` marking carries which changes require adopter action, and `git tag` carries which versions
+came to rest. A list here would be a second, hand-written copy of all three — and one that only a person
+remembering to rename it after a cut could keep true, which is a step no check performs. It was measured
+not performed: the heading above this list said *the open window* through two shipped releases.
 
-  **What earns the minor is not classified here, and that is the repair rather than a smaller claim.**
-  The `0.5.0` release marked every entry requiring adopter action `**BREAKING**` and its `### Migration`
-  section states each step. That classification has one owner and this is not it. What belongs here is the
-  version *consequence*: pre-1.0, an adopter having to act earns a minor whatever the diff size, and a recorded
-  baseline going stale is such an action — which is why `0.5.0` is minor-class rather than the patch it
-  opened as.
+Two properties from those windows do not expire with a version, so they stay:
 
-  This paragraph used to classify it anyway: it named the bare-principal resolver closure as the one item, and
-  called the rest of the window's public surface additive and therefore free. Both halves went stale inside the
-  window. Another entry earned the mark — `Outcome::Clean` gaining the subject it was measured over — and it is
-  part of the very surface the sentence called additive, carrying a `### Migration` bullet that reads *the
-  compiler names every site*. Two owners for one classification, and the one with no producer drifted, which is
-  the shape *Bind a claim to its measurement* refuses everywhere else.
-
-  No figure is carried here. The counts this paragraph used to hold ("of the 44 commits … the two other
-  product-code touches") were written early and falsified by the window itself, and the command that replaced
-  them addressed refs this repository no longer holds.
-
-  What was deliberately not done **as of 2026-08-06**: the version bump, the
-  dated CHANGELOG section, the internal pins and `Cargo.lock`, which move together at release preparation.
-  The 0.5.0 preparation has since done each.
-
-  **This paragraph used to end by naming the gate's current answer, and that sentence was wrong three times
-  in a row.** It said `development: 0.4.0`, was corrected to `release-ready: 0.5.0`, and was already false
-  at the commit that froze it — the release squash makes HEAD's subject `release: X.Y.Z`, which is
-  `State::Snapshot`, so the tree it shipped in reports `snapshot: 0.5.0`. A fourth correction would have been
-  the same mistake again: **the gate's answer is a live state and this is a record.** What a record can say
-  is the property and how to re-derive it, which is what the commit-count sentence above already does and
-  what this one now does too:
+- **The gate reads versions, never a branch name** — grep the reaction for one and there is none, so
+  renaming a release branch changes nothing it judges.
+- **The gate's answer is a live state, and this file is a record.** A record states the property and how to
+  re-derive it rather than freezing an answer; naming the answer here was wrong three times in a row
+  (`development: 0.4.0`, then `release-ready: 0.5.0`, then already false at the commit that froze it).
 
   ```bash
   TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test release_coherence \
     the_release_surfaces_are_coherent -- --nocapture     # prints `<state>: <version>` for the checkout
   ```
 
-  The property that survives, and the only one this entry needed: **the gate reads versions, never a branch
-  name** — grep the reaction for one and there is none — so the rename changed nothing it judges.
-- **0.6.0 (shipped) — minor-class.** Its dated `CHANGELOG.md` section marks false-negative closures,
-  rule-key identity changes, and wider module resolution as `**BREAKING**`, with migration steps for
-  recorded baselines. Those changes require adopter action, which earns a minor under `AGENTS.md`'s
-  version rule. The release snapshot is this repository's root commit, so its predecessor is described by
-  the shipped change record rather than a comparison to an absent parent here.
-- **Work rooted at the `v0.6.0` snapshot — patch-class as measured 2026-09-20.** The release-branch diff
-  adds a repository check for inner comments, moves implementation comments out of published-crate
-  sources, and corrects check code, specifications, and prose. Published-crate edits change comments only;
-  no public API, default-on observation, baseline or report identity, or wire format moves. No adopter
-  action is required by that measured diff. Reassess the complete release diff before cutting it: a later
-  change requiring adopter action would change the class.
 - **Next breaking window (if earned)** — requires real adopter or correctness pressure.
 
 ### Closed — reproduction records
