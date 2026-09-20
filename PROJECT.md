@@ -254,10 +254,9 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
 
 - **The amendment requirement is a reaction now, because as prose it never fired.**
   `.github/CODEOWNERS` says the review requirement *is* the reaction and that a merge cannot relax the law
-  without a human accepting it — then says designation alone only auto-requests review. Measured, `main`'s
-  protection answers `require_code_owner_reviews: false` and `required_approving_review_count: 0`; and
-  enabling it would not close this, since GitHub does not let a pull request's author approve their own, so
-  for a single-steward repository the rule cannot fire at all. That is a prose prescription with no backstop
+  without a human accepting it — then says designation alone only auto-requests review. Enabling the
+  code-owner-review setting would not close this either, since GitHub does not let a pull request's author
+  approve their own, so for a single-steward repository the rule cannot fire whatever that setting says. That is a prose prescription with no backstop
   standing on the law itself, which is the shape this project's reason rule refuses everywhere else.
 
   Every boundary the law declares — its heading, reason, rule and severity — is declared in

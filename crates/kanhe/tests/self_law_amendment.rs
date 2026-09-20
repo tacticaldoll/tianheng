@@ -5,10 +5,9 @@
 //! without a human accepting it*. Its last paragraph then says what that is worth: designation alone only
 //! auto-requests review, and making review required needs branch protection the admin has to enable.
 //!
-//! **Measured, it is not enabled**: `main`'s protection answers `require_code_owner_reviews: false` and
-//! `required_approving_review_count: 0`. And enabling it would not close this, because GitHub does not let a
-//! pull request's author approve their own — so for a repository whose steward and author are one person the
-//! rule cannot fire at all. A prose prescription with no backstop is the shape this repository's own reason
+//! **Enabling it would not close this**, because GitHub does not let a pull request's author approve their
+//! own — so for a repository whose steward and author are one person the rule cannot fire whatever that
+//! setting is, and the protection's current value decides nothing here. A prose prescription with no backstop is the shape this repository's own reason
 //! rule forbids everywhere else, and here it sat on the law itself.
 //!
 //! **What it cost.** Two crate boundaries reached `AGENTS.self-law.md` under a commit body reading *the law

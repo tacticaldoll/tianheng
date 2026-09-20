@@ -289,6 +289,46 @@ ask when a new check is written or a review names a corpus defect — and where 
 the compiler enforces it afterwards rather than this paragraph. `BACKLOG.md` carries it as the un-reacted-SHALL
 class requires.
 
+**A claim about a state is bound to the event that changes it, and that binding is the one nothing supplies.**
+The branches above ask what carries a claim. This asks *when it stops being true*, which is a different
+question and the one this repository kept getting wrong: a hand-written sentence describing a current state
+— which versions shipped, what a repository setting answers, which documents are generated — is correct when
+written and silently wrong after the next release, the next settings change, the next generated document.
+Nothing goes red, because the event that falsified it is not in any check's corpus. A figure at least has
+*A census is produced, never typed* aimed at it; a state sentence has nothing.
+
+**The disposition is the branches above, asked again about the event rather than the carrier.** A second
+copy is not removable because it is a copy — it is removable when nothing downstream depends on it, which is
+branch one. Where something does, branch two already applies and the copy stays, held to its producer both
+ways. Measured while this paragraph was being written: `AGENTS.md`'s list of generated documents was read as
+a removable copy of `docs/projection-register.md` and deleted, and
+`every_generated_document_is_reachable_from_where_a_reader_is_sent` refused it — the register knowing a
+document exists is not the same as a reader being able to find it, so that list carries reachability, not a
+duplicate enumeration, and it was already held both ways. The rule here would have removed it; the reaction
+did not let it. Ask what already knows the answer — `git tag` and `CHANGELOG.md` know which versions shipped and what each one
+carried; a structural fact about how a tool behaves knows itself and does not need measuring at all. Where such an owner exists, the sentence
+states the property and names the owner. Where the state lives outside this repository, write the reason it
+holds rather than the value it currently has: *a pull request's author cannot approve their own, so a
+single-steward repository cannot satisfy that requirement whatever the setting says* survives every
+settings change, while `require_code_owner_reviews: false` was false of this repository for an entire
+release window and four documents repeated it.
+
+Measured 2026-09-21, by reading every hand-written state claim these shapes reach: the shipped-version list
+had gone two releases without its rename and its own heading still said *the open window*, and the
+repository-setting value stood in **four** places at once, all four wrong while `main` carried no protection
+object at all. Both dissolved into their owners. A third candidate did not, and that is the more useful half
+of the measurement — the reachability list above was read the same way and the reaction refused it, so the
+count of removable copies here is two of three considered.
+
+**Dissolving one carries the retirement sweep with it, and that half was skipped here.** Removing a
+restated claim retires the thing other prose points at, so *Retiring a capability requires the same sweep*
+applies unchanged: grep every tracked live document for what was removed before closing the change. Skipped
+here, it left this file describing the deleted list's duty in the present tense one section above, found by
+review rather than by anything running. Seeds are what the removed thing was called and what it was said to
+do — a record carrier keeps its sentence, since a dated section is a measurement of its own moment. This has no reaction of its own, for the reason
+*Do not add a detector over prose* gives — deciding that a sentence describes a state is a judgement over prose — so it is a question
+asked when a sentence about *how things currently are* is written, and `BACKLOG.md` carries what it cannot.
+
 ## A reader reads its whole subject — four shapes, and only three close by construction
 
 The dominant defect class this repository ships, by count: a reader whose input is narrower than the thing it
@@ -359,9 +399,9 @@ or drop it: the claim almost never needs the number.
 This is not a style preference. Hand-written figures drifted **repeatedly in one release window, in every kind of
 place they can live**: a doc comment saying fifty-three declarations against a register holding fifty-four; a backlog entry citing
 fifty-five; a changelog sentence citing fifty-four with no time anchor; "eight files under `src/runner/`" in three
-files at once; "all five gate matrices" after a sixth gate arrived; and a version-horizon paragraph — the one that
-assigns the release number — whose measured commit count and "nothing else is packaged" claim the window itself
-falsified.
+files at once; "all five gate matrices" after a sixth gate arrived; and a version-horizon paragraph — then the
+place a release number was decided — whose measured commit count and "nothing else is packaged" claim the window
+itself falsified.
 
 **A figure inside a generated document is only safe if it is computed.** A literal in the template is the one place
 a projection cannot self-correct: the freshness check compares the generator's own text with itself, so
@@ -502,7 +542,8 @@ the next round finds the next sentence; change the shape and the class ends.
 prose rule has no backstop and then leaving it as prose is how the same rule keeps costing: the measurement is
 the expensive part and it is already done. Two rules in this repository were measured un-reacted in one window
 and only one of them was answered — `.github/CODEOWNERS`'s *a merge cannot relax the law without a human
-accepting it*, measured against `main`'s protection as `require_code_owner_reviews: false`. What got a reaction
+accepting it* — a requirement that cannot fire in a single-steward repository whatever `main`'s branch
+protection is set to, because GitHub does not let a pull request's author approve their own. What got a reaction
 there is its **naming** half: a structural amendment must now produce a second explicit artifact. The
 acceptance half is a judgement boundary, recorded as one, because a single-steward repository has no
 mechanical second party. The reason-perimeter falsifier, measured over four rounds and eight corrections, got

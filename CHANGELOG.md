@@ -31,6 +31,17 @@ them.
 
 ## [Unreleased]
 
+### Self-governance
+
+- **Hand-written claims about a current state are dissolved into whatever owns that state.** A sentence
+  describing how things currently are goes silently wrong after the event that changes it, because that
+  event is in no check's corpus. `BACKLOG.md`'s shipped-version list is removed — `git tag` holds which
+  versions came to rest and `CHANGELOG.md`'s dated sections hold what each carried — and the
+  branch-protection value that stood in four documents is replaced by the structural reason it stood for.
+  `AGENTS.md` gains the question this asks, under *Bind a claim to its measurement*, together with the
+  counter-example a reaction refused: a list that looks like a duplicate enumeration but carries
+  reachability stays, and is held both ways.
+
 ## [0.6.1] - 2026-09-21
 
 ### Self-governance

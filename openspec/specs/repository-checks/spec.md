@@ -2355,10 +2355,9 @@ The subject SHALL be the projection's tracked text rather than `constitution()` 
 law it is judging compares the law against itself and cannot fail.
 
 `.github/CODEOWNERS` states that the review requirement is the reaction and that a merge cannot relax the law
-without a human accepting it, then states that designation alone only auto-requests review. Measured, `main`
-carries `require_code_owner_reviews: false` and `required_approving_review_count: 0`; and enabling it would
-not close the gap, because a pull request's author cannot approve their own, so for a single-steward
-repository that rule cannot fire. Two crate boundaries reached the projection under a commit body stating the
+without a human accepting it, then states that designation alone only auto-requests review. Enabling the
+code-owner-review setting would not close the gap, because a pull request's author cannot approve their own,
+so for a single-steward repository that rule cannot fire whatever that setting is. Two crate boundaries reached the projection under a commit body stating the
 law itself did not change, and nothing refused them.
 
 #### Scenario: A boundary reaches the law without being named
