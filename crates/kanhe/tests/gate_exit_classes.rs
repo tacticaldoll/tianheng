@@ -87,7 +87,8 @@ const TARGETS_SPAWNING_A_PROCESS: [(&str, &str); 29] = [
     ("crates/kanhe/tests/law_restatement.rs", "git: enumerates"),
     (
         "crates/kanhe/tests/line_comment_purity.rs",
-        "git: enumerates the published crates' sources, through the hermetic builder",
+        "git: enumerates the published crates' sources and initialises a fixture repository, both \
+         through the hermetic builder",
     ),
     (
         "crates/kanhe/tests/merge_message.rs",

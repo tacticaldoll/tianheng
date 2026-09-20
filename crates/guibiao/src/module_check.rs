@@ -63,6 +63,8 @@ fn push_module_violation(
     );
 }
 
+/// Compare module identities. An import path must first resolve to its containing module:
+/// its item leaf would make a shallow import from the anchor look like a descendant.
 fn within_scan_depth(candidate: &str, anchor: &str, depth: ScanDepth) -> bool {
     if depth == ScanDepth::Shallow {
         candidate == anchor

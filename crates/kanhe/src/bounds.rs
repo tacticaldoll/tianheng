@@ -1043,41 +1043,16 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "a_construction_through_a_rename_or_inside_a_macro_is_read",
         ),
         BoundDecl::unpinned(
-            BoundId::new(
-                "repository-checks/a-new-hygiene-check-is-added-a-stated-bound",
-            ),
-            "a hygiene rule's placement -- whether its statement lives in its own check's header or in a \
-             capability specification -- where deciding what a specification section is *about* is a \
-             judgement over prose",
+            BoundId::new("repository-checks/a-block-comment-is-not-read-a-stated-bound"),
+            "implementation prose in a `/* ... */` block comment under a governed published-crate source",
             Extent::Reached(Reached::UnderReacts {
-                because: "a check over specification text that refused hygiene vocabulary would need to \
-                          judge what a requirement is *about* -- the prose instrument this repository \
-                          designed, measured three times and rejected. A keyword blocklist (`trailing \
-                          whitespace`, `tab`) would refuse a legitimate capability whose subject happens \
-                          to name the same words, which is the false-positive shape this repository \
-                          withdraws instruments over. The rule is stated in the specification for the \
-                          human writing the next one, and its enforcement is the review that reads it"
+                because: "the requirement places implementation prose outside governed published-crate \
+                          source comments, but the reader skips `/* ... */` spans and therefore misses \
+                          block comments that carry such prose"
                     .into(),
                 owner: Owner::Engine,
             }),
-            "`BACKLOG.md` — *a specification section about a single hygiene rule cannot be told from a \
-             capability requirement without a judgment over prose*",
-        ),
-        BoundDecl::unpinned(
-            BoundId::new(
-                "repository-checks/a-specification-is-proposed-for-one-hygiene-rule-a-stated-bound",
-            ),
-            "a proposed specification section whose subject is a single repository hygiene rule",
-            Extent::Reached(Reached::UnderReacts {
-                because: "the boundary is held by the review reading the requirement, not by an \
-                          instrument -- the same prose judgement as its sibling: naming a section's \
-                          subject is not decidable by a check, and a keyword blocklist would refuse a \
-                          legitimate capability whose subject happens to name the same words"
-                    .into(),
-                owner: Owner::Engine,
-            }),
-            "`BACKLOG.md` — *a specification section about a single hygiene rule cannot be told from a \
-             capability requirement without a judgment over prose*",
+            "`BACKLOG.md` — *block comments carrying implementation prose in governed sources are outside line_comment_purity*",
         ),
     ]
 }

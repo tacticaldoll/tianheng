@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**58 of 107 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**57 of 106 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -33,6 +33,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `release-coherence/a-name-reached-only-through-a-url-a-stated-bound` — owner: engine
 - `release-coherence/an-entry-about-self-governance-that-names-no-machinery-a-stated-bound` — owner: engine
 - `release-coherence/machinery-the-judged-repository-tracks-by-nothing-a-stated-bound` — owner: engine
+- `repository-checks/a-block-comment-is-not-read-a-stated-bound` — owner: engine
 - `repository-checks/a-census-written-outside-markdown-is-not-observed-a-stated-bound` — owner: engine
 - `repository-checks/a-construction-shape-the-register-s-reader-does-not-model-a-stated-bound` — owner: engine
 - `repository-checks/a-consumer-that-stops-early-is-neither-head-nor-grep-a-stated-bound` — owner: engine
@@ -44,11 +45,9 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `repository-checks/a-git-constructed-through-a-program-value-is-not-read-a-stated-bound` — owner: engine
 - `repository-checks/a-git-named-in-prose-is-not-read-a-stated-bound` — owner: engine
 - `repository-checks/a-marker-is-reached-through-some-other-primitive-a-stated-bound` — owner: engine
-- `repository-checks/a-new-hygiene-check-is-added-a-stated-bound` — owner: engine
 - `repository-checks/a-paragraph-repeated-in-prose-is-not-read-a-stated-bound` — owner: engine
 - `repository-checks/a-paragraph-repeated-out-of-line-is-not-read-a-stated-bound` — owner: engine
 - `repository-checks/a-refusal-constructed-outside-the-register-s-corpus-is-not-triaged-a-stated-bound` — owner: engine
-- `repository-checks/a-specification-is-proposed-for-one-hygiene-rule-a-stated-bound` — owner: engine
 - `repository-checks/a-tool-configuration-set-in-the-environment-is-not-observed-a-stated-bound` — owner: engine
 - `repository-checks/a-whitespace-preceded-shell-marker-inside-quotes-is-cut-a-stated-bound` — owner: engine
 - `repository-checks/an-input-edited-inside-its-own-post-gate-re-read-a-stated-bound` — owner: engine
@@ -475,7 +474,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: refuses to judge
 - **pinned by**: `a_worktree_holding_an_undecodable_path_is_not_judged_clean_or_dirty`
 
-## under-reacts (58)
+## under-reacts (57)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -701,6 +700,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `machinery_tracked_by_nothing_is_a_stated_bound`
 
+### `repository-checks/a-block-comment-is-not-read-a-stated-bound`
+
+> implementation prose in a `/* ... */` block comment under a governed published-crate source
+
+- **because**: the requirement places implementation prose outside governed published-crate source comments, but the reader skips `/* ... */` spans and therefore misses block comments that carry such prose
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *block comments carrying implementation prose in governed sources are outside line_comment_purity*
+
 ### `repository-checks/a-census-written-outside-markdown-is-not-observed-a-stated-bound`
 
 > a declared census written with the wrong figures in a tracked file that is not Markdown
@@ -790,14 +797,6 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *the backtick primitives the pairing reader names*
 
-### `repository-checks/a-new-hygiene-check-is-added-a-stated-bound`
-
-> a hygiene rule's placement -- whether its statement lives in its own check's header or in a capability specification -- where deciding what a specification section is *about* is a judgement over prose
-
-- **because**: a check over specification text that refused hygiene vocabulary would need to judge what a requirement is *about* -- the prose instrument this repository designed, measured three times and rejected. A keyword blocklist (`trailing whitespace`, `tab`) would refuse a legitimate capability whose subject happens to name the same words, which is the false-positive shape this repository withdraws instruments over. The rule is stated in the specification for the human writing the next one, and its enforcement is the review that reads it
-- **its defence must show**: does not react
-- **unpinned**, tracked by: `BACKLOG.md` — *a specification section about a single hygiene rule cannot be told from a capability requirement without a judgment over prose*
-
 ### `repository-checks/a-paragraph-repeated-in-prose-is-not-read-a-stated-bound`
 
 > a paragraph repeated in a tracked file that is not Rust, including this repository's governance prose
@@ -821,14 +820,6 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the register reads `crates/kanhe/src`, where a construction is held by a named direction or declared unheld. A gate whose judgement and directions share a file has no answer to *which direction observes this branch*, because every direction in the file can see it -- so triaging it means first deciding where such gates belong, which is a question about their location rather than about this register
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *a gate that is its own test is outside the refusal register*
-
-### `repository-checks/a-specification-is-proposed-for-one-hygiene-rule-a-stated-bound`
-
-> a proposed specification section whose subject is a single repository hygiene rule
-
-- **because**: the boundary is held by the review reading the requirement, not by an instrument -- the same prose judgement as its sibling: naming a section's subject is not decidable by a check, and a keyword blocklist would refuse a legitimate capability whose subject happens to name the same words
-- **its defence must show**: does not react
-- **unpinned**, tracked by: `BACKLOG.md` — *a specification section about a single hygiene rule cannot be told from a capability requirement without a judgment over prose*
 
 ### `repository-checks/a-tool-configuration-set-in-the-environment-is-not-observed-a-stated-bound`
 
