@@ -192,26 +192,18 @@ impl<'a> Run<'a> {
 
 /// The one composition seam beneath the library check and CLI runner. Coverage remains static-only
 /// and is returned separately for CLI advisory presentation; it never changes the reaction.
+///
+/// Every outcome entering this path is stated before merging. A constitution error from any dimension
+/// supersedes the accumulated verdict; evaluation stops once an error occurs.
+/// Audits even an empty runtime declaration so an orphan `assert_boundary!` probe reacts.
 fn evaluate_constitution(
     constitution: &Constitution,
     manifest_path: &Path,
 ) -> (Outcome, Option<Coverage>) {
-    // One `cargo metadata` read feeds both the static reaction outcome and coverage; the semantic
-    // dimension reads its own (it has no coverage notion). A constitution error from any dimension
-    // supersedes the accumulated verdict, and otherwise violations merge into one report.
     let (static_outcome, observed_coverage) =
         check_and_cover(constitution.static_boundaries(), manifest_path);
-    // Every outcome entering this path is stated, exactly as `Run::observe` states each one entering the
-    // protocol's. Two ways in, one rule, applied where an outcome arrives.
     let mut outcome = stated(static_outcome);
     if !matches!(outcome, Outcome::ConstitutionError(_)) {
-        // The built-in path obtains this dimension's outcome BY INVOKING its observer, which is what makes the
-        // two composition paths' equality construction-held here rather than measured. Note what it is not:
-        // unlike the runtime arm below — which held a second copy of 漏刻's three statements, the corpus and
-        // anchor derivation, the audit call and the `cannot read workspace` message, until delegation left one
-        // copy — this arm always called the one implementation `SemanticObserver::observe` calls. Nothing was deduplicated, and a guard deciding
-        // emptiness above this line still compiles and passes every gate. `observer-protocol` keeps its bound
-        // on that. The cost is one clone of the declared bundle per run, paid deliberately.
         outcome = merge_outcomes(
             outcome,
             stated(
@@ -221,19 +213,7 @@ fn evaluate_constitution(
         );
     }
 
-    // Audit even an empty runtime declaration: an orphan `assert_boundary!` probe must react.
-    // Once an earlier dimension errors the verdict is untrustworthy, so evaluation stops.
     if !matches!(outcome, Outcome::ConstitutionError(_)) {
-        // **Delegated, not restated.** This arm held its own copy of 漏刻's three statements — the corpus and
-        // anchor derivation, the audit call, and the `cannot read workspace` message — so equality between
-        // this path and the protocol's for the runtime dimension depended on nobody editing one of the two
-        // copies. That is the exact drift `observer-protocol` exists to end, and it was sitting inside the
-        // thing being compared. This path now IS the observer for this dimension, which cannot drift; the
-        // cost is one `to_vec` of the declared seams per run, paid deliberately.
-        //
-        // Consequence the spec states: for the runtime dimension the two paths agree **by construction**
-        // rather than by observation. What still bites is the equality reaction's per-dimension assertion
-        // that the fixture's runtime boundary actually reacted.
         outcome = merge_outcomes(
             outcome,
             stated(
@@ -264,6 +244,11 @@ struct ParsedArgs {
 /// Parse `dispatch`'s process arguments into [`ParsedArgs`], or `Err(exit code)` on a usage
 /// error (an absent flag value, an unrecognized argument, or an unknown `--format`) — a
 /// misconfiguration fails loud (exit 2), never a silent downgrade to a default (PROJECT.md).
+///
+/// The command is the first positional token (`list` or `check`, default `check`). Value-taking
+/// flags require a non-empty value; separate tokens beginning with `--` are refused as missing values
+/// (use `--flag=<val>` for values beginning with `--`). Unrecognized arguments trigger usage errors.
+/// An absent `--format` remains `None` so each command can distinguish explicit request from default.
 fn parse_args<I, S>(args: I) -> Result<ParsedArgs, u8>
 where
     I: IntoIterator<Item = S>,
@@ -277,9 +262,6 @@ where
     let mut disallow_stale = false;
     let mut args = args.into_iter().map(Into::into).skip(1).peekable();
 
-    // The command is the first positional token; an absent or unrecognized leading
-    // token stays `check` (backward compatible). Flags following it never select
-    // the command.
     let command = match args.peek().map(String::as_str) {
         Some("list") => {
             args.next();
@@ -292,18 +274,6 @@ where
         _ => Command::Check,
     };
 
-    // A value-taking flag must be given its value; an absent value is a usage error
-    // (exit 2), never a silent downgrade to the default or to a plain check
-    // (PROJECT.md: misconfiguration fails loud).
-    //
-    // A value that is itself a `--`-prefixed token is the same missing value, one token later:
-    // the flag the user meant to pass gets eaten as this flag's value. Taking it would drop a
-    // real flag with no diagnostic, and for `--write-baseline` it reaches a silent SUCCESS —
-    // writing a baseline file literally named `--warn-uncovered` and exiting 0, the one shape of
-    // this mistake that does not even land on a non-zero exit. So reject it here and name the
-    // token found, rather than let a downstream scan error misreport it as a bad path. The
-    // `--flag=<value>` form stays the escape hatch for a value that must begin with `--`; it
-    // carries its value in the same token, so no following flag can be consumed by mistake.
     macro_rules! value {
         ($flag:literal) => {
             match args.next() {
@@ -338,11 +308,6 @@ where
             "--warn-uncovered" => warn_uncovered = true,
             "--disallow-stale" => disallow_stale = true,
             other => {
-                // The equals form deliberately does NOT reject a `--`-prefixed value — carrying the
-                // value in the same token is exactly what makes it the escape hatch for one — but it
-                // shares the non-empty rule, so `--flag=` is the usage error it is, and the
-                // once-only rule, so the two forms cannot be combined to smuggle a second value past
-                // it (`--baseline a --baseline=b`).
                 if let Some(path) = other.strip_prefix("--manifest-path=") {
                     let path = require_non_empty("--manifest-path", path.to_string())?;
                     take_once(&mut manifest_path, "--manifest-path", path)?;
@@ -356,20 +321,12 @@ where
                     let value = require_non_empty("--format", value.to_string())?;
                     take_once(&mut format, "--format", value)?;
                 } else {
-                    // An unknown flag, a misspelling, or a stray positional is a
-                    // misconfiguration — fail loud (exit 2), never silently ignore
-                    // it (PROJECT.md).
                     return Err(usage(&format!("unrecognized argument '{other}'")));
                 }
             }
         }
     }
 
-    // `--format` is parsed for both commands so the flag contract stays uniform; `markdown`
-    // is recognized here but only honored by `list` (rejected for `check` below). The `None`
-    // (flag absent) case stays `None` rather than collapsing to `Text` here: each dispatch
-    // defaults it at the point of use, so it can still distinguish "text was asked for" from
-    // "nothing was asked for" and reject the former where no report is produced at all.
     let format = match format.as_deref() {
         None => None,
         Some("text") => Some(Format::Text),
@@ -396,24 +353,9 @@ where
 
 /// The `list` command's whole reaction: a projection, not a reaction — it observes nothing (no
 /// `--manifest-path`), cannot fail a boundary, and always exits 0. It accepts only `--format`; a
-/// check-only flag supplied to `list` is a usage error, not a silent no-op (PROJECT.md: never
-/// silently ignore a flag).
+/// check-only flag supplied to `list` is a usage error naming all supplied check-only flags.
+/// Supports `--format text|json|markdown`; SARIF is `check`-only as it projects a reaction.
 fn dispatch_list(constitution: &Constitution, parsed: &ParsedArgs) -> u8 {
-    // The flags SUPPLIED are named, not merely the fact that some inapplicable flag was present. This was a single
-    // sentence naming none of them, which satisfied this command's own requirement while the requirement covering
-    // the same conflict inside `check` — one that cites this rule as the one it extends — requires the flag to be
-    // named. The two disagreed and each implementation matched its own, so no test caught it.
-    //
-    // It matters most for `--manifest-path`, the flag a user types by habit: told only that "list takes only
-    // --format", a reader who passed both `--manifest-path` and `--format` is being shown the flag they got right.
-    //
-    // Ordered by this check rather than by the command line, so the message is a function of the set supplied and
-    // not of how it was typed — which is what makes it assertable.
-    //
-    // Exhaustively destructured (no `..`) rather than read through `parsed.field`: a `ParsedArgs` field added
-    // without a matching arm here fails to COMPILE, naming the missing field, instead of silently reaching
-    // `list` unrejected — a hand-written array beside the struct was only ever going to disagree with it again,
-    // the way this command's own single-sentence flag naming and `check`'s equivalent requirement already had.
     let ParsedArgs {
         command: _,
         manifest_path,
@@ -444,9 +386,6 @@ fn dispatch_list(constitution: &Constitution, parsed: &ParsedArgs) -> u8 {
     }
     let semantic = constitution.semantic_boundaries();
     let runtime = constitution.runtime_boundaries();
-    // `list` honors every format it supports, so an absent `--format` simply defaults to `text`
-    // here; unlike `check`'s write action, there is no `list` action a requested format cannot
-    // apply to.
     match parsed.format.unwrap_or(Format::Text) {
         Format::Json => {
             println!(
@@ -456,9 +395,6 @@ fn dispatch_list(constitution: &Constitution, parsed: &ParsedArgs) -> u8 {
             );
         }
         Format::Markdown => {
-            // Rendered from the same `list_document` value the JSON projection emits, so the
-            // Markdown provably carries no less than the JSON and covers exactly the same
-            // dimensions — a pure projection, never a reaction.
             print!("{}", list_markdown(&list_document(constitution)));
         }
         Format::Text => {
@@ -473,8 +409,6 @@ fn dispatch_list(constitution: &Constitution, parsed: &ParsedArgs) -> u8 {
             print!("{}", unsafe_text(&semantic.unsafe_confinement));
             print!("{}", runtime_text(runtime));
         }
-        // SARIF projects the *reaction*, not the declared law, so it is `check`-only —
-        // symmetric to `markdown` being `list`-only.
         Format::Sarif => {
             return usage(
                 "list supports --format text|json|markdown; sarif projects the reaction \
@@ -530,6 +464,11 @@ fn print_report(
 
 /// The runner's work, returning the exit code as a number so it is assertable
 /// without a subprocess and without inspecting an opaque [`ExitCode`].
+///
+/// `check` accepts format text, json, or sarif (markdown is list-only). Mutually exclusive
+/// or inapplicable flags (`--baseline` with `--write-baseline`, `--disallow-stale` without
+/// `--baseline`, or `--warn-uncovered`/`--format` with `--write-baseline`) are rejected before
+/// manifest resolution. Coverage is advisory and omitted on constitution errors.
 fn dispatch<I, S>(constitution: &Constitution, args: I) -> u8
 where
     I: IntoIterator<Item = S>,
@@ -544,11 +483,6 @@ where
         return dispatch_list(constitution, &parsed);
     }
 
-    // The command is `check`. `markdown` is a `list`-only projection of the declared law;
-    // `check`'s machine output is the JSON report, so reject it loud (exit 2) rather than
-    // silently falling back. `text`/`json` map to the existing boolean contract. An absent
-    // `--format` defaults here, at the point of use, so the write-baseline check below still sees
-    // whether one was requested at all.
     let report_format = match parsed.format.unwrap_or(Format::Text) {
         Format::Text => ReportFormat::Text,
         Format::Json => ReportFormat::Json,
@@ -561,19 +495,6 @@ where
         }
     };
 
-    // Exhaustively destructured (no `..`) and **consumed by value** — not merely matched by
-    // reference — so every remaining use of a `ParsedArgs` field in this function reads the bound
-    // local rather than `parsed.<field>`. Matching by reference (an earlier version of this guard
-    // did) only forces exhaustiveness at the match site itself: a field added later and read as
-    // `parsed.<field>` anywhere else in this function still compiles, unconsidered by the guard,
-    // which is the asymmetry a prior fix here closed for one check and left standing for the ones
-    // after it. Consuming `parsed` closes that for `manifest_path`/`baseline_path`/
-    // `write_baseline_path` outright: the compiler refuses `parsed.<field>` once its value has moved
-    // into a local, naming the field. A `Copy` field (`format`, `warn_uncovered`, `disallow_stale`)
-    // has no such backstop — copying a place doesn't consume it, so `parsed.<copy field>` stays
-    // legal even after this destructure names it — so every field in this function is, by
-    // convention, always read through the bound local below rather than through `parsed`, and no
-    // later line in this function does otherwise.
     let ParsedArgs {
         command: _,
         manifest_path: manifest_path_arg,
@@ -584,28 +505,12 @@ where
         disallow_stale,
     } = parsed;
 
-    // A contradictory flag pair is a pure usage error, independent of any workspace — check it
-    // before resolving the manifest, so an also-absent `--manifest-path` (whose "no Cargo.toml
-    // found" diagnostic would otherwise fire first) cannot mask the real misconfiguration.
     if baseline_path.is_some() && write_baseline_path.is_some() {
         return usage("--baseline and --write-baseline are mutually exclusive");
     }
     if disallow_stale && baseline_path.is_none() {
         return usage("--disallow-stale requires --baseline");
     }
-    // `--write-baseline` records a snapshot; it emits no report at all, so a flag whose only effect
-    // is on a report has nothing to act on here. `list` already rejects a check-only flag rather
-    // than accepting it as a silent no-op, and `--disallow-stale` without `--baseline` is rejected
-    // for the same reason — this is that same rule applied WITHIN `check`, between its
-    // two actions, which was the one place it did not hold: `check --write-baseline out.json
-    // --warn-uncovered --format sarif` recorded the baseline, exited 0, and dropped both flags with
-    // no diagnostic, so an adopter could believe they had coverage advisories or a SARIF document
-    // and receive neither.
-    //
-    // The line drawn here is "the action produces nothing this flag could affect", not "this flag
-    // changes nothing observable". `--warn-uncovered` under `--format json` stays accepted: the JSON
-    // report's `coverage` object already carries every uncovered crate unconditionally, so the flag
-    // is redundant there rather than dropped — the consumer receives the whole fact either way.
     if write_baseline_path.is_some() {
         if warn_uncovered {
             return usage(
@@ -632,9 +537,6 @@ where
         return write_baseline(&outcome, &path);
     }
 
-    // Coverage is an observation, not a reaction: surfaced only when the constitution
-    // was successfully evaluated, omitted on a constitution error (where the error is
-    // the story), and never affecting the exit code.
     let coverage = match outcome {
         Outcome::ConstitutionError(_) => None,
         _ => observed_coverage,
@@ -735,6 +637,10 @@ fn nearest_manifest_from(start: PathBuf) -> Option<PathBuf> {
 
 /// Record the current violations as a baseline. Recording is not judging, so this
 /// returns 0; but a constitution that could not be evaluated cannot be pinned.
+///
+/// An existing empty file (such as from an interrupted create) is recorded afresh as a fresh snapshot.
+/// A valid existing baseline file preserves existing owner/tracker annotations. Unsupported or
+/// corrupted non-empty content is refused.
 fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
     if let Outcome::ConstitutionError(message) = outcome {
         eprintln!(
@@ -749,29 +655,7 @@ fn write_baseline(outcome: &Outcome, path: &str) -> u8 {
         Outcome::Violations(report) => report,
         _ => &empty,
     };
-    // Metadata-preserving merge applies only to a supported semantic baseline. Unsupported or
-    // unreadable content is preserved byte-for-byte: presentation cannot reconstruct identity, and
-    // overwriting would silently destroy annotations the adopter may still need to carry manually.
     let (baseline, create_new) = match std::fs::read_to_string(path) {
-        // A zero-length target is the one "unsupported" shape that provably holds nothing worth
-        // protecting. The refusal below exists to stop an overwrite from destroying hand-authored
-        // owner/tracker annotations, which cannot be reconstructed from a rerun — and zero bytes
-        // cannot hold any. Refusing it therefore protects nothing while costing the adopter a manual
-        // file move, and its own guidance ("preserve any desired annotations") names something that
-        // is not there.
-        //
-        // It is also the exact shape an interrupted create leaves: `create_baseline_file` publishes
-        // its directory entry before its first byte, so a crash mid-create leaves an empty file. The
-        // write action's job is to record, so it records — and says that it did, because recovering
-        // in silence is the other extreme. Bounded to *zero* length deliberately: whitespace, a
-        // truncated `{"format":`, or any other partial content might have held annotations before it
-        // was damaged, so those stay refused.
-        //
-        // `create_new` is false: the file exists, so this takes the overwrite path, which preserves
-        // its mode and swaps atomically. Gate mode (`--baseline`) deliberately does NOT share this
-        // tolerance — see `gate`, where an unreadable baseline stays exit 2. Recording may safely
-        // regenerate what it owns; gating consumes a declaration the adopter wrote, and a corrupt
-        // one must be reported rather than read as "nothing is baselined".
         Ok(text) if text.is_empty() => {
             eprintln!(
                 "Tianheng: baseline {path} was empty, so there were no owner/tracker annotations to \
@@ -924,25 +808,6 @@ fn create_baseline_file(path: &str, document: &str) -> Result<(), BaselineWriteE
     };
     if err.kind() == std::io::ErrorKind::AlreadyExists {
         if let Ok(metadata) = std::fs::symlink_metadata(path) {
-            // Dangling is claimed only when the target is genuinely **absent** — `NotFound`
-            // specifically, not any metadata failure. `std::fs::metadata` follows the link, so it also
-            // fails when the target EXISTS but cannot be reached: `EACCES` on a component of its path,
-            // or `ELOOP`. Treating those as dangling repeats the defect this branch was narrowed to fix,
-            // one error kind further in — "it is a symlink to X, which does not exist" about a target
-            // that does, prescribing a remedy ("recreate the target") that cannot help. Measured: with
-            // the target inside a `chmod 000` directory, `lstat` reports a symlink, the `O_EXCL` open
-            // fails `EEXIST`, and `metadata` fails `EACCES`.
-            //
-            // This function is reached only when `read_to_string` returned `NotFound`, so for a symlink
-            // the target was absent when the path was read — but it can come back before the `O_EXCL`
-            // open (restored file, or the link replaced), and classifying on symlink-ness alone then
-            // told the adopter "it is a symlink to X, which does not exist" about a target that does,
-            // and prescribed a remedy ("recreate the target") already satisfied. Refusing was always
-            // safe; classifying on symlink-ness alone risked reporting a false reason if the target reappeared.
-            //
-            // Falling through loses no diagnostic: [`write_baseline`]'s `create_new && AlreadyExists`
-            // arm already reports that the baseline "appeared while the new snapshot was being
-            // prepared", which is exactly what happened.
             if metadata.file_type().is_symlink()
                 && matches!(std::fs::metadata(path), Err(err)
                     if err.kind() == std::io::ErrorKind::NotFound)
@@ -1110,10 +975,6 @@ fn write_baseline_atomically(path: &str, document: &str) -> Result<(), BaselineW
 
     let guard = AtomicTempFileGuard::new(tmp_path);
 
-    // The fsync sits after `set_permissions` and before the `rename`, so one call flushes both
-    // the bytes and the mode change (both live on the same inode) while the temp file is still
-    // the only name reaching them. Syncing before the chmod would leave the mode unflushed; the
-    // rename must come after both, since it is the step that publishes them.
     file.write_all(document.as_bytes())?;
     file.set_permissions(permissions)?;
     file.sync_all()?;
@@ -1126,6 +987,7 @@ fn write_baseline_atomically(path: &str, document: &str) -> Result<(), BaselineW
 
 /// Gate against a baseline: suppress recorded violations, fail only on new ones,
 /// and report stale baseline entries. An unreadable baseline is a scan error.
+/// Constitution errors are reported immediately before reading the baseline.
 fn gate(
     outcome: &mut Outcome,
     path: &str,
@@ -1134,9 +996,6 @@ fn gate(
     warn_uncovered: bool,
     disallow_stale: bool,
 ) -> u8 {
-    // A constitution error is the whole story: report it before reading the baseline, so
-    // it is never masked by a missing or unreadable baseline file (both exit 2, but the
-    // constitution error is the actionable one).
     if let Outcome::ConstitutionError(message) = outcome {
         match format {
             ReportFormat::Json => println!("{}", report_json(outcome, &[], None)),
@@ -1211,6 +1070,9 @@ fn gate(
 /// that could not be evaluated makes the run's verdict untrustworthy — and otherwise the two reports'
 /// violations merge into a single report, gated, baselined, and reported together. `first` is checked
 /// first, so its error wins deterministically when both error.
+///
+/// When neither participant reports violations, the composed subject is the checked sum of what
+/// the participants declared and reached.
 fn merge_outcomes(first: Outcome, second: Outcome) -> Outcome {
     if matches!(first, Outcome::ConstitutionError(_)) {
         return first;
@@ -1226,30 +1088,6 @@ fn merge_outcomes(first: Outcome, second: Outcome) -> Outcome {
         violations.extend(report.violations.iter().cloned());
     }
     if violations.is_empty() {
-        // The composed subject is the sum of what the participants declared and reached. Summing rather
-        // than picking one is what keeps a fold of two clean verdicts from silently reporting only the
-        // second's subject; summing rather than intersecting is right because the figures are each
-        // dimension's own unit, and the composed claim is *these participants, together, reached this
-        // much*.
-        //
-        // **Checked, because both figures come from outside.** `Subject::of` admits any `usize` pair where
-        // something declared also reached something, so a participant may hand this fold `usize::MAX` — and
-        // two of those overflow. Unchecked, that is a debug panic and a release wrap, which is the worst
-        // pair: the profile decides between a crash and a quiet lie. Measured on the code this replaces —
-        // debug reported `attempt to add with overflow`, release returned
-        // `Clean(Subject { declared: 18446744073709551614, reached: 2 })`. The wrapped total satisfies
-        // `Subject::of` because `reached` is still positive, so the fold states a **clean** verdict carrying
-        // a figure that is the sum of nothing.
-        //
-        // This is also what the sentence that stood here got wrong. *The sum of two constructible subjects
-        // is constructible* is true of the integers and not of `usize`, and the `None` arm below was called
-        // unreachable on the strength of it.
-        // **A CONSEQUENCE of `stated`, not a second site.** Every outcome reaching this fold has passed
-        // `stated` where it entered its run — `Run::observe` for the protocol's path, `evaluate_constitution`
-        // for the built-in one — so no input can take the refusal below. It stays because this function takes
-        // two `Outcome` values and nothing in its signature says they were stated: what makes the claim true
-        // is the check, not a caller's discipline. Guarding only here was the first repair, and it left the
-        // one-observer run untouched, since `Run::observe` stores the first outcome verbatim.
         let (Some(first_subject), Some(second_subject)) = (subject_of(&first), subject_of(&second))
         else {
             return Outcome::ConstitutionError(
@@ -1275,8 +1113,6 @@ fn merge_outcomes(first: Outcome, second: Outcome) -> Outcome {
         };
         match Subject::of(declared, reached) {
             Some(subject) => Outcome::Clean(subject),
-            // Now genuinely unreachable, and still constructed rather than asserted: with the sum checked
-            // above, either side declaring something means that side also reached something.
             None => Outcome::ConstitutionError(
                 "the composed run declared boundaries and reached nothing, so nothing was judged"
                     .to_string(),

@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**27 of 105 declared bounds have no pinning test.** That figure is the register's
+**28 of 106 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -340,6 +340,12 @@ fallback used where no manifest exists, which the register spec describes.
 - **pinned by**: `a_directory_named_without_its_slash_is_a_stated_bound`
 
 ## repository-checks
+
+### `repository-checks/a-block-comment-is-not-read-a-stated-bound`
+
+> `line_comment_purity` reports no offence for that comment. Its reader finds `//` comments and skips block-comment spans, leaving this part of the requirement unobserved; widening this repository check waits for a live instance of block-comment implementation prose in the governed sources
+
+- **unpinned**, tracked by: `BACKLOG.md` — *block comments carrying implementation prose in governed sources are outside line_comment_purity*
 
 ### `repository-checks/a-construction-shape-the-register-s-reader-does-not-model-a-stated-bound`
 

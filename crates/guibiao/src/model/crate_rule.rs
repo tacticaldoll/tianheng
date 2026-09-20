@@ -353,14 +353,10 @@ impl Rule {
                 let sources: Vec<&str> = allowed.iter().map(SourceKind::label).collect();
                 vec![("allowed_sources", serde_json::json!(sources))]
             }
-            // `crate` names the governed dependency; `only_features` is the intrinsic closed
-            // set (always emitted, as `[]` when empty), matching the restrict-to vocabulary.
             Rule::RestrictFeaturesOf { crate_, allowed } => vec![
                 ("crate", serde_json::json!(crate_)),
                 ("only_features", serde_json::json!(allowed)),
             ],
-            // `forbidden_features` lists the denied names, distinct from restrict's
-            // `only_features` so the projection says which polarity governs the feature set.
             Rule::ForbidFeaturesOf { crate_, forbidden } => vec![
                 ("crate", serde_json::json!(crate_)),
                 ("forbidden_features", serde_json::json!(forbidden)),
@@ -412,11 +408,6 @@ impl Rule {
                 .into_iter()
                 .filter(|dependency| !allowed.contains(dependency))
                 .collect(),
-            // A dependency on the TARGET'S OWN name is never a cross-crate layering violation —
-            // Cargo allows (and dogfooding/doctest patterns genuinely use) a crate listing
-            // itself as a dev-dependency path on itself. `dependencies()` excludes this
-            // self-referential edge at observation (see `cargo_metadata.rs::is_self_dependency`)
-            // so every dependency rule observes it consistently.
             Rule::RestrictWorkspaceDependenciesTo { allowed } => dependencies(package, kind)
                 .into_iter()
                 .filter(|dependency| {
@@ -431,13 +422,7 @@ impl Rule {
                     })
                     .collect();
             }
-            // Feature-granularity rules observe the target's DECLARED feature request on
-            // `crate_` (declared-not-resolved; see `declared_features`) and qualify each
-            // offending feature `f` as `crate_/f`. A feature name on a dependency edge is a
-            // plain name (Cargo forbids `dep:`/`pkg/feat` there), so `crate_/f` is unambiguous.
             Rule::RestrictFeaturesOf { crate_, allowed } => {
-                // Allowlist: a declared feature outside `allowed` violates. Empty allowlist ⇒
-                // every declared feature (including `default`) violates.
                 return declared_features(package, crate_, kind)
                     .into_iter()
                     .filter(|feature| !allowed.contains(feature))
@@ -447,8 +432,6 @@ impl Rule {
                     .collect();
             }
             Rule::ForbidFeaturesOf { crate_, forbidden } => {
-                // Denylist: a declared feature matching a forbidden name violates. Empty
-                // forbidden set ⇒ no findings (natural from the filter), a vacuous no-op.
                 return declared_features(package, crate_, kind)
                     .into_iter()
                     .filter(|feature| forbidden.contains(feature))

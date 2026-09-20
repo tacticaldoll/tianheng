@@ -10,9 +10,6 @@ pub(crate) enum RuntimeFact {
     UnregisteredCrossing {
         type_id: String,
     },
-    // The probe-coverage facts are produced only by the CI-audit face (`mod audit`, gated behind the
-    // non-default `audit` feature), so they exist only when that face does — otherwise they are dead
-    // in the prod-light default build. Gated to match their sole constructor rather than silenced.
     #[cfg(feature = "audit")]
     DuplicateSeam {
         seam: String,
@@ -25,21 +22,14 @@ pub(crate) enum RuntimeFact {
     UndeclaredProbe {
         seam: String,
     },
-    // `owner` is the owner-qualified enclosing item (never a bare name — see `fn_scopes` in
-    // `audit::scan`), `marker` the actual configured wrapper matched, and `expr` the offending
-    // expression's own trimmed source text; together with `file` these are the identity
-    // discriminator, never a byte offset or occurrence count. `file` is labeled relative to the
-    // caller-supplied anchor — its checkout/workspace root (see `audit::scan::labeled` and
-    // `audit_probe_coverage_with_markers`, which owns why the caller supplies it) — whenever the file
-    // lies under it, rather than the raw absolute path: a checkout-dependent absolute path would make
-    // a recorded baseline stale in any other clone or CI runner, and an anchor derived from the
-    // scanned roots instead would restate every label whenever the member set changed. A file reached
-    // through an ABSOLUTE `#[path = "/…"]` literal is the one exception, and it is a rule rather than a
-    // gap: it keeps the path the literal wrote, never relativized, because an absolute literal does not
-    // move with the checkout and relativizing it made its identity depend on whether a given checkout's
-    // anchor happened to contain the target (relative-looking here, absolute there, for one committed
-    // literal). Pinned by `a_nested_absolute_path_literal_now_agrees_across_checkouts` in
-    // `audit::tests`.
+    /// `owner` is the owner-qualified enclosing item (never a bare name), `marker` the configured
+    /// wrapper matched, `expr` the offending expression's trimmed source text; with `file` these are
+    /// the identity discriminator, never a byte offset or occurrence count. `file` is labeled
+    /// relative to the caller-supplied anchor whenever the file lies under it, rather than the raw
+    /// absolute path: a checkout-dependent absolute path would stale a recorded baseline in any other
+    /// clone or CI runner. A file reached through an absolute `#[path = "/…"]` literal is the one
+    /// exception — it keeps the path the literal wrote, because an absolute literal does not move
+    /// with the checkout.
     #[cfg(feature = "audit")]
     UnauditableProbe {
         marker: String,
@@ -133,8 +123,6 @@ fn key<const N: usize>(
     StructuredFactIdentity::of(fact_type, shape, fields)
 }
 
-// The production catalog runs with audit both off and on; audit-only cases extend it when that
-// face exists, so neither configuration can silently lose its own fact schemas.
 #[cfg(test)]
 mod tests {
     use super::*;

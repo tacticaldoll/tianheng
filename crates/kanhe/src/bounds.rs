@@ -1042,5 +1042,17 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "a_construction_through_a_rename_or_inside_a_macro_is_read",
         ),
+        BoundDecl::unpinned(
+            BoundId::new("repository-checks/a-block-comment-is-not-read-a-stated-bound"),
+            "implementation prose in a `/* ... */` block comment under a governed published-crate source",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the requirement places implementation prose outside governed published-crate \
+                          source comments, but the reader skips `/* ... */` spans and therefore misses \
+                          block comments that carry such prose"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "`BACKLOG.md` — *block comments carrying implementation prose in governed sources are outside line_comment_purity*",
+        ),
     ]
 }

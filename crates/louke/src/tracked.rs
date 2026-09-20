@@ -18,8 +18,6 @@ impl<T: Any> Tracked for T {
     }
 }
 
-// --- The fold-hasher: TypeId is already a hash; never SipHash ----------------
-
 /// A std-only hasher that folds the written bytes. A `TypeId` is already a good hash, so
 /// folding avoids SipHash's per-lookup cost (the overhead-spike's only trap). `write` is
 /// implemented for the general byte path (not only `write_u64`/`write_u128`), since a

@@ -39,7 +39,6 @@ pub fn projection_gate(
     bless: bool,
 ) -> Result<(), String> {
     if bless {
-        // A first bless may target a not-yet-existing subdir; `fs::write` does not create parents.
         if let Some(parent) = path.parent() {
             if !parent.as_os_str().is_empty() {
                 std::fs::create_dir_all(parent).map_err(|e| {
@@ -59,7 +58,6 @@ pub fn projection_gate(
             )
         });
     }
-    // "Cannot confirm fresh" (missing/unreadable) is a reaction, never a silent pass.
     let checked_in = std::fs::read_to_string(path).map_err(|e| {
         format!(
             "cannot read {}: {e} — {}",

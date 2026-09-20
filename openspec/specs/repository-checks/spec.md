@@ -22,6 +22,43 @@ check had reached the vacuity its own bounds warned about, enumerating **zero** 
 
 ## Requirements
 
+### Requirement: Implementation prose SHALL stay out of governed published-crate source comments
+
+Implementation prose SHALL NOT appear in a published crate's governed `src` files. A code diff carrying
+such prose requires every reader to judge its meaning. `line_comment_purity` enforces this boundary for
+inner `//` comments. Its corpus is every publishable crate's tracked Rust source under `src`, excluding
+`src/tests/` and `src/tests.rs`; an inline test module in another file remains in the corpus. Doc comments
+carry an item's contract and are outside this rule. The reader distinguishes `//` from text inside a string
+or block comment. Where removed prose carries a claim worth keeping, the DSL's `because`, a test name and
+this specification are where that claim can have an owner — a direction for the author rather than a second
+contract, because no reaction observes where a removed comment went.
+
+#### Scenario: A governed source carries an inner line comment
+
+- **WHEN** a governed published-crate source carries an inner `//` comment
+- **THEN** the check refuses with the path, line, and comment text
+- **PINNED-BY** `a_corpus_with_an_inner_comment_is_refused`
+
+#### Scenario: A new publishable crate enters the corpus
+
+- **WHEN** a newly publishable crate has a tracked source file with an inner `//` comment
+- **THEN** the check reads that crate and refuses the comment
+- **PINNED-BY** `a_new_published_crate_with_an_inner_comment_is_refused`
+
+#### Scenario: Comment-shaped text inside a string is not a line comment
+
+- **WHEN** a governed source contains `//` inside a string or a doc comment
+- **THEN** the reader does not report it as an inner line comment
+- **PINNED-BY** `the_reader_separates_a_comment_from_a_string`
+
+#### Scenario: A block comment is not read — a stated bound
+
+- **WHEN** a governed published-crate source carries implementation prose in a `/* … */` block comment
+- **THEN** `line_comment_purity` reports no offence for that comment. Its reader finds `//` comments and
+  skips block-comment spans, leaving this part of the requirement unobserved; widening this repository
+  check waits for a live instance of block-comment implementation prose in the governed sources
+- **UNPINNED** `BACKLOG.md` — *block comments carrying implementation prose in governed sources are outside line_comment_purity*
+
 ### Requirement: Repository governance vocabulary SHALL preserve product ownership
 
 Live project prose and self-descriptive source comments SHALL use **product** only for crates whose manifests

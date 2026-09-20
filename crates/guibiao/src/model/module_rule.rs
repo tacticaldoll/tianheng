@@ -210,9 +210,6 @@ impl ModuleRule {
                 "tianheng.rule/guibiao/must-only-be-imported-by",
                 [("allowed", canonical_module_set(allowed))],
             ),
-            // `package_name_to_import_ident` folds `-` to `_` and nothing else, so a raw-identifier
-            // prefix survived it and `r#gen` keyed apart from `gen`. Evaluation folds both, at
-            // `module_check`'s `package_name_to_import_ident(&canonical_module_path(crate_name))`.
             ModuleRule::ConfineExternalCrate { crate_name } => RuleKey::of(
                 "tianheng.rule/guibiao/confine-external-crate",
                 [(
@@ -252,8 +249,6 @@ impl ModuleRule {
             ModuleRule::MustNotBeImportedBy { .. } => "module must not be imported by",
             ModuleRule::MustOnlyBeImportedBy { .. } => "module may only be imported by",
             ModuleRule::ConfineExternalCrate { .. } => "external crate confined to module",
-            // Presentation parity: the modifier remains a projection detail of the same
-            // inline-rule family; `key()` separately preserves the established no-rekey contract.
             ModuleRule::ConfineInlineSymbolPath { .. } => "inline symbol path confined to module",
         }
     }
@@ -285,9 +280,6 @@ impl ModuleRule {
             ModuleRule::RestrictImportsTo { .. }
             | ModuleRule::MustOnlyBeImportedBy { .. }
             | ModuleRule::ConfineExternalCrate { .. } => Polarity::AllowlistGap,
-            // A forbidden inline call under the prefix is a breach to remove (or replace with
-            // injected time) — the same repair shape as `MustNotImport`, not an allowlist gap.
-            // Identity parity: the strict-external modifier shares the polarity.
             ModuleRule::ConfineInlineSymbolPath { .. } => Polarity::DenyBreach,
         }
     }
@@ -346,21 +338,12 @@ impl ModuleRule {
             ModuleRule::MustNotBeImportedBy { importer } => {
                 vec![("importer", serde_json::json!(importer))]
             }
-            // `only_importers` (not bare `only`): this rule governs the inbound *importer*
-            // surface, distinct from `restrict_imports_to`'s outbound `only` — the same
-            // surface-qualified-key precedent `only_workspace` sets, so the projection is
-            // self-describing without reading the `rule` label.
             ModuleRule::MustOnlyBeImportedBy { allowed } => {
                 vec![("only_importers", serde_json::json!(allowed))]
             }
-            // `external_crate` (self-describing): this rule confines a named external crate to
-            // the governed module's subtree, a surface distinct from every internal-edge rule.
             ModuleRule::ConfineExternalCrate { crate_name } => {
                 vec![("external_crate", serde_json::json!(crate_name))]
             }
-            // `confined_prefix` (self-describing): the module-path prefix whose inline calls are
-            // forbidden in the subtree. `ending_with` / `strict` are emitted only when set, so a
-            // bare confinement keeps byte-identical JSON (the same discipline as the anchor).
             ModuleRule::ConfineInlineSymbolPath {
                 prefix,
                 ending_with,

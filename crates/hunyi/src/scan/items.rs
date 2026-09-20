@@ -23,10 +23,9 @@ use crate::syn_util::{
 /// rename binds `Y` crate-wide via the extern prelude, whereas a module-scoped `extern crate … as`
 /// binds only locally (collecting it crate-wide would false-positive on a same-named head elsewhere
 /// — a stated bound). `as _` / `X == Y` / `extern crate self as …` are no-ops.
+///
+/// Transparent-macro arms are flattened so platform-branching renames are observed.
 fn collect_crate_root_extern_renames(items: &[syn::Item], out: &mut ExternRenameMap) {
-    // Flattened here too, not only in the walkers: a platform-branching crate root may well write
-    // its `extern crate X as Y;` inside a `cfg_if!` arm, and a rename missed here silently
-    // mis-resolves every head that uses the alias (a false negative one hop from observation).
     for item in flatten_transparent_macro_items(items) {
         if let syn::Item::ExternCrate(ec) = item {
             if let Some((_, rename)) = &ec.rename {
@@ -61,6 +60,10 @@ fn bare_local_alias_target(
 /// collecting re-exports, trait definitions, and trait-impl sites. This is a fresh
 /// whole-crate traversal (the single-path `descend` does not fit a "nowhere except
 /// here" property); it reuses only the leaf primitives and the shared resolver.
+///
+/// Pre-collects crate-root `extern crate X as Y;` renames before the walk to eliminate
+/// forward-reference order hazards. Traverses modules with ancestor path tracking to detect
+/// cyclic module loops without stack overflowing.
 pub(crate) fn scan_crate(
     src_dir: &Path,
     root_file: &Path,
@@ -77,28 +80,13 @@ pub(crate) fn scan_crate(
         type_defs: Vec::new(),
         alias_targets: AliasMap::new(),
     };
-    // Pre-collect crate-root `extern crate X as Y;` renames BEFORE the walk, so the rename map is
-    // complete before any alias-target or re-export-closure resolution — every source-order
-    // (forward-reference) hazard is eliminated (an alias or re-export preceding the `extern crate`
-    // in root source order still resolves). Renames are crate-root-only (they bind crate-wide via
-    // the extern prelude; a module-scoped one is a stated bound), so one root scan suffices.
     collect_crate_root_extern_renames(&root.items, &mut scan.extern_renames);
-    // Every source file read during the walk, by its canonicalized (symlink-resolved) path. A
-    // file-backed `mod x;` is located through the live filesystem, which follows symlinks, so a
-    // cyclic symlinked module directory (`src/foo/foo -> src/foo`) would otherwise recurse forever
-    // and stack-overflow (SIGABRT) — neither exit 0/1 nor the contract's exit 2. Re-reaching an
-    // canonical file already on the descent path is that cycle: "cannot judge" (exit 2), never a
-    // crash. 圭表 keeps a parallel canonicalizing guard on its own module-boundary walk (三儀 ⊥ 三儀);
-    // 漏刻's probe scanner uses `xingbiao::try_visit` for the same canonicalizing guard.
-    // Seeded with the crate root so a submodule looping back to it is caught too.
     let mut ancestors: HashSet<PathBuf> = HashSet::new();
     ancestors.insert(xingbiao::canonicalize_or_fail(root_file)?);
     walk_module(
         root.items,
         "crate".to_string(),
         src_dir.to_path_buf(),
-        // The crate root is mod-rs-like: its own directory (`src_dir`, the root file's parent) is the
-        // base for both its conventional children and any `#[path]` written in it.
         src_dir.to_path_buf(),
         root_file.to_path_buf(),
         crate_package,
@@ -185,21 +173,11 @@ pub(super) fn flatten_for_walk(items: &[syn::Item]) -> (Vec<syn::Item>, Vec<Flat
 /// whole-tree set — so a re-reached file is diagnosed as a cycle only when it loops the path back on
 /// itself, never when two sibling/cousin modules legitimately share one `#[path]` target. An inline
 /// module's body is cloned (callers borrow their items).
-// Each child is `(items, module path, child_dir, file_dir, opened_file, current_file)`: `child_dir`
-// is the base for the child's own conventional `mod y;`, `file_dir` the directory a `#[path]`
-// written in the child resolves from (they differ for a non-mod-rs `name.rs`, and both accumulate
-// an enclosing inline-`mod` name); `opened_file` is the canonical path of the new source file this
-// child opened (`Some` for a file-based / `#[path]`-file child, `None` for an inline body that
-// stays in the parent's file) — the caller unions it into `ancestors` before recursing.
-// `current_file` is the literal (non-canonicalized) path of the file the child's OWN items live
-// in — the same file `opened_file` names for a file-based child, or the caller's own
-// `current_file` inherited unchanged for an inline body — so a caller that attributes each finding
-// to its real source file (rather than a single first-branch file for the whole module) always has
-// it in hand, never re-resolved afterward from the module string alone (which misattributes a
-// finding once two `#[cfg]`-split branches share one module path). A named struct would obscure
-// the by-position destructuring at the three call sites; the shape is documented here.
-/// `(items, module path, child_dir, file_dir, opened_file, current_file)` for one resolved child —
-/// see `resolve_child_modules`'s own doc for what each position means.
+/// `(items, module path, child_dir, file_dir, opened_file, current_file)` for one resolved child.
+///
+/// `child_dir` is the base for conventional child modules; `file_dir` is the base for `#[path]` remaps;
+/// `opened_file` is the canonical path of a new source file opened by this child (`None` for inline bodies);
+/// `current_file` is the literal path of the file containing the child's items.
 type ChildEntry = (
     Vec<syn::Item>,
     String,
@@ -264,10 +242,6 @@ fn resolve_direct_path_child(
     children: &mut Vec<ChildEntry>,
 ) -> Result<(), String> {
     match &module_item.content {
-        // Inline body relocated by `#[path = "dir"]`: `<file_dir>/dir` is the base for the body's
-        // file-children AND any `#[path]` written inside it, so it is the body's `file_dir` too
-        // (not the enclosing `file_dir` — the relocation accumulates). The body's own content
-        // still lives in the enclosing file, so `current_file` inherits unchanged.
         Some((_, inner)) => {
             let relocated = file_dir.join(rel);
             children.push((
@@ -282,15 +256,6 @@ fn resolve_direct_path_child(
         None => {
             let file = file_dir.join(rel);
             if !xingbiao::is_regular_file(&file)? {
-                // An unconditional `#[path]` target must exist (rustc errors otherwise), so an
-                // absent one is a genuine broken reference: fail loud (exit 2), never a silent
-                // skip. A `cfg_attr`-wrapped `#[path]` is the union `resolve_conventional_child`
-                // handles, not this unconditional branch at all (`direct_path_value` never
-                // matches it). A BARE `#[cfg(pred)]` co-occurring with this unconditional
-                // `#[path]` removes the whole item when `pred` is false (verified against a real
-                // rustc build: `#[cfg(windows)] #[path = "…"] mod x;` compiles cleanly on a
-                // non-windows host with the target entirely absent) — tolerate exactly like the
-                // plain-missing-file case elsewhere in this walker.
                 if cfg_conditional {
                     return Ok(());
                 }
@@ -307,8 +272,6 @@ fn resolve_direct_path_child(
             else {
                 return Ok(());
             };
-            // mod-rs-like: the loaded file's own directory is the base for both its conventional
-            // children and any nested `#[path]` beneath it.
             let own_dir = file
                 .parent()
                 .map(Path::to_path_buf)
@@ -351,31 +314,12 @@ fn resolve_conventional_child(
     let cfg_attr_targets = cfg_attr_path_values(&module_item.attrs);
     let sub_dir = child_dir.join(name);
     match &module_item.content {
-        // Inline `mod x { … }`: descend its lexical items (same file). Its own children — both
-        // conventional `mod y;` AND any `#[path]` nested in the body — resolve from `<child_dir>/x`
-        // (rustc accumulates the inline-module name as a directory component), so that dir is the
-        // body's `file_dir` too, NOT the enclosing `file_dir`. Getting this wrong drops a
-        // `#[path]` relocated inside an inline block onto the wrong file — a false negative.
-        // The body's own content stays in the enclosing file, so `current_file` inherits
-        // unchanged.
-        // A `cfg_attr(…, path = "dir")` on this inline header names a CANDIDATE base per platform
-        // predicate (the unconditional form is dispatched to `resolve_direct_path_child` before this
-        // point, so only the conditional one reaches here). Every candidate is unioned with the
-        // conventional base, cfg-blind: `syn` does not evaluate `cfg`, so preferring one would drop
-        // every child beneath the other. A candidate is descended only when it EXISTS as a directory
-        // — recursing into an absent one would fail loud on the body's other, unrelated nested items
-        // solely because one platform's directory is missing — and when none exists the conventional
-        // base is descended anyway, so a nested reference broken on every platform still fails loud.
-        // Not following it made 渾儀 exit 2 on source that compiles cleanly, while this crate's own
-        // FILE-form arm below already followed the same attribute; 圭表 and 漏刻 state the same rule
-        // for the identical shape (三儀 ⊥ 三儀: the same rule, hand-written per dimension).
         Some((_, inner)) => {
             let bases: Vec<PathBuf> = cfg_attr_targets
                 .iter()
                 .map(|rel| file_dir.join(rel))
                 .chain(std::iter::once(sub_dir.clone()))
                 .collect();
-            // An unreadable base is not an absent one; dropping it takes its subtree with it.
             let mut bases: Vec<PathBuf> = {
                 let mut kept = Vec::new();
                 for base in bases {
@@ -401,15 +345,8 @@ fn resolve_conventional_child(
                 ));
             }
         }
-        // File `mod x;`: `<dir>/x.rs` or `<dir>/x/mod.rs`; children under `x/`; the child's own
-        // `file_dir` is the located file's directory (`<dir>` for `x.rs`, `<dir>/x` for
-        // `x/mod.rs`), which is where a `#[path]` inside it resolves from.
         None => {
             let mut has_backing_source = false;
-            // Every `cfg_attr(path)` target this declaration carries (a module may stack more
-            // than one, each gated by its own predicate for a different platform), whichever
-            // exists — read alongside the conventional file below, never in place of it: cfg-blind
-            // observation cannot know which one this build actually compiles.
             for rel in &cfg_attr_targets {
                 let file = file_dir.join(rel);
                 if xingbiao::is_regular_file(&file)? {
@@ -439,14 +376,6 @@ fn resolve_conventional_child(
             }
             match locate_module_file(child_dir, name)? {
                 ModuleFile::One(file) => {
-                    // A file already on the current descent path (an ANCESTOR, by canonical
-                    // symlink-resolved path) is a genuine module cycle — a symlinked directory or a
-                    // circular `#[path]` looping the `mod` graph back on itself. Stop with a scan
-                    // error (exit 2 "cannot judge") rather than recursing into a stack overflow. Two
-                    // *sibling/cousin* declarations legitimately resolving to one file (e.g.
-                    // `#[path="s.rs"] mod a; #[path="s.rs"] mod b;`, which rustc compiles) are NOT a
-                    // cycle — the ancestor set, unlike a monotonic whole-tree visited set, does not
-                    // misreport them (that would be a false positive on compilable input).
                     if let Some((items, canon)) = load_child_file(
                         &file,
                         child_module,
@@ -469,12 +398,6 @@ fn resolve_conventional_child(
                         ));
                     }
                 }
-                // BOTH conventional forms present is unresolvable under every predicate value — no
-                // `#[cfg]` makes two files compile as one module — so unlike an absence it is never
-                // a legitimate configuration, and it reacts regardless of any gate. Erroring out of
-                // the whole walk rather than dropping this one module matches 圭表's own
-                // `resolve_plain_sources`: a crate whose module graph cannot be resolved cannot be
-                // judged, and excluding the module would hide every import beneath it.
                 ModuleFile::Ambiguous { flat, nested } => {
                     return Err(dual_backed_module_error(
                         child_module,
@@ -484,12 +407,6 @@ fn resolve_conventional_child(
                         &nested,
                     ));
                 }
-                // A `#[cfg]`-gated module may legitimately have no source file when the feature is
-                // off (a standard optional-feature pattern) — a stated coverage bound, not a scan
-                // error. A non-cfg missing conventional file is tolerated too when the `cfg_attr`
-                // target above already backs this module on some other build; only when NEITHER
-                // candidate exists, and this declaration is not otherwise cfg-conditional, is the
-                // module truly unbacked on every configuration — a real scan error (exit 2).
                 ModuleFile::Absent => {
                     if !has_backing_source && !cfg_conditional {
                         return Err(missing_module_file_error(child_module, crate_package));
@@ -501,8 +418,6 @@ fn resolve_conventional_child(
     Ok(())
 }
 
-// `child_dir` and `file_dir` are distinct module-resolution bases (see `child_dir` and `file_dir`), not
-// bundled: they thread the descent by position alongside the crate-scan accumulator and guards.
 pub(super) fn resolve_child_modules(
     items: &[FlatItem],
     module: &str,
@@ -513,37 +428,13 @@ pub(super) fn resolve_child_modules(
     ancestors: &HashSet<PathBuf>,
 ) -> Result<Vec<ChildEntry>, String> {
     let mut children = Vec::new();
-    // Deduped by (declared name, resolved file's CANONICAL path): two mutually-exclusive `#[cfg]`
-    // arms that both plainly declare the SAME name `mod seg;` (no `#[path]`, so both are found via
-    // the identical `locate_module_file` lookup), or that both `#[path]`-remap the SAME name to the
-    // identical target, are the same real file compiled twice by neither build — pushing a branch
-    // per occurrence would duplicate that file's items in the crate-wide scan
-    // (`ImplSite`/`TypeDef`/`UnsafeSite`), inflating one real violation into two apparently-
-    // distinct findings whenever a self-type's generic argument is unrenderable and falls back to
-    // a positional ordinal that differs between the two scan-Vec positions (escaping the eventual
-    // fact-identity dedup). Mirrors `module_resolve.rs::descend`'s own `seen_files` guard.
-    // Keyed on the NAME too, not the file alone: two DIFFERENT declared names that
-    // happen to `#[path]`-remap to the identical file (`#[path="s.rs"] mod a;` / `#[path="s.rs"]
-    // mod b;`) are two real, separately-compiled modules — already an existing, tested case — and
-    // must never collide with each other's own dedup entry.
     let mut seen_files: HashSet<(String, PathBuf)> = HashSet::new();
-    // Takes items with transparent-macro (`cfg_if!`) arms flattened in, so a `mod` declared only
-    // inside an arm is descended like any other — 圭表 already observes such a declaration
-    // (`declared_modules_observes_mod_inside_cfg_if_macro_body`), and a module invisible here costs
-    // the whole subtree beneath it its observation (its `unsafe` sites, markers, and trait impls).
-    // The parameter is `&[FlatItem]`, not `&[syn::Item]`, because arm MEMBERSHIP is load-bearing
-    // here (the absence tolerance below) and flattening erases it: handed an already-flattened
-    // plain list, this walker would report a legitimately fileless arm-declared module as exit 2.
-    // The type makes that mistake impossible rather than a comment asking callers not to make it.
     for flat in items {
         let syn::Item::Mod(module_item) = &flat.item else {
             continue;
         };
         let name = strip_raw(&module_item.ident.to_string());
         let child_module = format!("{module}::{name}");
-        // May this declaration legitimately have no source file on this build? Its own bare
-        // `#[cfg]`, or arm membership (every `cfg_if!` arm is gated by a predicate in the macro
-        // header). The same rule `module_resolve::descend` applies, matching 圭表.
         let cfg_conditional = flat.in_transparent_arm || has_cfg_attr(&module_item.attrs);
         if let Some(rel) = direct_path_value(&module_item.attrs) {
             resolve_direct_path_child(
@@ -578,12 +469,13 @@ pub(super) fn resolve_child_modules(
     Ok(children)
 }
 
-// `child_dir` and `file_dir` are distinct module-resolution bases (see `resolve_child_modules`), not
-// bundled: they thread the descent by position alongside the crate-scan accumulator and guards.
 /// Record this module's own facts into `scan` from a single flattened items pass: trait
 /// definitions, trait-impl sites, type definitions, and resolvable type-alias targets (including
 /// the forbidden-marker alias-landing map). Pulled out of `walk_module` as the "this module's own
 /// observation" phase, distinct from the child-descent phase that follows it.
+///
+/// Records non-generic type alias targets and landing types for marker containment,
+/// resolving leading `::`, use-map, bare local aliases, and extern crates.
 #[allow(clippy::too_many_arguments)]
 fn record_module_facts(
     items: &[syn::Item],
@@ -603,7 +495,6 @@ fn record_module_facts(
                     strip_raw(&trait_item.ident.to_string())
                 ));
             }
-            // Trait impls only (`impl Trait for Type`); inherent impls carry no `trait_`.
             syn::Item::Impl(impl_item) if impl_item.trait_.is_some() => {
                 let (_, trait_path, _) = impl_item.trait_.as_ref().expect("trait_ is Some");
                 scan.impls.push(ImplSite {
@@ -624,37 +515,10 @@ fn record_module_facts(
             syn::Item::Union(i) => {
                 push_type_def(&i.attrs, &i.ident, module, current_file, uses, scan)?;
             }
-            // A non-generic `type X = <nominal path>;` alias: record `{module}::X → target`
-            // so the exposure pipeline can follow it to the defining path. The target-resolution
-            // ladder is byte-identical to the query site's, so no resolvable target is dropped and
-            // no local shadow is misread:
-            //   0. a leading-`::` target — an unambiguous extern (raw set, with the crate-root
-            //      rename applied), a HARD short-circuit, so `type X = ::serde::Value;` records the
-            //      extern even under a local `mod serde`, and `type X = ::<rename>::Foo;` too;
-            //   1. `resolve_path_all(Ignore)` — use-map (every cfg-branch candidate) /
-            //      `crate`·`self`·`super`;
-            //   2. `bare_local_alias_target` — a bare single-segment target naming one of THIS
-            //      module's own type aliases recorded as `{module}::{name}` (its canonical alias-map
-            //      key), tried BEFORE the extern oracle so a local alias shadows a same-named
-            //      dependency (rustc's own resolution); the query-time `expand_canonical_paths`
-            //      fixpoint then closes a *bare* alias-of-an-alias chain regardless of source order.
-            //      Gated to local alias names, so a bare non-alias target (a local struct, a std
-            //      prelude type like `String`) is never mis-recorded — no false positive;
-            //   3. `extern_verbatim_renamed` — an extern head, incl. a crate-root `extern crate as`
-            //      rename (the rename map is pre-collected, so this is order-independent).
-            // A generic alias (`type X<T> = …`) or a complex target (`Vec<T>`, `&T`, a
-            // tuple/`dyn`/`impl`) is skipped — a stated coverage bound, never a silent claim.
             syn::Item::Type(type_item) => {
                 if !type_item.generics.params.is_empty() {
-                    // Stated bound: generic type aliases (`type X<T> = …`) are intentionally skipped.
                     continue;
                 }
-                // Record the alias's LANDING type — where its target resolves under the same bare-head
-                // `CurrentModule` fallback the impl-self check uses — so the forbidden-marker check can
-                // react on an alias to a crate-defined subtree type (`type Bar = Real`) yet stay silent
-                // on one to a foreign/prelude type (`type Baz = Vec<u8>` / `= String`), whose marker
-                // lands off the governed subtree. Only a nominal `Type::Path` target has a single
-                // landing type; a tuple/ref/`dyn` target has none and is skipped (never governed here).
                 if let syn::Type::Path(tp) = &*type_item.ty {
                     let landings =
                         resolve_path_all(&tp.path, uses, module, BareFallback::CurrentModule);
@@ -711,6 +575,8 @@ fn record_module_facts(
     Ok(())
 }
 
+/// Walk one module: flatten transparent macros, collect re-exports with per-defining-module
+/// child-module shadowing, record module facts, and recurse into child modules.
 #[allow(clippy::too_many_arguments)]
 fn walk_module(
     items: Vec<syn::Item>,
@@ -725,23 +591,8 @@ fn walk_module(
     scan: &mut CrateScan,
 ) -> Result<(), String> {
     check_module_depth(depth, &module, crate_package)?;
-    // ONE flattening pass, two views. `flat` retains arm membership for the child resolution below;
-    // `items` is the plain list this module's own observation reads — a re-export, trait definition,
-    // trait impl, or type definition written inside an arm is a real declaration of this module, and
-    // the crate-wide maps built here feed every capability's resolution, so a miss is not one lost
-    // fact but a mis-resolution everywhere downstream.
     let (items, flat) = flatten_for_walk(&items);
     let uses = collect_uses(&items);
-    // The re-export closure applies the same per-defining-module child-module shadow the direct
-    // head oracle does: a bare `pub use dep::X;` / `pub use wc::X;` head named by this module's own
-    // child `mod dep` / `mod wc` is not recorded as the dependency / renamed crate, so a
-    // cross-module facade reaching it through this crate-wide map does not mis-canonicalize. That
-    // exclusion is now computed PER re-export item (via `flat`'s own arm/`#[cfg]` tag, inside
-    // `collect_reexports`), not once over this module's whole child-module set: a `mod` that is
-    // provably mutually exclusive with a SPECIFIC `pub use` in `flat` (a different `cfg_if!` arm,
-    // or a syntactic `#[cfg]` negation) must not shadow that item's own head even though both live
-    // in this same file (see `collect_reexports`'s own doc).
-    // `collect_reexports` keeps a leading-`::` head on the raw sets regardless.
     let child_mod_decls = child_module_decls(&flat);
     collect_reexports(
         &flat,
@@ -751,18 +602,10 @@ fn walk_module(
         &scan.extern_renames,
         &mut scan.reexports,
     );
-    // Alias targets resolve in the same per-module shadow as type positions: a bare head naming
-    // a local child module (`mod serde` + `type X = serde::Foo`) is local, not the dependency.
     let externs_type: HashSet<String> = externs
         .difference(&local_type_namespace_names(&items))
         .cloned()
         .collect();
-    // This module's own non-generic type-alias names — the only bare single-segment targets the
-    // alias-collection ladder resolves against the current module (a bare intermediate in an
-    // alias-of-an-alias chain, always same-module). Gating to these names keeps a bare non-alias
-    // target (a local struct, or a std prelude type like `String`) from being mis-recorded as
-    // `{module}::{name}` — which would false-positive under a boundary forbidding the module's own
-    // path. Computed once here so the check is order-independent within the module.
     let local_alias_names: HashSet<String> = items
         .iter()
         .filter_map(|it| match it {
@@ -795,9 +638,6 @@ fn walk_module(
             ancestors,
         )?
     {
-        // Extend the ancestor path with the child's own file (an inline body stays in the parent's
-        // file, so it inherits `ancestors` unchanged); each sibling branches from the SAME parent
-        // path, so a file shared across siblings is never mistaken for a cycle.
         match opened {
             Some(canon) => {
                 let mut child_ancestors = ancestors.clone();
@@ -863,19 +703,8 @@ pub(crate) fn walk_subtree_modules(
     let branches = resolve_module_branches(src_dir, root_file, module, crate_package)?;
     let mut out: Vec<(String, Vec<syn::Item>, PathBuf)> = Vec::new();
     for (items, file, child_dir, file_dir) in branches {
-        // Seed the ancestor path with THIS branch's own file, so a descendant looping back to it
-        // is caught — the same discipline `scan_crate` applies from the crate root. Never a set
-        // shared across branches: two mutually-exclusive `#[cfg]` arms' own files are never
-        // simultaneously open in any real build, so one arm's file must never gate the other's.
         let mut ancestors: HashSet<PathBuf> = HashSet::new();
         ancestors.insert(xingbiao::canonicalize_or_fail(&file)?);
-        // This branch's own `path_base` IS the base a `#[path]` written in it resolves from —
-        // used AS-IS, never re-derived as `file.parent()`: for an inline-module branch,
-        // `path_base` is its accumulated directory, which differs from the *enclosing* file's own
-        // directory (the inline body stays in the parent's file, but its own `#[path]`s and
-        // conventional children do not resolve from the parent's directory) — re-deriving it here
-        // silently substituted the wrong base and could hard-error or, worse, silently observe
-        // the wrong (uncompiled) file in the subtree walk.
         collect_subtree(
             items,
             module.to_string(),
@@ -911,10 +740,6 @@ fn collect_subtree(
     out: &mut Vec<(String, Vec<syn::Item>, PathBuf)>,
 ) -> Result<(), String> {
     check_module_depth(depth, &module, crate_package)?;
-    // Flattened before the items are recorded in `out`: a subtree reaction (`including_submodules`)
-    // observes each module's item list directly, so an arm item missing here is a false negative in
-    // the subtree scope even though the same item reacts at the anchor itself. `flat` keeps arm
-    // membership for the child resolution.
     let (items, flat) = flatten_for_walk(&items);
     for (child_items, child_module, sub_dir, sub_file_dir, opened, child_file) in
         resolve_child_modules(
@@ -1048,5 +873,3 @@ fn extract_derives_from_cfg_metas(
     }
     Ok(())
 }
-
-// --- Unsafe-site scan (`semantic-unsafe-confinement`) -------------------------

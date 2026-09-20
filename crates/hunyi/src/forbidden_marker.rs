@@ -54,9 +54,6 @@ pub(crate) fn check_forbidden_marker_boundary(
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
     let (_package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
-    // Each of a package's crate roots is its own compilation unit: same module path `crate`,
-    // separate module graph. Evaluated once per unit so an exposure in a `bin` beside a library
-    // is observed, with the unit carried into each finding's identity.
     over_each_unit(
         &units,
         &unknown_module_error(&boundary.module, &boundary.crate_package),
@@ -69,9 +66,6 @@ pub(crate) fn check_forbidden_marker_boundary(
                 &boundary.crate_package,
             )?;
 
-            // Each finding carries the module its offending element sits in — the impl site's module for
-            // an `impl`, the defining type's module for a `#[derive]`; the shared emit helper resolves that
-            // module's source file (memoized per module) and stamps the deny-breach polarity.
             push_multi_module_violations(
                 violations,
                 MultiModuleViolationContext {
@@ -96,6 +90,8 @@ pub(crate) fn check_forbidden_marker_boundary(
 /// `#[derive]` on a subtree type, and an `impl T for X` (anywhere) whose self-type resolves to
 /// a subtree definition. Matching is leaf-identifier (so the derive-macro re-export path and
 /// the trait path both match; never a silent miss). Sorted, deduplicated.
+///
+/// Forbidden operands are validated with `validate_path_operands` to reject empty path segments.
 pub(crate) fn forbidden_marker_findings(
     src_dir: &Path,
     root_file: &Path,
@@ -103,21 +99,9 @@ pub(crate) fn forbidden_marker_findings(
     forbidden: &[String],
     crate_package: &str,
 ) -> Result<Vec<(SemanticFact, String, PathBuf)>, String> {
-    // A forbidden entry with an empty `::`-segment could never match a real leaf identifier — a
-    // trailing/doubled `::` (or the empty string) makes `leaf_of` compute an empty leaf, and no
-    // real identifier is ever empty; a leading `::` is harmless for leaf matching alone but
-    // rejected anyway, for consistency with every other forbidden/allowed-operand-shaped DSL
-    // method in this family (see `resolve::has_empty_path_segment`'s own doc). Checked before any
-    // scanning, mirroring `exposure::module_findings`'s guard for its own forbidden set.
     validate_path_operands(forbidden)?;
     let scan = scan_crate(src_dir, root_file, crate_package, &HashSet::new())?;
     let subtree = canonical_path_str(subtree);
-    // The canonical paths of every type the crate actually DEFINES — the only types that can
-    // "acquire" a marker. A trait impl's self type is cross-checked against this so a foreign or
-    // prelude self type (`impl Marker for Vec<u8>` / `Box<…>`), whose bare head the
-    // `CurrentModule` fallback would otherwise fabricate into a phantom `crate::<mod>::Vec`, is not
-    // mistaken for a governed-subtree type (a false positive). The derive form already scans only
-    // these definitions, so the impl form now shares the same authoritative set.
     let defined: HashSet<&str> = scan
         .type_defs
         .iter()
@@ -132,8 +116,6 @@ pub(crate) fn forbidden_marker_findings(
             &scan, &subtree, &defined, entry, entry_leaf,
         ));
     }
-    // Dedup BY FINDING (keep the first module), so the count is identical to before — `file` is
-    // metadata attached to a finding, never a second identity key.
     sort_attributed_facts(&mut findings)?;
     Ok(findings)
 }
@@ -161,11 +143,6 @@ fn derive_marker_findings(
         for (ordinal, derived) in td.derives.iter().enumerate() {
             let derived_leaves = resolved_leaves(derived, &td.uses, &td.module);
             if derived_leaves.iter().any(|leaf| leaf == entry_leaf) {
-                // A derive sits in the defining type's module — its source file, not any
-                // impl site's. Render the marker from the WRITTEN derive path so two distinct
-                // forbidden derives sharing a leaf on one type (`#[derive(a::Marker, b::Marker)]`)
-                // stay distinct findings. An unrenderable path carries an internal positional
-                // sentinel that the shared sorting reaction rejects before emission.
                 let marker =
                     path_to_string(derived).unwrap_or_else(|| format!("{entry}<_#{ordinal}>"));
                 findings.push((
@@ -203,18 +180,6 @@ fn impl_marker_findings(
         if !trait_leaves.iter().any(|leaf| leaf == entry_leaf) {
             continue;
         }
-        // The concrete type the marker LANDS on: `resolve_self_type` follows the re-export and
-        // type-alias closures to the definition, so `impl Marker for crate::facade::Order` (a
-        // `pub use` facade) and `impl Marker for Bar` where `type Bar = Real` both land on the
-        // real subtree def, while a foreign/prelude self (`impl Marker for Vec<u8>`, fabricated by
-        // the CurrentModule fallback into a phantom `crate::<mod>::Vec`) or an alias to a foreign
-        // type (`type Baz = Vec<u8>`) lands off the governed subtree — each rejected by the
-        // `defined` + `under_subtree` gate below (a false positive). Only a crate-DEFINED type
-        // under the subtree can acquire a marker.
-        // Every landing candidate is checked (cfg-blind): a self type reached through a
-        // mutually-exclusive `#[cfg]`-gated alias must not have its other candidate's landing
-        // silently dropped (found on adversarial review of
-        // `hunyi-cfg-branch-use-reexport-merging`).
         let landings = resolve_self_type(
             &site.self_ty,
             &site.uses,
@@ -224,7 +189,7 @@ fn impl_marker_findings(
             &site.type_params,
         );
         if landings.is_empty() {
-            continue; // self-type not placeable (glob/external/complex) — a stated bound
+            continue;
         }
         if !landings
             .iter()
@@ -232,12 +197,6 @@ fn impl_marker_findings(
         {
             continue;
         }
-        // Injective identity: the written trait path WITH generic args, the self type WITH
-        // generic args (owner-qualified like the seam owner), and the impl-site module. Two
-        // distinct acquisitions — `impl Marker<u8>`/`impl Marker<u16>`, or the same leaf from
-        // different modules — thus stay distinct findings, so a baseline cannot mask a new one.
-        // An unrenderable trait arg carries the config entry plus an internal positional
-        // sentinel; the shared sorting reaction rejects it before public identity emission.
         let marker =
             path_to_string(&site.trait_path).unwrap_or_else(|| format!("{entry}<_#{ordinal}>"));
         let owner = canonical_self_owner(

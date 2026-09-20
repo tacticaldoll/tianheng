@@ -15,7 +15,8 @@ use xuanji::pretty_json;
 /// the repair hint, and `exit_code` mirroring the process exit. `stale` lists baseline entries
 /// matching no current violation. When `disallow_stale` is true and `stale` is not empty,
 /// `stale_disallowed` is set to `true`, `exit_code` is `1`, and `outcome` reflects `"violations"`
-/// if any violation or disallowed stale entry fails the gate.
+/// if any violation or disallowed stale entry fails the gate. The `subject` is emitted beside `outcome`
+/// to distinguish observed-clean workspaces from unreached ones.
 pub fn report_json_with_stale_policy(
     outcome: &Outcome,
     stale: &[BaselineEntry],
@@ -24,9 +25,6 @@ pub fn report_json_with_stale_policy(
 ) -> String {
     let policy = stale_policy(outcome, stale, disallow_stale);
     let has_disallowed_stale = policy.stale_disallowed;
-    // The subject travels beside the label, so a machine reading this document can tell a workspace that was
-    // observed and found sound from one that was never reached — the distinction the outcome now carries and
-    // this projection would otherwise drop on its way out.
     let (label, violations, error, subject) = match outcome {
         Outcome::Clean(subject) => (
             if has_disallowed_stale {
@@ -194,6 +192,8 @@ pub fn constitution_json(constitution: &Constitution) -> String {
     pretty_json(&document)
 }
 
+/// Projects a single boundary to JSON. Anchors and non-default dependency kinds are only emitted
+/// when set, preserving byte-identical output when unset.
 fn boundary_json(boundary: &Boundary) -> Value {
     match boundary {
         Boundary::Crate(b) => {
@@ -210,8 +210,6 @@ fn boundary_json(boundary: &Boundary) -> Value {
             if let Some(kind) = dependency_kind_label(b.dependency_kind()) {
                 object["dependency_kind"] = serde_json::json!(kind);
             }
-            // Emit the anchor only when set, so a boundary without one keeps byte-identical JSON
-            // (and the Markdown derived from it) — the same discipline as `dependency_kind`.
             if let Some(anchor) = b.anchor() {
                 object["anchor"] = serde_json::json!(anchor);
             }

@@ -75,8 +75,13 @@ pub(crate) fn path_leaf(path: &syn::Path) -> String {
 /// Returns **every** landing candidate, cfg-blind like the exposure pipeline's own
 /// `expand_canonical_paths`: a self type whose head, or whose `type X = Y;` alias target, is a
 /// mutually-exclusive `#[cfg]`-gated `use` name must not have its other candidate silently
-/// dropped (found on adversarial review of `hunyi-cfg-branch-use-reexport-merging`: the
-/// marker-acquisition self-type landing missed a forbidden self type this way).
+/// dropped.
+///
+/// Qualified-path self types (`<T>::Item`, `<T as Trait>::Item`) store their dependent type in
+/// `qself.ty` outside `path.segments` and are dropped as non-nominal types (`tp.qself.is_some()`).
+/// A self type naming the impl's own generic type parameter — bare (`T`) or projected (`T::Assoc`)
+/// — is dropped via `is_shadowed_param_path` before resolution to prevent resolving `T` through an
+/// in-scope alias.
 pub(crate) fn resolve_self_type(
     self_ty: &syn::Type,
     uses: &UseMap,
@@ -87,21 +92,9 @@ pub(crate) fn resolve_self_type(
 ) -> Vec<String> {
     let bases = match self_ty {
         syn::Type::Path(tp) => {
-            // A QUALIFIED-path self type (`<T>::Item`, `<T as Trait>::Item`) stores its own
-            // dependent type in `qself.ty`, entirely OUTSIDE `path.segments` — even when that
-            // dependent type is the impl's own generic parameter, `is_shadowed_param_path` (which
-            // only inspects `path`) cannot see it. Mirrors `canonical_self_owner`'s own
-            // `qself.is_none()` guard: a qself'd self type is never a placeable nominal path either
-            // way, so it is dropped here as a declared bound.
             if tp.qself.is_some() {
                 return Vec::new();
             }
-            // A self type naming the impl's own type parameter — bare (`T`) or a projection off it
-            // (`T::Assoc`) — is a parameter use, never a nominal type: dropped before any resolution
-            // is attempted, via the SAME leading-segment shadow check the sibling exposure
-            // collectors use (`is_shadowed_param_path`), not a narrower single-segment-only copy —
-            // matching `impl<T> ... for T {}` OR `impl<T> ... for T::Assoc {}` here would otherwise
-            // resolve `T` through an unrelated same-named alias in scope.
             if is_shadowed_param_path(&tp.path, impl_type_params) {
                 return Vec::new();
             }

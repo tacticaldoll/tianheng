@@ -17,8 +17,6 @@ use crate::tracked::TidMap;
 pub(crate) const UNDECLARED_SEAM_REPAIR_HINT: &str =
     "declare the RuntimeBoundary or fix the probe's seam name";
 
-// --- Private internals -------------------------------------------------------
-
 pub(crate) struct Seam {
     pub(crate) allowed: Vec<&'static str>,
     pub(crate) reason: String,
@@ -39,8 +37,6 @@ pub(crate) struct Registry {
 
 static REGISTRY: OnceLock<Registry> = OnceLock::new();
 
-// --- Public API --------------------------------------------------------------
-
 /// Install the runtime constitution **once at startup**: the declared boundaries and the
 /// origin registrations ([`crate::register_origin!`]). The registry is **write-once** so the probe
 /// hot path reads it without a lock; calling `install` a second time is a constitution error
@@ -52,9 +48,6 @@ where
 {
     let mut seams = HashMap::new();
     for b in boundaries {
-        // A seam declared twice is an observable misconfiguration: a silent overwrite would let
-        // the last declaration shadow the earlier law (a declared boundary that never enforces —
-        // the one bug this tool forbids). Fail loud, like a constitution error.
         if seams.contains_key(b.seam) {
             panic!(
                 "louke: runtime seam '{}' declared more than once — each seam is declared exactly \
@@ -75,8 +68,6 @@ where
     }
     let mut origin_map: TidMap<OriginInfo> = TidMap::default();
     for e in origins {
-        // Same type registered twice (e.g. two `register_origin!` sites) would silently keep the
-        // last origin — fail loud rather than let an observed origin be silently replaced.
         if origin_map.contains_key(&e.type_id) {
             panic!(
                 "louke: an origin for type '{}' was registered more than once — each type \
@@ -103,8 +94,6 @@ where
     }
 }
 
-// --- The pure core ----------------------------------------------------------
-
 /// The pure reaction, testable without process-global state: resolve the seam (an undeclared
 /// seam is a constitution error), resolve the crossing type's origin (an unregistered type
 /// has none), and match the allowlist **fail-closed** — an origin not in the allowlist, or
@@ -117,9 +106,6 @@ pub(crate) fn check_crossing(
     registry: &Registry,
 ) -> Result<Option<(Violation, Posture)>, String> {
     let s = registry.seams.get(seam).ok_or_else(|| {
-        // Reason-led, aligned with the CI-audit twin (shared repair hint): name the intent (an
-        // undeclared seam is never enforced) before the mechanics. Keeps the `undeclared runtime
-        // seam '{seam}'` substring the prod contract and tests depend on.
         format!(
             "an undeclared seam is never enforced — {UNDECLARED_SEAM_REPAIR_HINT}: probe \
                  references undeclared runtime seam '{seam}'"
@@ -127,7 +113,6 @@ pub(crate) fn check_crossing(
     })?;
 
     let info = registry.origins.get(&type_id);
-    // Fail-closed: a type that never registered an origin is not in the allowlist.
     let allowed = info.is_some_and(|i| s.allowed.contains(&i.origin));
     if allowed {
         return Ok(None);
@@ -138,21 +123,10 @@ pub(crate) fn check_crossing(
             origin: i.origin.to_string(),
             type_name: i.type_name.to_string(),
         },
-        // An unregistered type recorded neither an origin nor a name, so the only per-type datum a
-        // crossing carries is its `TypeId` (from `Any`; a concrete type NAME is unrecoverable from a
-        // `&dyn Any` on stable Rust). Append it so two DISTINCT unregistered types crossing the same
-        // seam produce distinct structured identities — otherwise baselining one
-        // silently masks the other (a false negative). The `<unregistered origin>` prefix is kept so
-        // the substring the prod contract/tests depend on still holds. The Debug bytes become the
-        // published semantic `type_id` field: the bytes are identity wire and stable only within a
-        // build (a hash of the type's identity), not a promised cross-toolchain type name.
         None => finding::RuntimeFact::UnregisteredCrossing {
             type_id: format!("{type_id:?}"),
         },
     };
-    // The rule family is the canonical `RUNTIME_SEAM_RULE` label; the allowed-origin set is the
-    // per-boundary detail appended here, so the prod reaction and the `list` projection share one
-    // rule label (the shell's `runtime` projection references the same const).
     let rule = runtime_seam_rule_line(&s.allowed);
     let finding = finding.into_finding();
     Ok(Some((
@@ -170,8 +144,6 @@ pub(crate) fn check_crossing(
     )))
 }
 
-// --- The probe reaction (hot path) ------------------------------------------
-
 #[doc(hidden)]
 pub fn __react(seam: &'static str, type_id: TypeId) {
     let registry = REGISTRY.get().unwrap_or_else(|| {
@@ -181,7 +153,6 @@ pub fn __react(seam: &'static str, type_id: TypeId) {
         Ok(None) => {}
         Ok(Some((violation, posture))) => {
             emit(&violation);
-            // `warn` is always event-only; panic only on an opted-in enforce violation.
             if posture == Posture::Panic && violation.severity == Severity::Enforce {
                 panic!(
                     "louke: runtime boundary '{seam}' violated by {}",
@@ -189,13 +160,9 @@ pub fn __react(seam: &'static str, type_id: TypeId) {
                 );
             }
         }
-        // An undeclared seam (or probe-before-install) is a constitution error: fail loud,
-        // never silently pass — the runtime analogue of exit 2.
         Err(message) => panic!("louke constitution error: {message}"),
     }
 }
-
-// --- The reaction sink ------------------------------------------------------
 
 #[allow(clippy::type_complexity)]
 static SINK: OnceLock<Box<dyn Fn(&Violation) + Send + Sync>> = OnceLock::new();
@@ -232,14 +199,6 @@ pub fn dropped_sink_events() -> u64 {
 pub(crate) fn emit(violation: &Violation) {
     match SINK.get() {
         Some(sink) => sink(violation),
-        // The default sink runs on every violation under the default `Event` posture, *before*
-        // the opt-in panic gate — so it must never itself panic. `eprintln!` panics if the stderr
-        // write fails (a closed/broken pipe, `… 2>&1 | consumer` after the consumer exits), which
-        // would crash the production process on a reaction — the exact failure the crate's
-        // no-panic-on-false-positive invariant forbids. Write directly, and on failure count the
-        // drop (`dropped_sink_events`) rather than silently losing all trace of it — counting can
-        // never itself fail, so this keeps the same no-panic guarantee while making the loss
-        // observable from outside the process.
         None => emit_default(std::io::stderr(), violation),
     }
 }

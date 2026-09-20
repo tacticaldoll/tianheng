@@ -158,7 +158,8 @@ pub fn crate_root_files(package: &Value) -> Vec<PathBuf> {
 /// so `./a` and `a//b` label as `a` and `a/b`. Both name the same file, and neither form is reachable
 /// from the inputs these labels are built from — a `cargo metadata` `src_path` or a walked path, both
 /// already canonical — but the normalization is stated rather than left implicit. `Component::ParentDir`
-/// is preserved as `..`, being unresolvable without touching the filesystem.
+/// is preserved as `..`, being unresolvable without touching the filesystem. A root-only path labels
+/// as `/`: the separator is written before the NEXT component, and a lone `RootDir` has none.
 pub fn path_label(path: &Path) -> String {
     fn push_escaped(out: &mut String, name: &std::ffi::OsStr) {
         fn push_text(out: &mut String, text: &str) {
@@ -180,21 +181,11 @@ pub fn path_label(path: &Path) -> String {
                 }
                 Err(err) => {
                     let (valid, invalid) = rest.split_at(err.valid_up_to());
-                    // `valid_up_to()` bounds a checked-valid prefix, so this cannot fail — and it
-                    // says so rather than branching on it. `unwrap_or_default()` was a fallback
-                    // nothing reaches, which tells a later reader that the empty case happens; the
-                    // `unreachable!()` this file already writes for `RootDir`/`CurDir` is the same
-                    // answer to the same question. `unreachable_branch` states the rule and its own
-                    // corpus cannot see this door: it recognises an always-`Some` value by the
-                    // RECEIVER (`.split(`, `.rsplit(`), and here the guarantee comes from where the
-                    // argument was cut instead.
                     push_text(
                         out,
                         std::str::from_utf8(valid)
                             .expect("`valid_up_to()` bounds a checked-valid prefix"),
                     );
-                    // `error_len() == None` means the input ends mid-sequence: every remaining byte is
-                    // unusable, so escape all of them rather than looping forever on the same slice.
                     let skip = err.error_len().unwrap_or(invalid.len()).max(1);
                     for byte in &invalid[..skip.min(invalid.len())] {
                         out.push_str(&format!("%{byte:02X}"));
@@ -209,8 +200,6 @@ pub fn path_label(path: &Path) -> String {
     let mut first = true;
     for component in path.components() {
         match component {
-            // A `RootDir` contributes no text, so the separator written before the NEXT component is
-            // what becomes the leading `/`. A path that is only `RootDir` therefore labels as `/`.
             std::path::Component::RootDir => {
                 label.push('/');
                 first = true;
@@ -314,13 +303,11 @@ pub fn member_src_dirs(metadata: &Value) -> Vec<PathBuf> {
 }
 
 /// Every workspace member library, proc-macro, and binary crate-root source file reported by Cargo.
+///
+/// Which target kinds have a governable crate root is [`crate_root_files`]'s filter; what is this
+/// function's own is the scope — every package rather than one — and the ordering: it sorts and
+/// dedups across packages, so the corpus is deterministic whatever order Cargo lists members in.
 pub fn member_root_files(metadata: &Value) -> Vec<PathBuf> {
-    // **Which targets have a governable crate root is [`crate_root_files`]'s question**, and it was
-    // spelled here a second time: the same `LIBRARY_KINDS`-or-`bin` filter over the same `src_path` read.
-    // One of the two would have moved without the other the next time a target kind was admitted. What is
-    // this function's own is the SCOPE — every package rather than one — and the ordering: `crate_root_files`
-    // dedups within a package by first appearance, and this sorts across packages so the corpus is
-    // deterministic whatever order cargo lists them in.
     let mut roots: Vec<PathBuf> = metadata["packages"]
         .as_array()
         .map(|packages| packages.iter().flat_map(crate_root_files).collect())
@@ -353,11 +340,6 @@ pub fn audit_corpus_and_anchor(manifest_path: &Path) -> Result<(Vec<PathBuf>, Pa
         Some(root) => root,
         None => {
             let manifest_dir = manifest_path.parent().unwrap_or(Path::new(""));
-            // The working directory is the last resort for a bare `Cargo.toml` whose parent is empty. Where
-            // even that cannot be read there is no anchor, and the error channel in this signature says so:
-            // an invented root mislabels every observed file, silently, because the anchor *is* baseline
-            // identity. Inventing one here would also be the defensive over-foolproofing of an impossible
-            // state the minimalism bound forbids.
             std::path::absolute(manifest_dir).or_else(|_| std::env::current_dir()).map_err(|err| {
                 format!(
                     "no anchor: {manifest_path:?} names no absolute directory and the working directory \

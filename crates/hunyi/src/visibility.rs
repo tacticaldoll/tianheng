@@ -25,15 +25,13 @@ pub fn check_visibility(boundaries: &[VisibilityBoundary], manifest_path: &Path)
     run_boundaries(boundaries, manifest_path, check_visibility_boundary)
 }
 
+/// Check a visibility boundary against every compilation unit of its package.
 pub(crate) fn check_visibility_boundary(
     metadata: &Value,
     boundary: &VisibilityBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
     let (_package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
-    // Each of a package's crate roots is its own compilation unit: same module path `crate`,
-    // separate module graph. Evaluated once per unit so an exposure in a `bin` beside a library
-    // is observed, with the unit carried into each finding's identity.
     over_each_unit(
         &units,
         &unknown_module_error(&boundary.module, &boundary.crate_package),

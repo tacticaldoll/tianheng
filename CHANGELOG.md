@@ -31,6 +31,15 @@ them.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-09-21
+
+### Self-governance
+
+- **All published crate sources are held to zero inner comments.** `crates/kanhe/tests/line_comment_purity.rs`
+  enforces that no published crate's `src/*.rs` (outside tests) carries an inner (`//`) comment. Implementation
+  comments carrying prose have been moved into DSL contracts, specifications, and doc comments, with provenance
+  and defect histories dropped.
+
 ## [0.6.0] - 2026-09-09
 
 ### Governance
@@ -3469,5 +3478,6 @@ them.
   96 tarballs then on the books, and the six new ones were audited on 2026-08-28, so the sentence says which
   audit covered what instead of letting one date stand for both.
 
-[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/tacticaldoll/tianheng/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/tacticaldoll/tianheng/releases/tag/v0.6.0

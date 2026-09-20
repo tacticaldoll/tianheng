@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**56 of 105 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**57 of 106 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -33,6 +33,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `release-coherence/a-name-reached-only-through-a-url-a-stated-bound` — owner: engine
 - `release-coherence/an-entry-about-self-governance-that-names-no-machinery-a-stated-bound` — owner: engine
 - `release-coherence/machinery-the-judged-repository-tracks-by-nothing-a-stated-bound` — owner: engine
+- `repository-checks/a-block-comment-is-not-read-a-stated-bound` — owner: engine
 - `repository-checks/a-census-written-outside-markdown-is-not-observed-a-stated-bound` — owner: engine
 - `repository-checks/a-construction-shape-the-register-s-reader-does-not-model-a-stated-bound` — owner: engine
 - `repository-checks/a-consumer-that-stops-early-is-neither-head-nor-grep-a-stated-bound` — owner: engine
@@ -473,7 +474,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: refuses to judge
 - **pinned by**: `a_worktree_holding_an_undecodable_path_is_not_judged_clean_or_dirty`
 
-## under-reacts (56)
+## under-reacts (57)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -698,6 +699,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the enumeration is `git ls-files scripts/`, so an untracked `scripts/` reads as absent and a citation of it goes unseen; closing this means judging worktree content, which this repository's gates are held not to do — the larger error
 - **its defence must show**: does not react
 - **pinned by**: `machinery_tracked_by_nothing_is_a_stated_bound`
+
+### `repository-checks/a-block-comment-is-not-read-a-stated-bound`
+
+> implementation prose in a `/* ... */` block comment under a governed published-crate source
+
+- **because**: the requirement places implementation prose outside governed published-crate source comments, but the reader skips `/* ... */` spans and therefore misses block comments that carry such prose
+- **its defence must show**: does not react
+- **unpinned**, tracked by: `BACKLOG.md` — *block comments carrying implementation prose in governed sources are outside line_comment_purity*
 
 ### `repository-checks/a-census-written-outside-markdown-is-not-observed-a-stated-bound`
 

@@ -136,19 +136,6 @@ pub fn audit_probe_coverage_with_markers(
             ));
         }
     }
-    // Every un-auditable probe's `file` identity field is labeled relative to the caller's
-    // `anchor` rather than as a raw absolute path, so the identity — and any baseline recorded
-    // against it — stays both checkout-independent and stable across a change to the observed
-    // member set. See `scan::labeled` and this function's own doc for why the anchor is given.
-    //
-    // A non-absolute anchor cannot do that job and so is refused rather than accepted: stripping
-    // it from an absolute source path fails, the label silently keeps its absolute form, and the
-    // identity is checkout-dependent again — the exact defect the anchor exists to close, reached
-    // by an argument that looked accepted. `Path::strip_prefix` succeeds against `""` too, which is
-    // why an empty anchor is refused by the same rule rather than blessed as a "no anchor" opt-out:
-    // it produces the same silently checkout-dependent identity, and this crate does not offer an
-    // argument whose effect is to reintroduce the bug. A caller with no stable directory to name
-    // has no correct value to pass here, so it hears that (exit 2) instead of a plausible label.
     if !anchor.is_absolute() {
         return Outcome::ConstitutionError(format!(
             "probe-label anchor '{}' is not an absolute path. Every observed file's identity is \
@@ -178,9 +165,6 @@ pub fn audit_probe_coverage_with_markers(
     violations.extend(undeclared_probe_violations(&probes, &declared_set));
     violations.extend(unauditable_probe_violations(&probes));
     if violations.is_empty() {
-        // The two figures this function already holds: the seams it was asked to cover, and the source
-        // inputs it was given to look for probes in. `None` is seams declared with no source to audit them
-        // against — nothing was judged, which is a misconfiguration rather than a covered workspace.
         match Subject::of(declared.len(), source_inputs.len()) {
             Some(subject) => Outcome::Clean(subject),
             None => Outcome::ConstitutionError(format!(
@@ -326,11 +310,6 @@ fn unauditable_probe_violations(probes: &[Probe]) -> Vec<Violation> {
     unauditable
         .into_iter()
         .map(|(marker, file, owner, expr)| {
-            // The offending source file, owner, and expression are in hand here (the probe scan
-            // captured them). Project the file into the `file` field as well as the finding text:
-            // it is a genuine observation, so reporting `null` would be a dishonest null. This is
-            // the one runtime violation with a source location — the seam-level ones above name a
-            // seam, not a file.
             audit_violation(
                 "<un-auditable probe>",
                 "a configured probe marker's seam must be a string literal to be auditable",

@@ -173,12 +173,6 @@ pub(crate) fn resolve_principal(
                 extern_verbatim_renamed(path, &file_scope.externs_type, &file_scope.renames_bare)
                     .into_iter()
                     .collect();
-            // A bare single-segment principal needs no `use` when its own module declares it — and
-            // only then. Resolving one the branch does NOT declare would fabricate a canonical path
-            // for a name the module never had (a prelude trait, a glob import), reacting over an
-            // operand that is not there; leaving a declared one unresolved would pass over the
-            // operand that is. `strip_raw` because the set compared against is canonical, so
-            // `r#type` and `type` are one name here exactly as at every other resolution site.
             if candidates.is_empty() && path.segments.len() == 1 {
                 let name = strip_raw(&path.segments[0].ident.to_string());
                 if file_scope.local_types.contains(&name) {

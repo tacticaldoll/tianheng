@@ -13,7 +13,6 @@ use xuanji::{BoundDecl, BoundId, Extent, FactGranularity, Owner, Reached};
 /// Every observation bound 渾儀 declares, grouped by the capability that declares it.
 pub fn observation_bounds() -> Vec<BoundDecl> {
     vec![
-        // --- semantic-async-exposure-boundary ---
         BoundDecl::pinned(
             BoundId::new("semantic-async-exposure-boundary/a-body-nested-module-is-a-stated-bound"),
             "`pub async fn` inside a `mod` declared in a function body",
@@ -23,7 +22,6 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "async_subtree_does_not_observe_a_body_nested_module",
         ),
-        // --- semantic-dyn-trait-boundary ---
         BoundDecl::pinned(
             BoundId::new(
                 "semantic-dyn-trait-boundary/a-public-item-naming-such-an-alias-is-not-expanded-a-stated-bound",
@@ -67,7 +65,6 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "an_unrenderable_sub_node_is_a_stated_rendering_bound",
         ),
-        // --- semantic-dyn-trait-operand-boundary ---
         BoundDecl::pinned(
             BoundId::new(
                 "semantic-dyn-trait-operand-boundary/a-genuinely-unresolvable-bare-principal-is-a-documented-bound",
@@ -79,7 +76,6 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             },
             "dyn_operand_genuinely_unresolvable_bare_principal_is_a_bound",
         ),
-        // --- semantic-forbidden-marker ---
         BoundDecl::pinned(
             BoundId::new(
                 "semantic-forbidden-marker/an-unresolvable-hand-impl-self-type-is-a-documented-bound",
@@ -92,7 +88,6 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             },
             "an_unresolvable_glob_self_type_is_a_documented_bound",
         ),
-        // --- semantic-impl-trait-operand-boundary ---
         BoundDecl::pinned(
             BoundId::new(
                 "semantic-impl-trait-operand-boundary/a-genuinely-unresolvable-bare-principal-is-a-documented-bound",
@@ -104,7 +99,6 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             },
             "impl_trait_operand_genuinely_unresolvable_bare_principal_is_a_bound",
         ),
-        // --- semantic-reexport-exposure ---
         BoundDecl::pinned(
             BoundId::new("semantic-reexport-exposure/an-underscore-rename-is-a-documented-bound"),
             "`pub use crate::infra::DbPool as _;` under a boundary forbidding that module",
@@ -179,7 +173,6 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "module_scoped_extern_crate_rename_is_a_stated_bound",
         ),
-        // --- semantic-signature-coupling ---
         BoundDecl::pinned(
             BoundId::new(
                 "semantic-signature-coupling/an-invocation-inside-an-impl-body-is-a-stated-bound",
@@ -229,7 +222,6 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "an_impl_nested_one_level_further_stays_a_stated_bound",
             ["a_static_wrapped_impl_stays_a_stated_bound"],
         ),
-        // --- semantic-trait-impl-exposure ---
         BoundDecl::pinned(
             BoundId::new(
                 "semantic-trait-impl-exposure/a-glob-imported-type-in-an-impl-position-is-a-documented-bound",
@@ -241,7 +233,6 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             },
             "a_glob_imported_type_in_an_impl_position_is_a_documented_coverage_bound",
         ),
-        // --- semantic-trait-impl-locality ---
         BoundDecl::pinned(
             BoundId::new(
                 "semantic-trait-impl-locality/a-macro-generated-impl-is-a-documented-bound",
@@ -264,7 +255,6 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "hunyi::a_cfg_gated_module_with_no_file_is_skipped_not_errored",
         ),
-        // --- semantic-unsafe-confinement ---
         BoundDecl::pinned(
             BoundId::new(
                 "semantic-unsafe-confinement/macro-generated-unsafe-is-a-documented-bound",
@@ -275,7 +265,6 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             },
             "unsafe_in_a_macro_body_is_a_stated_bound",
         ),
-        // --- semantic-visibility-boundary ---
         BoundDecl::pinned(
             BoundId::new(
                 "semantic-visibility-boundary/a-macro-generated-item-is-a-documented-bound",
