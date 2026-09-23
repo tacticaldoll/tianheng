@@ -87,6 +87,11 @@ them.
 
 ### Self-governance
 
+- **The attribute-spelling differential now exercises absent module files.** A separate generated corpus
+  checks bare `cfg`, raw-identifier `cfg`, and `cfg_attr` look-alikes against all three dimensions and rustc.
+  It records the declared cfg-blind limit: a live bare predicate with no backing file fails in rustc, while
+  the dimensions tolerate the absence without evaluating the predicate. No product outcome changes.
+
 - **Hand-written claims about a current state are dissolved into whatever owns that state.** A sentence
   describing how things currently are goes silently wrong after the event that changes it, because that
   event is in no check's corpus. `BACKLOG.md`'s shipped-version list is removed — `git tag` holds which

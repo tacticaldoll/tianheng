@@ -728,39 +728,6 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
-- **Absence tolerance has no differential, and the spelling that motivated the one we have is its subject
-  rather than an axis of it.** *Class:* READY-PATCH — the gap is measured and the work touches test targets
-  only. *Observed pressure:* `attribute_spelling_differential` cites *the raw bare-`cfg` spelling was missed
-  by all three at once* as the defect that motivated building it, and its corpus has no row for a bare `cfg`
-  — because a bare `cfg` answers a different question. `#[cfg(pred)]` **removes the whole item** when `pred`
-  is false, where `#[cfg_attr(pred, …)]` never removes the item, so what a reader does with a bare `cfg` is
-  *absence tolerance*: whether a missing backing file is an error. `guibiao`'s
-  `has_bare_cfg_attr_before_item` records that distinction, verified against a real rustc build, and states
-  that `cfg_attr` must never grant the tolerance (`#[cfg_attr(unix, allow(dead_code))] mod x;` with no
-  backing file is a genuine E0583 on every platform). *Observation source:* widening that corpus to the two
-  axes that **are** orthogonal — attribute position and value literal — and measuring what the third would
-  need.
-
-  *Current reaction or bound:* the existing differential covers remap resolution across three dimensions and
-  says in its own doc that this is a second subject. `guibiao`'s reader is held by a direction of its own;
-  what nothing holds is the **agreement** of the three dimensions about absence tolerance, which is exactly
-  the property a differential buys and the one the motivating defect fell through. *Risk:* the shape is one
-  edit from live — a cfg-gated module whose file is absent is ordinary in a workspace with optional
-  features — and agreement between three readers is not correctness, which is why this file has rustc as a
-  third party at all.
-
-  *Promotion trigger:* fired at filing, by the measurement above: the corpus that exists cites this spelling
-  as its motivation and cannot carry it. *Version class:* patch; test targets only, no crate surface.
-  *Authority:* the `attribute-spelling-differential` subject in `repository-checks`, and `guibiao`'s
-  `module-boundary` spec for the tolerance itself.
-
-  **Shape.** A second generated corpus whose probe is a **file that does not exist**, not an item that
-  resolves: for each cfg spelling (`cfg`, `r#cfg`) and each predicate, a module declared with no backing
-  file, where the declared answer is *tolerated* under a false predicate and *E0583* under a live one — and
-  rustc is asked which, the same way the remap differential asks whether a remap applied. `Answer` as it
-  stands has no value for this, which is the sign that it is a corpus of its own rather than rows added to
-  the existing one.
-
 - **The ambient-ignore guard reads files where its property belongs to call sites, and says something false
   when one file holds both kinds.** *Class:* READY-PATCH — measured, and the correction touches no published
   surface. *Observed pressure:* `no_judgement_reads_an_ambient_ignore_file` decides per **file**: a file
@@ -3376,6 +3343,16 @@ Two properties from those windows do not expire with a version, so they stay:
 A closed item leaves the live class it was filed under; it does not stay there struck through. Its
 reproduction record moves here, where closed reproduction records belong, so a live class heading
 cannot read as a queue holding work that is already done.
+
+- ~~**Absence tolerance has no differential across the three dimensions.**~~ *Class:* READY-PATCH —
+  closed by the missing-file corpus in `attribute_spelling_differential`. It feeds bare `cfg` and `r#cfg`
+  under false, true, and compound-false predicates, plus `cfg_attr` look-alikes, to all three dimensions;
+  rustc separately checks which declarations compile and which fail with E0583. The first run exposed a
+  false premise in the proposed shape: under a **true** bare predicate rustc reports E0583, while all three
+  dimensions tolerate the absent file because the declared policy is cfg-blind. The corpus holds that
+  deliberate difference, not an invented requirement that the dimensions evaluate the predicate. A
+  negative run replacing 圭表's bare-cfg detector with `false` made this test refuse all six bare-cfg
+  rows for 圭表; restoring the detector returned the corpus to green.
 
 - ~~**Each test that removes read permission hand-rolls the check that it took effect, the copies disagree on
   what a failed check means, and one copy is missing.**~~ *Class:* READY-PATCH — closed by `xingbiao::Unreadable`.

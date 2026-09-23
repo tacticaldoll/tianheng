@@ -10,7 +10,7 @@
 //! summed over attribute positions, plus the look-alikes declared beside them — and the count is printed
 //! on every clean run rather than written here. It is **not** every lexical form Rust admits: no
 //! cross-product can be, and this one said so while being false along three axes at once. Two of the
-//! three are axes now; the third answers a different question and `BACKLOG.md` carries it.
+//! three are axes now; the third answers a different question and has its own corpus below.
 //!
 //! **Three parties, because two are not enough.** A differential over the three dimensions alone answers
 //! *do they agree*, and agreement is not correctness: the raw bare-`cfg` spelling was missed by all three at
@@ -195,7 +195,7 @@ const PREDICATES: [(&str, &str, bool); 3] = [
 /// bare `#[cfg(pred)]` removes the whole item when `pred` is false, where `#[cfg_attr(pred, …)]` never
 /// removes the item — so what a reader does with a bare `cfg` is *absence tolerance*, whether a missing
 /// backing file is an error, and its probe is a file that does not exist rather than an item that resolves.
-/// `Answer` has no value for it. It is a second subject, and `BACKLOG.md` carries it as one.
+/// `Answer` has no value for it. The separate corpus below holds that second subject.
 ///
 /// A decoy is paired with a **false** predicate deliberately. `foo::path` under a live predicate is a path
 /// rustc resolves and rejects, so the pairing is what makes the shape legal source at all — and the
@@ -345,6 +345,107 @@ fn referencing_the_target(attribute: &str) -> String {
 /// already live — its predicate is the look-alike — and is probed as written.
 fn live_probe(attribute: &str) -> String {
     attribute.replace("any()", "unix")
+}
+
+/// Absence is a separate question from remapping: no file named `gone.rs` is ever created.
+/// A false bare cfg removes its declaration; a live one and every cfg_attr-only look-alike
+/// leave an unbacked declaration that rustc reports as E0583. The dimensions deliberately
+/// tolerate either bare cfg predicate because they do not evaluate cfg expressions.
+struct AbsenceShape {
+    label: String,
+    attribute: String,
+    rustc_tolerated: bool,
+    dimension_tolerated: bool,
+}
+
+fn absence_corpus() -> Vec<AbsenceShape> {
+    let mut shapes = Vec::new();
+    for (name, predicate, live) in [
+        ("false", "any()", false),
+        ("true", "all()", true),
+        ("compound false", "all(unix, not(unix))", false),
+    ] {
+        for spelling in ["cfg", "r#cfg"] {
+            shapes.push(AbsenceShape {
+                label: format!("{spelling} · {name}"),
+                attribute: format!("#[{spelling}({predicate})]"),
+                rustc_tolerated: !live,
+                dimension_tolerated: true,
+            });
+        }
+        for spelling in ["cfg_attr", "r#cfg_attr"] {
+            shapes.push(AbsenceShape {
+                label: format!("{spelling} · {name} · no path"),
+                attribute: format!("#[{spelling}({predicate}, allow(dead_code))]"),
+                rustc_tolerated: false,
+                dimension_tolerated: false,
+            });
+        }
+    }
+    shapes
+}
+
+#[test]
+fn every_dimension_observes_its_declared_absence_tolerance() {
+    if std::env::var_os("TIANHENG_SPELLING_DIFFERENTIAL").is_none() {
+        println!("absence differential: skipped — set TIANHENG_SPELLING_DIFFERENTIAL=1");
+        return;
+    }
+
+    let corpus = absence_corpus();
+    let mut offences = Vec::new();
+    for (i, shape) in corpus.iter().enumerate() {
+        let name = format!("absence-{i:02}");
+        let source = format!("{}\npub mod gone;\npub mod keep {{}}\n", shape.attribute);
+        let rustc_answer = compiles(&name, &source);
+        match (shape.rustc_tolerated, rustc_answer) {
+            (true, Err(error)) => offences.push(format!(
+                "{}: rustc refuses a declaration marked tolerable: {error}",
+                shape.label
+            )),
+            (false, Ok(())) => offences.push(format!(
+                "{}: rustc accepts a declaration marked unbacked",
+                shape.label
+            )),
+            (false, Err(error)) if !error.contains("E0583") => offences.push(format!(
+                "{}: rustc refuses the generated source for a reason other than the missing file: {error}",
+                shape.label
+            )),
+            _ => {}
+        }
+
+        let lib = format!(
+            "{FORBIDDEN}{PROBED}{}\npub mod gone;\npub mod keep;\n",
+            shape.attribute
+        );
+        let fixture = TempFixture::new(&name, &lib);
+        let src = fixture.lib().parent().expect("lib.rs has a parent");
+        std::fs::write(src.join("keep.rs"), CLEAN).expect("write the present sibling");
+        let expected = if shape.dimension_tolerated { 0 } else { 2 };
+        for (dimension, got) in [
+            (
+                "圭表",
+                guibiao_exit(&name, fixture.manifest(), "crate::keep", REASON),
+            ),
+            (
+                "渾儀",
+                hunyi_exit(&name, fixture.manifest(), "crate::keep", REASON),
+            ),
+            ("漏刻", louke_exit(fixture.lib(), SEAM, REASON)),
+        ] {
+            if got != expected {
+                offences.push(format!(
+                    "{}: {dimension} returned {got}, expected {expected} for `{}`",
+                    shape.label, shape.attribute
+                ));
+            }
+        }
+    }
+    assert!(offences.is_empty(), "{}", offences.join("\n"));
+    println!(
+        "absence differential: {} spellings match their declared rustc and dimension outcomes",
+        corpus.len()
+    );
 }
 
 /// Every generated spelling is legal Rust, and every dimension answers it the way the generator declares —
