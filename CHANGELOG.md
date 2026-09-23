@@ -101,6 +101,12 @@ them.
   counter-example a reaction refused: a list that looks like a duplicate enumeration but carries
   reachability stays, and is held both ways.
 
+- **`pin_bites` reads coverage against the citations a mutation may name.** A record may only name a test a
+  declared bound cites, yet the clean-run disclosure divided by every cited test, so citations under
+  ordinary scenarios read as coverage not yet written when no record can reach them. The disclosure now
+  counts the bound-cited tests as its denominator and the ordinary-only citations as a separate figure, and
+  a direction holds the split. No product outcome changes.
+
 ## [0.6.1] - 2026-09-21
 
 ### Self-governance
