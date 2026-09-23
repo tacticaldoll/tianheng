@@ -738,6 +738,61 @@ consumer for an undemonstrated deduplication.
   instance is a typo; two is a shape, and the decidable check's cost becomes the cheaper side. *Version
   class:* patch; workflow and repository checks only. *Authority:* `repository-checks`.
 
+- **A version this repository never released is written into tracked prose, and the shape filed to hold it
+  refuses only legitimate sites.** *Class:* WATCH — the pressure is real, and the decidable shape this entry
+  was promoted on rests on a premise the re-founding falsified, so what it holds is a trigger rather than a
+  design. *Observed pressure:* release class is decided from what a window's changes **do**, so a window's
+  number is not knowable until its cut; a number written into prose beforehand becomes a pointer to nothing
+  the moment the class moves. **It has moved three times.** Measured 2026-09-06 over every `X.Y.Z` literal in
+  tracked live Markdown outside `CHANGELOG.md`: three distinct numbers appear with neither a dated changelog
+  section nor a tag, and the trend runs the wrong way — 15 occurrences, then 4, then 30. The numbers
+  themselves are not written here, for the reason `AGENTS.md`'s carrier taxonomy row gives. *Observation
+  source:* the promotion-trigger sweep, which reached it sideways: a release branch's rename had been carried
+  into a measurement addressed at that branch **by name**, and GitHub does not retarget a **merged** pull
+  request's base, so the figure came to name a set not containing its own evidence. That is the sharp end of
+  the class; the other 23 sites merely resolved to nothing.
+
+  *Current reaction or bound:* prose only — `AGENTS.md`'s carrier taxonomy carries the row, and the 24 live
+  occurrences were repaired to name the version each window shipped as. Nothing reacts. *Risk:* the class is
+  **structural rather than accidental**: reclassifying upward is this repository's SemVer honesty working
+  correctly, so windows will keep being renumbered and every window's prose will keep being written before
+  its number is earned. The steward's decision on how a repair reads stands independently of any instrument:
+  the number survives nowhere, because a dead number qualified by a clause explaining that it is dead is
+  still that number in an agent's context.
+
+  **The shape filed here is not decidable over this tree, measured 2026-09-24.** It read *a `## [X.Y.Z]`
+  dated section or a `vX.Y.Z` tag* as the whole of what *released* means, and a literal below the workspace
+  version with neither as a version that never existed. This repository's history begins at `0.6.0`, so
+  neither exists for any version before it, while every one of those versions is published — the registry
+  owns that fact, and `curl -s https://crates.io/api/v1/crates/tianheng/versions | jq -r '.versions[].num'`
+  lists it. Run over the corpus this entry names,
+
+  ```
+  git ls-files '*.md' ':!CHANGELOG.md' | xargs grep -noP '(?<![\d.])\d+\.\d+\.\d+(?![\d.])'
+  ```
+
+  the shape refuses **150** sites and **none** is an offence: 145 name a version the registry carries, and
+  five are `0.0.1` in `release-coherence` scenarios — a manifest value a fixture writes so that a requirement
+  can be stale, which names no release of this repository at all. So *no judgement over meaning is needed*
+  was false in two ways at once: which versions shipped has an owner outside the tree, and a version literal
+  can be a fixture's value rather than a claim. The negative run the entry named — *this file's own state
+  before the repair* — predates the tree's root commit and resolves in no clone.
+
+  **What survives is a narrower shape, and it has no instance.** A literal at or above the oldest tag, below
+  the workspace version, that no tag carries is a version this repository never cut. The floor comes from
+  `git tag`, so nothing states it as a literal, and both the pre-floor versions and the fixture value fall
+  below it. At the date above it answers zero: the one in-range value carries its tag. It still cannot tell a
+  fixture value that happens to fall in range from a claim, so a check would need the declared exemption the
+  first shape said it could do without. And it sees a window's number renamed **upward** only once release
+  preparation moves the workspace version past it; before that the number sits above the version and reads as
+  a plan. A rule needs a reachable instance (`AGENTS.md`, *Bind a claim to its measurement*), and a narrowed
+  shape with none is a gap that exists in an argument — so it is prose and a trigger here, not a check.
+
+  *Watch trigger:* the narrowed sweep answers non-zero. The occasion is the pre-cut trigger reading, **after**
+  the workspace version has moved for release preparation, which is the one moment the renamed-upward case is
+  inside its range; the instance it finds is then the negative run a check would need. *Version class:*
+  patch; no crate is touched. *Authority:* `repository-checks`, and `AGENTS.md`'s carrier taxonomy row.
+
 ### READY-PATCH
 
 - **The ambient-ignore guard reads files where its property belongs to call sites, and says something false
@@ -767,54 +822,6 @@ consumer for an undemonstrated deduplication.
   only step that leaves it: decide neutralisation for the read rather than for the file, by asking whether
   the setting is spelled within the construction whose marker matched, and the control's two commands become
   two answers instead of one.
-
-- **A version this repository never released is written into tracked prose, and nothing resolves it.**
-  *Class:* READY-PATCH — the pressure is measured and the correction touches no published surface. *Observed
-  pressure:* release class is decided from what a window's changes **do**, so a window's number is not
-  knowable until its cut; a number written into prose beforehand becomes a pointer to nothing the moment the
-  class moves. **It has moved three times.** Measured 2026-09-06 over every `X.Y.Z` literal in tracked live
-  Markdown outside `CHANGELOG.md`: three distinct numbers appear with neither a dated
-  changelog section nor a tag, and the trend runs the wrong way — 15 occurrences, then 4, then 30. The
-  numbers themselves are not written here, for the reason the repair below gives. *Observation source:* the
-  promotion-trigger sweep, which reached it sideways: a release branch's rename had been carried into a
-  measurement addressed at that branch **by name**, and GitHub does not retarget a **merged** pull request's
-  base, so the figure came to name a set not containing its own evidence. That is the sharp end of the
-  class; the other 23 sites merely resolved to nothing.
-
-  *Current reaction or bound:* prose only — `AGENTS.md`'s carrier taxonomy carries the
-  row, and the 24 live occurrences are repaired to name the version each window shipped as. Nothing reacts.
-  *Risk:* the class is **structural rather than accidental**, which is what makes prose alone the weaker
-  half: reclassifying upward is this repository's SemVer honesty working correctly, so windows will keep
-  being renumbered and every window's prose will keep being written before its number is earned.
-
-  *Promotion trigger:* fired at filing, by its own measurement — three instances, and the third produced a
-  false figure rather than only a dead pointer. *Version class:* patch; no crate is touched. *Authority:*
-  `repository-checks`, and `AGENTS.md`'s carrier taxonomy row.
-
-  **Shape, and it is decidable — which is unusual for this file's prose classes.** A version literal in
-  tracked live Markdown that is **below the workspace version** and has neither a `## [X.Y.Z]` dated section
-  nor a `vX.Y.Z` tag names a version that never existed and never will. No judgement over meaning is needed:
-  a number above the workspace version is a plan, a number with a section or a tag is a release, and what is
-  left is neither. **The number survives nowhere, and that is a change from how this entry first proposed to
-  close it.** The first plan kept it alive in three declaring places — this entry, `AGENTS.md`'s taxonomy
-  row, and the changelog entry recording the repair — on the reasoning that a declaring site is exempt the
-  way the relative-phrase bound exempts `AGENTS.md`'s own row. The steward rejected that on 潛移: what sits
-  in an agent's context is what gets imitated, and a dead number qualified by a clause explaining that it is
-  dead is still that number in the context, with the clause read by a human and skipped by the
-  continuation. The class is decidable without an instance — the shape above states it in full — so no
-  exemption is needed and none is declared. A check would therefore have **no allowlist**, which is the
-  cheaper design as well as the honest one.
-
-  Its negative run is this file's own state before the repair: the check must report the 24 sites, and the
-  measurement it would have reported alongside them is gone rather than exempted — **which is the part worth
-  keeping.** That figure was defended as an observation, on the ground that a query's argument is part of what
-  it measured. It is; the observation was simply the wrong one. Re-addressed from the branch name to
-  the window's own commit range, the same question answers **103 pull requests and three offences** where the
-  branch-addressed corpus answered 22 and one. A dead name is not only unresolvable — this one was holding a
-  figure three times too small, and preserving it as an observation would have preserved that.
-
-  **What is left is choosing whether the declaring exemption is worded as a section, a file, or a marker**,
-  which is a check's design and not more evidence.
 
 - **Most pinning citations have never been seen to fail.** *Class:* READY-PATCH. *Observed pressure:* the
   register decides a citation names a test that RUNS and cannot decide that it BITES; gutting a cited pin's body
