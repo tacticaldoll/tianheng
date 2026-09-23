@@ -280,8 +280,6 @@ fn all_three_dimensions_agree_every_candidate_absent_stays_a_scan_error() {
 #[test]
 #[cfg(unix)]
 fn a_module_target_that_cannot_be_read_is_not_tolerated_as_absent() {
-    use std::os::unix::fs::PermissionsExt;
-
     let package = "cfg-attr-path-only-unreadable";
     // `readable` is what the boundary governs and it holds nothing forbidden, so a run that tolerates the
     // unreadable sibling is CLEAN. `imp` is cfg-gated — the arm that is owed a real absence.
@@ -298,23 +296,10 @@ fn a_module_target_that_cannot_be_read_is_not_tolerated_as_absent() {
         .join("imp");
     std::fs::create_dir_all(&dir).expect("create the module directory");
     std::fs::write(dir.join("mod.rs"), IMP_VIOLATIONS).expect("write the module file");
-    let restore = std::fs::metadata(&dir)
-        .expect("read the mode")
-        .permissions();
-    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o000)).expect("restrict it");
-
-    let restricted = !dir.join("mod.rs").is_file();
-    let exits =
-        restricted.then(|| hunyi_exit(package, fixture.manifest(), "crate::readable", REASON));
-    std::fs::set_permissions(&dir, restore).expect("restore the mode");
-
-    let Some(hunyi) = exits else {
-        assert!(
-            std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
-            "mode 000 did not restrict the target — running as root would make this direction vacuous"
-        );
+    let Some(_unreadable) = xingbiao::Unreadable::try_new(&dir) else {
         return;
     };
+    let hunyi = hunyi_exit(package, fixture.manifest(), "crate::readable", REASON);
     assert_eq!(hunyi, 2, "渾儀: an unreadable target is not an absent one");
 }
 

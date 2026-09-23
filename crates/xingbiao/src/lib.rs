@@ -4,7 +4,7 @@
 //! the tabulated catalog every observation dimension references before it observes. Spawns
 //! `cargo` and parses its JSON (`serde_json` + std only, no `syn`).
 //!
-//! **The criterion, because this charter has widened twice and an enumeration of what it holds goes
+//! **The criterion, because this charter widens, and an enumeration of what it holds goes
 //! stale.** A fact belongs here when every dimension must agree on it *before* observing, and it is a
 //! fact about the tree rather than a reading of what the tree contains. Which packages exist and where
 //! their roots are; whether two paths are one file; whether a path is there at all, and whether being
@@ -22,6 +22,13 @@
 //! them) arrived after all three dimensions were measured collapsing *absent* into *unreadable* — each is
 //! one notch finer than the last, on the same
 //! question of what the tree holds.
+//!
+//! **Fixture infrastructure.** This widening is test-only: [`claim_scratch`] and `Unreadable`.
+//! Both are `#[doc(hidden)]` items that exist because integration and unit test trees across member
+//! crates cannot share a `cfg(test)` helper, yet must enforce identical policies (atomic temporary
+//! root reservation without adopting pre-existing symlinks, and permission-removal verification that
+//! restores on drop and asserts under `TIANHENG_WORKSPACE_TESTS`). They ship hidden in the published
+//! crate so all test suites agree on fixture safety and refusal semantics without hand-rolled copies.
 //!
 //! Sits beneath all three observation dimensions — static (圭表), semantic (渾儀) and runtime (漏刻,
 //! through its CI-only `audit` face) — preventing twin-drift in what they take the tree to be.
@@ -441,4 +448,69 @@ pub fn is_directory(path: &Path) -> Result<bool, String> {
 #[doc(hidden)]
 pub fn claim_scratch(path: &Path) -> std::io::Result<()> {
     std::fs::create_dir(path)
+}
+
+/// An RAII guard that restricts a file or directory to mode 000 during test execution
+/// and restores its original permissions on drop.
+///
+/// **Fixture infrastructure, deliberately withheld from the API contract.**
+/// Like [`claim_scratch`], it is `pub` because test targets across crates need it across crate
+/// boundaries, and `#[doc(hidden)]` because 星表's domain is declared workspace data.
+///
+/// Under a privileged user (such as root in a container), mode 000 does not restrict access.
+/// Outside `TIANHENG_WORKSPACE_TESTS`, it restores permissions and returns `None` so the calling
+/// test can skip gracefully. Inside `TIANHENG_WORKSPACE_TESTS`, a silent skip is forbidden and
+/// asserts.
+#[cfg(unix)]
+#[doc(hidden)]
+pub struct Unreadable<'a> {
+    path: &'a Path,
+    original: std::fs::Permissions,
+}
+
+#[cfg(unix)]
+impl<'a> Unreadable<'a> {
+    /// Restrict `path` to mode 000, returning `None` if mode 000 does not bite (e.g. running as root).
+    pub fn try_new(path: &'a Path) -> Option<Self> {
+        use std::os::unix::fs::PermissionsExt;
+        let original = std::fs::metadata(path)
+            .expect("read initial permissions")
+            .permissions();
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o000))
+            .expect("drop read/traverse permissions");
+        let accessible = if path.is_dir() {
+            std::fs::read_dir(path).is_ok()
+        } else {
+            std::fs::read(path).is_ok()
+        };
+        if accessible {
+            std::fs::set_permissions(path, original)
+                .expect("restore permissions when mode 000 did not bite");
+            assert!(
+                std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
+                "mode 000 did not restrict the path — running as root would make this direction vacuous"
+            );
+            return None;
+        }
+        Some(Self { path, original })
+    }
+}
+
+#[cfg(unix)]
+impl Drop for Unreadable<'_> {
+    fn drop(&mut self) {
+        if let Err(err) = std::fs::set_permissions(self.path, self.original.clone()) {
+            if std::thread::panicking() {
+                eprintln!(
+                    "Unreadable: failed to restore permissions for '{}' during unwind: {err}",
+                    self.path.display()
+                );
+            } else {
+                panic!(
+                    "Unreadable: failed to restore permissions for '{}': {err}",
+                    self.path.display()
+                );
+            }
+        }
+    }
 }

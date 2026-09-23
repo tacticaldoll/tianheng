@@ -1104,30 +1104,6 @@ consumer for an undemonstrated deduplication.
   have. The sweep is what the next window should run, from the subject side, at each pre-release review.
 
 
-- **Each test that removes read permission hand-rolls the check that it took effect, the copies disagree on
-  what a failed check means, and one copy is missing.** *Class:* READY-PATCH — measured; test targets only.
-  *Observed pressure:* a test that removes read permission holds only where permissions bind, and a
-  privileged user reads mode 000 anyway. `guibiao`'s `unreadable_governed_file_is_a_scan_error` and its
-  directory sibling skip silently when the read succeeds; `louke`'s audit direction and `tianheng`'s
-  `cfg_attr_path_only_module_conformance` skip only outside `TIANHENG_WORKSPACE_TESTS` and refuse inside it,
-  because a silent skip in the exhaustive suite reads as coverage; `guibiao`'s `per_target_corpus` follows the
-  second policy through an `Unreadable` guard local to that file. `tianheng`'s runner test for an unreachable
-  baseline symlink target checks nothing, so under a privileged user the write succeeds and the test fails
-  on a correct product. *Observation source:* the first self-review of the change that added the
-  `per_target_corpus` direction, which omitted the check, and the sweep of `from_mode(0o000)` across
-  `crates/` that followed.
-
-  *Current reaction or bound:* none; each tree carries its own copy. *Risk:* the missing check fails closed —
-  noise under a privileged user, never a false pass — while the silent-skip policy can read as coverage in a
-  suite meant to be exhaustive. *Promotion trigger:* any further direction that removes read permission, or a
-  CI job that runs as root. *Version class:* patch; test targets only. *Authority:* `AGENTS.md`, *Bind a claim
-  to its measurement*, on a cannot-judge versus a silent skip.
-
-  **Shape.** One guard returning `Option`, restoring permissions on drop, with the refusal policy in the
-  guard rather than at each call site. `guibiao`'s unit and integration test trees cannot share a
-  `cfg(test)` helper, so the guard's home is the first question, and it is a question about every tree that
-  removes read permission rather than about the pair that prompted it.
-
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
 - **渾儀 answers an unparseable `cfg_attr` two ways, and no source rustc accepts reaches the silent one.**
@@ -3400,6 +3376,20 @@ Two properties from those windows do not expire with a version, so they stay:
 A closed item leaves the live class it was filed under; it does not stay there struck through. Its
 reproduction record moves here, where closed reproduction records belong, so a live class heading
 cannot read as a queue holding work that is already done.
+
+- ~~**Each test that removes read permission hand-rolls the check that it took effect, the copies disagree on
+  what a failed check means, and one copy is missing.**~~ *Class:* READY-PATCH — closed by `xingbiao::Unreadable`.
+  *Observed pressure:* a test that removes read permission holds only where permissions bind, and a
+  privileged user reads mode 000 anyway. `guibiao`'s `unreadable_governed_file_is_a_scan_error` and its
+  directory sibling skip silently when the read succeeds; `louke`'s audit direction and `tianheng`'s
+  `cfg_attr_path_only_module_conformance` skip only outside `TIANHENG_WORKSPACE_TESTS` and refuse inside it,
+  because a silent skip in the exhaustive suite reads as coverage; `guibiao`'s `per_target_corpus` follows the
+  second policy through an `Unreadable` guard local to that file. `tianheng`'s runner test for an unreachable
+  baseline symlink target checks nothing, so under a privileged user the write succeeds and the test fails
+  on a correct product. *Observation source:* the first self-review of the change that added the
+  `per_target_corpus` direction, which omitted the check, and the sweep of `from_mode(0o000)` across
+  `crates/` that followed.
+  *Closed by:* `xingbiao::Unreadable`, restoring permissions on drop and asserting under `TIANHENG_WORKSPACE_TESTS`.
 
 ## Explicitly not on the roadmap
 

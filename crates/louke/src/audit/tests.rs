@@ -593,8 +593,6 @@ fn a_component_that_is_not_a_directory_is_an_absence() {
 #[test]
 #[cfg(unix)]
 fn a_module_target_this_reader_cannot_read_is_not_an_absent_one() {
-    use std::os::unix::fs::PermissionsExt;
-
     let tb = TempBase::new("unreadable-target");
     let root = tb.source("lib.rs", "#[cfg(feature = \"gated\")]\nmod gated;");
     let dir = root
@@ -608,31 +606,13 @@ fn a_module_target_this_reader_cannot_read_is_not_an_absent_one() {
     )
     .expect("write the module file");
 
-    // Root bypasses mode bits entirely, so this direction would pass for a reason unrelated to the
-    // change. Refuse to skip in silence where the suite is meant to be exhaustive.
-    let restore = std::fs::metadata(&dir)
-        .expect("read the mode")
-        .permissions();
-    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o000))
-        .expect("restrict the directory");
-    let readable_anyway = dir.join("mod.rs").is_file();
-    let outcome = if readable_anyway {
-        None
-    } else {
-        Some(tb.audit(
-            &[boundary("gated", Severity::Enforce)],
-            std::slice::from_ref(&root),
-        ))
-    };
-    std::fs::set_permissions(&dir, restore).expect("restore the mode");
-
-    let Some(outcome) = outcome else {
-        assert!(
-            std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
-            "mode 000 did not restrict this target — running as root would make this direction vacuous"
-        );
+    let Some(_unreadable) = xingbiao::Unreadable::try_new(&dir) else {
         return;
     };
+    let outcome = tb.audit(
+        &[boundary("gated", Severity::Enforce)],
+        std::slice::from_ref(&root),
+    );
     assert_eq!(
         outcome.exit_code(),
         2,
