@@ -56,8 +56,18 @@ them.
   inline body was never read, behind a clean report. The refusal now propagates from the root that holds
   the inline form, for every module rule.
 
-  **Why a minor:** both are false negatives closed by default. A tree that was green may now exit 1 or 2,
-  and a recorded baseline may need new entries.
+- **BREAKING** — **圭表 reads a compiled root from its own root file, so a file no target compiles no
+  longer enters it.** A conventional `src/lib.rs` or `src/main.rs` that Cargo does not report as a target —
+  `autobins = false` is the usual cause — was still read as part of the other conventional root, because
+  both paths denote `crate`. Its `mod` declarations entered that root's graph and its imports were judged.
+  Measured against 0.6.1 with a library declaring `shared` inline and importing a forbidden module, and an
+  uncompiled `main.rs` declaring `pub mod shared;` beside a `shared.rs`: `Clean`, because `shared.rs` was
+  governed in place of the inline body rustc compiles. That now refuses the inline target, and an import
+  written only in the uncompiled file no longer reacts.
+
+  **Why a minor:** each closes a false negative by default, and the last also removes findings. A tree that
+  was green may now exit 1 or 2, a recorded baseline may need new entries, and one holding a finding from an
+  uncompiled file no longer describes the tree.
 
 ### Migration
 
@@ -68,6 +78,10 @@ them.
   A package whose binary roots do not import the confined crate is unaffected.
 - **A governed module declared inline in one root and backed by a file in another now exits 2.** Give the
   inline form its own file, or govern a module that is file-backed in every root that declares it.
+- **A package with a conventional `lib.rs` or `main.rs` that no target compiles** may report fewer findings
+  or a new inline-target refusal. Regenerate any recorded baseline with `tianheng check --write-baseline
+  <file>` — `--disallow-stale` reports an entry from the uncompiled file — and re-apply `owner` / `tracker`
+  annotations.
 
 ### Self-governance
 

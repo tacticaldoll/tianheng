@@ -761,8 +761,11 @@ every root, so the three no longer disagree about which of a package's source Ca
 
 Each root SHALL be resolved as its own module graph: two roots of one package both denote the module path
 `crate`, and neither's declarations, inline-module shadowing, nor `#[path]` remaps SHALL leak into the
-other's resolution. An observation SHALL carry the compilation unit it came from as an identity role, per
-`structured-violation-identity`.
+other's resolution. A root's corpus SHALL begin at its own root file: a source file whose path would also
+denote `crate` — a conventional `lib.rs` or `main.rs` that is not this root — is either another compiled
+root, resolved on its own, or a file no target compiles, and SHALL NOT enter this root's graph as a
+declaring source or a governed file. An observation SHALL carry the compilation unit it came from as an
+identity role, per `structured-violation-identity`.
 
 A governed module SHALL be looked for in **every** root's graph, and an unknown-module constitution error
 SHALL be reported only when **no** root has it. A module legitimately exists in one root's graph and not
@@ -829,6 +832,15 @@ module, import path) pair rather than the path alone.
   an external-crate confinement
 - **THEN** the system reports the inline-module constitution error (exit 2), rather than governing the
   file-backed root in its place and reporting clean
+
+#### Scenario: A source file no target compiles is in no root's corpus
+
+- **WHEN** a package with `autobins = false` builds only its library, and an uncompiled `src/main.rs`
+  either declares `pub mod shared;` beside a library that declares `shared` inline, or imports a module a
+  boundary on `crate` forbids
+- **THEN** the library's inline `shared` is refused as an inline target (exit 2) rather than governed
+  through `src/shared.rs`, and the uncompiled file's import does not react, because neither file's
+  content is source the package compiles
 
 #### Scenario: One root's declarations do not leak into another's graph
 - **WHEN** two roots of one package each declare a same-named submodule backed by different files

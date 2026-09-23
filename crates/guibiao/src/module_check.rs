@@ -18,8 +18,8 @@ use crate::model::module_rule::Perimeter;
 use crate::module_scan::{
     ImportedPath, InlineFinding, canonical_module_path, declaration_text,
     external_imports_with_importers, governed_files, imports_with_importers,
-    inline_symbol_findings, package_name_to_import_ident, path_within, reachable_modules,
-    rust_files, value_namespace_item_names,
+    inline_symbol_findings, is_another_crate_root, package_name_to_import_ident, path_within,
+    reachable_modules, rust_files, value_namespace_item_names,
 };
 use crate::{BoundaryKind, ModuleBoundary, ModuleRule, Violation, ViolationId};
 
@@ -694,6 +694,7 @@ fn check_one_root(
     if let Some(siblings) = sibling_roots {
         files.retain(|f| root_file.is_some_and(|r| r == f.as_path()) || !siblings.contains(f));
     }
+    files.retain(|f| !is_another_crate_root(f, &src_dir, root_relative.as_deref()));
     let (reachable, inline_only, remapped, remap_shadowed) =
         reachable_modules(&src_dir, &files, root_relative.as_deref())?;
     let root_modules: Vec<String> = reachable

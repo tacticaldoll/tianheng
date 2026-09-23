@@ -365,34 +365,6 @@ pub(super) fn a_cfg_dual_declared_module_keeps_governing_its_conventional_file()
     );
 }
 
-/// A known false negative, pinned rather than fixed: `BACKLOG.md` records it under *A compiled root's
-/// corpus includes a source file no target compiles*. The metadata names only the library target, so
-/// `main.rs` is a file no target compiles, yet it stays in that root's file set; its `pub mod shared;`
-/// makes `shared.rs` the governed target, and the library's inline `shared` body — the one rustc compiles
-/// — is not observed. A package that also compiles `main.rs` resolves each root on its own and refuses
-/// the inline target instead, which `per_target_corpus` holds.
-#[test]
-pub(super) fn a_cross_root_same_named_submodule_is_a_documented_bound() {
-    let (result, violations) = run_module_check(
-        "cross-root-submodule",
-        &[
-            ("lib.rs", "pub mod shared { use crate::forbidden::X; }\n"),
-            ("main.rs", "pub mod shared;\nfn main() {}\n"),
-            ("shared.rs", "// clean — the bin root's shared module\n"),
-        ],
-        ModuleBoundary::in_crate("x")
-            .module("crate::shared")
-            .must_not_import("crate::forbidden")
-            .because("shared must not import forbidden"),
-    );
-    result.expect("the uncompiled main.rs makes shared.rs a file-backed target");
-    assert!(
-        violations.is_empty(),
-        "the known false negative in BACKLOG.md: the library's inline `mod shared` body is not \
-             observed (shared.rs is governed instead): {violations:?}"
-    );
-}
-
 /// A plain `mod child;` backed by BOTH `child.rs` and `child/mod.rs` at once is a genuine rustc
 /// compile error (E0761) — closes a pre-existing debt: both forms were previously silently
 /// accepted as separate sources (dual-governed), the mirror image of the missing-file gap.
@@ -853,21 +825,28 @@ pub(super) fn a_module_violation_carries_its_offending_file() {
     );
 }
 
+/// One module backed by two files in one root — the per-platform shim, whose arms are both observed
+/// because the scan is cfg-blind — with the same forbidden import in each collapses to exactly one
+/// violation: the file is attached after collapsing by identity, never a de-dup key, and the one that
+/// survives carries a file.
 #[test]
 pub(super) fn a_module_backed_by_two_files_yields_one_violation_with_a_file() {
-    // `crate` is backed by both lib.rs and main.rs (a lib+bin package); the same forbidden
-    // import in each must still collapse to exactly one violation (the file is attached
-    // after collapsing by identity, never a de-dup key), and that one carries a file.
     let (result, violations) = run_module_check(
         "module-two-files",
         &[
-            ("lib.rs", "use crate::forbidden::Thing;\n"),
-            ("main.rs", "use crate::forbidden::Thing;\nfn main() {}\n"),
+            (
+                "lib.rs",
+                "pub mod forbidden;\n#[cfg(unix)]\n#[path = \"imp_unix.rs\"]\npub mod imp;\n\
+                 #[cfg(not(unix))]\n#[path = \"imp_other.rs\"]\npub mod imp;\n",
+            ),
+            ("forbidden.rs", "pub struct Thing;\n"),
+            ("imp_unix.rs", "use crate::forbidden::Thing;\n"),
+            ("imp_other.rs", "use crate::forbidden::Thing;\n"),
         ],
         ModuleBoundary::in_crate("x")
-            .module("crate")
+            .module("crate::imp")
             .must_not_import("crate::forbidden")
-            .because("crate must not import forbidden"),
+            .because("imp must not import forbidden"),
     );
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(

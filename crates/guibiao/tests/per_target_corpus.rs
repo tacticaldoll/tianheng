@@ -616,9 +616,12 @@ fn no_root_declaring_the_permitted_module_is_still_a_constitution_error() {
             ("src/main.rs", "use brick::B;\nfn main() {}\n"),
         ],
     );
+    let Outcome::ConstitutionError(message) = &outcome else {
+        panic!("a permitted module no root declares is a typo, not an empty region: {outcome:?}");
+    };
     assert!(
-        matches!(outcome, Outcome::ConstitutionError(_)),
-        "a permitted module no root declares is a typo, not an empty region: {outcome:?}"
+        message.contains("'crate::seam' is not found among the reachable modules"),
+        "the refusal names the missing permitted module rather than some other failure: {message}"
     );
 }
 
@@ -675,9 +678,12 @@ fn an_unreadable_file_in_a_root_without_the_permitted_module_is_refused() {
         return;
     };
     let outcome = check(&confined_to_seam("confineunread"), probe.manifest());
+    let Outcome::ConstitutionError(message) = &outcome else {
+        panic!("an unreadable file in a root being judged is a refusal, not a pass: {outcome:?}");
+    };
     assert!(
-        matches!(outcome, Outcome::ConstitutionError(_)),
-        "an unreadable file in a root being judged is a refusal, not a pass: {outcome:?}"
+        message.contains("cli.rs"),
+        "the refusal names the file it could not read rather than some other failure: {message}"
     );
 }
 
@@ -712,4 +718,67 @@ fn a_library_finding_keeps_its_identity_beside_a_judged_binary_root() {
     let beside_a_leaking_bin = ids("idleak", "use brick::B;\nfn main() {}\n");
     assert_eq!(beside_a_clean_bin.len(), 1, "{beside_a_clean_bin:?}");
     assert_eq!(beside_a_clean_bin, beside_a_leaking_bin);
+}
+
+/// A source file no target compiles belongs to no root's corpus. With `autobins = false`, Cargo reports
+/// only the library, so `src/main.rs` is not compiled — yet it sits at a conventional root path, and read
+/// as part of the library root its `mod shared;` would make `shared.rs` the governed target in place of
+/// the library's inline `shared`, the one rustc compiles.
+#[test]
+fn an_uncompiled_conventional_root_file_does_not_stand_in_for_a_compiled_inline_module() {
+    let probe = RootProbe::new(
+        "strayinline",
+        "autobins = false\n",
+        &[
+            (
+                "src/lib.rs",
+                "pub mod forbidden;\npub mod shared {\n    use crate::forbidden::X;\n}\n",
+            ),
+            ("src/forbidden.rs", "pub struct X;\n"),
+            ("src/main.rs", "pub mod shared;\nfn main() {}\n"),
+            ("src/shared.rs", "\n"),
+        ],
+    );
+    let law = Constitution::new("root-scope").boundary(
+        ModuleBoundary::in_crate("strayinline")
+            .module("crate::shared")
+            .must_not_import("crate::forbidden")
+            .because("shared does not reach the forbidden module"),
+    );
+    match check(&law, probe.manifest()) {
+        Outcome::ConstitutionError(message) => assert!(
+            message.contains("inline"),
+            "expected the inline-target refusal, got: {message}"
+        ),
+        other => panic!(
+            "the compiled `shared` is inline, so it is refused; an uncompiled main.rs must not make \
+             shared.rs its backing file: {other:?}"
+        ),
+    }
+}
+
+/// The other side of the same corpus: what an uncompiled file imports is not source the package
+/// compiles, so it does not react.
+#[test]
+fn an_uncompiled_conventional_root_file_is_not_judged() {
+    let probe = RootProbe::new(
+        "strayimport",
+        "autobins = false\n",
+        &[
+            ("src/lib.rs", "pub mod forbidden;\n"),
+            ("src/forbidden.rs", "pub struct X;\n"),
+            ("src/main.rs", "use crate::forbidden::X;\nfn main() {}\n"),
+        ],
+    );
+    let outcome = check(&clock_free_import_law("strayimport"), probe.manifest());
+    assert_eq!(outcome.exit_code(), 0, "{outcome:?}");
+}
+
+fn clock_free_import_law(package: &str) -> Constitution {
+    Constitution::new("root-scope").boundary(
+        ModuleBoundary::in_crate(package)
+            .module("crate")
+            .must_not_import("crate::forbidden")
+            .because("the crate root does not reach the forbidden module"),
+    )
 }
