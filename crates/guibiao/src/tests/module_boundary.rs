@@ -365,13 +365,12 @@ pub(super) fn a_cfg_dual_declared_module_keeps_governing_its_conventional_file()
     );
 }
 
-/// Stated bound (not a fix): a package that builds a lib AND a bin observes its whole `src/`
-/// under one conventional-path tree, so both roots resolve to `crate` and there are no
-/// per-target module graphs. A submodule declared inline in one root and file-backed in the
-/// other governs the file-backed one; the inline body's imports are NOT observed. Closing it
-/// needs per-target graphs (distinguishing the lib crate's `crate::shared` from the bin's) —
-/// beyond the conventional-path scanner. Recorded here and in `module-boundary`, never a silent
-/// claim of cleanliness.
+/// A known false negative, pinned rather than fixed: `BACKLOG.md` records it under *A compiled root's
+/// corpus includes a source file no target compiles*. The metadata names only the library target, so
+/// `main.rs` is a file no target compiles, yet it stays in that root's file set; its `pub mod shared;`
+/// makes `shared.rs` the governed target, and the library's inline `shared` body — the one rustc compiles
+/// — is not observed. A package that also compiles `main.rs` resolves each root on its own and refuses
+/// the inline target instead, which `per_target_corpus` holds.
 #[test]
 pub(super) fn a_cross_root_same_named_submodule_is_a_documented_bound() {
     let (result, violations) = run_module_check(
@@ -386,11 +385,11 @@ pub(super) fn a_cross_root_same_named_submodule_is_a_documented_bound() {
             .must_not_import("crate::forbidden")
             .because("shared must not import forbidden"),
     );
-    result.expect("a file-backed shared (via the bin root) is a valid target");
+    result.expect("the uncompiled main.rs makes shared.rs a file-backed target");
     assert!(
         violations.is_empty(),
-        "documented lib+bin bound: the lib root's inline `mod shared` body is not observed \
-             (shared.rs is governed instead) — recorded, not silently claimed clean: {violations:?}"
+        "the known false negative in BACKLOG.md: the library's inline `mod shared` body is not \
+             observed (shared.rs is governed instead): {violations:?}"
     );
 }
 

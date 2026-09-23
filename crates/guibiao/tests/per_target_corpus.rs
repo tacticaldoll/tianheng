@@ -622,6 +622,33 @@ fn no_root_declaring_the_permitted_module_is_still_a_constitution_error() {
     );
 }
 
+/// A file made unreadable for as long as this lives, and readable again when it drops — including when
+/// the test holding it panics.
+#[cfg(unix)]
+struct Unreadable<'a>(&'a Path);
+
+#[cfg(unix)]
+impl<'a> Unreadable<'a> {
+    /// `None` where mode 000 does not stop this process reading the file — a privileged user, as a
+    /// container's root is — because a direction whose premise is an unreadable file cannot be judged
+    /// there, and asserting anyway would fail on a correct product. The caller decides what that means:
+    /// a skip is silent only outside the workspace suite, which is meant to be exhaustive.
+    fn try_new(file: &'a Path) -> Option<Self> {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(file, std::fs::Permissions::from_mode(0o000)).expect("drop read");
+        let guard = Self(file);
+        std::fs::read(file).is_err().then_some(guard)
+    }
+}
+
+#[cfg(unix)]
+impl Drop for Unreadable<'_> {
+    fn drop(&mut self) {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(self.0, std::fs::Permissions::from_mode(0o644));
+    }
+}
+
 /// A file that a root without the permitted module reaches, and that cannot be read, is a refusal to
 /// judge rather than a pass. Kept for the contract: resolving the root's module graph already reads it,
 /// so this refused before that root's imports were judged too; it pins that the judgement cannot turn
@@ -629,7 +656,6 @@ fn no_root_declaring_the_permitted_module_is_still_a_constitution_error() {
 #[cfg(unix)]
 #[test]
 fn an_unreadable_file_in_a_root_without_the_permitted_module_is_refused() {
-    use std::os::unix::fs::PermissionsExt;
     let probe = RootProbe::new(
         "confineunread",
         "",
@@ -641,9 +667,14 @@ fn an_unreadable_file_in_a_root_without_the_permitted_module_is_refused() {
         ],
     );
     let cli = probe.dir.join("src/cli.rs");
-    std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o000)).expect("chmod");
+    let Some(_unreadable) = Unreadable::try_new(&cli) else {
+        assert!(
+            std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
+            "mode 000 did not restrict the file — running as root would make this direction vacuous"
+        );
+        return;
+    };
     let outcome = check(&confined_to_seam("confineunread"), probe.manifest());
-    std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o644)).expect("chmod back");
     assert!(
         matches!(outcome, Outcome::ConstitutionError(_)),
         "an unreadable file in a root being judged is a refusal, not a pass: {outcome:?}"

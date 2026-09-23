@@ -268,6 +268,19 @@ impl ModuleRule {
         }
     }
 
+    /// Where a violation of this rule can lie, which decides whether a compiled root without the
+    /// governed module is judged at all.
+    pub(crate) fn perimeter(&self) -> Perimeter {
+        match self {
+            ModuleRule::MustNotImport { .. }
+            | ModuleRule::RestrictImportsTo { .. }
+            | ModuleRule::MustNotBeImportedBy { .. }
+            | ModuleRule::MustOnlyBeImportedBy { .. }
+            | ModuleRule::ConfineInlineSymbolPath { .. } => Perimeter::GovernedModule,
+            ModuleRule::ConfineExternalCrate { .. } => Perimeter::WholeRoot,
+        }
+    }
+
     /// The repair-direction [`Polarity`] of a violation of this rule. The two `MustNot*` rules
     /// forbid a specific module edge (repair: remove the import) → `DenyBreach`; `RestrictImportsTo`,
     /// `MustOnlyBeImportedBy`, and `ConfineExternalCrate` permit a region and react to an edge
@@ -646,3 +659,16 @@ impl InlineConfinementDraft {
 boundary_common!(ModuleBoundary);
 draft_common!(ModuleBoundaryDraft);
 draft_common!(InlineConfinementDraft);
+
+/// Where a module rule's violations can lie within one compiled root.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Perimeter {
+    /// Every violation involves the governed module itself — as the importer, the module imported, or
+    /// the subtree a call is made in — so a root whose graph lacks that module holds none, and is not
+    /// judged.
+    GovernedModule,
+    /// The governed module is only the region where an otherwise-forbidden construct is permitted, and a
+    /// violation can lie anywhere in the root. A root whose graph lacks that module has an empty
+    /// permitted region, and is judged like any other.
+    WholeRoot,
+}

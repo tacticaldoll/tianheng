@@ -14,6 +14,7 @@ use crate::errors::{
     restrict_imports_to_on_crate_error, unknown_module_error, unreadable_governed_file_error,
 };
 use crate::finding::ModuleFact;
+use crate::model::module_rule::Perimeter;
 use crate::module_scan::{
     ImportedPath, InlineFinding, canonical_module_path, declaration_text,
     external_imports_with_importers, governed_files, imports_with_importers,
@@ -659,12 +660,11 @@ enum RootOutcome {
 /// a sibling root backing the same path with a file would absorb it and leave the inline body
 /// unobserved behind a clean report.
 ///
-/// A root without the governed module reports [`RootOutcome::ModuleAbsent`], and for every rule but
-/// external confinement nothing is observed there, because the governed module is the perimeter. For
-/// external confinement the permitted module bounds where a confined import is *allowed*, not where one
-/// is looked for — the perimeter is the whole root — so such a root has an empty permitted region and
-/// is scanned anyway: every confined import in it offends. The caller keeps those findings only when
-/// some root is governed, so a package where no root has the module is still a constitution error.
+/// A root without the governed module reports [`RootOutcome::ModuleAbsent`]. Whether it is judged
+/// first is the rule's [`Perimeter`]: under `GovernedModule` it holds nothing the rule governs and is
+/// not; under `WholeRoot` it is judged through the same dispatch as a governed root, with an empty
+/// permitted region. The caller keeps those findings only when some root is governed, so a package where
+/// no root has the module is still a constitution error.
 fn check_one_root(
     package: &Value,
     root_file: Option<&Path>,
@@ -730,31 +730,26 @@ fn check_one_root(
         root_modules: &root_modules,
     };
 
-    if governed.is_empty() {
-        if inline_only.contains(&governed_module) {
-            let leaf = governed_module
-                .rsplit_once("::")
-                .map_or(governed_module.as_str(), |(_, leaf)| leaf);
-            return Err(inline_module_target_error(
-                &boundary.module,
-                &boundary.crate_package,
-                leaf,
-            ));
-        }
-        if let ModuleRule::ConfineExternalCrate { crate_name } = &boundary.rule {
-            check_external_confinement(
-                &ctx,
-                boundary,
-                &governed_module,
-                rule,
-                crate_name,
-                violations,
-            )?;
-        }
-        return Ok(RootOutcome::ModuleAbsent(unknown_module_error(
+    if governed.is_empty() && inline_only.contains(&governed_module) {
+        let leaf = governed_module
+            .rsplit_once("::")
+            .map_or(governed_module.as_str(), |(_, leaf)| leaf);
+        return Err(inline_module_target_error(
             &boundary.module,
             &boundary.crate_package,
-        )));
+            leaf,
+        ));
+    }
+    let outcome = if governed.is_empty() {
+        RootOutcome::ModuleAbsent(unknown_module_error(
+            &boundary.module,
+            &boundary.crate_package,
+        ))
+    } else {
+        RootOutcome::Governed
+    };
+    if governed.is_empty() && boundary.rule.perimeter() == Perimeter::GovernedModule {
+        return Ok(outcome);
     }
 
     let inbound = matches!(
@@ -763,7 +758,7 @@ fn check_one_root(
     );
     if inbound {
         check_inbound_rule(&ctx, boundary, &governed_module, rule, violations)?;
-        return Ok(RootOutcome::Governed);
+        return Ok(outcome);
     }
     if let ModuleRule::ConfineExternalCrate { crate_name } = &boundary.rule {
         check_external_confinement(
@@ -774,7 +769,7 @@ fn check_one_root(
             crate_name,
             violations,
         )?;
-        return Ok(RootOutcome::Governed);
+        return Ok(outcome);
     }
     if let Some((prefix, ending_with, strict, external)) = boundary.rule.inline_payload() {
         check_inline_confinement(
@@ -789,8 +784,8 @@ fn check_one_root(
             external,
             violations,
         )?;
-        return Ok(RootOutcome::Governed);
+        return Ok(outcome);
     }
     check_outbound_rule(&ctx, boundary, &governed_module, governed, rule, violations)?;
-    Ok(RootOutcome::Governed)
+    Ok(outcome)
 }

@@ -1104,6 +1104,53 @@ consumer for an undemonstrated deduplication.
   have. The sweep is what the next window should run, from the subject side, at each pre-release review.
 
 
+- **A compiled root's corpus includes a source file no target compiles, and it can stand in for an inline
+  module that is compiled.** *Class:* READY-PATCH — measured against real `cargo metadata`, and the
+  correction touches no published surface. *Observed pressure:* a package with `autobins = false`, a
+  `src/lib.rs` declaring `pub mod shared { use crate::forbidden::X; }` inline, a `src/main.rs` that no target
+  compiles declaring `pub mod shared;`, and a `src/shared.rs`. rustc compiles the inline body and warns that
+  its import is unused, so the import is real; a `must_not_import("crate::forbidden")` on `crate::shared`
+  reports `Clean`. `cargo metadata` names one target, `src/lib.rs`, so no sibling root removes `src/main.rs`
+  from that root's file set, and `src/shared.rs` is governed in place of the inline body. *Observation
+  source:* a real-cargo probe of that shape, built while closing the multi-root deferral of an inline target
+  in `module-boundary`; the mechanism named here is read from the corpus construction in
+  `check_one_root` and has not been perturbed on its own.
+
+  *Current reaction or bound:* none. `a_cross_root_same_named_submodule_is_a_documented_bound` pins this
+  outcome over synthetic metadata that declares only the library target — the same shape — and its doc
+  comment is where this entry is recorded. *Risk:* a false negative, and the one class the Core Contract
+  forbids: an import rustc compiles, in a governed module, reported clean. Bounded by the shape — a file in
+  the source directory that no target compiles and that declares a module the root declares inline.
+
+  *Promotion trigger:* a decision to take it; the evidence is already measured. *Version class:* minor, by
+  `AGENTS.md`'s versioning rule — closing a false negative can add findings to a green tree. *Authority:*
+  `module-boundary`, *The governed target is a file-based module* and *Every compiled root of a package is
+  governed*.
+
+- **Each test that removes read permission hand-rolls the check that it took effect, the copies disagree on
+  what a failed check means, and one copy is missing.** *Class:* READY-PATCH — measured; test targets only.
+  *Observed pressure:* a test that removes read permission holds only where permissions bind, and a
+  privileged user reads mode 000 anyway. `guibiao`'s `unreadable_governed_file_is_a_scan_error` and its
+  directory sibling skip silently when the read succeeds; `louke`'s audit direction and `tianheng`'s
+  `cfg_attr_path_only_module_conformance` skip only outside `TIANHENG_WORKSPACE_TESTS` and refuse inside it,
+  because a silent skip in the exhaustive suite reads as coverage; `guibiao`'s `per_target_corpus` follows the
+  second policy through an `Unreadable` guard local to that file. `tianheng`'s runner test for an unreachable
+  baseline symlink target checks nothing, so under a privileged user the write succeeds and the test fails
+  on a correct product. *Observation source:* the first self-review of the change that added the
+  `per_target_corpus` direction, which omitted the check, and the sweep of `from_mode(0o000)` across
+  `crates/` that followed.
+
+  *Current reaction or bound:* none; each tree carries its own copy. *Risk:* the missing check fails closed —
+  noise under a privileged user, never a false pass — while the silent-skip policy can read as coverage in a
+  suite meant to be exhaustive. *Promotion trigger:* any further direction that removes read permission, or a
+  CI job that runs as root. *Version class:* patch; test targets only. *Authority:* `AGENTS.md`, *Bind a claim
+  to its measurement*, on a cannot-judge versus a silent skip.
+
+  **Shape.** One guard returning `Option`, restoring permissions on drop, with the refusal policy in the
+  guard rather than at each call site. `guibiao`'s unit and integration test trees cannot share a
+  `cfg(test)` helper, so the guard's home is the first question, and it is a question about every tree that
+  removes read permission rather than about the pair that prompted it.
+
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
 - **渾儀 answers an unparseable `cfg_attr` two ways, and no source rustc accepts reaches the silent one.**
