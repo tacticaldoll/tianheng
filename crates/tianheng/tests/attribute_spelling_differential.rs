@@ -42,7 +42,10 @@
 
 #[path = "support/mod.rs"]
 mod support;
-use support::{TempFixture, guibiao_exit, hunyi_exit, louke_exit};
+use support::{
+    TempFixture, guibiao_exit, guibiao_outcome, hunyi_exit, hunyi_outcome, louke_exit,
+    louke_outcome,
+};
 
 const REASON: &str = "differential: one spelling, one answer, in every dimension";
 const SEAM: &str = "conformance-seam";
@@ -385,27 +388,27 @@ fn absence_corpus() -> Vec<AbsenceShape> {
     shapes
 }
 
-fn absence_outcomes(name: &str, fixture: &TempFixture) -> [(&'static str, guibiao::Outcome); 3] {
-    let static_law = guibiao::Constitution::new(name).boundary(
-        guibiao::ModuleBoundary::in_crate(name)
-            .module("crate::keep")
-            .must_not_import("crate::forbidden")
-            .because(REASON),
-    );
-    let semantic_law = hunyi::SignatureBoundary::in_crate(name)
-        .module("crate::keep")
-        .must_not_expose("crate::forbidden::Thing")
-        .because(REASON);
-    let runtime_law = louke::RuntimeBoundary::at(SEAM)
-        .only_origins(["o"])
-        .because(REASON);
-    let anchor = fixture.lib().parent().expect("lib.rs has a parent");
+/// Each dimension owns its own missing-module wording. The shared test records those observed
+/// error classes beside each result, without placing a shared error marker in product code.
+fn absence_outcomes(
+    name: &str,
+    fixture: &TempFixture,
+) -> [(&'static str, guibiao::Outcome, &'static str); 3] {
     [
-        ("圭表", guibiao::check(&static_law, fixture.manifest())),
-        ("渾儀", hunyi::check(&[semantic_law], fixture.manifest())),
+        (
+            "圭表",
+            guibiao_outcome(name, fixture.manifest(), "crate::keep", REASON),
+            "source file could not be located",
+        ),
+        (
+            "渾儀",
+            hunyi_outcome(name, fixture.manifest(), "crate::keep", REASON),
+            "source file could not be located",
+        ),
         (
             "漏刻",
-            louke::audit_probe_coverage(&[runtime_law], &[fixture.lib().to_path_buf()], anchor),
+            louke_outcome(fixture.lib(), SEAM, REASON),
+            "cannot resolve reachable module",
         ),
     ]
 }
@@ -479,18 +482,18 @@ fn every_dimension_observes_its_declared_absence_tolerance() {
         let fixture = TempFixture::new(&name, &lib);
         let src = fixture.lib().parent().expect("lib.rs has a parent");
         std::fs::write(src.join("keep.rs"), CLEAN).expect("write the present sibling");
-        for (dimension, outcome) in absence_outcomes(&name, &fixture) {
+        for (dimension, outcome, missing_file_marker) in absence_outcomes(&name, &fixture) {
             match (shape.dimension_tolerated, outcome) {
                 (true, guibiao::Outcome::Clean(_)) => {}
                 (false, guibiao::Outcome::ConstitutionError(message))
-                    if message.contains("gone") => {}
+                    if message.contains("gone") && message.contains(missing_file_marker) => {}
                 (tolerated, outcome) => offences.push(format!(
                     "{}: {dimension} returned {outcome:?}, expected {} for `{}`",
                     shape.label,
                     if tolerated {
                         "clean"
                     } else {
-                        "a constitution error naming the absent `gone` module"
+                        "a missing-file constitution error naming `gone`"
                     },
                     shape.attribute
                 )),

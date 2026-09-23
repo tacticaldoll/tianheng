@@ -3367,7 +3367,10 @@ cannot read as a queue holding work that is already done.
   rows for 圭表. The same mutation in 渾儀's independent `has_cfg_attr` and 漏刻's `mod_preamble_attrs`
   each made the test refuse its own six bare-cfg rows. Restoring each detector returned the corpus to green.
   An independent emitted-source set now also refuses a missing spelling: deleting `r#cfg` from the
-  generator fails on three absent attributes instead of passing over a nine-row corpus.
+  generator fails on three absent attributes instead of passing over a nine-row corpus. The
+  non-tolerated rows now require each dimension's own missing-module message class as well as `gone`;
+  changing 圭表's message to unreadable-file wording while keeping exit 2 and `gone`
+  failed all six of its `cfg_attr` rows.
 
 - ~~**Each test that removes read permission hand-rolls the check that it took effect, the copies disagree on
   what a failed check means, and one copy is missing.**~~ *Class:* READY-PATCH — closed by `xingbiao::Unreadable`.
