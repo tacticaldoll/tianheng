@@ -688,9 +688,21 @@ consumer for an undemonstrated deduplication.
   judgement-over-meaning this repository has measured and declined. At four the question stops being *did
   the author slip* and becomes *does this file's shape invite it*.
 
-  *Watch trigger — the trait question:* a **third** axis added to this corpus, or a second corpus in the tree
-  that grows axes the same way. Two axes cannot answer whether the asymmetry generalises; three can, and at
-  three the trait's cost is paid against evidence rather than against a guess.
+  **The trait-question trigger fired when `absence_corpus()` became a second generated corpus.** Its spelling
+  and predicate grid lost `r#cfg` without a red test: the run still passed and reported nine rather than
+  twelve shapes. That is a missing membership instrument, not evidence that the two corpora admit one
+  `Axis::output` contract. The remap corpus is a sum over `Position` and a product over `Value`; the absence
+  corpus is one rectangular grid whose emitted source and rustc/dimension outcomes are checked separately.
+  A trait projecting each variant into one output would still flatten the first corpus's position-dependent
+  structure. **Disposition: decline the shared trait on this evidence.** The narrower instrument is an
+  independent exact-source set for the absence corpus, compared both ways with its output, plus a distinctness
+  check. Removing `r#cfg` now fails on the missing emitted spellings rather than silently shrinking a figure.
+
+  *Reopening trigger — the trait question:* a third generated differential corpus whose variants share one
+  per-variant output shape with an existing corpus, or a local membership floor found unable to express an
+  axis's emitted forms. That would supply evidence for a common trait rather than the present two different
+  products. The recurring-shape trigger above remains separate: this instance omitted instruments for both
+  new axes, rather than supplying one of a pair to only one axis.
 
   *Version class:* patch; test targets only. *Authority:* the `attribute-spelling-differential` subject in
   `repository-checks`.
@@ -3352,7 +3364,10 @@ cannot read as a queue holding work that is already done.
   dimensions tolerate the absent file because the declared policy is cfg-blind. The corpus holds that
   deliberate difference, not an invented requirement that the dimensions evaluate the predicate. A
   negative run replacing 圭表's bare-cfg detector with `false` made this test refuse all six bare-cfg
-  rows for 圭表; restoring the detector returned the corpus to green.
+  rows for 圭表. The same mutation in 渾儀's independent `has_cfg_attr` and 漏刻's `mod_preamble_attrs`
+  each made the test refuse its own six bare-cfg rows. Restoring each detector returned the corpus to green.
+  An independent emitted-source set now also refuses a missing spelling: deleting `r#cfg` from the
+  generator fails on three absent attributes instead of passing over a nine-row corpus.
 
 - ~~**Each test that removes read permission hand-rolls the check that it took effect, the copies disagree on
   what a failed check means, and one copy is missing.**~~ *Class:* READY-PATCH — closed by `xingbiao::Unreadable`.

@@ -385,6 +385,48 @@ fn absence_corpus() -> Vec<AbsenceShape> {
     shapes
 }
 
+fn absence_outcomes(name: &str, fixture: &TempFixture) -> [(&'static str, guibiao::Outcome); 3] {
+    let static_law = guibiao::Constitution::new(name).boundary(
+        guibiao::ModuleBoundary::in_crate(name)
+            .module("crate::keep")
+            .must_not_import("crate::forbidden")
+            .because(REASON),
+    );
+    let semantic_law = hunyi::SignatureBoundary::in_crate(name)
+        .module("crate::keep")
+        .must_not_expose("crate::forbidden::Thing")
+        .because(REASON);
+    let runtime_law = louke::RuntimeBoundary::at(SEAM)
+        .only_origins(["o"])
+        .because(REASON);
+    let anchor = fixture.lib().parent().expect("lib.rs has a parent");
+    [
+        ("圭表", guibiao::check(&static_law, fixture.manifest())),
+        ("渾儀", hunyi::check(&[semantic_law], fixture.manifest())),
+        (
+            "漏刻",
+            louke::audit_probe_coverage(&[runtime_law], &[fixture.lib().to_path_buf()], anchor),
+        ),
+    ]
+}
+
+/// An independent membership floor: the generator's loops cannot prove they did not lose a
+/// spelling or predicate. Comparing emitted source also catches two labels that emit one form.
+const EXPECTED_ABSENCE_ATTRIBUTES: [&str; 12] = [
+    "#[cfg(any())]",
+    "#[r#cfg(any())]",
+    "#[cfg_attr(any(), allow(dead_code))]",
+    "#[r#cfg_attr(any(), allow(dead_code))]",
+    "#[cfg(all())]",
+    "#[r#cfg(all())]",
+    "#[cfg_attr(all(), allow(dead_code))]",
+    "#[r#cfg_attr(all(), allow(dead_code))]",
+    "#[cfg(all(unix, not(unix)))]",
+    "#[r#cfg(all(unix, not(unix)))]",
+    "#[cfg_attr(all(unix, not(unix)), allow(dead_code))]",
+    "#[r#cfg_attr(all(unix, not(unix)), allow(dead_code))]",
+];
+
 #[test]
 fn every_dimension_observes_its_declared_absence_tolerance() {
     if std::env::var_os("TIANHENG_SPELLING_DIFFERENTIAL").is_none() {
@@ -393,6 +435,22 @@ fn every_dimension_observes_its_declared_absence_tolerance() {
     }
 
     let corpus = absence_corpus();
+    let expected_attributes = EXPECTED_ABSENCE_ATTRIBUTES
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>();
+    let actual_attributes = corpus
+        .iter()
+        .map(|shape| shape.attribute.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        actual_attributes, expected_attributes,
+        "the absence corpus must emit every declared spelling and predicate, with no extra form"
+    );
+    assert_eq!(
+        corpus.len(),
+        actual_attributes.len(),
+        "distinct axis labels must emit distinct source"
+    );
     let mut offences = Vec::new();
     for (i, shape) in corpus.iter().enumerate() {
         let name = format!("absence-{i:02}");
@@ -421,23 +479,21 @@ fn every_dimension_observes_its_declared_absence_tolerance() {
         let fixture = TempFixture::new(&name, &lib);
         let src = fixture.lib().parent().expect("lib.rs has a parent");
         std::fs::write(src.join("keep.rs"), CLEAN).expect("write the present sibling");
-        let expected = if shape.dimension_tolerated { 0 } else { 2 };
-        for (dimension, got) in [
-            (
-                "圭表",
-                guibiao_exit(&name, fixture.manifest(), "crate::keep", REASON),
-            ),
-            (
-                "渾儀",
-                hunyi_exit(&name, fixture.manifest(), "crate::keep", REASON),
-            ),
-            ("漏刻", louke_exit(fixture.lib(), SEAM, REASON)),
-        ] {
-            if got != expected {
-                offences.push(format!(
-                    "{}: {dimension} returned {got}, expected {expected} for `{}`",
-                    shape.label, shape.attribute
-                ));
+        for (dimension, outcome) in absence_outcomes(&name, &fixture) {
+            match (shape.dimension_tolerated, outcome) {
+                (true, guibiao::Outcome::Clean(_)) => {}
+                (false, guibiao::Outcome::ConstitutionError(message))
+                    if message.contains("gone") => {}
+                (tolerated, outcome) => offences.push(format!(
+                    "{}: {dimension} returned {outcome:?}, expected {} for `{}`",
+                    shape.label,
+                    if tolerated {
+                        "clean"
+                    } else {
+                        "a constitution error naming the absent `gone` module"
+                    },
+                    shape.attribute
+                )),
             }
         }
     }
