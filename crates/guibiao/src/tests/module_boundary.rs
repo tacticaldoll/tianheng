@@ -7,18 +7,11 @@ use super::helpers::*;
 #[cfg(unix)]
 #[test]
 pub(super) fn unreadable_governed_file_is_a_scan_error() {
-    use std::os::unix::fs::PermissionsExt;
-
     let ws = TempWorkspace::new("unreadable");
     let file = ws.write("lib.rs", "use crate::forbidden::Thing;\n");
-    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o000))
-        .expect("drop read permission");
-
-    // Self-calibrating root guard: if mode 0 is still readable, permissions do
-    // not bite here, so the premise cannot hold — skip rather than false-pass.
-    if std::fs::read_to_string(&file).is_ok() {
+    let Some(_unreadable) = xingbiao::Unreadable::try_new(&file) else {
         return;
-    }
+    };
 
     let metadata = ws.metadata("x");
     let boundary = ModuleBoundary::in_crate("x")
@@ -28,8 +21,6 @@ pub(super) fn unreadable_governed_file_is_a_scan_error() {
 
     let mut violations = Vec::new();
     let result = check_module_boundary(&metadata, &boundary, &mut violations);
-
-    let _ = std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o644));
 
     assert!(
         result.is_err(),
@@ -44,21 +35,13 @@ pub(super) fn unreadable_governed_file_is_a_scan_error() {
 #[cfg(unix)]
 #[test]
 pub(super) fn unreadable_governed_directory_is_a_scan_error() {
-    use std::os::unix::fs::PermissionsExt;
-
     let ws = TempWorkspace::new("unreadable-dir");
     ws.write("lib.rs", "// nothing\n");
     ws.write("sub/inner.rs", "use crate::forbidden::Thing;\n");
     let sub = ws.src().join("sub");
-    std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o000))
-        .expect("drop dir read/exec permission");
-
-    // Self-calibrating root guard: if the directory is still traversable, the
-    // premise cannot hold — skip rather than false-pass.
-    if std::fs::read_dir(&sub).is_ok() {
-        let _ = std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o755));
+    let Some(_unreadable) = xingbiao::Unreadable::try_new(&sub) else {
         return;
-    }
+    };
 
     let metadata = ws.metadata("x");
     let boundary = ModuleBoundary::in_crate("x")
@@ -68,8 +51,6 @@ pub(super) fn unreadable_governed_directory_is_a_scan_error() {
 
     let mut violations = Vec::new();
     let result = check_module_boundary(&metadata, &boundary, &mut violations);
-
-    let _ = std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o755));
 
     assert!(
         result.is_err(),
@@ -249,7 +230,13 @@ pub(super) fn an_inline_module_target_is_a_self_describing_constitution_error() 
     // inline target reports the inline cause, never the unknown-module message.
     assert_eq!(
         inline_err,
-        inline_module_target_error("crate::kernel", "app", "kernel")
+        inline_module_target_error(
+            "crate::kernel",
+            "app",
+            "kernel",
+            Some("lib.rs"),
+            "kernel.rs"
+        )
     );
     assert_ne!(inline_err, unknown_module_error("crate::kernel", "app"));
 
@@ -289,7 +276,7 @@ pub(super) fn an_inline_target_with_a_same_named_orphan_file_is_still_a_constitu
     );
     assert_eq!(
         err,
-        inline_module_target_error("crate::kernel", "x", "kernel")
+        inline_module_target_error("crate::kernel", "x", "kernel", Some("lib.rs"), "kernel.rs")
     );
 }
 
@@ -680,7 +667,7 @@ pub(super) fn an_inline_arm_paired_with_a_tolerated_away_plain_arm_still_reports
     );
     assert_eq!(
         err,
-        inline_module_target_error("crate::engine", "x", "engine")
+        inline_module_target_error("crate::engine", "x", "engine", Some("lib.rs"), "engine.rs")
     );
 }
 

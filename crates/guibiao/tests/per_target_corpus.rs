@@ -68,7 +68,7 @@ impl Drop for RootProbe {
 /// The same forbidden construct in every root, so which roots react is the only variable.
 const OFFENDING: &str = "pub fn touch() { let _ = std::fs::canonicalize(\".\"); }\n";
 
-fn clock_free(package: &str) -> Constitution {
+fn root_scope_fs_law(package: &str) -> Constitution {
     Constitution::new("root-scope").boundary(
         ModuleBoundary::in_crate(package)
             .module("crate")
@@ -101,7 +101,7 @@ fn a_second_crate_root_beside_the_library_is_governed_too() {
         ],
     );
 
-    let files = reacting_files(&check(&clock_free("libmain"), probe.manifest()));
+    let files = reacting_files(&check(&root_scope_fs_law("libmain"), probe.manifest()));
     for governed in ["src/lib.rs", "src/main.rs"] {
         assert!(
             files.iter().any(|f| f.ends_with(governed)),
@@ -130,7 +130,7 @@ fn every_binary_target_root_is_governed_wherever_it_lives() {
         ],
     );
 
-    let files = reacting_files(&check(&clock_free("binroots"), probe.manifest()));
+    let files = reacting_files(&check(&root_scope_fs_law("binroots"), probe.manifest()));
     assert!(
         files.iter().any(|f| f.ends_with("src/lib.rs")),
         "the resolved library root must react: {files:?}"
@@ -154,7 +154,7 @@ fn a_package_with_no_library_governs_its_first_binary_root() {
         &[("src/main.rs", &format!("fn main() {{}}\n{OFFENDING}"))],
     );
 
-    let files = reacting_files(&check(&clock_free("binonly"), probe.manifest()));
+    let files = reacting_files(&check(&root_scope_fs_law("binonly"), probe.manifest()));
     assert!(
         files.iter().any(|f| f.ends_with("src/main.rs")),
         "with no library target, the first binary root is the governed one: {files:?}"
@@ -199,7 +199,7 @@ fn a_root_cargo_reports_twice_is_scanned_once() {
         ],
     );
 
-    let outcome = check(&clock_free("twicereported"), probe.manifest());
+    let outcome = check(&root_scope_fs_law("twicereported"), probe.manifest());
     let Outcome::Violations(report) = &outcome else {
         panic!("expected Violations, got {outcome:?}");
     };
@@ -262,7 +262,7 @@ fn a_target_root_outside_the_package_directory_is_refused_not_labeled() {
         &[("src/lib.rs", OFFENDING)],
     );
 
-    match check(&clock_free("outofpackage"), probe.manifest()) {
+    match check(&root_scope_fs_law("outofpackage"), probe.manifest()) {
         Outcome::ConstitutionError(message) => {
             assert!(
                 message.contains("cannot be judged without a checkout-dependent identity"),
@@ -288,6 +288,26 @@ fn confined_to_seam(package: &str) -> Constitution {
             .because("brick enters the package only through the seam"),
     )
 }
+
+const INLINE_IN_THE_BINARY: &[(&str, &str)] = &[
+    ("src/lib.rs", "pub mod seam;\npub mod forbidden;\n"),
+    ("src/seam.rs", "\n"),
+    ("src/forbidden.rs", "\n"),
+    (
+        "src/main.rs",
+        "mod seam {\n    use brick::B;\n}\nfn main() {}\n",
+    ),
+];
+
+const INLINE_IN_THE_LIBRARY: &[(&str, &str)] = &[
+    (
+        "src/lib.rs",
+        "pub mod forbidden;\npub mod seam {\n    use crate::forbidden::X;\n}\n",
+    ),
+    ("src/forbidden.rs", "pub struct X;\n"),
+    ("src/main.rs", "mod seam;\nfn main() {}\n"),
+    ("src/seam.rs", "\n"),
+];
 
 /// A confinement's perimeter is the whole package; the permitted module is only the region inside it
 /// where the import is allowed. A root whose graph has no such module therefore has an **empty**
@@ -351,42 +371,147 @@ fn an_inline_target_in_one_root_is_refused_even_when_another_root_backs_it_with_
         ("inlineconfine", confined_to_seam),
         ("inlinerestrict", restrict),
     ];
-    let inline_in_the_binary: &[(&str, &str)] = &[
-        ("src/lib.rs", "pub mod seam;\npub mod forbidden;\n"),
-        ("src/seam.rs", "\n"),
-        ("src/forbidden.rs", "\n"),
-        (
-            "src/main.rs",
-            "mod seam {\n    use brick::B;\n}\nfn main() {}\n",
-        ),
-    ];
-    let inline_in_the_library: &[(&str, &str)] = &[
-        (
-            "src/lib.rs",
-            "pub mod forbidden;\npub mod seam {\n    use crate::forbidden::X;\n}\n",
-        ),
-        ("src/forbidden.rs", "pub struct X;\n"),
-        ("src/main.rs", "mod seam;\nfn main() {}\n"),
-        ("src/seam.rs", "\n"),
-    ];
     for (package, law) in cases {
         for (side, files) in [
-            ("binary", inline_in_the_binary),
-            ("library", inline_in_the_library),
+            ("binary", INLINE_IN_THE_BINARY),
+            ("library", INLINE_IN_THE_LIBRARY),
         ] {
             let package = format!("{package}{side}");
             let probe = RootProbe::new(&package, "", files);
             match check(&law(&package), probe.manifest()) {
-                Outcome::ConstitutionError(message) => assert!(
-                    message.contains("inline"),
-                    "{package}: expected the inline-target refusal, got: {message}"
-                ),
+                Outcome::ConstitutionError(message) => {
+                    assert!(
+                        message.contains("inline"),
+                        "{package}: expected the inline-target refusal, got: {message}"
+                    );
+                    assert!(
+                        message.contains("compilation unit"),
+                        "{package}: expected the inline-target refusal to name the compilation unit, got: {message}"
+                    );
+                }
                 other => panic!(
                     "{package}: the {side} root declares the target inline, which is not a \
                      governable target and must not be deferred to a root backing it with a file: \
                      {other:?}"
                 ),
             }
+        }
+    }
+}
+
+/// The inline-target refusal names the responsible compilation unit and suggests an
+/// extraction path within that root's layout that rustc actually resolves
+/// ({root directory}/{leaf}.rs), covering a bin main.rs, a library lib.rs, a binary in
+/// src/bin/*.rs, and omitting the compilation unit qualifier under the no-target fallback.
+#[test]
+fn an_inline_target_refusal_names_its_root_and_a_path_rustc_resolves() {
+    let inline_in_the_tool_binary: &[(&str, &str)] = &[
+        ("src/lib.rs", "pub mod seam;\npub mod forbidden;\n"),
+        ("src/seam.rs", "\n"),
+        ("src/forbidden.rs", "\n"),
+        (
+            "src/bin/tool.rs",
+            "mod seam {\n    use brick::B;\n}\nfn main() {}\n",
+        ),
+    ];
+    let inline_with_no_targets: &[(&str, &str)] = &[
+        ("examples/dummy.rs", "fn main() {}\n"),
+        (
+            "src/lib.rs",
+            "pub mod forbidden;\npub mod seam {\n    use crate::forbidden::X;\n}\n",
+        ),
+        ("src/forbidden.rs", "pub struct X;\n"),
+    ];
+    let inline_nested_in_the_library: &[(&str, &str)] = &[
+        ("src/lib.rs", "pub mod outer;\n"),
+        ("src/outer.rs", "pub mod inner {\n    use brick::B;\n}\n"),
+    ];
+    let no_target_manifest = concat!(
+        "autolib = false\n",
+        "autobins = false\n",
+        "[[example]]\n",
+        "name = \"dummy\"\n",
+        "path = \"examples/dummy.rs\"\n",
+    );
+
+    let confined_to = |package: &str, module: &str| {
+        Constitution::new("root-scope").boundary(
+            ModuleBoundary::in_crate(package)
+                .module(module)
+                .confine_external_crate("brick")
+                .because("brick enters the package only through the permitted module"),
+        )
+    };
+
+    for (package_suffix, manifest_extra, files, target_module, expected_unit, expected_path) in [
+        (
+            "binmain",
+            "",
+            INLINE_IN_THE_BINARY,
+            "crate::seam",
+            Some("src/main.rs"),
+            "src/seam.rs",
+        ),
+        (
+            "lib",
+            "",
+            INLINE_IN_THE_LIBRARY,
+            "crate::seam",
+            Some("src/lib.rs"),
+            "src/seam.rs",
+        ),
+        (
+            "toolbin",
+            "",
+            inline_in_the_tool_binary,
+            "crate::seam",
+            Some("src/bin/tool.rs"),
+            "src/bin/seam.rs",
+        ),
+        (
+            "notarget",
+            no_target_manifest,
+            inline_with_no_targets,
+            "crate::seam",
+            None,
+            "src/seam.rs",
+        ),
+        (
+            "nestedlib",
+            "",
+            inline_nested_in_the_library,
+            "crate::outer::inner",
+            Some("src/lib.rs"),
+            "src/outer/inner.rs",
+        ),
+    ] {
+        let package = format!("inlinerefusal{package_suffix}");
+        let probe = RootProbe::new(&package, manifest_extra, files);
+        match check(&confined_to(&package, target_module), probe.manifest()) {
+            Outcome::ConstitutionError(message) => {
+                assert!(
+                    message.contains("inline"),
+                    "{package}: expected the inline-target refusal, got: {message}"
+                );
+                assert!(
+                    message.contains(&format!("`{expected_path}`")),
+                    "{package}: expected suggested path `{expected_path}`, got: {message}"
+                );
+                if let Some(unit) = expected_unit {
+                    assert!(
+                        message.contains(&format!("in compilation unit '{unit}'")),
+                        "{package}: expected refusal to name compilation unit '{unit}', \
+                         got: {message}"
+                    );
+                } else {
+                    assert!(
+                        !message.contains("compilation unit"),
+                        "{package}: expected no compilation unit qualifier for no-target \
+                         fallback, got: {message}"
+                    );
+                }
+            }
+            other => panic!("{package}: expected the inline-target refusal: {other:?}"),
         }
     }
 }
@@ -625,33 +750,6 @@ fn no_root_declaring_the_permitted_module_is_still_a_constitution_error() {
     );
 }
 
-/// A file made unreadable for as long as this lives, and readable again when it drops — including when
-/// the test holding it panics.
-#[cfg(unix)]
-struct Unreadable<'a>(&'a Path);
-
-#[cfg(unix)]
-impl<'a> Unreadable<'a> {
-    /// `None` where mode 000 does not stop this process reading the file — a privileged user, as a
-    /// container's root is — because a direction whose premise is an unreadable file cannot be judged
-    /// there, and asserting anyway would fail on a correct product. The caller decides what that means:
-    /// a skip is silent only outside the workspace suite, which is meant to be exhaustive.
-    fn try_new(file: &'a Path) -> Option<Self> {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(file, std::fs::Permissions::from_mode(0o000)).expect("drop read");
-        let guard = Self(file);
-        std::fs::read(file).is_err().then_some(guard)
-    }
-}
-
-#[cfg(unix)]
-impl Drop for Unreadable<'_> {
-    fn drop(&mut self) {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(self.0, std::fs::Permissions::from_mode(0o644));
-    }
-}
-
 /// A file that a root without the permitted module reaches, and that cannot be read, is a refusal to
 /// judge rather than a pass. Kept for the contract: resolving the root's module graph already reads it,
 /// so this refused before that root's imports were judged too; it pins that the judgement cannot turn
@@ -670,11 +768,7 @@ fn an_unreadable_file_in_a_root_without_the_permitted_module_is_refused() {
         ],
     );
     let cli = probe.dir.join("src/cli.rs");
-    let Some(_unreadable) = Unreadable::try_new(&cli) else {
-        assert!(
-            std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
-            "mode 000 did not restrict the file — running as root would make this direction vacuous"
-        );
+    let Some(_unreadable) = xingbiao::Unreadable::try_new(&cli) else {
         return;
     };
     let outcome = check(&confined_to_seam("confineunread"), probe.manifest());
@@ -772,12 +866,15 @@ fn a_top_level_file_no_target_compiles_is_not_judged() {
                 (stray, "use crate::forbidden::X;\n"),
             ],
         );
-        let outcome = check(&clock_free_import_law(package), probe.manifest());
+        let outcome = check(
+            &root_scope_must_not_import_forbidden(package),
+            probe.manifest(),
+        );
         assert_eq!(outcome.exit_code(), 0, "{stray}: {outcome:?}");
     }
 }
 
-fn clock_free_import_law(package: &str) -> Constitution {
+fn root_scope_must_not_import_forbidden(package: &str) -> Constitution {
     Constitution::new("root-scope").boundary(
         ModuleBoundary::in_crate(package)
             .module("crate")

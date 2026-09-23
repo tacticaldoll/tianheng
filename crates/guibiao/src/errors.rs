@@ -40,11 +40,21 @@ pub(crate) fn missing_src_error(crate_package: &str) -> String {
 
 /// A module boundary targets an inline `mod name { … }`, which owns no source file
 /// and so cannot be a governed target — distinct from an unknown-module typo.
-pub(crate) fn inline_module_target_error(module: &str, crate_package: &str, leaf: &str) -> String {
+pub(crate) fn inline_module_target_error(
+    module: &str,
+    crate_package: &str,
+    leaf: &str,
+    unit: Option<&str>,
+    suggested_path: &str,
+) -> String {
+    let unit_qualifier = match unit {
+        Some(u) => format!(" in compilation unit '{u}'"),
+        None => String::new(),
+    };
     format!(
-        "module '{module}' in crate '{crate_package}' is declared inline (`mod {leaf} {{ … }}`) and \
+        "module '{module}' in crate '{crate_package}'{unit_qualifier} is declared inline (`mod {leaf} {{ … }}`) and \
          owns no source file; module boundaries govern file-based modules — move it \
-         into its own file (e.g. `src/{leaf}.rs`), or target an enclosing file-based \
+         into its own file (e.g. `{suggested_path}`), use `#[path = \"…\"]`, or target an enclosing file-based \
          module"
     )
 }

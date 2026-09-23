@@ -227,7 +227,7 @@ struct ScanContext<'a> {
     files: &'a [PathBuf],
     root_relative: Option<&'a Path>,
     reachable: &'a std::collections::BTreeSet<String>,
-    inline_only: &'a std::collections::BTreeSet<String>,
+    inline_only: &'a std::collections::BTreeMap<String, PathBuf>,
     remapped: &'a [(PathBuf, String)],
     remap_shadowed: &'a std::collections::BTreeSet<String>,
     root_modules: &'a [String],
@@ -652,6 +652,14 @@ enum RootOutcome {
     ModuleAbsent(String),
 }
 
+/// Derives the package-relative label for an inline module extraction suggestion.
+///
+/// Uses the same [`compilation_unit_label`] mechanism that derives the root's own unit label,
+/// so single-root and multi-root packages format suggested paths identically.
+fn suggested_module_path(package: &Value, candidate: &Path) -> String {
+    compilation_unit_label(package, candidate).unwrap_or_else(|| xingbiao::path_label(candidate))
+}
+
 /// Check one compilation unit root. Custom target roots relative to `src_dir` map to `crate`.
 /// Roots outside the package manifest directory error as configuration errors.
 /// Sibling compilation unit roots are excluded from module discovery to prevent duplicate violations.
@@ -731,27 +739,36 @@ fn check_one_root(
         root_modules: &root_modules,
     };
 
-    if governed.is_empty() && inline_only.contains(&governed_module) {
-        let leaf = governed_module
-            .rsplit_once("::")
-            .map_or(governed_module.as_str(), |(_, leaf)| leaf);
-        return Err(inline_module_target_error(
+    let outcome = match (
+        governed.is_empty(),
+        inline_only.get(&governed_module),
+        boundary.rule.perimeter(),
+    ) {
+        (true, Some(candidate), _) => {
+            let leaf = governed_module
+                .rsplit_once("::")
+                .map_or(governed_module.as_str(), |(_, leaf)| leaf);
+            let suggested_path = suggested_module_path(package, candidate);
+            return Err(inline_module_target_error(
+                &boundary.module,
+                &boundary.crate_package,
+                leaf,
+                unit_owned.as_deref(),
+                &suggested_path,
+            ));
+        }
+        (true, None, Perimeter::GovernedModule) => {
+            return Ok(RootOutcome::ModuleAbsent(unknown_module_error(
+                &boundary.module,
+                &boundary.crate_package,
+            )));
+        }
+        (true, None, Perimeter::WholeRoot) => RootOutcome::ModuleAbsent(unknown_module_error(
             &boundary.module,
             &boundary.crate_package,
-            leaf,
-        ));
-    }
-    let outcome = if governed.is_empty() {
-        RootOutcome::ModuleAbsent(unknown_module_error(
-            &boundary.module,
-            &boundary.crate_package,
-        ))
-    } else {
-        RootOutcome::Governed
+        )),
+        (false, _, _) => RootOutcome::Governed,
     };
-    if governed.is_empty() && boundary.rule.perimeter() == Perimeter::GovernedModule {
-        return Ok(outcome);
-    }
 
     let inbound = matches!(
         &boundary.rule,
