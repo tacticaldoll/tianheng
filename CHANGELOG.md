@@ -31,6 +31,44 @@ them.
 
 ## [Unreleased]
 
+### Static
+
+- **BREAKING** — **圭表 judges external-crate confinement in every compiled root, including a root that
+  does not declare the permitted module.** `confine_external_crate(c)` on `module(s)` says `c` is imported
+  only from `s`, so its perimeter is the whole package and `s` is only the region inside it where the import
+  is allowed. A root whose graph had no `s` — a `src/main.rs` or `src/bin/*.rs` beside a library that
+  declares it — was set aside before any rule ran, which is correct for every rule whose perimeter *is* `s`
+  and wrong for this one: `use c::…` in such a root was never judged, and the package reported clean.
+  Measured against 0.6.1 with a library declaring `mod seam;` and a `main.rs` holding `use brick::B;`:
+  `clean — no boundary violated`, exit 0, while the same import in a library module exited 1.
+
+  Such a root is now judged with an empty permitted region: every import of `c` in it, or in a module it
+  reaches, reacts under that root's own compilation unit, so a baseline accepting one root's finding does
+  not accept another's. A library finding's identity is unchanged. A package where no root declares `s` is
+  still a constitution error, and so is a confinement anchored at `crate`. Confinement stays use-only: a
+  root reaching `c` through an inline path such as `c::run(…)`, or through the package's own library, is
+  not read by this rule.
+
+- **BREAKING** — **A governed module declared inline in one compiled root is refused even where another
+  root backs the same path with a file.** An inline module owns no source file and is not a governable
+  target, which was already refused in a single-root package. With several roots the refusal was deferred
+  like an absent module, so a sibling root backing the path with a file was governed in its place and the
+  inline body was never read, behind a clean report. The refusal now propagates from the root that holds
+  the inline form, for every module rule.
+
+  **Why a minor:** both are false negatives closed by default. A tree that was green may now exit 1 or 2,
+  and a recorded baseline may need new entries.
+
+### Migration
+
+- **A package with a library and a binary root, under an external-crate confinement, may report new
+  findings.** Where a binary root, or a module it reaches, imports the confined crate directly, repair it
+  by routing the import through the permitted module, widen the confinement, declare it `warn()`, or
+  record it with `tianheng check --write-baseline <file>` and re-apply any `owner` / `tracker` annotations.
+  A package whose binary roots do not import the confined crate is unaffected.
+- **A governed module declared inline in one root and backed by a file in another now exits 2.** Give the
+  inline form its own file, or govern a module that is file-backed in every root that declares it.
+
 ### Self-governance
 
 - **Hand-written claims about a current state are dissolved into whatever owns that state.** A sentence

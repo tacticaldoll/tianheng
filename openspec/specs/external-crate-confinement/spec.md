@@ -46,7 +46,23 @@ A module boundary SHALL support a rule confining an **external** crate's imports
 
 ### Requirement: An external import outside the permitted subtree is a violation
 
-The system SHALL scan every reachable file of the target crate and emit a violation when a file whose enclosing module is **not** within the permitted subtree `s` (neither `s` nor beneath it, the `::`-delimited "or beneath" test) imports the confined external crate `c` (a `use c::…` declaration). The violation SHALL name the **confined external crate `c`** as its `target` and the offending importing module as its `finding`. It SHALL react according to its severity (enforce fails with exit 1, warn is advisory) and any baseline, exactly as the other module rules do. Its repair polarity SHALL be `AllowlistGap` (the import is outside the permitted region — repair by moving it into `s` or widening the confinement).
+The system SHALL scan every reachable file of every compiled root of the target crate — including a root whose graph has no permitted subtree `s`, which has an empty permitted region — and emit a violation when a file whose enclosing module is **not** within the permitted subtree `s` (neither `s` nor beneath it, the `::`-delimited "or beneath" test) imports the confined external crate `c` (a `use c::…` declaration). The violation SHALL name the **confined external crate `c`** as its `target` and the offending importing module as its `finding`. It SHALL react according to its severity (enforce fails with exit 1, warn is advisory) and any baseline, exactly as the other module rules do. Its repair polarity SHALL be `AllowlistGap` (the import is outside the permitted region — repair by moving it into `s` or widening the confinement).
+
+#### Scenario: A root without the permitted subtree is judged with an empty permitted region
+
+- **WHEN** a package builds a library root that declares the permitted subtree `crate::seam` and a binary
+  root whose graph has no such module, and the binary root, or a module it reaches, declares `use brick::B;`
+  under the confinement of `brick` to `crate::seam`
+- **THEN** the system emits a violation for `brick` whose `finding` is the importing module and whose
+  identity carries the binary root's compilation unit, and exits 1 at enforce severity, because the
+  permitted subtree bounds where the import is allowed and not where it is looked for; a library finding's
+  identity is unchanged by the binary root being judged
+
+#### Scenario: A root without the permitted subtree is judged only when some root declares it
+
+- **WHEN** no root of the package declares the permitted subtree, and a root imports the confined crate
+- **THEN** the system reports the unknown-module constitution error (exit 2) and no violation beside it,
+  because a permitted subtree no root declares is a misnamed one rather than an empty region
 
 #### Scenario: An import of the confined crate from outside the subtree violates
 

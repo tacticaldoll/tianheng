@@ -769,6 +769,12 @@ SHALL be reported only when **no** root has it. A module legitimately exists in 
 another's — a library's internals are not the binary's — so erroring per root would make a boundary on a
 library-only module exit 2 for the package's `bin` root, refusing to judge source that compiles.
 
+What a root without the governed module contributes depends on the rule's perimeter. For a rule whose
+perimeter is the governed module — every outbound and inbound rule, and inline-symbol-path confinement —
+that root holds nothing the rule governs, and nothing is observed there. External-crate confinement's
+perimeter is the whole root, with the governed module only the region where the confined import is
+permitted, so such a root is judged with an empty permitted region, per `external-crate-confinement`.
+
 A package whose metadata reports no target at all SHALL fall back to its conventional source directory,
 which is what synthetic metadata in a caller's own tests carries; that fallback is load-bearing and SHALL
 NOT be dropped when the corpus becomes per-root.
@@ -783,8 +789,10 @@ source directory, is governed normally.
 
 While evaluating each root, only "this root does not have the governed module" SHALL be deferred to the
 other roots. Every other failure — an unreadable source, a resolution ambiguity, a root outside the
-package directory — SHALL propagate immediately, because deferring it until a sibling root happened to be
-governable would silently pass over source the system could not read.
+package directory, a governed module that root declares inline — SHALL propagate immediately, because
+deferring it until a sibling root happened to be governable would silently pass over source the system
+could not read. An inline target is present in its root rather than absent from it: deferred, a sibling
+root backing the same path with a file would be governed in its place and the inline body left unobserved.
 
 An outbound rule's finding SHALL carry the **importing module** — the module that lexically declares the
 `use`, so an import inside an inline `mod inner { … }` is attributed to that module rather than the
@@ -813,6 +821,14 @@ module, import path) pair rather than the path alone.
   `bin` root whose graph has no such module
 - **THEN** the system governs it in the library root and reports no constitution error, rather than
   refusing to judge because one root lacks it
+
+#### Scenario: A target declared inline in one root is refused though another root backs it with a file
+
+- **WHEN** one root of a package declares the governed module inline and another root backs the same path
+  with a file, whichever of the library and the binary holds the inline form, under an outbound rule or
+  an external-crate confinement
+- **THEN** the system reports the inline-module constitution error (exit 2), rather than governing the
+  file-backed root in its place and reporting clean
 
 #### Scenario: One root's declarations do not leak into another's graph
 - **WHEN** two roots of one package each declare a same-named submodule backed by different files
