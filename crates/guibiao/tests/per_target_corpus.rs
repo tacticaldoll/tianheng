@@ -782,3 +782,28 @@ fn clock_free_import_law(package: &str) -> Constitution {
             .because("the crate root does not reach the forbidden module"),
     )
 }
+
+/// A conventional root filename is excluded from another root only as a second source of `crate`. Reached
+/// through a declaration, it is the declared module's source like any other file: a library declaring
+/// `pub mod main;` governs `src/main.rs` as `crate::main`, when no target compiles that file on its own.
+#[test]
+fn a_conventional_root_filename_reached_through_a_declaration_is_that_modules_source() {
+    let probe = RootProbe::new(
+        "declaredmain",
+        "autobins = false\n",
+        &[
+            ("src/lib.rs", "pub mod main;\npub mod forbidden;\n"),
+            ("src/forbidden.rs", "pub struct X;\n"),
+            ("src/main.rs", "use crate::forbidden::X;\n"),
+        ],
+    );
+    let law = Constitution::new("root-scope").boundary(
+        ModuleBoundary::in_crate("declaredmain")
+            .module("crate::main")
+            .must_not_import("crate::forbidden")
+            .because("the main module does not reach the forbidden module"),
+    );
+    let files = reacting_files(&check(&law, probe.manifest()));
+    assert_eq!(files.len(), 1, "{files:?}");
+    assert!(files[0].ends_with("src/main.rs"), "{files:?}");
+}

@@ -63,7 +63,8 @@ them.
   Measured against 0.6.1 with a library declaring `shared` inline and importing a forbidden module, and an
   uncompiled `main.rs` declaring `pub mod shared;` beside a `shared.rs`: `Clean`, because `shared.rs` was
   governed in place of the inline body rustc compiles. That now refuses the inline target, and an import
-  written only in the uncompiled file no longer reacts.
+  written only in the uncompiled file no longer reacts. A library that declares `pub mod main;` over such a
+  file is now judged under `crate::main`, where it was refused as a cycle back to the crate root.
 
   **Why a minor:** each closes a false negative by default, and the last also removes findings. A tree that
   was green may now exit 1 or 2, a recorded baseline may need new entries, and one holding a finding from an

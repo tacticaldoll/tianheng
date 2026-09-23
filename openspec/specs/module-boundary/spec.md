@@ -293,7 +293,7 @@ A module boundary SHALL support an inbound rule: `ModuleBoundary::in_crate(p).mo
 
 ### Requirement: A boundary reports each violation once
 
-A module boundary SHALL report each distinct violation at most once: its violations SHALL be deduplicated by identity `(target, rule_key, fact)`. When the governed module's subtree spans multiple source files that produce the same finding — a parent and a child file importing the same path, or a module backed by both `lib.rs` and `main.rs` (which both resolve to `crate`) — the system SHALL emit a single violation, not one per file. Deduplication SHALL be performed per boundary at the point findings are produced, so a duplicate arising from any other source is not silently suppressed.
+A module boundary SHALL report each distinct violation at most once: its violations SHALL be deduplicated by identity `(target, rule_key, fact)`. When the governed module's subtree spans multiple source files that produce the same finding — a parent and a child file importing the same path, or one module backed by two files in one root, as the per-platform shim's `#[cfg]` arms remapping `#[path]` are — the system SHALL emit a single violation, not one per file. Deduplication SHALL be performed per boundary at the point findings are produced, so a duplicate arising from any other source is not silently suppressed.
 
 #### Scenario: A finding produced by two files in the governed subtree is reported once
 
@@ -761,11 +761,11 @@ every root, so the three no longer disagree about which of a package's source Ca
 
 Each root SHALL be resolved as its own module graph: two roots of one package both denote the module path
 `crate`, and neither's declarations, inline-module shadowing, nor `#[path]` remaps SHALL leak into the
-other's resolution. A root's corpus SHALL begin at its own root file: a source file whose path would also
-denote `crate` — a conventional `lib.rs` or `main.rs` that is not this root — is either another compiled
-root, resolved on its own, or a file no target compiles, and SHALL NOT enter this root's graph as a
-declaring source or a governed file. An observation SHALL carry the compilation unit it came from as an
-identity role, per `structured-violation-identity`.
+other's resolution. A root's corpus SHALL begin at its own root file: a conventional `lib.rs` or `main.rs`
+that is not this root — another compiled root, or a file no target compiles — SHALL NOT enter this root's
+graph as a second source of `crate` by virtue of its filename. Such a file reached through an explicit
+`mod` or `#[path]` declaration is that declared module's source, like any other file. An observation SHALL
+carry the compilation unit it came from as an identity role, per `structured-violation-identity`.
 
 A governed module SHALL be looked for in **every** root's graph, and an unknown-module constitution error
 SHALL be reported only when **no** root has it. A module legitimately exists in one root's graph and not
@@ -841,6 +841,14 @@ module, import path) pair rather than the path alone.
 - **THEN** the library's inline `shared` is refused as an inline target (exit 2) rather than governed
   through `src/shared.rs`, and the uncompiled file's import does not react, because neither file's
   content is source the package compiles
+
+#### Scenario: A conventional root filename reached through a declaration is that module's source
+
+- **WHEN** a package with `autobins = false` builds only its library, whose `lib.rs` declares
+  `pub mod main;`, and `src/main.rs` imports a module a boundary on `crate::main` forbids
+- **THEN** the system reports the violation under `crate::main`, because the declaration makes `main.rs`
+  that module's source, rather than refusing the file as a cycle back to the crate root or excluding it
+  for its filename
 
 #### Scenario: One root's declarations do not leak into another's graph
 - **WHEN** two roots of one package each declare a same-named submodule backed by different files
