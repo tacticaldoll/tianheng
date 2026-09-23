@@ -156,7 +156,7 @@ pub(super) fn must_not_be_imported_by_inline_protected_module_is_a_constitution_
     let err = result.expect_err("an inline protected module is a constitution error");
     assert_eq!(
         err,
-        inline_module_target_error("crate::kernel", "x", "kernel")
+        inline_module_target_error("crate::kernel", "x", "kernel", Some("lib.rs"), "kernel.rs")
     );
 }
 

@@ -14,11 +14,12 @@ use crate::errors::{
     restrict_imports_to_on_crate_error, unknown_module_error, unreadable_governed_file_error,
 };
 use crate::finding::ModuleFact;
+use crate::model::module_rule::Perimeter;
 use crate::module_scan::{
     ImportedPath, InlineFinding, canonical_module_path, declaration_text,
     external_imports_with_importers, governed_files, imports_with_importers,
-    inline_symbol_findings, package_name_to_import_ident, path_within, reachable_modules,
-    rust_files, value_namespace_item_names,
+    inline_symbol_findings, is_another_crate_root, package_name_to_import_ident, path_within,
+    reachable_modules, rust_files, value_namespace_item_names,
 };
 use crate::{BoundaryKind, ModuleBoundary, ModuleRule, Violation, ViolationId};
 
@@ -226,7 +227,7 @@ struct ScanContext<'a> {
     files: &'a [PathBuf],
     root_relative: Option<&'a Path>,
     reachable: &'a std::collections::BTreeSet<String>,
-    inline_only: &'a std::collections::BTreeSet<String>,
+    inline_only: &'a std::collections::BTreeMap<String, PathBuf>,
     remapped: &'a [(PathBuf, String)],
     remap_shadowed: &'a std::collections::BTreeSet<String>,
     root_modules: &'a [String],
@@ -596,7 +597,8 @@ fn check_outbound_rule(
 /// reason so the message still names a real expected location.
 ///
 /// If metadata reports no target at all, the conventional source directory fallback is used.
-/// Only missing-module errors are deferred; unreadable files or other scan failures propagate immediately.
+/// Only missing-module errors are deferred; an inline target, unreadable files and other scan failures
+/// propagate immediately.
 pub(crate) fn check_module_boundary(
     metadata: &Value,
     boundary: &ModuleBoundary,
@@ -606,26 +608,27 @@ pub(crate) fn check_module_boundary(
         .ok_or_else(|| crate_not_found_error(&boundary.crate_package))?;
     let roots = crate_root_files(package);
     if roots.is_empty() {
-        return match check_one_root(package, None, None, boundary, violations)? {
-            RootOutcome::Governed => Ok(()),
+        let mut found = Vec::new();
+        return match check_one_root(package, None, None, boundary, &mut found)? {
+            RootOutcome::Governed => {
+                violations.append(&mut found);
+                Ok(())
+            }
             RootOutcome::ModuleAbsent(reason) => Err(reason),
         };
     }
     let mut deferred: Option<String> = None;
     let mut governed_somewhere = false;
+    let mut found = Vec::new();
     for root in &roots {
-        let mut per_root = Vec::new();
         match check_one_root(
             package,
             Some(root.as_path()),
             Some(&roots),
             boundary,
-            &mut per_root,
+            &mut found,
         )? {
-            RootOutcome::Governed => {
-                governed_somewhere = true;
-                violations.append(&mut per_root);
-            }
+            RootOutcome::Governed => governed_somewhere = true,
             RootOutcome::ModuleAbsent(reason) => {
                 if deferred.is_none() {
                     deferred = Some(reason);
@@ -635,7 +638,10 @@ pub(crate) fn check_module_boundary(
     }
     match deferred {
         Some(reason) if !governed_somewhere => Err(reason),
-        _ => Ok(()),
+        _ => {
+            violations.append(&mut found);
+            Ok(())
+        }
     }
 }
 
@@ -646,10 +652,27 @@ enum RootOutcome {
     ModuleAbsent(String),
 }
 
+/// Derives the package-relative label for an inline module extraction suggestion.
+///
+/// Uses the same [`compilation_unit_label`] mechanism that derives the root's own unit label,
+/// so single-root and multi-root packages format suggested paths identically.
+fn suggested_module_path(package: &Value, candidate: &Path) -> String {
+    compilation_unit_label(package, candidate).unwrap_or_else(|| xingbiao::path_label(candidate))
+}
+
 /// Check one compilation unit root. Custom target roots relative to `src_dir` map to `crate`.
 /// Roots outside the package manifest directory error as configuration errors.
 /// Sibling compilation unit roots are excluded from module discovery to prevent duplicate violations.
-/// Inline modules own no source file and cannot be governed targets (exit 2).
+/// Inline modules own no source file and cannot be governed targets (exit 2). An inline target is
+/// present in its root rather than absent from it, so that refusal is returned at once: deferring it,
+/// a sibling root backing the same path with a file would absorb it and leave the inline body
+/// unobserved behind a clean report.
+///
+/// A root without the governed module reports [`RootOutcome::ModuleAbsent`]. Whether it is judged
+/// first is the rule's [`Perimeter`]: under `GovernedModule` it holds nothing the rule governs and is
+/// not; under `WholeRoot` it is judged through the same dispatch as a governed root, with an empty
+/// permitted region. The caller keeps those findings only when some root is governed, so a package where
+/// no root has the module is still a constitution error.
 fn check_one_root(
     package: &Value,
     root_file: Option<&Path>,
@@ -679,6 +702,7 @@ fn check_one_root(
     if let Some(siblings) = sibling_roots {
         files.retain(|f| root_file.is_some_and(|r| r == f.as_path()) || !siblings.contains(f));
     }
+    files.retain(|f| !is_another_crate_root(f, &src_dir, root_relative.as_deref()));
     let (reachable, inline_only, remapped, remap_shadowed) =
         reachable_modules(&src_dir, &files, root_relative.as_deref())?;
     let root_modules: Vec<String> = reachable
@@ -702,23 +726,6 @@ fn check_one_root(
         root_relative.as_deref(),
         boundary.depth,
     );
-    if governed.is_empty() {
-        if inline_only.contains(&governed_module) {
-            let leaf = governed_module
-                .rsplit_once("::")
-                .map_or(governed_module.as_str(), |(_, leaf)| leaf);
-            return Ok(RootOutcome::ModuleAbsent(inline_module_target_error(
-                &boundary.module,
-                &boundary.crate_package,
-                leaf,
-            )));
-        }
-        return Ok(RootOutcome::ModuleAbsent(unknown_module_error(
-            &boundary.module,
-            &boundary.crate_package,
-        )));
-    }
-
     let rule = boundary.rule.label();
     let ctx = ScanContext {
         unit,
@@ -732,13 +739,44 @@ fn check_one_root(
         root_modules: &root_modules,
     };
 
+    let outcome = match (
+        governed.is_empty(),
+        inline_only.get(&governed_module),
+        boundary.rule.perimeter(),
+    ) {
+        (true, Some(candidate), _) => {
+            let leaf = governed_module
+                .rsplit_once("::")
+                .map_or(governed_module.as_str(), |(_, leaf)| leaf);
+            let suggested_path = suggested_module_path(package, candidate);
+            return Err(inline_module_target_error(
+                &boundary.module,
+                &boundary.crate_package,
+                leaf,
+                unit_owned.as_deref(),
+                &suggested_path,
+            ));
+        }
+        (true, None, Perimeter::GovernedModule) => {
+            return Ok(RootOutcome::ModuleAbsent(unknown_module_error(
+                &boundary.module,
+                &boundary.crate_package,
+            )));
+        }
+        (true, None, Perimeter::WholeRoot) => RootOutcome::ModuleAbsent(unknown_module_error(
+            &boundary.module,
+            &boundary.crate_package,
+        )),
+        (false, _, _) => RootOutcome::Governed,
+    };
+
     let inbound = matches!(
         &boundary.rule,
         ModuleRule::MustNotBeImportedBy { .. } | ModuleRule::MustOnlyBeImportedBy { .. }
     );
     if inbound {
         check_inbound_rule(&ctx, boundary, &governed_module, rule, violations)?;
-        return Ok(RootOutcome::Governed);
+        return Ok(outcome);
     }
     if let ModuleRule::ConfineExternalCrate { crate_name } = &boundary.rule {
         check_external_confinement(
@@ -749,7 +787,7 @@ fn check_one_root(
             crate_name,
             violations,
         )?;
-        return Ok(RootOutcome::Governed);
+        return Ok(outcome);
     }
     if let Some((prefix, ending_with, strict, external)) = boundary.rule.inline_payload() {
         check_inline_confinement(
@@ -764,8 +802,8 @@ fn check_one_root(
             external,
             violations,
         )?;
-        return Ok(RootOutcome::Governed);
+        return Ok(outcome);
     }
     check_outbound_rule(&ctx, boundary, &governed_module, governed, rule, violations)?;
-    Ok(RootOutcome::Governed)
+    Ok(outcome)
 }

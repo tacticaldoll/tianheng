@@ -714,7 +714,7 @@ fn an_inline_modules_file_backed_child_is_reachable() {
         reachable_modules(&src, &files, None).expect("walk modules");
 
     assert!(
-        inline_only.contains("crate::parent"),
+        inline_only.contains_key("crate::parent"),
         "parent has no file of its own: {inline_only:?}"
     );
     assert!(
@@ -722,7 +722,7 @@ fn an_inline_modules_file_backed_child_is_reachable() {
         "the real compiled file-backed child of an inline module must be reachable: {reachable:?}"
     );
     assert!(
-        !inline_only.contains("crate::parent::child"),
+        !inline_only.contains_key("crate::parent::child"),
         "the child is file-backed, not inline-only: {inline_only:?}"
     );
 }
@@ -851,7 +851,7 @@ fn an_inline_only_grandparents_conventional_orphan_stays_excluded() {
     let (reachable, inline_only, _remapped, _remap_shadowed) =
         reachable_modules(&src, &files, None).expect("walk modules");
     assert!(
-        inline_only.contains("crate::parent"),
+        inline_only.contains_key("crate::parent"),
         "parent is declared inline-only: {inline_only:?}"
     );
     assert!(
@@ -898,7 +898,7 @@ fn a_path_remapped_child_nested_in_an_inline_parent_is_followed() {
         ScanDepth::Subtree,
     );
     assert!(
-        inline_only.contains("crate::parent"),
+        inline_only.contains_key("crate::parent"),
         "parent is declared inline-only: {inline_only:?}"
     );
     assert!(
@@ -1438,7 +1438,7 @@ fn an_inline_sibling_of_a_plain_file_is_still_governed() {
     let (reachable, inline_only, _remapped, _remap_shadowed) =
         reachable_modules(&src, &files, None).expect("walk modules");
     assert!(
-        !inline_only.contains("crate::x"),
+        !inline_only.contains_key("crate::x"),
         "a plain file is declared, so crate::x is not inline-only: {inline_only:?}"
     );
     assert!(

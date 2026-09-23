@@ -293,7 +293,7 @@ A module boundary SHALL support an inbound rule: `ModuleBoundary::in_crate(p).mo
 
 ### Requirement: A boundary reports each violation once
 
-A module boundary SHALL report each distinct violation at most once: its violations SHALL be deduplicated by identity `(target, rule_key, fact)`. When the governed module's subtree spans multiple source files that produce the same finding — a parent and a child file importing the same path, or a module backed by both `lib.rs` and `main.rs` (which both resolve to `crate`) — the system SHALL emit a single violation, not one per file. Deduplication SHALL be performed per boundary at the point findings are produced, so a duplicate arising from any other source is not silently suppressed.
+A module boundary SHALL report each distinct violation at most once: its violations SHALL be deduplicated by identity `(target, rule_key, fact)`. When the governed module's subtree spans multiple source files that produce the same finding — a parent and a child file importing the same path, or one module backed by two files in one root, as the per-platform shim's `#[cfg]` arms remapping `#[path]` are — the system SHALL emit a single violation, not one per file. Deduplication SHALL be performed per boundary at the point findings are produced, so a duplicate arising from any other source is not silently suppressed.
 
 #### Scenario: A finding produced by two files in the governed subtree is reported once
 
@@ -761,13 +761,23 @@ every root, so the three no longer disagree about which of a package's source Ca
 
 Each root SHALL be resolved as its own module graph: two roots of one package both denote the module path
 `crate`, and neither's declarations, inline-module shadowing, nor `#[path]` remaps SHALL leak into the
-other's resolution. An observation SHALL carry the compilation unit it came from as an identity role, per
-`structured-violation-identity`.
+other's resolution. A root's corpus SHALL begin at its own root file: a file whose path alone would denote
+`crate` without being this root — a top-level `mod.rs`, or a top-level `lib.rs` or `main.rs` beside a
+conventional root — is another compiled root or a file no target compiles, and SHALL NOT enter this root's
+graph as a second source of `crate` by virtue of its path. Such a file reached through an explicit `mod` or
+`#[path]` declaration is that declared module's source, like any other file. An observation SHALL
+carry the compilation unit it came from as an identity role, per `structured-violation-identity`.
 
 A governed module SHALL be looked for in **every** root's graph, and an unknown-module constitution error
 SHALL be reported only when **no** root has it. A module legitimately exists in one root's graph and not
 another's — a library's internals are not the binary's — so erroring per root would make a boundary on a
 library-only module exit 2 for the package's `bin` root, refusing to judge source that compiles.
+
+What a root without the governed module contributes depends on the rule's perimeter. For a rule whose
+perimeter is the governed module — every outbound and inbound rule, and inline-symbol-path confinement —
+that root holds nothing the rule governs, and nothing is observed there. External-crate confinement's
+perimeter is the whole root, with the governed module only the region where the confined import is
+permitted, so such a root is judged with an empty permitted region, per `external-crate-confinement`.
 
 A package whose metadata reports no target at all SHALL fall back to its conventional source directory,
 which is what synthetic metadata in a caller's own tests carries; that fallback is load-bearing and SHALL
@@ -783,8 +793,10 @@ source directory, is governed normally.
 
 While evaluating each root, only "this root does not have the governed module" SHALL be deferred to the
 other roots. Every other failure — an unreadable source, a resolution ambiguity, a root outside the
-package directory — SHALL propagate immediately, because deferring it until a sibling root happened to be
-governable would silently pass over source the system could not read.
+package directory, a governed module that root declares inline — SHALL propagate immediately, because
+deferring it until a sibling root happened to be governable would silently pass over source the system
+could not read. An inline target is present in its root rather than absent from it: deferred, a sibling
+root backing the same path with a file would be governed in its place and the inline body left unobserved.
 
 An outbound rule's finding SHALL carry the **importing module** — the module that lexically declares the
 `use`, so an import inside an inline `mod inner { … }` is attributed to that module rather than the
@@ -813,6 +825,31 @@ module, import path) pair rather than the path alone.
   `bin` root whose graph has no such module
 - **THEN** the system governs it in the library root and reports no constitution error, rather than
   refusing to judge because one root lacks it
+
+#### Scenario: A target declared inline in one root is refused though another root backs it with a file
+
+- **WHEN** one root of a package declares the governed module inline and another root backs the same path
+  with a file, whichever of the library and the binary holds the inline form, under an outbound rule or
+  an external-crate confinement
+- **THEN** the system reports the inline-module constitution error (exit 2), rather than governing the
+  file-backed root in its place and reporting clean
+
+#### Scenario: A source file no target compiles is in no root's corpus
+
+- **WHEN** a package with `autobins = false` builds only its library, and an uncompiled `src/main.rs`
+  either declares `pub mod shared;` beside a library that declares `shared` inline, or imports a module a
+  boundary on `crate` forbids — or an undeclared top-level `src/mod.rs` imports it
+- **THEN** the library's inline `shared` is refused as an inline target (exit 2) rather than governed
+  through `src/shared.rs`, and the uncompiled file's import does not react, because none of those files'
+  content is source the package compiles
+
+#### Scenario: A conventional root filename reached through a declaration is that module's source
+
+- **WHEN** a package with `autobins = false` builds only its library, whose `lib.rs` declares
+  `pub mod main;`, and `src/main.rs` imports a module a boundary on `crate::main` forbids
+- **THEN** the system reports the violation with `crate::main` as its importer, because the declaration makes `main.rs`
+  that module's source, rather than refusing the file as a cycle back to the crate root or excluding it
+  for its filename
 
 #### Scenario: One root's declarations do not leak into another's graph
 - **WHEN** two roots of one package each declare a same-named submodule backed by different files

@@ -2598,19 +2598,16 @@ fn a_symlink_is_reported_dangling_only_when_its_target_does_not_resolve() {
     // "metadata failed" test calls this dangling and tells the adopter to recreate a file that is
     // already there. Only absence — `NotFound` — is dangling. This arm needs no race to construct,
     // unlike the one above.
-    use std::os::unix::fs::PermissionsExt;
     let locked = dir.path().join("locked");
     std::fs::create_dir_all(&locked).expect("create locked dir");
     let hidden = locked.join("target.json");
     std::fs::write(&hidden, "{}").expect("write hidden target");
     let unreachable = dir.path().join("unreachable-baseline.json");
     std::os::unix::fs::symlink(&hidden, &unreachable).expect("link into locked dir");
-    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000))
-        .expect("lock the directory");
+    let Some(_unreadable) = xingbiao::Unreadable::try_new(&locked) else {
+        return;
+    };
     let outcome = create_baseline_file(&unreachable.to_string_lossy(), "{}");
-    // Restore before asserting, so a failure cannot leave an undeletable temp tree behind.
-    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755))
-        .expect("unlock the directory");
     match outcome {
         Err(BaselineWriteError::Io(err)) => {
             assert_ne!(

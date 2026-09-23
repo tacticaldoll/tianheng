@@ -19,7 +19,7 @@ mod use_scan;
 pub(crate) use fs_walk::rust_files;
 pub(crate) use lexer::declaration_text;
 pub(crate) use path_vocab::{canonical_module_path, package_name_to_import_ident, path_within};
-pub(crate) use reachability::{governed_files, reachable_modules};
+pub(crate) use reachability::{governed_files, is_another_crate_root, reachable_modules};
 pub(crate) use symbol_scan::{InlineFinding, inline_symbol_findings, value_namespace_item_names};
 pub(crate) use use_scan::{ImportedPath, external_imports_with_importers, imports_with_importers};
 

@@ -503,8 +503,31 @@ fn a_directory_that_cannot_be_flushed_does_not_fail_a_landed_write() {
     struct Restore(PathBuf);
     impl Drop for Restore {
         fn drop(&mut self) {
-            let _ = std::fs::set_permissions(&self.0, std::fs::Permissions::from_mode(0o700));
-            let _ = std::fs::remove_dir_all(&self.0);
+            if let Err(err) =
+                std::fs::set_permissions(&self.0, std::fs::Permissions::from_mode(0o700))
+            {
+                if std::thread::panicking() {
+                    eprintln!(
+                        "Restore: failed to restore permissions for '{}' during unwind: {err}",
+                        self.0.display()
+                    );
+                } else {
+                    panic!(
+                        "failed to restore permissions for '{}': {err}",
+                        self.0.display()
+                    );
+                }
+            }
+            if let Err(err) = std::fs::remove_dir_all(&self.0) {
+                if std::thread::panicking() {
+                    eprintln!(
+                        "Restore: failed to remove directory '{}' during unwind: {err}",
+                        self.0.display()
+                    );
+                } else {
+                    panic!("failed to remove directory '{}': {err}", self.0.display());
+                }
+            }
         }
     }
     let _restore = Restore(dir.clone());

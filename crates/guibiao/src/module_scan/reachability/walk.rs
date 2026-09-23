@@ -558,7 +558,7 @@ pub(crate) fn reachable_modules(
 ) -> Result<
     (
         std::collections::BTreeSet<String>,
-        std::collections::BTreeSet<String>,
+        std::collections::BTreeMap<String, PathBuf>,
         Vec<(PathBuf, String)>,
         std::collections::BTreeSet<String>,
     ),
@@ -568,7 +568,7 @@ pub(crate) fn reachable_modules(
     let files_literal: HashSet<&PathBuf> = files.iter().collect();
 
     let mut reachable = std::collections::BTreeSet::new();
-    let mut inline_only = std::collections::BTreeSet::new();
+    let mut inline_only = std::collections::BTreeMap::new();
     let mut graph = GraphSources::default();
     reachable.insert("crate".to_string());
     if let Some(root_files) = by_module.get("crate") {
@@ -592,6 +592,7 @@ pub(crate) fn reachable_modules(
                 conditional,
             } = child_sources;
             let child_path = format!("{module}::{child}");
+            let inline_extraction_base = bodies.first().map(|b| b.base.clone());
             if seen_inline {
                 register_inline_sources(&child, &child_path, bodies, &mut graph)?;
             }
@@ -609,7 +610,10 @@ pub(crate) fn reachable_modules(
                 false
             };
             if seen_inline && !plain_file_resolved {
-                inline_only.insert(child_path.clone());
+                let suggested = inline_extraction_base
+                    .map(|base| base.join(format!("{child}.rs")))
+                    .unwrap_or_else(|| src_dir.join(format!("{child}.rs")));
+                inline_only.insert(child_path.clone(), suggested);
             }
             resolve_direct_paths(&child_path, seen_plain_file, direct, &mut graph)?;
             resolve_conditional_paths(&child_path, seen_plain_file, conditional, &mut graph)?;
