@@ -63,7 +63,8 @@ them.
   Measured against 0.6.1 with a library declaring `shared` inline and importing a forbidden module, and an
   uncompiled `main.rs` declaring `pub mod shared;` beside a `shared.rs`: `Clean`, because `shared.rs` was
   governed in place of the inline body rustc compiles. That now refuses the inline target, and an import
-  written only in the uncompiled file no longer reacts. A library that declares `pub mod main;` over such a
+  written only in the uncompiled file no longer reacts. An undeclared top-level `src/mod.rs`, which also
+  denotes `crate` by its path, is left out the same way. A library that declares `pub mod main;` over such a
   file is now judged under `crate::main`, where it was refused as a cycle back to the crate root.
 
   **Why a minor:** each closes a false negative by default, and the last also removes findings. A tree that
@@ -79,7 +80,7 @@ them.
   A package whose binary roots do not import the confined crate is unaffected.
 - **A governed module declared inline in one root and backed by a file in another now exits 2.** Give the
   inline form its own file, or govern a module that is file-backed in every root that declares it.
-- **A package with a conventional `lib.rs` or `main.rs` that no target compiles** may report fewer findings
+- **A package with a top-level `lib.rs`, `main.rs`, or `mod.rs` that no target compiles** may report fewer findings
   or a new inline-target refusal. Regenerate any recorded baseline with `tianheng check --write-baseline
   <file>` — `--disallow-stale` reports an entry from the uncompiled file — and re-apply `owner` / `tracker`
   annotations.

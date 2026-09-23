@@ -761,10 +761,11 @@ every root, so the three no longer disagree about which of a package's source Ca
 
 Each root SHALL be resolved as its own module graph: two roots of one package both denote the module path
 `crate`, and neither's declarations, inline-module shadowing, nor `#[path]` remaps SHALL leak into the
-other's resolution. A root's corpus SHALL begin at its own root file: a conventional `lib.rs` or `main.rs`
-that is not this root — another compiled root, or a file no target compiles — SHALL NOT enter this root's
-graph as a second source of `crate` by virtue of its filename. Such a file reached through an explicit
-`mod` or `#[path]` declaration is that declared module's source, like any other file. An observation SHALL
+other's resolution. A root's corpus SHALL begin at its own root file: a file whose path alone would denote
+`crate` without being this root — a top-level `mod.rs`, or a top-level `lib.rs` or `main.rs` beside a
+conventional root — is another compiled root or a file no target compiles, and SHALL NOT enter this root's
+graph as a second source of `crate` by virtue of its path. Such a file reached through an explicit `mod` or
+`#[path]` declaration is that declared module's source, like any other file. An observation SHALL
 carry the compilation unit it came from as an identity role, per `structured-violation-identity`.
 
 A governed module SHALL be looked for in **every** root's graph, and an unknown-module constitution error
@@ -837,16 +838,16 @@ module, import path) pair rather than the path alone.
 
 - **WHEN** a package with `autobins = false` builds only its library, and an uncompiled `src/main.rs`
   either declares `pub mod shared;` beside a library that declares `shared` inline, or imports a module a
-  boundary on `crate` forbids
+  boundary on `crate` forbids — or an undeclared top-level `src/mod.rs` imports it
 - **THEN** the library's inline `shared` is refused as an inline target (exit 2) rather than governed
-  through `src/shared.rs`, and the uncompiled file's import does not react, because neither file's
+  through `src/shared.rs`, and the uncompiled file's import does not react, because none of those files'
   content is source the package compiles
 
 #### Scenario: A conventional root filename reached through a declaration is that module's source
 
 - **WHEN** a package with `autobins = false` builds only its library, whose `lib.rs` declares
   `pub mod main;`, and `src/main.rs` imports a module a boundary on `crate::main` forbids
-- **THEN** the system reports the violation under `crate::main`, because the declaration makes `main.rs`
+- **THEN** the system reports the violation with `crate::main` as its importer, because the declaration makes `main.rs`
   that module's source, rather than refusing the file as a cycle back to the crate root or excluding it
   for its filename
 

@@ -758,20 +758,23 @@ fn an_uncompiled_conventional_root_file_does_not_stand_in_for_a_compiled_inline_
 }
 
 /// The other side of the same corpus: what an uncompiled file imports is not source the package
-/// compiles, so it does not react.
+/// compiles, so it does not react. Every file whose path alone denotes `crate` is covered — an uncompiled
+/// `main.rs`, and a top-level `mod.rs`, which no target compiles unless something declares it.
 #[test]
-fn an_uncompiled_conventional_root_file_is_not_judged() {
-    let probe = RootProbe::new(
-        "strayimport",
-        "autobins = false\n",
-        &[
-            ("src/lib.rs", "pub mod forbidden;\n"),
-            ("src/forbidden.rs", "pub struct X;\n"),
-            ("src/main.rs", "use crate::forbidden::X;\nfn main() {}\n"),
-        ],
-    );
-    let outcome = check(&clock_free_import_law("strayimport"), probe.manifest());
-    assert_eq!(outcome.exit_code(), 0, "{outcome:?}");
+fn a_top_level_file_no_target_compiles_is_not_judged() {
+    for (package, stray) in [("straymain", "src/main.rs"), ("straymod", "src/mod.rs")] {
+        let probe = RootProbe::new(
+            package,
+            "autobins = false\n",
+            &[
+                ("src/lib.rs", "pub mod forbidden;\n"),
+                ("src/forbidden.rs", "pub struct X;\n"),
+                (stray, "use crate::forbidden::X;\n"),
+            ],
+        );
+        let outcome = check(&clock_free_import_law(package), probe.manifest());
+        assert_eq!(outcome.exit_code(), 0, "{stray}: {outcome:?}");
+    }
 }
 
 fn clock_free_import_law(package: &str) -> Constitution {
@@ -803,7 +806,28 @@ fn a_conventional_root_filename_reached_through_a_declaration_is_that_modules_so
             .must_not_import("crate::forbidden")
             .because("the main module does not reach the forbidden module"),
     );
-    let files = reacting_files(&check(&law, probe.manifest()));
-    assert_eq!(files.len(), 1, "{files:?}");
-    assert!(files[0].ends_with("src/main.rs"), "{files:?}");
+    let Outcome::Violations(report) = check(&law, probe.manifest()) else {
+        panic!("the declared `crate::main` imports the forbidden module, so it must react");
+    };
+    assert_eq!(report.violations.len(), 1, "{:?}", report.violations);
+    let violation = &report.violations[0];
+    assert!(
+        violation
+            .file
+            .as_deref()
+            .is_some_and(|f| f.ends_with("src/main.rs")),
+        "{violation:?}"
+    );
+    let importer: Vec<_> = violation
+        .fact()
+        .fields()
+        .filter(|(role, _)| *role == "importer")
+        .map(|(_, value)| value)
+        .collect();
+    assert_eq!(
+        importer,
+        ["crate::main"],
+        "the file is the declared module's source, so the import is attributed to that module: {:?}",
+        violation.fact()
+    );
 }
