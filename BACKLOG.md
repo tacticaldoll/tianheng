@@ -858,13 +858,15 @@ consumer for an undemonstrated deduplication.
   mutation. Unlike the six above, the reason is structural rather than economic and the change stated it:
   `every_declared_mutation_s_name_resolves_to_a_real_bound_id` refuses a record whose name resolves to no
   bound id, so an ordinary scenario's citation **cannot** carry one. What that exposes is the second
-  addition. The figure `pin_bites` prints counts every distinct `PINNED-BY` name under `openspec/specs`,
+  addition. The figure `pin_bites` printed counted every distinct `PINNED-BY` name under `openspec/specs`,
   while a mutation may only name a test that a **pinned bound** cites. Measured 2026-09-20, by extracting
   the `PINNED-BY` names across `openspec/specs` and the `pinned by` names from the two bound projections and
-  comparing the distinct sets: **258 cited, 79 eligible**. Most of the remainder this gate reports is
-  therefore not coverage anyone can author — it is a denominator the numerator cannot reach by construction
-  — so *coverage grows one considered record at a time* is being measured against the wrong set until the
-  gate reports the eligible half on its own.
+  comparing the distinct sets: **258 cited, 79 eligible**. Most of the remainder that gate reported was
+  therefore not coverage anyone can author — it was a denominator the numerator cannot reach by construction.
+  The gate now reads coverage against the tests a declared bound cites and prints the ordinary-only citations
+  as a separate figure, so *coverage grows one considered record at a time* is measured against the set a
+  record can reach; its eligible figure, taken from its own output on 2026-09-24, agreed with the extraction
+  above.
 
   **Not fired, measured 2026-09-08.** The obligation this entry settled on is that citing carries the
   mutation, so the sweep is what the window cited. Measured over the delta: `+.*PINNED-BY` in

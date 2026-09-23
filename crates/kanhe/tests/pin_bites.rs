@@ -539,18 +539,71 @@ fn every_declared_mutation_kills_the_pin_it_names() {
         );
     }
 
+    let coverage = Coverage::of(&records, &cited);
     eprintln!(
-        "pin bites ok ({} declared mutation(s) covering {} of {} cited test(s)) — the uncovered remainder is \
-         the point: a gate reporting only the mutations it ran would be the reads-as-coverage failure it \
-         exists to end, one level up",
-        records.len(),
-        records
-            .iter()
-            .map(|r| r.name.as_str())
-            .collect::<std::collections::BTreeSet<_>>()
-            .len(),
-        cited.len()
+        "pin bites ok ({} declared mutation(s) covering {} of {} test(s) a declared bound cites; {} more \
+         cited only under ordinary scenarios, which no record may name) — the uncovered remainder is the \
+         point: a gate reporting only the mutations it ran would be the reads-as-coverage failure it exists \
+         to end, one level up",
+        coverage.mutations, coverage.covered, coverage.bound_cited, coverage.ordinary_only
     );
+}
+
+/// What a clean run discloses, split where a record's admissibility splits it.
+///
+/// A record may name only a test a declared bound cites — `every_declared_mutation_s_name_resolves_to_a_real_bound_id`
+/// refuses any other — so the denominator coverage is read against is `bound_cited`, and a test cited only under
+/// ordinary scenarios is counted apart as `ordinary_only`. Folding the two into one figure reports as uncovered
+/// what no record can cover.
+struct Coverage {
+    mutations: usize,
+    covered: usize,
+    bound_cited: usize,
+    ordinary_only: usize,
+}
+
+impl Coverage {
+    fn of(records: &[Record], cited: &HashMap<String, Vec<String>>) -> Self {
+        let bound_cited = cited.values().filter(|ids| !ids.is_empty()).count();
+        Coverage {
+            mutations: records.len(),
+            covered: records
+                .iter()
+                .map(|r| r.name.as_str())
+                .collect::<std::collections::BTreeSet<_>>()
+                .len(),
+            bound_cited,
+            ordinary_only: cited.len() - bound_cited,
+        }
+    }
+}
+
+/// A test cited only under an ordinary scenario is counted apart from the bound-cited denominator, and a test
+/// two records name is covered once.
+#[test]
+fn pin_coverage_counts_ordinary_only_citations_apart() {
+    let record = |name: &str| Record {
+        name: name.to_string(),
+        file: String::new(),
+        from: String::new(),
+        to: String::new(),
+    };
+    let cited = HashMap::from([
+        ("bound_pin".to_string(), vec!["cap/a-bound".to_string()]),
+        (
+            "uncovered_bound_pin".to_string(),
+            vec!["cap/another-bound".to_string()],
+        ),
+        ("ordinary_pin".to_string(), Vec::new()),
+    ]);
+    let coverage = Coverage::of(&[record("bound_pin"), record("bound_pin")], &cited);
+    assert_eq!(coverage.mutations, 2);
+    assert_eq!(coverage.covered, 1);
+    assert_eq!(
+        coverage.bound_cited, 2,
+        "a test cited only under an ordinary scenario is in the denominator, where no record can reach it"
+    );
+    assert_eq!(coverage.ordinary_only, 1);
 }
 
 /// A bare `#### ` heading not spelled `Scenario:` ends the open bound scenario in `citations_in`, matching
