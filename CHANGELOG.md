@@ -87,6 +87,13 @@ them.
 
 ### Self-governance
 
+- **Dev-dependencies' licenses are checked.** `deny.toml` says a dependency under a license it does not
+  allow fails CI until reviewed, and cargo-deny leaves a crate reached only through `[dev-dependencies]` out
+  of that check unless `licenses.include-dev` is set — while the self-law's crate boundaries observe normal
+  edges alone, so nothing held the sentence for the dependencies only this repository's checks use. It is
+  set now: a Zlib crate planted as a dev-dependency of `kanhe` passed before and is rejected after, and the
+  tracked tree passes unchanged.
+
 - **The self-law's dependency reasons say which edges they observe.** The crate boundaries said a crate
   *depends on* its allowlist *only*, some adding that no other edge *can exist* or that none reaches a
   workspace member, while `restrict_dependencies_to` reads the names of direct normal dependencies and holds
