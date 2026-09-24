@@ -1385,40 +1385,66 @@ being touched.
 observes of the act, never from the tool's status.** A tool's status is the tool's class: `gh pr merge` exits `1`
 when it does not merge and `cargo publish` exits `1` on an argument it cannot parse, and `1` is the class reserved
 for a gate that ran and refused. So no wrapper SHALL `exec` its act, and an act that did not complete SHALL exit the
-unjudged class. A status is also not an observation of the far side — a client can exit non-zero after the server
-acted, when the response is what was lost — so a sentence saying an act did or did not happen SHALL rest on a
-reading of its outcome, and where no reading is available the wrapper SHALL say the outcome is unknown.
+unjudged class. That no wrapper `exec`s is observed by what an `exec` does rather than by reading for the word: an
+`exec`d act's own `1` reaches the caller and its EXIT trap never runs, and the directions below and the one holding
+*no temporary file behind* see both, in whatever command position the `exec` is written. A status is also not an
+observation of the far side — a client can exit non-zero after the server acted, when the response is what was
+lost — so a sentence saying an act did or did not happen SHALL rest on a reading of its outcome, and where no
+reading is available the wrapper SHALL say the outcome is unknown.
 
-The merge wrapper reads the pull request back after the act, on both paths. Read as merged, it SHALL exit clean
-and print the pull request and its squash commit, printing the commit only where the reading is a commit ID and
-saying it is unknown otherwise, since gh prints nothing on success when its output is not a terminal; where gh had
-exited non-zero it SHALL say so beside the report. Read as not merged, it SHALL exit the unjudged class and say no
-merge was recorded. Unreadable, it SHALL exit clean saying the squash commit is unknown if gh reported success, and
-the unjudged class saying whether it merged is unknown if gh did not. The publish wrapper has nothing to read back
-and SHALL, where cargo does not complete, exit the unjudged class and say that what cargo reported uploading stays
-on the registry, since a workspace publish stops crate by crate.
+The merge wrapper reads the pull request back after the act, on both paths, and **a merged pull request is not
+the act; the record it carries is.** One read as merged may have been merged before this call — by an earlier
+run, in the web UI, by another actor after the re-reads — so the wrapper SHALL read the squash commit's message
+and the head it merged and compare them with the subject, body and head the gate judged. Read as merged with a
+record carrying all three, it SHALL exit clean and print the pull request and its squash commit, whoever's call
+produced it, and where gh had exited non-zero it SHALL say so beside the report; gh prints nothing on success when
+its output is not a terminal, which is why the report is the wrapper's. Read as merged with a record carrying
+anything else, it SHALL exit the unjudged class saying the merge is not the act the gate judged, and why. Read as
+not merged, whatever gh reported, it SHALL exit the unjudged class and say GitHub records no merge. Where the state
+or the record cannot be read, it SHALL exit clean, saying which half is unknown, only if gh reported the merge, and
+otherwise exit the unjudged class saying the outcome is unknown. A commit SHALL be printed as one only where the
+reading has a commit ID's shape.
+
+The publish wrapper reads nothing back from the registry, so its account observes cargo's status and nothing
+else. Where cargo does not complete, it SHALL exit the unjudged class and say that which of the crates cargo named
+were published is unknown, since a workspace publish stops crate by crate; on success it SHALL add no sentence of
+its own, since any would claim a reading it never made.
 
 **No write SHALL choose a wrapper's class.** Every line a wrapper or its library prints goes through a writer that
-cannot fail, and a broken pipe is a failed write rather than a signal, so a caller that closed or abandoned a
-stream receives the same class as one that read it.
+cannot fail, and each wrapper ignores SIGPIPE immediately after `set -Eeuo pipefail` — before its library is sourced, so the
+bootstrap guard and every argument refusal are covered — so a broken pipe is a failed write rather than a signal,
+and a caller that closed or abandoned a stream receives the same class as one that read it.
 
 #### Scenario: A merge completes
 
-- **WHEN** the gate agrees and gh merges
+- **WHEN** the gate agrees, gh merges, and the record GitHub holds carries the judged subject, body and head
 - **THEN** the wrapper prints the pull request and its squash commit and exits clean
 - **PINNED-BY** `a_completed_merge_names_the_squash_commit_it_recorded`
 
 #### Scenario: gh does not complete the merge
 
 - **WHEN** the gate agrees, gh exits `1`, and the pull request reads as open
-- **THEN** the wrapper exits the unjudged class saying no merge was recorded, never gh's own `1`
+- **THEN** the wrapper exits the unjudged class saying GitHub records no merge, never gh's own `1`
 - **PINNED-BY** `a_merge_gh_does_not_complete_exits_the_unjudged_class`
 
-#### Scenario: gh reports a failure after the merge landed
+#### Scenario: gh reports the merge complete and the pull request reads as open
 
-- **WHEN** gh exits `1` and the pull request reads as merged
+- **WHEN** gh exits `0` and the pull request reads as open, as a merge queue's enqueue or a lagging read leaves it
+- **THEN** the wrapper exits the unjudged class, naming gh's report and saying GitHub records no merge
+- **PINNED-BY** `a_merge_gh_reports_complete_but_github_reads_open_records_no_merge`
+
+#### Scenario: gh reports a failure after the judged merge landed
+
+- **WHEN** gh exits `1` and the pull request reads as merged with a record carrying the judged act
 - **THEN** the wrapper exits clean, naming the squash commit and gh's failure beside it
 - **PINNED-BY** `a_merge_gh_reports_failed_but_github_reads_merged_is_a_completed_merge`
+
+#### Scenario: A merged pull request whose record is not the judged act
+
+- **WHEN** the pull request reads as merged and its squash commit carries another message, or merged another head
+- **THEN** the wrapper exits the unjudged class saying the merge is not the act the gate judged, and reports no merge
+  of its own
+- **PINNED-BY** `a_merged_pull_request_whose_record_is_not_the_judged_act_is_refused`
 
 #### Scenario: gh reports a failure and the outcome cannot be read
 
@@ -1426,27 +1452,29 @@ stream receives the same class as one that read it.
 - **THEN** the wrapper exits the unjudged class saying whether it merged is unknown, never that nothing landed
 - **PINNED-BY** `a_failed_merge_whose_state_cannot_be_read_says_whether_it_merged_is_unknown`
 
+#### Scenario: gh reports a failure and the record cannot be read
+
+- **WHEN** gh exits `1`, the pull request reads as merged, and its squash commit cannot be read
+- **THEN** the wrapper exits the unjudged class saying whether that merge is the judged one is unknown
+- **PINNED-BY** `a_failed_merge_whose_record_cannot_be_read_is_not_claimed`
+
 #### Scenario: A completed merge's squash cannot be read back
 
-- **WHEN** gh merges and the read-back fails, or succeeds carrying something other than a commit ID
+- **WHEN** gh merges and the state or the squash commit cannot be read back, or the reading carries something other
+  than a commit ID
 - **THEN** the wrapper says the merge completed and which half is unknown, and exits clean
 - **PINNED-BY** `a_merge_whose_squash_cannot_be_read_back_says_so`
 
 #### Scenario: cargo does not complete the publish
 
 - **WHEN** the source gate agrees and `cargo publish` exits `1`
-- **THEN** the wrapper exits the unjudged class and says what was uploaded stays uploaded
+- **THEN** the wrapper exits the unjudged class and says which of the named crates were published is unknown
 - **PINNED-BY** `a_publish_cargo_does_not_complete_exits_the_unjudged_class`
 
-#### Scenario: No wrapper execs its act
+#### Scenario: A closed or broken stderr moves no class chosen before or by the library
 
-- **WHEN** either wrapper or the library is read for `exec` and `perform_the_act` in statement position
-- **THEN** no `exec` is found, and each wrapper performs exactly one act
-- **PINNED-BY** `each_wrapper_performs_its_act_and_execs_nothing`
-
-#### Scenario: A closed stream moves no class the library chooses
-
-- **WHEN** the library's violation, unjudged and ERR-trap paths run with standard error closed
+- **WHEN** the library's violation, unjudged and ERR-trap paths, a wrapper refusing its arguments, a wrapper whose
+  library is absent, or the library run as a command writes to a standard error that is closed or a broken pipe
 - **THEN** each exits the class it exits with the stream open
 - **PINNED-BY** `no_closed_stream_moves_the_library_s_classes`
 

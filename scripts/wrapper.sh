@@ -50,6 +50,7 @@ WRAPPER_EXIT_MISUSE=64
 # read as a gate that refused and `2` as a wrapper that could not judge.
 # `a_library_run_as_a_command_stops_without_reaching_a_wrapper_s_classes` runs the file.
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+    trap '' PIPE
     printf '%s\n' \
         'wrapper.sh is a library the two wrappers source, not a wrapper itself. Run scripts/merge-pr.sh or scripts/publish.sh' \
         >&2 || :
@@ -62,8 +63,16 @@ fi
 # re-entered it, and the second failure left through errexit with printf's own status, the class reserved for a
 # gate that ran and refused — and a report printed after a completed act exited `2`, calling the merge it had
 # just made a run that reached no verdict. The class is the one fact a closed terminal must not move; the text is
-# what an operator loses by closing it. `install_exit_class_trap` ignores SIGPIPE so a broken pipe is such a
-# failed write rather than a signal that ends the shell with `141`, which is neither class.
+# what an operator loses by closing it.
+#
+# **A broken pipe is a failed write, never a signal**, and that half cannot live here. SIGPIPE's default ends the
+# shell with `141`, which is neither class, so each wrapper ignores it immediately after `set -Eeuo pipefail` —
+# before this file is sourced, because the bootstrap guard and the argument refusals run before this library's
+# trap is installed, and measured with stderr into a broken pipe, a usage error exited `141` while the ignore sat
+# in `install_exit_class_trap`. The misuse guard above, which runs with no wrapper around it, ignores it for
+# itself. The disposition is inherited by every tool a wrapper runs, which then meets a broken pipe as a write
+# error of its own: the gate's output is captured rather than written, and the act's status is read by its
+# account rather than trusted.
 #
 # `tell` is for the operator's diagnostics and goes to stderr; `say` is the one line of result a completed act
 # reports, and goes to stdout, where a caller capturing the result reads it.
@@ -106,7 +115,6 @@ refuse() {
 # unaffected. An explicit `exit` is not intercepted, so the gate's verdict still reaches the caller. `set -E`
 # is required and is not optional: without it a failure inside a function exits 1 and the trap never sees it.
 install_exit_class_trap() {
-    trap '' PIPE
     trap 'cannot_judge "an unguarded command failed, so this wrapper stopped without reaching a verdict — which is not the same fact as a gate that ran and refused"' ERR
 }
 

@@ -1570,7 +1570,8 @@ consumer for an undemonstrated deduplication.
   other, by running each new direction against both. **Not fired**: the one divergence is the account's
   body, answered differently for a stated reason, which this entry's own reading excludes; the defect the
   review found — a tool's status choosing the class — was in both copies, and is closed in the one place both
-  now call. `each_wrapper_performs_its_act_and_execs_nothing` holds the shape.
+  now call. What holds the shape is behavioural rather than a reading: an `exec`d act's own `1` reaching the
+  caller, and its skipped EXIT trap, are what the account and cleanup directions of both wrappers observe.
 
 - **ACCEPTED DEBT: A branch name is governed by prose alone, and the gate that would hold it is declined.**
   *Class:* ACCEPTED DEBT, re-classified 2026-09-01 when the trigger fired and the steward re-decided; WATCH

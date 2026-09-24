@@ -52,6 +52,8 @@
 # what let the short forms through the sibling wrapper; refusing them costs an argument's worth of
 # typing and removes the parsing question entirely.
 set -Eeuo pipefail
+# The stream policy, before anything can write: `scripts/wrapper.sh`'s paragraph on `tell` says why it is here.
+trap '' PIPE
 
 WRAPPER_SUBJECT='publish source'
 # The lifecycle this wrapper is built on: the two exit classes and the one helper that chooses them, the
@@ -214,15 +216,17 @@ cd "$repo" || cannot_judge \
 # refused. The allowlist above keeps every such argument away today; this is what keeps the class right without
 # relying on that.
 #
-# Nothing is read back, and a success says nothing of its own: `cargo publish` names every crate it uploads as it
-# goes, so its output already is the record. A failure is the case that needs a sentence, because a workspace
-# publish uploads crate by crate — a run that stops has uploaded what it said it uploaded, permanently.
+# Nothing is read back from the registry, so this account observes cargo's status and nothing else, and says so.
+# A success adds no sentence of its own: cargo's output is all the record there is, and a line here would claim
+# a reading this wrapper never made. A failure needs one, because a workspace publish uploads crate by crate —
+# a run that stops may have published some of the crates it named, and which ones is unknown to this wrapper.
 account_for_the_publish() {
     local status=$1
     if ((status != 0)); then
-        cannot_judge "cargo publish exited $status without completing, after the source gate had agreed. Any crate \
-it reported uploading above is on the registry and stays there — a version can be yanked, never replaced — so \
-read that output before running this again. This is not the same fact as a gate that ran and refused"
+        cannot_judge "cargo publish exited $status without completing, after the source gate had agreed. Nothing was \
+read back from the registry, so which of the crates it named were published is unknown — check crates.io before \
+running this again, since a published version can be yanked but never replaced. This is not the same fact as a \
+gate that ran and refused"
     fi
 }
 

@@ -756,7 +756,8 @@ fn a_gate_that_passes_without_judging_stops_before_the_publish() {
 ///
 /// `cargo publish` exits `1` on an argument it cannot parse, and `1` is the class reserved for a gate that ran
 /// and refused — so an `exec`d publish reported its own failure as a disagreement the gate never found. The
-/// operator is told that what was uploaded stays uploaded, because a workspace publish stops crate by crate.
+/// operator is told which crates were published is unknown, because a workspace publish stops crate by crate and
+/// nothing here reads the registry back.
 #[test]
 fn a_publish_cargo_does_not_complete_exits_the_unjudged_class() {
     let Some(root) = workspace_root() else {
@@ -777,7 +778,9 @@ fn a_publish_cargo_does_not_complete_exits_the_unjudged_class() {
     assert!(
         run.stderr
             .contains("cargo publish exited 1 without completing")
-            && run.stderr.contains("stays there"),
+            && run
+                .stderr
+                .contains("which of the crates it named were published is unknown"),
         "the operator is told the act failed and what it may have left, got: {}",
         run.stderr
     );

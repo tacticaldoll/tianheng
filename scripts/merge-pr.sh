@@ -25,6 +25,8 @@
 #
 # A merge made in the GitHub web UI reaches no wrapper at all; that is a declared bound, not an oversight.
 set -Eeuo pipefail
+# The stream policy, before anything can write: `scripts/wrapper.sh`'s paragraph on `tell` says why it is here.
+trap '' PIPE
 
 WRAPPER_SUBJECT='merge message'
 # The lifecycle this wrapper is built on: the two exit classes and the one helper that chooses them, the
@@ -685,49 +687,78 @@ require_ci_green
 # about the wrong cause, on the invocation with no passthrough flags that is the ordinary one. The `+` form
 # is used rather than a version check, so no minimum has to be declared anywhere and kept in step.
 #
-# What the merge recorded, decided from the pull request as GitHub reads it after the act, never from gh's status.
+# What the merge recorded, decided from what GitHub holds after the act, never from gh's status.
 #
 # gh prints nothing on success when its output is not a terminal, so without this a completed merge was a silent
-# exit 0 every operator confirmed by reading GitHub afterwards. And gh's status alone cannot say what happened on
-# the other side: it exits `1` when it does not merge — a head that moved under `--match-head-commit`, a closed
-# pull request — and equally when the merge landed and the response was what failed. So the state is read back
-# on both paths, and each sentence below says only what that reading, or its absence, establishes:
+# exit 0 every operator confirmed by reading GitHub afterwards. And gh's status is not an observation of the far
+# side: it exits `1` when it does not merge — a head that moved under `--match-head-commit`, a pull request
+# already merged or closed — and equally when the merge landed and the response was what was lost.
 #
-#   read MERGED            → the merge happened; the squash commit is named where it reads as a commit ID, and
-#                            said to be unknown where it does not — a successful response can carry `null`
-#   read, not MERGED       → no merge was recorded, which the reading observed; unjudged if gh said it failed,
-#                            and unjudged too if gh said it succeeded, since the two then disagree
-#   unreadable             → gh's own report is all there is: a completed merge whose squash is unknown, or a
-#                            failed one where whether anything landed is unknown
+# **A merged pull request is not this act; the record it carries is.** A pull request read as merged may have
+# been merged by an earlier run, in the web UI, or by another actor between the re-reads above and the call —
+# so the squash commit's message and the head it merged are read back and compared with the subject, body and
+# head the gate judged. Only a record carrying all three is the judged act, whoever's call produced it; one
+# carrying anything else is refused as not this act, which is what a re-run after an unknown outcome needs told
+# apart.
 #
-# Every branch but a completed merge leaves through `cannot_judge`, so a failed act is never gh's `1`.
+# The comparison is exact, which rests on GitHub recording `--subject` and `--body` as given. Measured
+# 2026-09-24 over the last 40 squash commits on `release/0.7.0`, all merged through this wrapper: no appended
+# trailer and no `(#N)`, and `gh api …/commits/<sha> --jq .commit.message` byte-identical to `git log -1
+# --format=%B` for the same commit. A record GitHub did rewrite would be refused here as not the judged message,
+# which is true of it. Each sentence below says only what its reading, or the reading's absence, establishes:
+#
+#   state unreadable       → gh's own report is all there is: clean if it reported the merge, unknown if not
+#   read, not MERGED       → GitHub records no merge, whatever gh reported
+#   MERGED, record unread  → clean if gh reported the merge, since it made it; unknown whose merge it is if not
+#   MERGED, record differs → a merge that is not the act the gate judged
+#   MERGED, record matches → the judged act, named with its squash commit
 account_for_the_merge() {
-    local status=$1 reading state="" commit=""
-    reading=$(gh pr view "$pr_number" --repo "$repository" --json state,mergeCommit \
-        --jq '.state + " " + (.mergeCommit.oid // "")') || reading=""
-    read -r state commit <<< "$reading" || :
-    local exited="gh exited $status from the merge of pull request $pr_number"
-    if [[ $state == MERGED ]]; then
-        if [[ $commit =~ ^[0-9a-f]{40}$ ]]; then
-            say "merged pull request $pr_number as $commit"
-        else
+    local status=$1 reading state="" commit="" merged_head="" recorded="" differs=""
+    local gh_said="gh reported the merge of pull request $pr_number complete"
+    if ((status != 0)); then
+        gh_said="gh exited $status from the merge of pull request $pr_number"
+    fi
+    # `|`-joined, because `read` collapses a run of whitespace separators and a missing commit would shift the
+    # head into its field.
+    reading=$(gh pr view "$pr_number" --repo "$repository" --json state,mergeCommit,headRefOid \
+        --jq '[.state, (.mergeCommit.oid // ""), .headRefOid] | join("|")') || reading=""
+    IFS='|' read -r state commit merged_head <<< "$reading" || :
+    if [[ -z $state ]]; then
+        if ((status == 0)); then
+            say "merged pull request $pr_number, as gh reported; its state could not be read back — check it on GitHub"
+            return
+        fi
+        cannot_judge "$gh_said, and its state could not be read back, so whether it merged is unknown — check it \
+on GitHub before running this again. The gate had agreed; this is not a message that disagrees"
+    fi
+    if [[ $state != MERGED ]]; then
+        cannot_judge "$gh_said, and GitHub reads it as $state, so it records no merge, although the gate had \
+agreed — gh's own message, if any, is above. That is not the same fact as a message that disagrees"
+    fi
+    if [[ $commit =~ ^[0-9a-f]{40}$ ]]; then
+        recorded=$(gh api "repos/$repository/commits/$commit" --jq .commit.message) || recorded=""
+    fi
+    if [[ -z $recorded ]]; then
+        if ((status == 0)); then
             say "merged pull request $pr_number; its squash commit could not be read back — check it on GitHub"
+            return
         fi
-        if ((status != 0)); then
-            tell "$WRAPPER_SUBJECT: $exited, but GitHub reads the pull request as merged, so the merge is what was recorded"
-        fi
-    elif [[ -n $state ]]; then
-        if ((status != 0)); then
-            cannot_judge "$exited, and GitHub reads the pull request as $state, so no merge was recorded, although \
-the gate had agreed — gh's own message is above. That is not the same fact as a message that disagrees"
-        fi
-        cannot_judge "gh reported the merge of pull request $pr_number complete, yet GitHub reads it as $state — \
-check it on GitHub before running this again"
-    elif ((status != 0)); then
-        cannot_judge "$exited, and the pull request's state could not be read back, so whether it merged is \
-unknown — check it on GitHub before running this again. The gate had agreed; this is not a message that disagrees"
-    else
-        say "merged pull request $pr_number, as gh reported; its state could not be read back — check it on GitHub"
+        cannot_judge "$gh_said, and GitHub reads it as merged, but its squash commit could not be read back, so \
+whether that merge is the one the gate judged is unknown — check it on GitHub before running this again"
+    fi
+    if [[ $recorded != "$subject"$'\n\n'"$body" ]]; then
+        differs="its message is not the subject and body the gate judged"
+    elif [[ $merged_head != "$head" ]]; then
+        differs="it merged head ${merged_head:-unknown}, not the head $head the gate judged"
+    fi
+    if [[ -n $differs ]]; then
+        cannot_judge "pull request $pr_number is merged as $commit, but that merge is not the act the gate judged: \
+$differs. $gh_said — check the pull request on GitHub, since a squash commit cannot be amended without \
+decoupling it from the pull request's record"
+    fi
+    say "merged pull request $pr_number as $commit, carrying the message the gate judged"
+    if ((status != 0)); then
+        tell "$WRAPPER_SUBJECT: $gh_said, but the merge GitHub records is the one the gate judged"
     fi
 }
 
