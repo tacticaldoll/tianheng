@@ -2,8 +2,9 @@
 //!
 //! Two facts live in two languages here. `refusal::Kind` types the distinction a gate draws — a source that
 //! **disagrees** against one that **could not be read** — and a shell wrapper turns a gate's failure into a
-//! process exit class. The wrappers read the class out of the gate's own output, which means a Rust enum's
-//! rendering and a `grep` pattern in a script must agree. Two places that must agree is the shape this
+//! process exit class. The gate writes its class to a verdict file the wrapper names, the shared library reads
+//! it back, and the wrapper exits with a code `kanhe::verdict_channel` owns — so a Rust enum's rendering, a
+//! Rust code table and the library's declarations must agree. Two places that must agree is the shape this
 //! repository has spent a window replacing, so it is checked rather than commented.
 //!
 //! **What went wrong without it.** Five could-not-read conditions in `scripts/merge-pr.sh` were split across
@@ -986,61 +987,55 @@ fn every_acquisition_is_guarded_so_the_tool_cannot_choose_the_class() {
     }
 }
 
-/// Every tracked wrapper that runs a gate is named by [`WRAPPERS`].
+/// Every tracked script is named by [`WRAPPERS`] or is the shared library, and every wrapper loads it.
 ///
 /// Without this the array is a second list beside the tree: a new wrapper would front a gate with its exit
 /// classes compared to nothing, while every direction above kept passing over the two it does name.
 ///
-/// **The criterion is the lifecycle, not the `.sh` suffix.** What makes a script a wrapper is that it runs a
-/// gate and stands in front of the act, and since the extraction both wrappers say so the same way: they
-/// **source** [`WRAPPERS_SHARED_LIBRARY`]. Matched as the sourcing line rather than the bare name, because a
-/// comment or a message naming the library is not the act of loading it — this direction's own doc comment
-/// does exactly that, and a file walking the whole text would count it. The library itself fronts nothing, so
-/// it is subtracted by name: the alternative, matching the act and special-casing nothing, would count the
-/// definition site as a third wrapper forever.
+/// **The members come from the enumeration the citation check reads**, every tracked file under `scripts/`,
+/// rather than from a rule of this direction's own. It used to find wrappers by their sourcing line, which
+/// cannot find the wrapper that matters most — one that never loaded the library — so a script citing and
+/// running a gate without it was in the citation check's set and absent from this one. Loading the library is
+/// asserted of each member now rather than used to find them, and the array is held to the set both ways.
 #[test]
 fn every_gate_running_wrapper_is_named() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let tracked = kanhe::hermetic_git::tracked_paths(&root, &["scripts"]).unwrap_or_else(|failure| {
-        panic!(
-            "`git ls-files scripts` did not answer ({failure:?}), and a failed enumeration is not a \
-             repository with no wrappers"
-        )
-    });
+    let library = kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY;
+    let scripts =
+        kanhe::gate_identity::tracked_scripts(&root).unwrap_or_else(|why| panic!("{why}"));
     assert!(
-        !tracked.is_empty(),
-        "no tracked script was enumerated, so this direction would hold over nothing"
+        scripts.iter().any(|(path, _)| path == library),
+        "{library} is not tracked, so every wrapper sourcing it loads nothing"
     );
-    let fronting: Vec<&String> = tracked
+    let members: BTreeSet<&str> = scripts
         .iter()
-        .filter(|path| path.ends_with(".sh"))
-        .filter(|path| path.as_str() != kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY)
-        .filter(|path| {
-            Source::of(read(&root, path)).shell().lines().any(|line| {
-                let line = line.trim_start();
-                (line.starts_with("source ") || line.starts_with("if ! source "))
-                    && line.contains("/scripts/wrapper.sh")
-            })
-        })
+        .map(|(path, _)| path.as_str())
+        .filter(|path| *path != library)
         .collect();
-    let unnamed: Vec<&&String> = fronting
-        .iter()
-        .filter(|path| !WRAPPERS.contains(&path.as_str()))
-        .collect();
-    assert!(
-        unnamed.is_empty(),
-        "these wrappers source the shared lifecycle and are not named by `WRAPPERS`, so their exit classes \
-         are compared to nothing: {unnamed:?}"
-    );
+    let named: BTreeSet<&str> = WRAPPERS.iter().copied().collect();
     assert_eq!(
-        fronting.len(),
-        WRAPPERS.len(),
-        "`WRAPPERS` names {} script(s) while {} tracked script(s) source the shared lifecycle",
-        WRAPPERS.len(),
-        fronting.len()
+        members,
+        named,
+        "`WRAPPERS` and the tracked scripts disagree — tracked and unnamed, so their exit classes are compared \
+         to nothing: {:?}; named and untracked: {:?}",
+        members.difference(&named).collect::<Vec<_>>(),
+        named.difference(&members).collect::<Vec<_>>()
     );
+    let sourcing = format!("/{library}");
+    for (path, text) in scripts.iter().filter(|(path, _)| path != library) {
+        let loads = Source::of(text.clone()).shell().lines().any(|line| {
+            let line = line.trim_start();
+            (line.starts_with("source ") || line.starts_with("if ! source "))
+                && line.contains(&sourcing)
+        });
+        assert!(
+            loads,
+            "{path} is a tracked script and does not load {library}, so the exit codes, the trap and the \
+             verdict read every direction here holds it to are not the ones it runs under"
+        );
+    }
 }
 
 /// Both wrappers refuse a **flag-shaped value**, and every arm that takes one is held to it.

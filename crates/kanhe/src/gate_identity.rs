@@ -5,8 +5,48 @@
 //! by holding the identifier to the target it is cited against — a test identifier is a reference into this
 //! repository exactly as a path is, and the reference gate matches paths only.
 
+use std::path::Path;
+
 use crate::refusal::{Refusal, cannot_judge_at, violation_at};
 use crate::region::Source;
+
+/// The directory every tracked file of which is a wrapper or the shared library — a category closed by
+/// location, which is why nothing filters it by extension.
+pub const SCRIPTS_DIRECTORY: &str = "scripts/";
+
+/// Every tracked file under [`SCRIPTS_DIRECTORY`], with its text: the one enumeration each direction over
+/// the scripts reads.
+///
+/// **No extension filter.** The citation check and the wrapper inventory each filtered the listing to `.sh`,
+/// so an extensionless script was invisible to both at once while the requirement says what `git ls-files
+/// scripts/` names. And they enumerated separately, so the inventory could find wrappers by one rule — a
+/// sourcing line — while the citation check found scripts by another, and a script citing a gate without
+/// loading the library was a member of the second set and not the first.
+///
+/// # Errors
+///
+/// A listing git did not answer, an empty one, or a tracked file that cannot be read — each described,
+/// because every one of them returns what a repository holding no scripts would, and reporting that as clean
+/// is the vacuity direction.
+pub fn tracked_scripts(repo: &Path) -> Result<Vec<(String, String)>, String> {
+    let listing =
+        crate::hermetic_git::tracked_paths(repo, &[SCRIPTS_DIRECTORY]).map_err(|failure| {
+            format!("`git ls-files {SCRIPTS_DIRECTORY}` did not answer: {failure:?}")
+        })?;
+    if listing.is_empty() {
+        return Err(format!(
+            "no tracked file under {SCRIPTS_DIRECTORY}, so a direction over the scripts would hold over nothing"
+        ));
+    }
+    listing
+        .into_iter()
+        .map(|path| {
+            let text = std::fs::read_to_string(repo.join(&path))
+                .map_err(|err| format!("cannot read tracked {path}: {err}"))?;
+            Ok((path, text))
+        })
+        .collect()
+}
 
 /// The one tracked script under `scripts/` that is not a wrapper: the shared library the wrappers source.
 ///

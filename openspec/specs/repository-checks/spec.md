@@ -1750,7 +1750,7 @@ require the run to report exactly one passing test, and SHALL surface what it sa
 A renamed or `#[ignore]`d test cannot report that it did not run, so a guard the disarming disables is not a
 guard.
 
-**The cited identity SHALL be pinned by a check.** For every tracked shell script, each `--exact <ident>`
+**The cited identity SHALL be pinned by a check.** For every tracked file under `scripts/`, each `--exact <ident>`
 SHALL be joined to the `--test <target>` of the same invocation, and that target SHALL register `<ident>`
 exactly once. A test identifier is a reference into this repository exactly as a path is, and the reference
 gate matches paths only.
@@ -1811,7 +1811,8 @@ before that.
 
 #### Scenario: A tracked script cites no gate at all
 
-- **WHEN** a tracked shell script carries no `--exact <ident>` citation anywhere, while its siblings do
+- **WHEN** a tracked file under `scripts/` other than the named shared library carries no `--exact <ident>`
+  citation anywhere, while its siblings do
 - **THEN** the check fails naming that script, because a script that defers its verdict to nothing is rendering
   one itself; the aggregate being non-empty says only that some script cites a gate, never that this one does
 
