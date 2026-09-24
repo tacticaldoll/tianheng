@@ -39,3 +39,10 @@ xingbiao = { workspace = true }
 # only its Normal dependencies, so this does not touch the self-law and needs no amendment.
 syn = { workspace = true, features = ["extra-traits"] }
 proc-macro2 = { version = "1", features = ["span-locations"] }
+# The workflow grammar, parsed rather than read by indentation, for the checks that judge
+# `.github/workflows/ci.yml` — its event parser carries the line each value came from, which their refusals
+# name. `default-features = false` drops the `encoding` feature and the BSD-3-Clause crate behind it.
+yaml-rust2 = { version = "0.13", default-features = false }
+# The traits a JSON visitor is written against, to read `package.json` refusing a key written twice — which
+# `serde_json::Value` would resolve by keeping the last. Already in the graph under `serde_json`.
+serde_core = "1"

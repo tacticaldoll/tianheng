@@ -982,6 +982,13 @@ TIANHENG_PIN_BITES=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test pin_b
                                            # would be the worse half of that trade
 TIANHENG_SPELLING_DIFFERENTIAL=1 cargo test -p tianheng --test attribute_spelling_differential   # the same trade, for
                                            # the same reason: it compiles one crate per generated spelling
+TIANHENG_WORKSPACE_TESTS=1 cargo +1.85 test --workspace --all-features   # the same trade again, for the MSRV. The
+                                           # name is the pinned toolchain: `ci.yml`'s `msrv` job derives the declared
+                                           # `rust-version` and refuses if it has moved from this literal, so the number
+                                           # lives in one place per side and this line is what a contributor runs with
+                                           # that toolchain installed. Env-shaped like its neighbours rather than gated
+                                           # by one; added because the same `if … && let …` compiled on the default
+                                           # toolchain, passed every line above, and failed CI's MSRV job, twice
 ```
 
 The self-governance dogfood gate (`crates/shengmo/tests/self_governance.rs`, which runs the product reaction under `cargo test`) and its projection

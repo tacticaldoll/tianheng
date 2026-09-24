@@ -3,6 +3,8 @@
 //! The wrapper gathers evidence and orders external commands; the message verdict remains in
 //! `merge_message.rs`. These directions replace `gh` and `cargo`, so no network call or merge can occur.
 
+mod support;
+
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
@@ -1725,16 +1727,12 @@ fn a_pull_request_no_workflow_has_claimed_stops_before_the_merge() {
 
 /// Every shape the reader has to decide, and the ones it must leave alone.
 ///
-/// **The direction reads one real file, so nothing exercised the shapes that file does not have.** Its
-/// documentation listed three ways a job could be lost and the repair closed two; the third — a job key at a
-/// depth the reader did not expect — stayed open because it loses a **key** rather than a **name**, so the set
-/// equality holds, nothing is carried, and the direction passes. A fixture is what asks the question the real
-/// file cannot.
+/// **The direction reads one real file, so nothing exercises the shapes that file does not have.** A shape
+/// that loses a **key** rather than a **name** leaves the set equality holding and nothing carried, so the
+/// direction passes over it; a fixture is what asks the question the real file cannot.
 ///
 /// The rows that must NOT react carry as much as the rows that must: a `steps:` entry may legitimately carry
-/// `if:` without the job's own conclusion moving, and a reader that refused it would refuse correct code —
-/// which is the narrowing the direction argues for and would silently lose if the depth rule were widened
-/// carelessly.
+/// `if:` without the job's own conclusion moving, and a reader that refused it would refuse correct code.
 #[test]
 fn the_workflow_reader_decides_every_shape_of_the_block() {
     let base = |keys: &str| {
@@ -1752,16 +1750,14 @@ fn the_workflow_reader_decides_every_shape_of_the_block() {
             2,
             1,
         ),
-        // The shape that shipped unread. Legal YAML — indentation only has to be consistent within one
-        // mapping — and the old reader found the job, held the equality, and examined no key.
+        // Legal YAML: indentation only has to be consistent within one mapping.
         (
             "if: at a deeper key depth the whole job uses",
             base("      name: A\n      if: x\n      runs-on: x\n"),
             2,
             1,
         ),
-        // A column-0 comment inside the block: a defect this reader once had, kept as a row so it cannot
-        // come back.
+        // A column-0 comment inside the block ends nothing.
         (
             "a column-0 comment does not end the block",
             "name: ci\n\njobs:\n  alpha:\n    name: A\n# --- divider ---\n  beta:\n    name: B\n    if: x\n"
@@ -1783,10 +1779,6 @@ fn the_workflow_reader_decides_every_shape_of_the_block() {
             2,
             0,
         ),
-        // The same defect on the block's other axis, and the row this fixture lacked when it was written:
-        // the job **names** sit deeper than two. A reader assuming that width finds no job at all, and the
-        // set equality then reports every job missing rather than the key it never examined — loud, but for
-        // the wrong reason. Derived, it simply reads.
         // A path filter is a trigger condition and belongs under `on:`, where it does move whether a job
         // runs at all.
         (
@@ -1838,14 +1830,12 @@ fn the_workflow_reader_decides_every_shape_of_the_block() {
             1,
             0,
         ),
-        // The job side is not read on its own line **on purpose**: a flow-form job header ends in no colon
-        // at the name depth, so no job is found and the direction's set equality says so loudly. Pinned so
-        // the asymmetry is a decision on record rather than an omission someone later "fixes" into silence.
+        // A flow-form job body is the same mapping as a block-form one, so its job and its key are read.
         (
-            "a flow-form job body is lost rather than misread",
+            "a flow-form job body is read as a job",
             "name: ci\n\njobs:\n  alpha: {name: A, if: x}\n".to_string(),
-            0,
-            0,
+            1,
+            1,
         ),
         // The quoted spelling names the same block: YAML 1.1 reads a bare `on` as a boolean.
         (
@@ -1884,62 +1874,23 @@ fn the_workflow_reader_decides_every_shape_of_the_block() {
 
 /// What a workflow's job block declares: the job names, and any key that lets a job skip.
 ///
-/// Split from the direction so a fixture can hand it shapes the real file does not currently have — which is
-/// the half the previous form lacked, and the reason it shipped blind to one of the three losses its own
-/// documentation listed.
+/// Split from the direction so a fixture can hand it shapes the real file does not currently have.
 ///
-/// **Depths are read out of the file, not assumed.** The first form matched a job name at two spaces and a
-/// job key at four. YAML fixes neither: indentation only has to be consistent within a mapping, so a job
-/// whose keys sit at six is the same document. Measured — `pyyaml` parses it, and with `if:` among those
-/// six-space keys the old reader found the job, held the set equality, examined no key, and passed. Binding
-/// the width to a declared literal would have made that fail loudly, which is better than passing; deriving
-/// it makes the question not arise, and it removes a literal rather than adding one.
-///
-/// So: the job-name depth is whatever the first structural line under `jobs:` sits at, and each job's key
-/// depth is whatever its own first deeper non-sequence line sits at. A `-` opens a sequence item, so a
-/// `steps:` entry written at the key's own depth is not read as a key — which is what keeps the step-level
-/// narrowing the direction argues for.
+/// **Read from the workflow's structure.** Which job a key belongs to, and whether it sits on the job or on a
+/// step inside it, is the grammar's answer: a job's own keys are the keys of its mapping, a step's `if:` is a
+/// key of a step, and a trigger filter is a key somewhere under `on:`. Indentation width, a comment between
+/// jobs, a quoted `"on"`, a flow-form body and a flow-form trigger are therefore not shapes this has to
+/// decide — the parser has, and a shape it cannot hold is refused rather than read past.
 struct WorkflowShape {
     jobs: BTreeSet<String>,
     carried: Vec<String>,
 }
 
-/// What a line opens, and what it still carries.
-///
-/// **One decision in one place.** A line that opens a block may also carry that block's content, and a reader
-/// treating the two as exclusive loses whatever sits after the colon. That rule was applied at the top level
-/// and not one level down, so a block-form `on:` whose event was written in flow form —
-/// `push: {branches: [main], paths: ['src/**']}`, ordinary YAML style — carried its filter past the reader.
-/// The key is decoded rather than prefix-matched, so `once:` is not `on:`.
-fn opens(line: &str) -> (&str, &str) {
-    let (key, rest) = line.split_once(':').unwrap_or((line, ""));
-    (key.trim().trim_matches(['"', '\'']), rest)
-}
-
-/// Whether `text` carries `key` **in key position** — the reader's one positional match.
-///
-/// **Three spellings of one question is what let a non-positional one in.** The reader asked it with
-/// `starts_with` twice and `contains` once, and the `contains` form reacted to a trailing comment:
-/// `on: {push: {branches: [main]}} # no paths: filter` named a filter that is a word in a sentence. Splitting
-/// on the flow separators puts every key at the start of its own segment, so a mention anywhere else is not
-/// one — which is the same distinction the attribution marks in `merge_message_gate` draw between a line that
-/// carries a trailer and a sentence that names it.
-///
-/// A block-form line is the degenerate case of the same rule: `paths:` alone splits to one segment that is
-/// itself. So one function answers for both forms, at both levels.
-fn carries(text: &str, key: &str) -> bool {
-    text.split(['{', ','])
-        .any(|segment| segment.trim_start().starts_with(key))
-}
-
 fn workflow_shape(text: &str) -> WorkflowShape {
     // Two key classes, each read at the position it can occupy. A path filter is a **trigger** condition
-    // and lives under `on:`; the other three sit on a job. Reading the pair at any depth instead was
-    // justified as *those two keys have no other meaning anywhere in it* — a claim about this file's current
-    // content rather than about the keys, and the same kind of assumption this reader removed for both
-    // indentation widths. Measured: a step input named `paths` — the shape `dorny/paths-filter` and
-    // `tj-actions/changed-files` take — made the direction refuse, telling a maintainer that a job can now
-    // legitimately skip about an input that moves no job's conclusion.
+    // and lives under `on:`; the other three sit on a job. A step input named `paths` — the shape
+    // `dorny/paths-filter` and `tj-actions/changed-files` take — moves no job's conclusion, and neither does
+    // a step's own `if:`.
     //
     // **They also reach the rollup by two mechanisms, so a miss costs two different things.** A job key moves
     // a *check's conclusion*: the job runs, reports `SKIPPED`, and the silent arm refuses — missing one costs
@@ -1947,88 +1898,28 @@ fn workflow_shape(text: &str) -> WorkflowShape {
     // rollup rather than skipped, and what happens then depends on whether anything else claimed the head.
     // [`a_missed_path_filter_costs_a_delay_only_while_one_workflow_exists`] holds the condition that keeps
     // the second cost equal to the first.
-    const ON_THE_JOB: [&str; 3] = ["if:", "needs:", "continue-on-error:"];
-    const ON_THE_WORKFLOW: [&str; 2] = ["paths:", "paths-ignore:"];
+    const ON_THE_JOB: [&str; 3] = ["if", "needs", "continue-on-error"];
+    const ON_THE_WORKFLOW: [&str; 2] = ["paths", "paths-ignore"];
 
-    let mut jobs = BTreeSet::new();
+    let workflow = support::workflow::parse(text).unwrap_or_else(|why| {
+        panic!("the workflow cannot be read, so which of its jobs can skip is not known: {why}")
+    });
     let mut carried = Vec::new();
-    let mut in_jobs = false;
-    let mut in_on = false;
-    let mut job_name_depth: Option<usize> = None;
-    let mut key_depth: Option<usize> = None;
-    let mut in_job = false;
-
-    for (index, line) in text.lines().enumerate() {
-        let trimmed = line.trim_start();
-        // A blank line and a comment end nothing — only a real top-level key does.
-        if trimmed.is_empty() || trimmed.starts_with('#') {
-            continue;
-        }
-        let depth = line.len() - trimmed.len();
-
-        if depth == 0 {
-            // YAML 1.1 reads a bare `on` as a boolean, so a workflow may quote the key; both spellings name
-            // the same block. Taken off the key rather than matched as a prefix, so `once:` is not `on:`.
-            let (top, rest) = opens(line);
-            in_jobs = top == "jobs";
-            in_on = top == "on";
-            in_job = false;
-            // **Entering a block and reading it are not exclusive.** This branch used to set the flag and
-            // `continue`, so the rest of its own line was seen by no reader — and YAML's flow form puts the
-            // whole block there: `on: {push: {paths: ['src/**']}}` carries a real path filter that the
-            // premise then reported intact. That direction is **open**, which is the one this machinery
-            // exists to close.
-            //
-            // The job side is deliberately not given the same treatment, because it already fails the other
-            // way: a flow-form `jobs: {alpha: {…}}` leaves no line ending in a colon at the name depth, so
-            // the set equality reports the jobs missing. Measured — `missing ["examples"]`. Reading it here
-            // would turn a loud failure into a quiet pass unless the flow body were parsed, which is a YAML
-            // parser rather than a line reader.
-            if in_on {
-                if let Some(key) = ON_THE_WORKFLOW.iter().find(|key| carries(rest, key)) {
-                    carried.push(format!("  ci.yml:{}: {key}", index + 1));
-                }
+    if let Some(on) = &workflow.on {
+        for (key, line) in on.keys_below() {
+            if ON_THE_WORKFLOW.contains(&key.as_str()) {
+                carried.push(format!("  ci.yml:{line}: {key}:"));
             }
-            job_name_depth = None;
-            continue;
-        }
-        if in_on {
-            // The same rule as the depth-0 branch, which is the point: an event may be written in flow form
-            // under a block-form `on:`, and `carries` reads a block-form line as the degenerate case.
-            if let Some(key) = ON_THE_WORKFLOW.iter().find(|key| carries(trimmed, key)) {
-                carried.push(format!("  ci.yml:{}: {key}", index + 1));
-            }
-            continue;
-        }
-        if !in_jobs {
-            continue;
-        }
-
-        let sequence = trimmed.starts_with('-');
-        let names_depth = *job_name_depth.get_or_insert(depth);
-
-        if depth == names_depth && !sequence && trimmed.ends_with(':') {
-            jobs.insert(trimmed.trim_end_matches(':').to_string());
-            key_depth = None;
-            in_job = true;
-            continue;
-        }
-        if !in_job || depth <= names_depth || sequence {
-            continue;
-        }
-        let keys_depth = *key_depth.get_or_insert(depth);
-        if depth != keys_depth {
-            continue;
-        }
-        // Two statements rather than a `let` chain: chained `let` in an `if` condition is stable well past
-        // this workspace's declared `rust-version`, and the local Definition of Done compiles on whatever
-        // toolchain is installed. This is the shape `require_ci_green`'s own header records riding nineteen
-        // merges green here and red in CI.
-        if let Some(key) = ON_THE_JOB.iter().find(|key| trimmed.starts_with(**key)) {
-            carried.push(format!("  ci.yml:{}: {key}", index + 1));
         }
     }
-
+    for job in &workflow.jobs {
+        for (key, line) in &job.keys {
+            if ON_THE_JOB.contains(&key.as_str()) {
+                carried.push(format!("  ci.yml:{line}: {key}:"));
+            }
+        }
+    }
+    let jobs = workflow.jobs.iter().map(|job| job.id.clone()).collect();
     WorkflowShape { jobs, carried }
 }
 
@@ -2141,14 +2032,9 @@ fn a_missed_path_filter_costs_a_delay_only_while_one_workflow_exists() {
 /// something to disagree with*. The first form asserted only that the reader had found *some* job, which
 /// catches a read that found nothing and cannot catch one that found **fewer**.
 ///
-/// **Three ways this reader could lose a job were named, two were closed, and the third took another round.**
-/// The latch (a column-0 comment ending the block) and the equality landed together; the two indentation
-/// assumptions did not, and one of them — a job key at a depth other than the assumed four — loses a **key**
-/// rather than a **name**, so the equality holds, nothing is carried, and the direction passes. Measured, on
-/// a document `pyyaml` accepts: with `if:` among a job's six-space keys the reader found the job, held the
-/// equality, examined no key, and reported the premise intact. Both assumptions are now derived from the
-/// document instead — see [`workflow_shape`] — which removes a literal rather than adding one, and
-/// [`the_workflow_reader_decides_every_shape_of_the_block`] holds each shape including the two that must not
+/// **A loss of a key rather than a name passes the equality**, so which job and key belong where is read
+/// from the parsed workflow — see [`workflow_shape`] — and
+/// [`the_workflow_reader_decides_every_shape_of_the_block`] holds each shape, including the ones that must not
 /// react.
 ///
 /// What the equality is for is what remains after that: a loss nobody has thought of yet. It names which jobs
@@ -2356,6 +2242,9 @@ fn a_flag_shaped_value_is_refused_in_every_value_position() {
 /// two places the class matters most were left out: both wrappers front an irreversible act and both ran
 /// `printf '%s' "$output" | grep -qE …` under `set -Eeuo pipefail`. `scripts/` is where `gate_exit_classes`
 /// already keeps its own wrapper corpus, so this is a list rather than new machinery.
+///
+/// Each file is read as text rather than through `support::workflow`, because what these scans judge is
+/// shell; `repository-checks` states that choice and the over-inclusion it costs.
 const RUNS_SHELL_UNDER_PIPEFAIL: [&str; 3] = [
     ".github/workflows/ci.yml",
     "scripts/merge-pr.sh",
@@ -2549,30 +2438,42 @@ fn shell_strictness_is_declared_once_for_the_whole_workflow() {
     let text = std::fs::read_to_string(&path)
         .expect("read .github/workflows/ci.yml — the strictness this holds is declared in it");
 
-    const STRICT_SHELL: &str = "shell: bash -euo pipefail {0}";
+    // Where the shell is declared is structure, and read from it: the workflow's `defaults.run.shell`, and
+    // any job's or step's own. What a `run:` body says about strictness is shell, and read as text below.
+    const STRICT_SHELL: &str = "bash -euo pipefail {0}";
+    let workflow = support::workflow::parse(&text).unwrap_or_else(|why| {
+        panic!("the workflow cannot be read, so where its shell is declared is not known: {why}")
+    });
     assert!(
-        text.contains(&format!("defaults:\n  run:\n    {STRICT_SHELL}\n")),
-        "{} declares no workflow-level `defaults: run: {STRICT_SHELL}`, so every `run:` step decides \
+        workflow
+            .defaults_shell
+            .as_ref()
+            .is_some_and(|shell| shell.value == STRICT_SHELL),
+        "{} declares no workflow-level `defaults: run: shell: {STRICT_SHELL}`, so every `run:` step decides \
          its own strictness and a pipeline's status is whatever its last stage returns",
         path.display()
     );
+    let declared = workflow.jobs.iter().flat_map(|job| {
+        job.defaults_shell
+            .iter()
+            .chain(job.steps.iter().filter_map(|step| step.shell.as_ref()))
+    });
 
     let mut lax = Vec::new();
+    for shell in declared {
+        if shell.value.starts_with("bash") && !shell.value.contains("-euo pipefail") {
+            lax.push(format!(
+                "  {}:{}: `shell: {}` names bash without `-euo pipefail`, taking back the strictness the \
+                 workflow declares",
+                path.display(),
+                shell.line,
+                shell.value
+            ));
+        }
+    }
     for (number, line) in text.lines().enumerate() {
         let trimmed = line.trim();
         if trimmed.starts_with('#') {
-            continue;
-        }
-        if let Some(shell) = trimmed.strip_prefix("shell:") {
-            let shell = shell.trim();
-            if shell.starts_with("bash") && !shell.contains("-euo pipefail") {
-                lax.push(format!(
-                    "  {}:{}: `shell: {shell}` names bash without `-euo pipefail`, taking back the \
-                     strictness the workflow declares",
-                    path.display(),
-                    number + 1
-                ));
-            }
             continue;
         }
         if trimmed.starts_with("set -") && trimmed.contains('e') {

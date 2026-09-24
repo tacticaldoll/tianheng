@@ -37,6 +37,10 @@ confidence-threshold = 0.9
 # Measured on cargo-deny 0.19.9: a Zlib crate planted as a dev-dependency of `kanhe` passes with this
 # unset and is rejected with it set.
 include-dev = true
+# Zlib, for one crate. `foldhash` is hashbrown's default hasher, and the workflow reader's YAML parser
+# reaches it; Zlib is permissive, OSI-approved and FSF-free. Reviewed and accepted for that crate alone
+# rather than added to `allow`, so a second Zlib crate is reviewed here in its own right.
+exceptions = [{ allow = ["Zlib"], crate = "foldhash" }]
 
 [bans]
 # New external dependencies are already governed by Tianheng's own reaction (the 圭表

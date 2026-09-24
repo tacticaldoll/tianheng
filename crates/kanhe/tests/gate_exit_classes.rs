@@ -56,7 +56,11 @@ const WRAPPERS: [&str; 2] = ["scripts/merge-pr.sh", "scripts/publish.sh"];
 ///
 /// The purpose beside each path is prose with no producer: a reader's aid for whoever adds the next one,
 /// not a fact this direction holds. What it holds is membership.
-const TARGETS_SPAWNING_A_PROCESS: [(&str, &str); 29] = [
+const TARGETS_SPAWNING_A_PROCESS: [(&str, &str); 30] = [
+    (
+        "crates/kanhe/tests/workflow_model.rs",
+        "bash: `compgen`, to hold the declared shell-own words against the shell that owns them",
+    ),
     (
         "crates/kanhe/tests/bound_register.rs",
         "git: enumerates, and builds a scratch repository's tree",

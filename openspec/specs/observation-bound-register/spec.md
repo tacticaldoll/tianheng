@@ -883,7 +883,8 @@ below.
 ### Requirement: The register reaction SHALL be a local gate CI runs identically
 
 The reaction SHALL be a script invoked from the workspace root, listed in `AGENTS.md`'s Definition of
-Done and run verbatim by CI, so `crates/kanhe/tests/dod_coherence.rs` binds the two. Its failure directions SHALL
+Done and run by CI, so `crates/kanhe/tests/dod_coherence.rs` binds the two as argv under the workflow's
+declared environment. Its failure directions SHALL
 each be proven by a companion test against fixtures built to trip exactly one condition — a gate over a
 coverage claim that has not been observed failing is a restatement of the register, not a defence of it.
 
@@ -936,7 +937,8 @@ ordinary exit-1 no-match result.
 #### Scenario: The local gate and CI cannot drift apart
 
 - **WHEN** the gate is added to the Definition of Done
-- **THEN** the identical command appears in CI, and `crates/kanhe/tests/dod_coherence.rs` fails if it does not
+- **THEN** the same command, compared as argv under the workflow's declared environment, appears in CI, and
+  `crates/kanhe/tests/dod_coherence.rs` fails if it does not
 
 #### Scenario: The reaction leaves the tree unchanged
 

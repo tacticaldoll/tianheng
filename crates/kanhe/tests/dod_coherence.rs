@@ -15,7 +15,13 @@
 //! to order, and no separate driver script that could recurse into a matrix script, so a check for either
 //! would have nothing left to react to.
 
+mod support;
+
+use std::collections::BTreeMap;
 use std::path::PathBuf;
+
+use shengmo::workspace::MARKER;
+use support::{shell, workflow};
 
 fn workspace_root() -> Option<PathBuf> {
     shengmo::workspace::locate(
@@ -60,86 +66,68 @@ fn dod_commands(agents: &str) -> Vec<String> {
     commands
 }
 
-fn cargo_deny_action_commands(ci: &str) -> Vec<String> {
-    let lines: Vec<&str> = ci.lines().collect();
+/// Every command CI's steps spell, as argv under the environment the workflow declares.
+///
+/// **Read from the workflow's structure, scoped as GitHub scopes it.** Each step's `run:` script is read in the
+/// environment the workflow declares for that step — the workflow's, its job's and its own — so `cargo "+$MSRV"`
+/// is `cargo +1.85` in the job that declares `MSRV: "1.85"`, and is no witness in a job that does not. What a
+/// variable holds at run time, after an earlier step writes `$GITHUB_ENV` or an action exports one, is not read;
+/// `BACKLOG.md` carries when that has to be looked at again. A script is a witness only when
+/// every line of it is a simple command: one line the tokenizer declines makes the whole script contribute
+/// nothing, since such a line can turn the lines after it into data. That can only report a Definition of
+/// Done command missing, the direction that fails.
+///
+/// **An action is a command too, where it runs one.** `EmbarkStudios/cargo-deny-action` runs `cargo deny
+/// <command>` from its `with.command` input, and a step with no such input contributes nothing rather than
+/// borrowing one from another mapping.
+fn ci_commands(ci: &str) -> Vec<Vec<String>> {
+    let workflow = workflow::parse(ci).unwrap_or_else(|why| {
+        panic!("the workflow cannot be read, so which commands CI runs is not known: {why}")
+    });
     let mut commands = Vec::new();
-    let mut start = 0;
-
-    while start < lines.len() {
-        let step_indent = lines[start].len() - lines[start].trim_start().len();
-        if !lines[start].trim_start().starts_with("- ") {
-            start += 1;
-            continue;
-        }
-
-        let mut end = start + 1;
-        while end < lines.len() {
-            let line = lines[end];
-            let indent = line.len() - line.trim_start().len();
-            let trimmed = line.trim_start();
-            if (!trimmed.is_empty() && indent < step_indent)
-                || (indent == step_indent && trimmed.starts_with("- "))
-            {
-                break;
+    for job in &workflow.jobs {
+        for step in &job.steps {
+            if let Some(run) = &step.run {
+                let env = workflow.env_for(job, step);
+                // A declined script is no witness — deliberately, not a lost read: see the doc above.
+                if let Some(read) = shell::script_commands(&run.value, &env) {
+                    commands.extend(read);
+                }
             }
-            end += 1;
-        }
-
-        let step = &lines[start..end];
-        let is_cargo_deny = step.iter().any(|line| {
-            line.trim()
-                .strip_prefix("- ")
-                .unwrap_or(line.trim())
-                .strip_prefix("uses: ")
-                .is_some_and(|action| action.starts_with("EmbarkStudios/cargo-deny-action@"))
-        });
-        if is_cargo_deny {
-            if let Some((with_index, with_indent)) =
-                step.iter().enumerate().find_map(|(index, line)| {
-                    let indent = line.len() - line.trim_start().len();
-                    (line.trim() == "with:").then_some((index, indent))
-                })
-            {
-                let with_body = &step[with_index + 1..];
-                let with_end = with_body
-                    .iter()
-                    .position(|line| {
-                        let indent = line.len() - line.trim_start().len();
-                        !line.trim().is_empty() && indent <= with_indent
-                    })
-                    .unwrap_or(with_body.len());
-                if let Some(command) = with_body[..with_end].iter().find_map(|line| {
-                    line.trim()
-                        .strip_prefix("command: ")
-                        .map(|value| value.trim().trim_matches(['\'', '"']))
-                }) {
-                    if !command.is_empty() {
-                        commands.push(format!("cargo deny {command}"));
-                    }
+            let runs_cargo_deny = step
+                .uses
+                .as_ref()
+                .is_some_and(|uses| uses.value.starts_with("EmbarkStudios/cargo-deny-action@"));
+            if runs_cargo_deny {
+                if let Some(command) = step.with.iter().find(|input| input.key == "command") {
+                    let mut words = vec!["cargo".to_string(), "deny".to_string()];
+                    words.extend(command.value.split_whitespace().map(str::to_string));
+                    commands.push(words);
                 }
             }
         }
-        start = end;
     }
-
     commands
 }
 
+/// The Definition of Done commands CI does not run, compared by argv.
+///
+/// A Definition of Done line is read by the same tokenizer with nothing in its environment, and one it cannot
+/// read is refused rather than compared: a declaration this check cannot turn into words is not one it can
+/// hold CI to.
 fn missing_from_ci(agents: &str, ci: &str) -> Vec<String> {
-    let mut ci_effective: Vec<String> = ci
-        .lines()
-        .map(|line| {
-            let line = line.trim();
-            let line = line.strip_prefix("- ").unwrap_or(line);
-            let line = line.strip_prefix("run: ").unwrap_or(line);
-            line.trim().to_string()
-        })
-        .collect();
-    ci_effective.extend(cargo_deny_action_commands(ci));
-
+    let ci = ci_commands(ci);
     dod_commands(agents)
         .into_iter()
-        .filter(|command| !ci_effective.iter().any(|ci_line| ci_line == command))
+        .filter(|command| {
+            let words = shell::words(command, &BTreeMap::new()).unwrap_or_else(|| {
+                panic!(
+                    "the Definition of Done line `{command}` is not a command this check can read as words, \
+                     so whether CI runs it cannot be decided"
+                )
+            });
+            !ci.contains(&words)
+        })
         .collect()
 }
 
@@ -208,4 +196,116 @@ fn an_absent_action_command_does_not_borrow_a_command_from_another_mapping() {
     let agents = "## Definition of Done\n\n```bash\ncargo deny check\n```\n";
     let ci = "jobs:\n  supply-chain:\n    steps:\n      - uses: EmbarkStudios/cargo-deny-action@v2\n        with:\n          log-level: warn\n        env:\n          command: check\n";
     assert_eq!(missing_from_ci(agents, ci), ["cargo deny check"]);
+}
+
+/// A step reading a job-level pin is the Definition of Done's literal line with the value in it.
+#[test]
+fn a_job_env_pin_expands_into_the_run_lines_that_read_it() {
+    let agents = format!(
+        "## Definition of Done\n\n```bash\n{MARKER}=1 cargo +1.85 test --workspace --all-features\n```\n"
+    );
+    let ci = format!(
+        "jobs:\n  msrv:\n    env:\n      MSRV: \"1.85\"\n    steps:\n      - run: {MARKER}=1 cargo \"+$MSRV\" test --workspace --all-features\n"
+    );
+    assert!(missing_from_ci(&agents, &ci).is_empty());
+}
+
+#[test]
+fn a_job_env_pin_at_another_value_does_not_satisfy_the_literal() {
+    let agents = format!(
+        "## Definition of Done\n\n```bash\n{MARKER}=1 cargo +1.85 test --workspace --all-features\n```\n"
+    );
+    let ci = format!(
+        "jobs:\n  msrv:\n    env:\n      MSRV: \"1.86\"\n    steps:\n      - run: {MARKER}=1 cargo \"+$MSRV\" test --workspace --all-features\n"
+    );
+    assert_eq!(
+        missing_from_ci(&agents, &ci),
+        [format!(
+            "{MARKER}=1 cargo +1.85 test --workspace --all-features"
+        )]
+    );
+}
+
+/// A pin in one job is not in force in another: the line reading it there is no witness.
+#[test]
+fn a_pin_in_another_job_does_not_satisfy_the_literal() {
+    let agents = format!(
+        "## Definition of Done\n\n```bash\n{MARKER}=1 cargo +1.85 test --workspace --all-features\n```\n"
+    );
+    let ci = format!(
+        "jobs:\n  pins:\n    env:\n      MSRV: \"1.85\"\n    steps:\n      - run: echo pinned\n  runs:\n    steps:\n      - run: {MARKER}=1 cargo \"+$MSRV\" test --workspace --all-features\n"
+    );
+    assert_eq!(
+        missing_from_ci(&agents, &ci),
+        [format!(
+            "{MARKER}=1 cargo +1.85 test --workspace --all-features"
+        )]
+    );
+}
+
+/// One env name in two jobs is two scopes, and the join reads each where it is in force.
+#[test]
+fn one_env_name_in_two_jobs_is_read_in_each() {
+    let agents = "## Definition of Done\n\n```bash\ncargo build --color always\n```\n";
+    let ci = "jobs:\n  a:\n    env:\n      COLOR: always\n    steps:\n      - run: cargo build --color \"$COLOR\"\n  b:\n    env:\n      COLOR: never\n    steps:\n      - run: cargo build --color \"$COLOR\"\n";
+    assert!(missing_from_ci(agents, ci).is_empty());
+}
+
+/// A line whose words are decided when it runs is no witness, however much of it matches.
+///
+/// Held for the contract rather than the change: a text join also reports this command missing, since the two
+/// lines differ as text. What it pins is that the argv reader declines the line instead of guessing its words.
+#[test]
+fn a_line_decided_at_run_time_is_no_witness() {
+    let agents = "## Definition of Done\n\n```bash\ncargo test --workspace\n```\n";
+    let ci = "jobs:\n  j:\n    steps:\n      - run: cargo test --workspace $(extra_flags)\n";
+    assert_eq!(missing_from_ci(agents, ci), ["cargo test --workspace"]);
+}
+
+/// A backslash continuation is one command, as the shell reads it.
+#[test]
+fn a_continued_line_is_one_command() {
+    let agents = "## Definition of Done\n\n```bash\ncargo test --workspace --all-features\n```\n";
+    let ci = "jobs:\n  j:\n    steps:\n      - run: |\n          cargo test \\\n            --workspace --all-features\n";
+    assert!(missing_from_ci(agents, ci).is_empty());
+}
+
+/// A here-document's body is data handed to a command, not a command.
+#[test]
+fn a_here_document_body_is_no_witness() {
+    let agents = "## Definition of Done\n\n```bash\ncargo test --workspace\n```\n";
+    let ci = "jobs:\n  j:\n    steps:\n      - run: |\n          cat <<'EOF'\n          cargo test --workspace\n          EOF\n";
+    assert_eq!(missing_from_ci(agents, ci), ["cargo test --workspace"]);
+}
+
+/// A string spanning lines is one word of one command, however its lines read on their own.
+#[test]
+fn a_line_inside_a_multi_line_string_is_no_witness() {
+    let agents = "## Definition of Done\n\n```bash\ncargo test --workspace\n```\n";
+    let ci = "jobs:\n  j:\n    steps:\n      - run: |\n          echo \"about to run\n          cargo test --workspace\n          \"\n";
+    assert_eq!(missing_from_ci(agents, ci), ["cargo test --workspace"]);
+}
+
+/// A command after a line that ends the script is never reached, however readable both lines are.
+#[test]
+fn a_command_after_the_script_ends_is_no_witness() {
+    let agents = "## Definition of Done\n\n```bash\ncargo test --workspace\n```\n";
+    let ci = "jobs:\n  j:\n    steps:\n      - run: |\n          exit 0\n          cargo test --workspace\n";
+    assert_eq!(missing_from_ci(agents, ci), ["cargo test --workspace"]);
+}
+
+/// A standalone assignment changes what the lines after it expand to, so the declared value is not the one used.
+#[test]
+fn a_script_reassigning_a_variable_is_no_witness() {
+    let agents = "## Definition of Done\n\n```bash\ncargo build --color always\n```\n";
+    let ci = "jobs:\n  j:\n    env:\n      COLOR: always\n    steps:\n      - run: |\n          COLOR=never\n          cargo build --color \"$COLOR\"\n";
+    assert_eq!(missing_from_ci(agents, ci), ["cargo build --color always"]);
+}
+
+/// An append is an assignment too: `V+=v` changes what a later `"$V"` expands to.
+#[test]
+fn a_script_appending_to_a_variable_is_no_witness() {
+    let agents = "## Definition of Done\n\n```bash\ncargo build --features a\n```\n";
+    let ci = "jobs:\n  j:\n    env:\n      V: a\n    steps:\n      - run: |\n          V+=,b\n          cargo build --features \"$V\"\n";
+    assert_eq!(missing_from_ci(agents, ci), ["cargo build --features a"]);
 }

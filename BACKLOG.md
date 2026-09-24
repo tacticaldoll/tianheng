@@ -1471,6 +1471,26 @@ consumer for an undemonstrated deduplication.
   — every named CI step running a suite is either in the list or covered by a listed command — which needs a
   reader that can say which suites a listed command covers, and that is the half not built.
 
+- **WATCH: The Definition of Done join expands declared values, not run-time ones.** *Class:* WATCH.
+  *Observed pressure:* `dod_coherence` tokenizes a CI step in the environment the workflow file declares for
+  it — the workflow's, its job's and the step's own `env:` — and does not determine what a variable holds when
+  the line runs. An earlier step in the same job can change that: a value written to `$GITHUB_ENV` reaches
+  every later step, and an action can export one. GitHub's documentation, read 2026-09-24, states that the
+  later steps see a `$GITHUB_ENV` value and does not state its precedence over a same-named `env:` key.
+  *Observation source:* measured 2026-09-24 over the tracked workflow, the one witness step that expands a
+  variable at all is the `msrv` job's build-and-test step, which reads `$MSRV`; before it stand the
+  `actions/checkout` step and the rust-version derivation. No step of this repository's own before it writes
+  `$GITHUB_ENV`. The checkout action's implementation was not examined, so whether it exports a variable of
+  that name is not known rather than known absent. *Current reaction or bound:* none; `repository-checks`
+  states that the comparison is over declared values. *Risk:* a run-time value different from the declared
+  one would make the join accept a CI line as the Definition of Done command while CI ran other words.
+  *Promotion trigger:* any of — an action added before a witness step that expands a variable; a `$GITHUB_ENV`
+  write in a step before one; any change to the checkout step already standing before the `msrv` witness
+  step — its pin, its `with:`, its `env:` or any other key; or a second witness step that expands a variable. *Version class:*
+  patch; repository checks only. *Authority:* `repository-checks`. *Shape:* decline expansion in a witness step
+  preceded by anything that can export a value, which today would decline the `msrv` witness — so the trigger
+  is also the moment to decide whether that step's pin is read another way.
+
 - **WATCH: The two irreversible-act wrappers are one lifecycle written twice.** *Class:* WATCH. *Observed
   pressure:* `scripts/merge-pr.sh` and `scripts/publish.sh` share a whole shape — resolve the repository root,
   parse an argument allowlist, open a verdict channel, run the gate, read the class, clean up, `exec` the
@@ -1672,6 +1692,16 @@ consumer for an undemonstrated deduplication.
   defect cost one CI round rather than reaching a release branch. Filed rather than promoted for the reason
   the sibling wrapper entry gives — the Definition of Done is not edited at a release cut. First work of the
   window after, with the cost now measured rather than assumed.
+
+  **Done in the `0.7.0` window, as scheduled.** The Definition of Done now carries the MSRV suite as an
+  env-shaped line of its own — `TIANHENG_WORKSPACE_TESTS=1 cargo +1.85 test --workspace --all-features`,
+  beside the two env-gated lines it follows — and the `msrv` job runs the same suite reading its pinned
+  toolchain from the job's `env:`, which `dod_coherence` reads in that job's scope and compares as argv. Not a `rust-toolchain` file, for the reason
+  the Shape above records: pinning the workspace to 1.85 would take `--all-features` clippy off the current
+  toolchain. What this closes is the latency: a construct the declared `rust-version` refuses now fails the
+  local list rather than arriving red in CI after a green one. What it does not close is a contributor who
+  lacks the toolchain and skips the line, which is the same trade the two env-gated lines beside it already
+  take, stated in theirs and taken here.
 
 - **WATCH: A constant's literal copies outside its reach are unheld.** *Class:* WATCH. *Observed pressure:*
   `shengmo::workspace::MARKER` owns `TIANHENG_WORKSPACE_TESTS`, and seven sites in `tianheng`, `louke` and
