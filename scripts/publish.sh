@@ -198,12 +198,7 @@ gate_output=$(TIANHENG_GATE_VERDICT=$verdict_file \
     TIANHENG_PUBLISH_SOURCE=1 TIANHENG_WORKSPACE_TESTS=1 \
     cargo test --manifest-path "$repo/Cargo.toml" -p kanhe --test publish_source \
     -- --exact the_publish_source_is_the_signed_release_snapshot 2>&1) || {
-    printf '%s\n' "$gate_output" >&2
-    read_verdict
-    if [[ $verdict == "$GATE_VIOLATION_CLASS" ]]; then
-        exit 1
-    fi
-    exit 2
+    exit_for_the_gates_refusal "$gate_output"
 }
 require_one_pass "$gate_output"
 require_a_verdict

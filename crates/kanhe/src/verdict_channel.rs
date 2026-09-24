@@ -40,6 +40,27 @@ pub fn rendered(kind: Kind) -> String {
 /// which is a different question and is satisfied by a harness that returned without judging.
 pub const CLEAN: &str = "Clean";
 
+/// The code a sanctioned wrapper exits with for each kind of refusal — the process-boundary half of [`Kind`],
+/// as [`rendered`] is the channel half.
+///
+/// A `match` rather than two constants, so a kind added to [`Kind`] cannot compile until it has an answer
+/// here, and the shell's declarations are held against this function rather than against numbers typed in two
+/// places. The values are this repository's own contract — `crates/shengmo/src/law.rs`: *0 clean, 1 violation,
+/// 2 constitution/usage error*.
+pub const fn wrapper_exit(kind: Kind) -> u8 {
+    match kind {
+        Kind::Violation => 1,
+        Kind::CannotJudge => 2,
+    }
+}
+
+/// The code the shared wrapper library answers when it is **executed** instead of sourced.
+///
+/// `EX_USAGE` from `sysexits.h`: a plain misuse, which is neither a gate that refused nor a wrapper that could
+/// not judge, so it must be neither code [`wrapper_exit`] returns — held by
+/// `the_library_misuse_code_is_outside_every_wrapper_class`.
+pub const LIBRARY_MISUSE: u8 = 64;
+
 /// What a gate harness reached, and **the only way one exits**.
 ///
 /// Three separate exits is what this replaces, each of which had to remember to report its class before

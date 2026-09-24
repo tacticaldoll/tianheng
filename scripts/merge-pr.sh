@@ -567,12 +567,7 @@ gate_output=$(TIANHENG_GATE_VERDICT=$verdict_file \
     TIANHENG_MERGE_HEAD=$head_branch \
     cargo test --manifest-path "$repo/Cargo.toml" -p kanhe --test merge_message \
     -- --exact the_squash_message_is_the_pull_request_it_records 2>&1) || {
-    printf '%s\n' "$gate_output" >&2
-    read_verdict
-    if [[ $verdict == "$GATE_VIOLATION_CLASS" ]]; then
-        exit 1
-    fi
-    exit 2
+    exit_for_the_gates_refusal "$gate_output"
 }
 require_one_pass "$gate_output"
 require_a_verdict

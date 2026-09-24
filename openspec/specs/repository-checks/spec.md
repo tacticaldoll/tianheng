@@ -957,7 +957,7 @@ every statement to be guarded makes the obligation as large as the script. Two s
 hold it — first by tool name, then by command substitution — and a bare `cd` walked through both, because the
 axis was never which shape a statement has. A wrapper SHALL therefore install an `ERR` trap reporting the
 unjudged class, with `set -E` so it reaches failures inside functions, leaving exactly one statement able to
-exit `1`: the arm carrying the gate's verdict. Measured on bash 5: a bare failure traps, a `||`-guarded
+exit `1`: `exit_for_the_gates_refusal`, the library's arm carrying the gate's verdict. Measured on bash 5: a bare failure traps, a `||`-guarded
 command does not, a failure in an `if`/`while`/`!`/`&&` condition does not, and an explicit `exit 1` is not
 intercepted.
 
@@ -1192,13 +1192,21 @@ and a gate that did not run.
 the ERR trap, the verdict channel's scalars, the two guards over the gate's run, and the verdict file's
 lifecycle SHALL each have **one definition site**, `scripts/wrapper.sh` — not two copies that agree: measured,
 the copies did agree and were kept agreeing by review alone, which is the drift a seam exists to end. What each
-wrapper keeps is what only it decides: its allowlist, its evidence, its gate, and its verdict arm. The library
-is sourced, never executed: it installs the wrappers' machinery into the caller and renders no verdict of its
-own, and a direction SHALL hold it to that by **running** it — run as a command, it stops **outside both
-classes the wrappers reserve**, answering the plain-misuse code (`EX_USAGE`, 64) through one named owner, in
-a message that says what to run instead. Reserving the two classes is what makes the direction decidable:
-asserting the answer is neither is the whole of it, where asserting only *not clean* would pass while the
-guard's condition is false and the file runs to its definitions.
+wrapper keeps is what only it decides: its allowlist, its evidence, and its gate. The failing path of a
+gate's run is identical for both, so it is the library's too: each wrapper routes its gate's failure to
+`exit_for_the_gates_refusal` from the `|| {` of the statement that runs the gate, and that function exits the
+violation class only for a `Violation` the gate wrote on its channel. The library is sourced, never executed:
+it installs the wrappers' machinery into the caller and renders no verdict of its own, and a direction SHALL
+hold it to that by **running** it — run as a command, it stops with the plain-misuse code
+`kanhe::verdict_channel::LIBRARY_MISUSE` owns, in a message that says what to run instead. That code SHALL be
+neither class `kanhe::verdict_channel::wrapper_exit` returns, held beside the enumeration of `refusal::Kind`.
+
+**Every exit code SHALL be owned in Rust and read in the shell.** `kanhe::verdict_channel` owns the codes —
+`wrapper_exit` for the two classes, by an exhaustive match over `refusal::Kind`, and `LIBRARY_MISUSE` — and
+the library SHALL declare one `WRAPPER_EXIT_<NAME>` per code, each held equal to its owner by a repository
+check. Every `exit` in the library and the wrappers SHALL name one of those declarations, and each code SHALL
+be chosen at one site; the one literal SHALL be each wrapper's bootstrap guard, which runs before the library
+is loaded and whose code the direction running it holds against `wrapper_exit`.
 
 **The `source` that loads the library is the one stop before that machinery exists, and it SHALL be the
 unjudged class in the wrapper's own voice.** A missing or unreadable library is an input the wrapper could
@@ -1251,10 +1259,22 @@ judged.
 #### Scenario: The shared library run as a command
 
 - **WHEN** `scripts/wrapper.sh` is executed directly rather than sourced
-- **THEN** it stops outside both classes the wrappers reserve — the plain-misuse answer, not a gate's refusal
-  and not a cannot-judge — saying what to run instead; a count of its `exit` text would pass while the
-  guard's condition is false, so the file is **run** and the code asserted against both classes
+- **THEN** it stops with the misuse code `kanhe` owns, saying what to run instead; a count of its `exit` text
+  would pass while the guard's condition is false, so the file is **run** and the code compared with its owner
 - **PINNED-BY** `a_library_run_as_a_command_stops_without_reaching_a_wrapper_s_classes`
+
+#### Scenario: The misuse code collides with a class
+
+- **WHEN** `LIBRARY_MISUSE` equals a code `wrapper_exit` returns for some `refusal::Kind`
+- **THEN** the check fails naming the kind it would be read as
+- **PINNED-BY** `the_library_misuse_code_is_outside_every_wrapper_class`
+
+#### Scenario: An exit names a code nothing owns
+
+- **WHEN** the library or a wrapper exits with a numeral outside the bootstrap guard, a bare `exit`, or a
+  variable that is not a declared `WRAPPER_EXIT_<NAME>`
+- **THEN** the check fails naming the site, and a declared code chosen at a second site fails the same way
+- **PINNED-BY** `each_wrapper_chooses_its_exit_class_in_one_place`
 
 #### Scenario: A wrapper whose library cannot be read
 
@@ -1290,7 +1310,8 @@ could not fail.
 **Every acquisition SHALL be guarded.** An unguarded command substitution under `set -e` exits with the *tool's*
 status and only the tool's stderr, so the class reported is neither of the two the wrapper defines and the
 operator receives the tool's words for a fact about the wrapper. Measured: a failing commits read left the merge
-wrapper exiting `91` in silence.
+wrapper exiting `91` in silence. The corpus SHALL include the shared library, whose functions run inside each
+wrapper, so an acquisition written there chooses the class exactly as one written in a wrapper would.
 
 A direction holding any of these stops SHALL assert the **class**, not merely that the wrapper failed. Asserting
 non-zero cannot see `1` from `2`, which is how five could-not-read conditions were split across both classes while

@@ -647,7 +647,7 @@ fn the_arrival_matrix_covers_every_argument_the_parser_forwards() {
 /// tool name, then by command substitution. A bare `cd` walked through both, because the axis was never which
 /// shape a statement has. Under `set -e` **any** unguarded failure exits with the tool's status, so the set
 /// to enumerate is not the statements that must be guarded but the statements that may exit `1` — and there
-/// is one, the gate's own verdict arm.
+/// is one, the library's `exit_for_the_gates_refusal`, which carries the gate's own verdict.
 ///
 /// Held by planting a failure rather than by reading the script for `trap`: a text property would pass for a
 /// trap that never fires, and `set -E` — which is what makes it fire inside a function — is a second token a

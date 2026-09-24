@@ -14,34 +14,26 @@
 # Sourced rather than executed, so every function here runs inside the sourcing wrapper's
 # `set -Eeuo pipefail` and answers to its ERR trap; nothing below may leave a command whose failure
 # chooses the exit class — that is the property the ERR trap exists to take away from every statement.
-# The functions below are written to that contract: each failure goes through `cannot_judge`, which
-# `exit 2`s, and the trap's message covers anything else by construction.
+# The functions below are written to that contract: each failure goes through `cannot_judge`, and the trap's
+# message covers anything else by construction.
 
 # This library is a part of each wrapper, not a unit of its own — sourced, it must never be executed.
-# The guard answers EX_USAGE (64), which is neither class a wrapper reserves: a library run as a command is a
-# plain misuse, not a wrapper that stopped, so `1` would read as a gate that refused and `2` as a
-# cannot-judge, and both are the wrong sentence for it. The number is a global rather than a literal so the
-# answer has one owner; `a_library_run_as_a_command_stops_without_reaching_a_wrapper_s_classes` holds the
-# direction by running the file, and `each_wrapper_chooses_its_exit_class_in_one_place` counts zero bare
-# `exit 1`/`exit 2` sites in it.
 #
-# **Definitions only, above this line and below it.** A wrapper sources this file inside `if ! source …`,
-# which runs it with errexit suppressed and the ERR trap out of reach — so a statement here that can fail
-# would be silently ignored rather than refused. Everything at the top level is a definition or an
-# assignment; the day that stops being true, the sourcing shape has to change first.
-WRAPPER_USAGE=64
-if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
-    printf '%s\n' \
-        'wrapper.sh is a library the two wrappers source, not a wrapper itself. Run scripts/merge-pr.sh or scripts/publish.sh' \
-        >&2
-    exit "$WRAPPER_USAGE"
-fi
+# **Definitions only at the top level.** A wrapper sources this file inside `if ! source …`, which runs it
+# with errexit suppressed and the ERR trap out of reach, so a top-level statement that can fail would be
+# silently ignored rather than refused. The top level holds assignments, function definitions and the
+# execution guard below, whose test cannot fail; anything else needs the sourcing shape changed first.
 
-# --- the two exit classes, chosen in one place ---------------------------------------------------------------
+# --- the exit codes, declared once -------------------------------------------------------------------------
+#
+# Spelled in `kanhe::verdict_channel` and read here, never typed twice: `wrapper_exit` owns the two classes and
+# `LIBRARY_MISUSE` the guard's answer, and `each_wrapper_uses_the_channel_the_gates_report_on` holds these
+# three against them. Every `exit` in this file and in both wrappers names one of them; the one literal is
+# each wrapper's bootstrap guard, which runs before this file is loaded.
 #
 # `2` is everything a wrapper could not judge: a misconfigured invocation, and an input it could not read.
 # `1` is a gate that ran and refused. The contract is this repository's own — `crates/shengmo/src/law.rs`:
-# *0 clean, 1 violation, 2 constitution/usage error* — and each is chosen here, once, for both wrappers.
+# *0 clean, 1 violation, 2 constitution/usage error*.
 #
 # **Five could-not-read conditions were split across both classes with no rule.** An unresolvable repository
 # exited 2 while an unreadable body file, an unreadable head, an unresolvable pull-request number and an
@@ -50,24 +42,32 @@ fi
 # subjects, because "which is not the same fact as a subject that disagrees". So the wrapper reported as a
 # disagreement what its own gate calls unjudgeable — telling an operator, in the words of the publish gate,
 # "to go looking for a disagreement that does not exist".
-#
+WRAPPER_EXIT_VIOLATION=1
+WRAPPER_EXIT_UNJUDGED=2
+WRAPPER_EXIT_MISUSE=64
+
+# Executed rather than sourced is a plain misuse, answered outside both classes a wrapper reserves: `1` would
+# read as a gate that refused and `2` as a wrapper that could not judge.
+# `a_library_run_as_a_command_stops_without_reaching_a_wrapper_s_classes` runs the file.
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+    printf '%s\n' \
+        'wrapper.sh is a library the two wrappers source, not a wrapper itself. Run scripts/merge-pr.sh or scripts/publish.sh' \
+        >&2
+    exit "$WRAPPER_EXIT_MISUSE"
+fi
+
 # The subject the refusal is about — `merge message` or `publish source` — is the one thing the two copies
 # never shared, and the WRAPPER_SUBJECT global each wrapper sets before sourcing is its one owner: every
 # helper here reads it, so a call site cannot spell one wrapper's prefix inside the other.
 cannot_judge() {
     printf '%s: %s\n' "$WRAPPER_SUBJECT" "$1" >&2
-    exit 2
+    exit "$WRAPPER_EXIT_UNJUDGED"
 }
 
 # The refusal idiom, delegating the class to the function above rather than choosing it again.
 #
-# **Converging the `case` arms onto this helper left four sites behind, and two of them predated it.** The
-# merge wrapper's positional selector and body-file guard exited through a bare `usage; exit 2` carrying none
-# of the prefix above; the URL refusal hand-copied that function's body because both helpers were defined
-# below it; and its value guard re-spelled it further down the file. Every stop in both wrappers now
-# delegates, and what decides that is `each_wrapper_chooses_its_exit_class_in_one_place` rather than the next
-# reader — a helper's existence was never the property, since three of those four sites were written with it
-# in scope.
+# Every stop in both wrappers delegates here or to `cannot_judge`; a stop that exits on its own is refused by
+# `each_wrapper_chooses_its_exit_class_in_one_place`.
 refuse() {
     cannot_judge "refusing \`$1\`: $2"
 }
@@ -79,12 +79,12 @@ refuse() {
 # substitution — and a bare `cd` walked through both, because the axis was never *which shape the statement
 # has*: it is *any statement whose failure can choose the class*. That is every command, which is why
 # enumerating them is the wrong instrument. Enumerating what may exit `1` is the right one, and there is
-# exactly one such statement: the gate's own verdict arm.
+# exactly one such statement: `exit_for_the_gates_refusal`, below.
 #
 # Measured on bash 5.x rather than reasoned about. A bare failure traps and exits 2, including a failed `cd`.
 # A `||`-guarded command does not trap, so every existing guard still decides its own outcome. A failure in a
 # condition — `if`, `while`, `!`, `&&` — does not trap, so the `grep -q` that checks the gate ran is
-# unaffected. An explicit `exit 1` is not intercepted, so the gate's verdict still reaches the caller. `set -E`
+# unaffected. An explicit `exit` is not intercepted, so the gate's verdict still reaches the caller. `set -E`
 # is required and is not optional: without it a failure inside a function exits 1 and the trap never sees it.
 install_exit_class_trap() {
     trap 'cannot_judge "an unguarded command failed, so this wrapper stopped without reaching a verdict — which is not the same fact as a gate that ran and refused"' ERR
@@ -124,10 +124,11 @@ GATE_VIOLATION_CLASS=Violation
 GATE_CLEAN_CLASS=Clean
 
 require_a_verdict() {
-    read_verdict
-    if [[ $verdict != "$GATE_CLEAN_CLASS" ]]; then
+    local reached
+    reached=$(verdict_on_channel) || reached=""
+    if [[ $reached != "$GATE_CLEAN_CLASS" ]]; then
         cannot_judge \
-            "the gate ran and passed without reaching a verdict — the channel carries ${verdict:-nothing}, and a run that judged nothing is not a run that agreed. This is the class a passing test cannot distinguish on its own, which is why it is read rather than inferred"
+            "the gate ran and passed without reaching a verdict — the channel carries ${reached:-nothing}, and a run that judged nothing is not a run that agreed. This is the class a passing test cannot distinguish on its own, which is why it is read rather than inferred"
     fi
 }
 
@@ -153,14 +154,27 @@ require_one_pass() {
 }
 
 # The class the gate reported, read off the channel it was given. Absent, empty or anything else is a run that
-# reached no verdict — a compile error included — and that is not a disagreement. The one read, shared by
-# `require_a_verdict` on the passing path and each wrapper's verdict arm on the failing one; an arm is then
-# one comparison, and the three hand-written copies the extraction briefly left are the shape this removes.
-read_verdict() {
-    verdict=""
+# reached no verdict — a compile error included — and that is not a disagreement. Printed rather than left in
+# a global, so each caller holds its own reading.
+verdict_on_channel() {
     if [[ -f $verdict_file ]]; then
-        verdict=$(cat -- "$verdict_file") || verdict=""
+        cat -- "$verdict_file" || printf ''
     fi
+}
+
+# The failing path of a gate's run, identical for both wrappers and so written once: the gate's output for
+# the operator, then the class the channel carries. Only a `Violation` the gate itself wrote leaves as the
+# violation class, which makes *only the gate's verdict exits 1* a property of this function and of the
+# channel rather than of where a wrapper calls it.
+exit_for_the_gates_refusal() {
+    local output=$1 reached
+    printf '%s\n' "$output" >&2
+    reached=$(verdict_on_channel) || reached=""
+    if [[ $reached == "$GATE_VIOLATION_CLASS" ]]; then
+        exit "$WRAPPER_EXIT_VIOLATION"
+    fi
+    cannot_judge \
+        "the gate failed without reporting a disagreement — its channel carries ${reached:-nothing} — so this stops as a run that could not judge, not as one that refused"
 }
 
 # The verdict file's lifecycle: created where the gate is about to run, removed where the act completes.
