@@ -87,6 +87,11 @@ them.
 
 ### Self-governance
 
+- **The set-membership sweep is a standing pre-cut step, and the claim it finds is accepted debt.** A prose claim
+  that a set the tree enumerates has only certain members is held by nothing, and a declared set would hold only
+  a claim an author already doubted. `AGENTS.md` now runs a subject-side sweep for such claims at the pre-cut
+  reading, and `BACKLOG.md` moves the entry from READY-PATCH to ACCEPTED DEBT.
+
 - **The bounds-method reader reads only an `Observer`'s method, and its declared bound narrows to the name.**
   It anchored on the unique line-start occurrence of `fn bounds(`, so with the definition moved out of the file a
   same-named method on an unrelated `impl` was read as the `Observer`'s. The walk that finds the body now records

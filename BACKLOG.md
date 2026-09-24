@@ -421,6 +421,95 @@ consumer for an undemonstrated deduplication.
   change actually needed** — the last being the case where the information is absent rather than merely
   unannounced, which is the failure the price would be worth paying for.
 
+- **A claim about this tree, written as prose, is held only where its author declared it.** *Class:*
+  ACCEPTED DEBT — **reclassified from READY-PATCH on 2026-09-25**, on the measured reason at the end of this
+  entry. *Observed pressure:* two claims were found false in the 0.5.0 window by the same shape — a
+  statement about an enumerable property of this repository, written with no producer and an outer edge wider
+  than anything that reacts. `Cargo.toml`'s *syn quarantined to 渾儀 alone*, false from the moment the
+  dev-table edge landed in the same window; and `PROJECT.md`'s *zero change directories have ever existed*,
+  contradicted by `git log --all`, by two commit bodies on the tip that wrote it, and by a requirement with a
+  scenario in `openspec/specs/reference-integrity/spec.md`. Both were true of a corpus neither named. *Observation
+  source:* an adversarial contract review of the `0.5.0` window, plus this file's and `CHANGELOG.md`'s own record of
+  the figure form of the same class — eight hand-written figures found wrong in a single change, which is what
+  `crates/kanhe/src/census.rs` was built for. *Current reaction or bound:* `census` holds a **figure** written in
+  a sentence its enumerating check declared, over tracked Markdown, and `repository-checks` declares two bounds
+  for what that leaves — a count in a phrasing no census declares, and a census outside Markdown. Nothing at all
+  holds a **set-membership or absolute** claim (`only X`, `never Y`, `alone`), in any carrier. *Risk:* the
+  projected prose is what conditions every agent that loads it, so a claim wider than its reaction is a false
+  statement of the law at the surface 潛移 makes most load-bearing. Bounded by the claims being prose: nothing an
+  adopter resolves, and no exit class moves. *Promotion trigger:* a third instance, or the design below being
+  written. *Version class:* patch; the carriers ship in no crate. *Authority:* this entry, `AGENTS.md`'s *Bind a
+  claim to its measurement* and *A census is produced, never typed*, and `crates/kanhe/src/census.rs`.
+
+  **Not fired, read 2026-09-08 — and a careless reading would have promoted it on the wrong form.** The
+  window produced prose claims that were false and found by review rather than by a reaction: three
+  hand-written counts in `pin_mutations.tsv`'s header, and one in a commit body about how many sites sat in
+  unpublished crates. All four are the **figure** form, which this entry separates from its own two
+  instances in so many words and which `census` was built for. The two instances the trigger counts are
+  **set-membership or absolute** claims — *syn quarantined to 渾儀 alone*, *zero change directories have ever
+  existed* — and the delta produced none. Swept over the live Markdown it added, for `only`, `never`,
+  `alone` and `no ... has ever`: one hit, *the re-export is never resolved against the extern prelude*,
+  which is a statement about a mechanism in a described failure mode rather than about an enumerable
+  property of this repository — and it has a reaction, the direction that reports the empty finding set. So
+  the count stands at two, and the sweep is written out because its one hit is the kind a re-run would
+  otherwise read as a contradiction.
+
+  *Shape, because the obvious instrument is already refused:* a detector over prose was designed, measured three
+  times and rejected, and that refusal has an observation source this entry does not get to ignore. The admitted
+  shape is the one already built for figures — **declaration**: `Census` carries a phrase and produced figures,
+  and the missing sibling is a declared phrase whose held value is a produced **set**, so *only 渾儀 names syn*
+  is compared against the enumerator that answers it. What that cannot cover is stated here rather than
+  discovered later: it reaches only claims some check enumerates the set for, so a role description like *the
+  syn dependency lives here* stays a reviewer's, and coverage stays opt-in — declaring is an author's act. That
+  residual is the honest floor of this repair, not an argument against it.
+
+  **The floor was measured on 2026-09-03, and it decides the shape rather than qualifying it.** Two live
+  instances of this class were found and repaired in the same change, both normative: `semantic-signature-
+  coupling` said the AST observation's crate *is the only crate permitted to depend on `syn`*, and
+  `semantic-dyn-trait-boundary` said the same in an aside. Both are false — `crates/kanhe/Cargo.toml` names
+  `syn` in `[dev-dependencies]`, which is permitted, and the root manifest's own comment says so and names
+  the occupant. Both now say *the only **packaged** crate that depends on `syn`*, which is the wording that
+  manifest already reached and is exactly true.
+
+  **Neither would have been caught by declaring a phrase, and the reason generalises: the instances of this
+  class are claims their author believed.** A declared set-claim is armed by an author writing it down, and
+  nobody declares a sentence they think is true — so the mechanism can hold the claims someone already
+  doubted and not the ones that go wrong. The two above sat in specifications for windows, under a
+  requirement whose own scenarios were narrower than its prose.
+
+  What did find them was a sweep of the **absolute-quantifier vocabulary near a named enumerable subject** —
+  *only*, *alone*, *the one place*, *no other* within a line of `syn` — over tracked documents. That is not
+  the prose detector this repository designed, measured and rejected three times: it decides nothing, and it
+  starts from a subject the tree already enumerates (which crates declare a dependency) rather than from the
+  meaning of a sentence. It produces a review queue, which is the interim-instrument form `AGENTS.md` already
+  states for the corpus-narrowing class.
+
+  *So the shape above is not built, and this is the measured reason rather than a deferral:* a declared set
+  is a producer for a claim someone chose to arm, and this class's instances are the claims nobody would
+  have. The sweep is what the next window should run, from the subject side, at each pre-release review.
+
+  **Fired, read 2026-09-24 — by that sweep, run from the subject side as written above.** Two corpora: every
+  tracked document and comment, for the quantifier vocabulary within reach of a dependency subject, held
+  against every manifest's dependency tables and `AGENTS.self-law.md`; and the lines the window rooted at the
+  `v0.6.1` snapshot added, for the same vocabulary near any subject the tree enumerates. The set-membership
+  form this entry counts, found false: a root-manifest comment and a runtime-origin scenario saying 漏刻
+  depends on 璇璣 *only*, where its `audit` feature reaches 星表; a spec listing 渾儀's allowlist without 星表;
+  `crates/tianheng/README.md` saying `syn` *is quarantined to* 渾儀, the retired wording minus its last word;
+  and, written in the window, a spec clause placing the verdict channel's variable name in the shared library,
+  where the wrappers alone spell it. Every one is a claim its author believed, which is this entry's own
+  thesis met again: none would have been declared, and the sweep found them. Each is repaired in the change
+  that records this reading. What the firing does **not** supply is a new instrument — the measured reason
+  above that a declared set holds only a doubted claim is unchanged.
+
+  **Accepted, decided 2026-09-25.** The steward took the second of the two dispositions the reading above left
+  open. READY-PATCH said *someone may patch this now*, and there is no patch: the one decidable shape, a
+  declared set, arms only the claims an author already doubted, and every instance this entry has recorded was a
+  claim its author believed. What finds them is the subject-side sweep, and that is a step someone performs, so
+  it is listed where the pre-cut reading is — `AGENTS.md`, *Branching and release* — rather than left to be
+  remembered from here. The debt accepted is the set-membership claim that no sweep reaches between two cuts.
+  *Reopening:* a decidable form that tells a claim about an enumerable set from a sentence about a mechanism, or
+  a false set-membership claim found in a released artifact that the sweep's vocabulary would not have reached.
+
 ### WATCH
 
 - **The merge wrapper's account restates how a judged squash message is composed, which the gate owns.**
@@ -1007,88 +1096,6 @@ consumer for an undemonstrated deduplication.
   the same change or arrive with a new guard and its negative run; a construction-guaranteed property stays in
   requirement prose instead. This does not close the entry — review convention cannot derive the missing binding —
   but it prevents sync from knowingly admitting another un-reacted scenario while the derived capability is designed.
-
-- **A claim about this tree, written as prose, is held only where its author declared it.** *Class:*
-  READY-PATCH. *Observed pressure:* two claims were found false in the 0.5.0 window by the same shape — a
-  statement about an enumerable property of this repository, written with no producer and an outer edge wider
-  than anything that reacts. `Cargo.toml`'s *syn quarantined to 渾儀 alone*, false from the moment the
-  dev-table edge landed in the same window; and `PROJECT.md`'s *zero change directories have ever existed*,
-  contradicted by `git log --all`, by two commit bodies on the tip that wrote it, and by a requirement with a
-  scenario in `openspec/specs/reference-integrity/spec.md`. Both were true of a corpus neither named. *Observation
-  source:* an adversarial contract review of the `0.5.0` window, plus this file's and `CHANGELOG.md`'s own record of
-  the figure form of the same class — eight hand-written figures found wrong in a single change, which is what
-  `crates/kanhe/src/census.rs` was built for. *Current reaction or bound:* `census` holds a **figure** written in
-  a sentence its enumerating check declared, over tracked Markdown, and `repository-checks` declares two bounds
-  for what that leaves — a count in a phrasing no census declares, and a census outside Markdown. Nothing at all
-  holds a **set-membership or absolute** claim (`only X`, `never Y`, `alone`), in any carrier. *Risk:* the
-  projected prose is what conditions every agent that loads it, so a claim wider than its reaction is a false
-  statement of the law at the surface 潛移 makes most load-bearing. Bounded by the claims being prose: nothing an
-  adopter resolves, and no exit class moves. *Promotion trigger:* a third instance, or the design below being
-  written. *Version class:* patch; the carriers ship in no crate. *Authority:* this entry, `AGENTS.md`'s *Bind a
-  claim to its measurement* and *A census is produced, never typed*, and `crates/kanhe/src/census.rs`.
-
-  **Not fired, read 2026-09-08 — and a careless reading would have promoted it on the wrong form.** The
-  window produced prose claims that were false and found by review rather than by a reaction: three
-  hand-written counts in `pin_mutations.tsv`'s header, and one in a commit body about how many sites sat in
-  unpublished crates. All four are the **figure** form, which this entry separates from its own two
-  instances in so many words and which `census` was built for. The two instances the trigger counts are
-  **set-membership or absolute** claims — *syn quarantined to 渾儀 alone*, *zero change directories have ever
-  existed* — and the delta produced none. Swept over the live Markdown it added, for `only`, `never`,
-  `alone` and `no ... has ever`: one hit, *the re-export is never resolved against the extern prelude*,
-  which is a statement about a mechanism in a described failure mode rather than about an enumerable
-  property of this repository — and it has a reaction, the direction that reports the empty finding set. So
-  the count stands at two, and the sweep is written out because its one hit is the kind a re-run would
-  otherwise read as a contradiction.
-
-  *Shape, because the obvious instrument is already refused:* a detector over prose was designed, measured three
-  times and rejected, and that refusal has an observation source this entry does not get to ignore. The admitted
-  shape is the one already built for figures — **declaration**: `Census` carries a phrase and produced figures,
-  and the missing sibling is a declared phrase whose held value is a produced **set**, so *only 渾儀 names syn*
-  is compared against the enumerator that answers it. What that cannot cover is stated here rather than
-  discovered later: it reaches only claims some check enumerates the set for, so a role description like *the
-  syn dependency lives here* stays a reviewer's, and coverage stays opt-in — declaring is an author's act. That
-  residual is the honest floor of this repair, not an argument against it.
-
-  **The floor was measured on 2026-09-03, and it decides the shape rather than qualifying it.** Two live
-  instances of this class were found and repaired in the same change, both normative: `semantic-signature-
-  coupling` said the AST observation's crate *is the only crate permitted to depend on `syn`*, and
-  `semantic-dyn-trait-boundary` said the same in an aside. Both are false — `crates/kanhe/Cargo.toml` names
-  `syn` in `[dev-dependencies]`, which is permitted, and the root manifest's own comment says so and names
-  the occupant. Both now say *the only **packaged** crate that depends on `syn`*, which is the wording that
-  manifest already reached and is exactly true.
-
-  **Neither would have been caught by declaring a phrase, and the reason generalises: the instances of this
-  class are claims their author believed.** A declared set-claim is armed by an author writing it down, and
-  nobody declares a sentence they think is true — so the mechanism can hold the claims someone already
-  doubted and not the ones that go wrong. The two above sat in specifications for windows, under a
-  requirement whose own scenarios were narrower than its prose.
-
-  What did find them was a sweep of the **absolute-quantifier vocabulary near a named enumerable subject** —
-  *only*, *alone*, *the one place*, *no other* within a line of `syn` — over tracked documents. That is not
-  the prose detector this repository designed, measured and rejected three times: it decides nothing, and it
-  starts from a subject the tree already enumerates (which crates declare a dependency) rather than from the
-  meaning of a sentence. It produces a review queue, which is the interim-instrument form `AGENTS.md` already
-  states for the corpus-narrowing class.
-
-  *So the shape above is not built, and this is the measured reason rather than a deferral:* a declared set
-  is a producer for a claim someone chose to arm, and this class's instances are the claims nobody would
-  have. The sweep is what the next window should run, from the subject side, at each pre-release review.
-
-  **Fired, read 2026-09-24 — by that sweep, run from the subject side as written above.** Two corpora: every
-  tracked document and comment, for the quantifier vocabulary within reach of a dependency subject, held
-  against every manifest's dependency tables and `AGENTS.self-law.md`; and the lines the window rooted at the
-  `v0.6.1` snapshot added, for the same vocabulary near any subject the tree enumerates. The set-membership
-  form this entry counts, found false: a root-manifest comment and a runtime-origin scenario saying 漏刻
-  depends on 璇璣 *only*, where its `audit` feature reaches 星表; a spec listing 渾儀's allowlist without 星表;
-  `crates/tianheng/README.md` saying `syn` *is quarantined to* 渾儀, the retired wording minus its last word;
-  and, written in the window, a spec clause placing the verdict channel's variable name in the shared library,
-  where the wrappers alone spell it. Every one is a claim its author believed, which is this entry's own
-  thesis met again: none would have been declared, and the sweep found them. Each is repaired in the change
-  that records this reading. What the firing does **not** supply is a new instrument — the measured reason
-  above that a declared set holds only a doubted claim is unchanged — so whether the entry stays READY-PATCH
-  with the sweep as its instrument, or moves to ACCEPTED DEBT beside a standing pre-release step, is a
-  steward's decision rather than a patch.
-
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 
