@@ -78,8 +78,11 @@ fn dod_commands(agents: &str) -> Vec<String> {
 /// Done command missing, the direction that fails.
 ///
 /// **An action is a command too, where it runs one.** `EmbarkStudios/cargo-deny-action` runs `cargo deny
-/// <command>` from its `with.command` input, and a step with no such input contributes nothing rather than
-/// borrowing one from another mapping.
+/// <command> <command-arguments>` from its `with` inputs, and a step with no `command` input contributes
+/// nothing rather than borrowing one from another mapping. A step setting `arguments` or `manifest-path`
+/// contributes nothing either: those are passed before the command, so it runs against another manifest or
+/// with other flags than the Definition of Done line — including where the value written is the action's own
+/// default, which reports the line missing, the direction that fails.
 fn ci_commands(ci: &str) -> Vec<Vec<String>> {
     let workflow = workflow::parse(ci).unwrap_or_else(|why| {
         panic!("the workflow cannot be read, so which commands CI runs is not known: {why}")
@@ -98,10 +101,17 @@ fn ci_commands(ci: &str) -> Vec<Vec<String>> {
                 .uses
                 .as_ref()
                 .is_some_and(|uses| uses.value.starts_with("EmbarkStudios/cargo-deny-action@"));
-            if runs_cargo_deny {
-                if let Some(command) = step.with.iter().find(|input| input.key == "command") {
+            let input = |key: &str| step.with.iter().find(|input| input.key == key);
+            // A step that sets what the action passes before the command — which manifest, which flags —
+            // runs a command the Definition of Done does not spell, so it is no witness at all.
+            let moves_the_prefix = input("arguments").is_some() || input("manifest-path").is_some();
+            if runs_cargo_deny && !moves_the_prefix {
+                if let Some(command) = input("command") {
                     let mut words = vec!["cargo".to_string(), "deny".to_string()];
                     words.extend(command.value.split_whitespace().map(str::to_string));
+                    if let Some(arguments) = input("command-arguments") {
+                        words.extend(arguments.value.split_whitespace().map(str::to_string));
+                    }
                     commands.push(words);
                 }
             }
@@ -189,6 +199,32 @@ fn a_wrong_cargo_deny_action_command_does_not_satisfy_check() {
     let agents = "## Definition of Done\n\n```bash\ncargo deny check\n```\n";
     let ci = "jobs:\n  supply-chain:\n    steps:\n      - uses: EmbarkStudios/cargo-deny-action@v2\n        with:\n          command: advisories\n";
     assert_eq!(missing_from_ci(agents, ci), ["cargo deny check"]);
+}
+
+/// The action's other inputs are words of the same command, and one that narrows it is read.
+///
+/// Its `action.yml`, at the commit `ci.yml` pins, passes `--manifest-path <manifest-path> <arguments> <command>
+/// <command-arguments>` to `cargo deny` — read from
+/// `https://raw.githubusercontent.com/EmbarkStudios/cargo-deny-action/<pinned sha>/action.yml`, whose `args:`
+/// list is that order — so `command: check` beside `command-arguments: advisories` runs the
+/// advisories check alone. A reader of `command` alone recorded `cargo deny check` for it.
+#[test]
+fn an_action_input_narrowing_the_command_does_not_satisfy_check() {
+    let agents = "## Definition of Done\n\n```bash\ncargo deny check\n```\n";
+    for narrowing in [
+        "command-arguments: advisories",
+        "arguments: --exclude kanhe",
+        "manifest-path: crates/xuanji/Cargo.toml",
+    ] {
+        let ci = format!(
+            "jobs:\n  supply-chain:\n    steps:\n      - uses: EmbarkStudios/cargo-deny-action@v2\n        with:\n          command: check\n          {narrowing}\n"
+        );
+        assert_eq!(
+            missing_from_ci(agents, &ci),
+            ["cargo deny check"],
+            "`{narrowing}` changes what the action runs, so it is no witness for `cargo deny check`"
+        );
+    }
 }
 
 #[test]

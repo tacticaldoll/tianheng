@@ -459,13 +459,19 @@ fn read(root: &Path, path: &str) -> String {
 /// loaded. Anything else — a numeral elsewhere, a bare `exit`, another variable — is refused, which is what a
 /// count of the two literals could not do: `exit "$ANY"` and `exit 3` were invisible to it.
 ///
-/// **Found in statement position, not as a token pair.** `exit` counts where it begins a command — at the
-/// start of a line or after `;`, `&&`, `||`, `then`, `else`, `do`, `{` or `(` — so `… || exit 1`, `exit 1;` and
-/// `then exit 1; fi` are all read, while a refusal message saying *and exit 0 having merged nothing* is not.
+/// **Found as a word, wherever it stands.** Every word whose value is `exit` — what quote removal leaves of it,
+/// under any quoting the shell removes — is held to those two shapes, in a command's position or not. Deciding
+/// *where a command begins* needs the shell's grammar: separators, reserved words, precommand words, case
+/// patterns. A reader modelling that answered wrongly one production at a time, and a missing production is an
+/// exit that passes; a word needs only quote removal, which is finite and done. So `printf eval exit 3` is
+/// refused as well — `exit` as another command's argument is held to the same form, and the repair is to quote
+/// it into a longer word, as a refusal message already is. `EXIT_SHAPES` is the whole of it, run.
 ///
 /// **What this does not reach**: a class chosen by an unguarded command's own status, which the ERR trap and
-/// `every_acquisition_is_guarded_so_the_tool_cannot_choose_the_class` close, and a refusal spelled `return`
-/// inside a function whose caller then exits, which has no instance and would need block structure to see.
+/// `every_acquisition_is_guarded_so_the_tool_cannot_choose_the_class` close; a refusal spelled `return`
+/// inside a function whose caller then exits, which has no instance and would need block structure to see;
+/// and a command name the text does not spell — a variable, or a string another command runs — which is the
+/// stated bound [`a_command_name_computed_when_the_line_runs_is_not_read`] pins.
 #[test]
 fn each_wrapper_chooses_its_exit_class_in_one_place() {
     let Some(root) = workspace_root() else {
@@ -485,22 +491,20 @@ fn each_wrapper_chooses_its_exit_class_in_one_place() {
         let bootstrap = bootstrap_region(&lines);
         let mut chosen: BTreeMap<String, Vec<usize>> = BTreeMap::new();
         let mut refused = Vec::new();
-        for (number, line) in &lines {
-            for argument in exit_arguments(line) {
-                let named = argument
-                    .strip_prefix("\"$WRAPPER_EXIT_")
-                    .and_then(|rest| rest.strip_suffix('"'))
-                    .filter(|name| DECLARED_EXITS.iter().any(|(declared, _)| declared == name));
-                match named {
-                    Some(name) => chosen.entry(name.to_string()).or_default().push(*number),
-                    None if argument == "2" && bootstrap.contains(number) => {
-                        chosen
-                            .entry("bootstrap".to_string())
-                            .or_default()
-                            .push(*number);
-                    }
-                    None => refused.push(format!("  {script}:{number}: exit {argument}")),
+        for (number, argument) in exit_sites(&executed_text(&lines)) {
+            let named = argument
+                .strip_prefix("\"$WRAPPER_EXIT_")
+                .and_then(|rest| rest.strip_suffix('"'))
+                .filter(|name| DECLARED_EXITS.iter().any(|(declared, _)| declared == name));
+            match named {
+                Some(name) => chosen.entry(name.to_string()).or_default().push(number),
+                None if argument == "2" && bootstrap.contains(&number) => {
+                    chosen
+                        .entry("bootstrap".to_string())
+                        .or_default()
+                        .push(number);
                 }
+                None => refused.push(format!("  {script}:{number}: exit {argument}")),
             }
         }
         assert!(
@@ -549,28 +553,392 @@ const DECLARED_EXITS: [(&str, u8); 3] = [
     ("MISUSE", kanhe::verdict_channel::LIBRARY_MISUSE),
 ];
 
-/// The argument of every `exit` that begins a command on `line`, as written.
-fn exit_arguments(line: &str) -> Vec<String> {
-    const OPENERS: [&str; 8] = [";", "&&", "||", "then", "else", "do", "{", "("];
-    let words: Vec<&str> = line.split_whitespace().collect();
-    let mut arguments = Vec::new();
+/// What [`exit_arguments`] reads from each shape a wrapper line can take, the shapes it declines included.
+///
+/// The table is the description of the reader: a row cannot drift from the code, because it runs. No row asks
+/// where a command begins, because the reader does not: an `exit` word in a case arm, a condition, a pipeline
+/// or another command's arguments reads the same way.
+const EXIT_SHAPES: &[(&str, &[&str])] = &[
+    ("exit 2", &["2"]),
+    (
+        "    exit \"$WRAPPER_EXIT_UNJUDGED\"",
+        &["\"$WRAPPER_EXIT_UNJUDGED\""],
+    ),
+    ("command || exit 1", &["1"]),
+    ("then exit 1; fi", &["1"]),
+    ("exit 1;", &["1"]),
+    // A bare exit, its terminator on the word or standing after it, reads with no argument.
+    ("{ exit; }", &[""]),
+    ("exit ;;", &[""]),
+    ("(exit 3)", &["3"]),
+    ("( exit 3 )", &["3"]),
+    ("*) exit 3 ;;", &["3"]),
+    ("\"(odd)\") exit 3 ;;", &["3"]),
+    ("if exit 3; then :; fi", &["3"]),
+    ("true | exit 3", &["3"]),
+    ("time -p exit 3", &["3"]),
+    ("printf eval exit 3", &["3"]),
+    ("for exit in a; do :; done", &["in"]),
+    // Every quoting the shell removes spells `exit`, ANSI-C quoting and each of its escapes included.
+    ("\"exit\" 3", &["3"]),
+    ("e\\xit 3", &["3"]),
+    ("x) $'exit' 3 ;;", &["3"]),
+    ("$'\\x65xit' 3", &["3"]),
+    ("$'\\145xit' 3", &["3"]),
+    ("$'\\u0065xit' 3", &["3"]),
+    ("$'e\\x78it' 3", &["3"]),
+    // A word whose value is longer than `exit` is not one: a message's prose, one quoted word.
+    ("tell \"reach gh, and exit 0 having merged nothing\"", &[]),
+    ("judged+=$'\\n\\n'$body", &[]),
+    ("printf '%s' $(date +%s) exit_code", &[]),
+    // Quotes and continuations span lines, so the text is read whole: a message's later line is still inside
+    // its quote, a backslash-newline joins `exit` to its argument, and a newline ends a bare `exit`.
+    (
+        "refuse \"$1\" \"it would\nreach gh, and exit 0 having merged nothing\"",
+        &[],
+    ),
+    ("exit \\\n    3", &["3"]),
+    ("exit\ncargo test", &[""]),
+    // A command substitution's contents are text the shell runs, wherever the substitution stands.
+    ("printf '%s' \"$(exit 3)\"", &["3"]),
+    ("status=$(exit 3)", &["3"]),
+    ("echo `exit 3`", &["3"]),
+    ("printf '%s' \"`exit 3`\"", &["3"]),
+    ("printf '%s' \"$(exit)\"", &[""]),
+    // A substitution is part of the word it stands in, so text beside it joins that word.
+    ("printf '%s' $(printf x)exit 3", &[]),
+    ("printf '%s' exit$(printf x) 3", &[]),
+    ("printf '%s' `printf x`exit 3", &[]),
+    // A parenthesis inside quotes is the word's text, not the shell's operator.
+    ("printf \"(exit\" 3", &[]),
+    ("exit \"$(printf 3)\"", &["\"$(printf 3)\""]),
+    // A command name computed when the line runs is not the line's to read: the declared bound below.
+    ("$stop 3", &[]),
+];
+
+#[test]
+fn the_exit_reader_decides_every_shape_a_wrapper_line_takes() {
+    for (line, expected) in EXIT_SHAPES {
+        assert_eq!(
+            exit_arguments(line),
+            expected
+                .iter()
+                .map(|argument| argument.to_string())
+                .collect::<Vec<_>>(),
+            "the exit reader misreads `{line}`"
+        );
+    }
+}
+
+/// A command name the shell computes when the line runs is not read — a stated bound, shown rather than described.
+///
+/// `$stop 3` runs `exit 3` where `stop=exit`, and `eval "exit 3"`, `trap 'exit 3' EXIT` and `bash -c 'exit 3'` run it
+/// from a string another command parses again: each is decided by a
+/// value the line does not spell, so a reader of words has nothing to read them from. Every word the line does
+/// spell as `exit` is read, [`EXIT_SHAPES`] says so, and this is what is left.
+#[test]
+fn a_command_name_computed_when_the_line_runs_is_not_read() {
+    for line in [
+        "$stop 3",
+        "\"$stop\" 3",
+        "eval \"exit 3\"",
+        "eval \"$stop 3\"",
+        "trap 'exit 3' EXIT",
+        "bash -c 'exit 3'",
+    ] {
+        assert_eq!(
+            exit_arguments(line),
+            Vec::<String>::new(),
+            "`{line}` names its command at run time, and the declared bound says it is not read"
+        );
+    }
+}
+
+/// The argument of every `exit` word in `text`, as written — empty for a bare `exit`.
+fn exit_arguments(text: &str) -> Vec<String> {
+    exit_sites(text)
+        .into_iter()
+        .map(|(_, argument)| argument)
+        .collect()
+}
+
+/// Every `exit` word in `text`, with the line it stands on and its argument as written.
+///
+/// **Over the whole text, not a line at a time**, because a quote the shell opens on one line closes on a later
+/// one: `merge-pr.sh` writes refusal messages across lines, and a line reader saw a message's *and exit 0* on
+/// a continuation line as standing outside every quote. The argument is the next word, unless an operator — a
+/// separator, a redirection, a newline — ends the command first.
+fn exit_sites(text: &str) -> Vec<(usize, String)> {
+    let words = shell_words(text);
+    let mut sites = Vec::new();
     for (index, word) in words.iter().enumerate() {
-        let word = word.trim_end_matches(';');
-        if word != "exit" {
+        if word.operator || word.value != "exit" {
             continue;
         }
-        let in_position = index == 0
-            || OPENERS
-                .iter()
-                .any(|opener| words[index - 1] == *opener || words[index - 1].ends_with(';'));
-        if in_position {
-            let argument = words
-                .get(index + 1)
-                .map_or("", |next| next.trim_end_matches(';'));
-            arguments.push(argument.to_string());
+        let argument = words
+            .get(index + 1)
+            .filter(|next| !next.operator)
+            .map_or("", |next| next.written.as_str());
+        sites.push((word.line, argument.to_string()));
+    }
+    sites
+}
+
+/// The executed text of a script, each executed line at its own line number and every other line empty, so a
+/// word's line is the one a reader of the file finds it on.
+fn executed_text(lines: &[(usize, String)]) -> String {
+    let last = lines.last().map_or(0, |(number, _)| *number);
+    let mut placed = vec![""; last];
+    for (number, line) in lines {
+        placed[number - 1] = line;
+    }
+    placed.join("\n")
+}
+
+/// One word of shell text, or one operator, where bash's own grammar puts the boundary.
+///
+/// **The boundaries are bash's definition, not a list grown to fit.** `bash(1)`, *DEFINITIONS*: a metacharacter
+/// is space, tab, newline, `|`, `&`, `;`, `(`, `)`, `<` or `>`, and outside quotes each one ends a word; every one
+/// but a blank also stands as an operator. So `(exit 3)`, `exit;` and `*) exit 3 ;;` put `exit` in a word of its
+/// own, while `"(exit"` quotes its parenthesis into the word's value. A command substitution's contents are shell
+/// text the shell runs, so they are read as words too, in order, wherever the substitution stands — unquoted,
+/// inside double quotes, or between backquotes — while the substitution itself stays part of the word it stands
+/// in, so `$(printf x)exit` is one word. A backslash before a newline joins the two lines.
+struct ShellWord {
+    /// Where the word begins in the text, which orders words read out of a substitution after the one holding it.
+    start: usize,
+    /// The line the word begins on, counted from one.
+    line: usize,
+    /// The word as written, quotes included — what an `exit` argument is compared as.
+    written: String,
+    /// What quote removal leaves of it — what the shell runs as a command name.
+    value: String,
+    /// Whether it is a metacharacter standing as an operator rather than a word.
+    operator: bool,
+}
+
+/// bash's metacharacters, from `bash(1)`, *DEFINITIONS*.
+const METACHARACTERS: [char; 10] = [' ', '\t', '\n', '|', '&', ';', '(', ')', '<', '>'];
+
+fn shell_words(text: &str) -> Vec<ShellWord> {
+    let mut tokens = Tokens {
+        chars: text.chars().collect(),
+        at: 0,
+        line: 1,
+        out: Vec::new(),
+    };
+    tokens.run(None);
+    let mut words = tokens.out;
+    words.sort_by_key(|word| word.start);
+    words
+}
+
+struct Tokens {
+    chars: Vec<char>,
+    at: usize,
+    line: usize,
+    out: Vec<ShellWord>,
+}
+
+impl Tokens {
+    fn take(&mut self) -> Option<char> {
+        let ch = *self.chars.get(self.at)?;
+        self.at += 1;
+        if ch == '\n' {
+            self.line += 1;
+        }
+        Some(ch)
+    }
+
+    fn push(&mut self, word: Option<ShellWord>) {
+        // A word that is only a backslash-newline is a continuation standing between words, not a word.
+        if let Some(word) = word.filter(|word| word.written != "\\\n") {
+            self.out.push(word);
         }
     }
-    arguments
+
+    /// Reads words and operators until `close` stands unquoted — the end of the substitution this run reads —
+    /// or the text ends. A `)` closes only at the depth it opened, so a subshell inside a substitution is its own.
+    fn run(&mut self, close: Option<char>) {
+        let mut word: Option<ShellWord> = None;
+        let mut depth = 0usize;
+        loop {
+            let (start, line) = (self.at, self.line);
+            let Some(ch) = self.take() else { break };
+            let closes = Some(ch) == close && (ch == '`' || depth == 0);
+            if closes || METACHARACTERS.contains(&ch) {
+                self.push(word.take());
+                match ch {
+                    '(' => depth += 1,
+                    ')' => depth = depth.saturating_sub(1),
+                    _ => {}
+                }
+                if ch != ' ' && ch != '\t' {
+                    self.out.push(ShellWord {
+                        start,
+                        line,
+                        written: ch.to_string(),
+                        value: ch.to_string(),
+                        operator: true,
+                    });
+                }
+                if closes {
+                    return;
+                }
+                continue;
+            }
+            let mut current = word.take().unwrap_or(ShellWord {
+                start,
+                line,
+                written: String::new(),
+                value: String::new(),
+                operator: false,
+            });
+            current.written.push(ch);
+            match ch {
+                '\\' => {
+                    if let Some(escaped) = self.take() {
+                        current.written.push(escaped);
+                        if escaped != '\n' {
+                            current.value.push(escaped);
+                        }
+                    }
+                }
+                '\'' => {
+                    while let Some(inner) = self.take() {
+                        current.written.push(inner);
+                        if inner == '\'' {
+                            break;
+                        }
+                        current.value.push(inner);
+                    }
+                }
+                // ANSI-C quoting, `$'…'`: its content is the value, each escape decoded as bash decodes it.
+                '$' if self.chars.get(self.at) == Some(&'\'') => {
+                    self.take();
+                    current.written.push('\'');
+                    while let Some(inner) = self.take() {
+                        current.written.push(inner);
+                        match inner {
+                            '\'' => break,
+                            '\\' => {
+                                let from = self.at;
+                                let decoded = ansi_c_escape(&self.chars, &mut self.at);
+                                current.written.extend(&self.chars[from..self.at]);
+                                current.value.extend(decoded);
+                            }
+                            _ => current.value.push(inner),
+                        }
+                    }
+                }
+                '$' if self.chars.get(self.at) == Some(&'(') => {
+                    self.substitution(&mut current, ')')
+                }
+                '`' => self.substitution(&mut current, '`'),
+                '"' => self.double_quoted(&mut current),
+                _ => current.value.push(ch),
+            }
+            word = Some(current);
+        }
+        self.push(word);
+    }
+
+    /// A command substitution, its `$` or opening backquote already read: **one** reading, quoted or not.
+    ///
+    /// Its contents are shell text the shell runs, read as words of their own. The substitution itself is part of
+    /// the word it stands in, held there as a placeholder, so text beside it joins that word — `$(printf x)exit` is
+    /// one word, as it is to the shell — and the word's value is never `exit`.
+    fn substitution(&mut self, word: &mut ShellWord, close: char) {
+        let from = self.at;
+        if close == ')' {
+            self.take();
+            word.value.push_str("$(…)");
+        } else {
+            word.value.push_str("`…`");
+        }
+        self.run(Some(close));
+        word.written.extend(&self.chars[from..self.at]);
+    }
+
+    /// The rest of a double-quoted span, its opening quote already read. A substitution inside it is shell text,
+    /// read as words of its own; the quoted word holds it as a placeholder, so its value is never `exit`.
+    fn double_quoted(&mut self, word: &mut ShellWord) {
+        while let Some(ch) = self.take() {
+            word.written.push(ch);
+            match ch {
+                '"' => return,
+                '\\' => {
+                    if let Some(escaped) = self.take() {
+                        word.written.push(escaped);
+                        // Inside double quotes a backslash escapes only these; before anything else it stays.
+                        if !matches!(escaped, '$' | '`' | '"' | '\\' | '\n') {
+                            word.value.push('\\');
+                        }
+                        if escaped != '\n' {
+                            word.value.push(escaped);
+                        }
+                    }
+                }
+                '$' if self.chars.get(self.at) == Some(&'(') => self.substitution(word, ')'),
+                '`' => self.substitution(word, '`'),
+                _ => word.value.push(ch),
+            }
+        }
+    }
+}
+
+/// The character one ANSI-C escape names, read from just after its backslash; `at` is left past the escape.
+///
+/// **The whole of bash's list, because it is finite.** `bash(1)`, *QUOTING*, names every form: the single
+/// letters, `\\`, `\'`, `\"`, `\?`, octal `\nnn`, hex `\xHH`, `\uHHHH`, `\UHHHHHHHH` and control `\cx`. A
+/// reader decoding some of them is one spelling short of `exit` for as long as the rest exist, so none is left
+/// out. Measured: `$'\x65xit'`, `$'\145xit'`, `$'\u0065xit'` and `$'e\x78it'` each run `exit` under bash 5.
+/// An escape bash leaves as written — a backslash before any other character — is both characters.
+fn ansi_c_escape(chars: &[char], at: &mut usize) -> Vec<char> {
+    let Some(&first) = chars.get(*at) else {
+        return vec!['\\'];
+    };
+    *at += 1;
+    let digits = |at: &mut usize, radix: u32, most: usize| {
+        let start = *at;
+        while *at < chars.len() && *at - start < most && chars[*at].is_digit(radix) {
+            *at += 1;
+        }
+        let text: String = chars[start..*at].iter().collect();
+        u32::from_str_radix(&text, radix)
+            .ok()
+            .and_then(char::from_u32)
+    };
+    let named = match first {
+        'a' => Some('\u{7}'),
+        'b' => Some('\u{8}'),
+        'e' | 'E' => Some('\u{1b}'),
+        'f' => Some('\u{c}'),
+        'n' => Some('\n'),
+        'r' => Some('\r'),
+        't' => Some('\t'),
+        'v' => Some('\u{b}'),
+        '\\' | '\'' | '"' | '?' => Some(first),
+        _ => None,
+    };
+    if let Some(named) = named {
+        return vec![named];
+    }
+    let decoded = match first {
+        '0'..='7' => {
+            *at -= 1;
+            digits(at, 8, 3)
+        }
+        'x' => digits(at, 16, 2),
+        'u' => digits(at, 16, 4),
+        'U' => digits(at, 16, 8),
+        'c' => chars.get(*at).map(|&control| {
+            *at += 1;
+            char::from(control as u8 & 0x1f)
+        }),
+        _ => None,
+    };
+    decoded.map_or_else(|| vec!['\\', first], |decoded| vec![decoded])
 }
 
 /// A closed or broken stream moves no class the library chooses, nor any a wrapper chooses before its trap.
@@ -956,14 +1324,10 @@ fn a_wrapper_exits_the_violation_class_only_for_a_gates_own_verdict() {
         .numbered_lines()
         .map(|(number, line)| (number, line.to_string()))
         .collect();
-    let sites: Vec<usize> = lines
-        .iter()
-        .filter(|(_, line)| {
-            exit_arguments(line)
-                .iter()
-                .any(|argument| argument == "\"$WRAPPER_EXIT_VIOLATION\"")
-        })
-        .map(|(number, _)| *number)
+    let sites: Vec<usize> = exit_sites(&executed_text(&lines))
+        .into_iter()
+        .filter(|(_, argument)| argument == "\"$WRAPPER_EXIT_VIOLATION\"")
+        .map(|(number, _)| number)
         .collect();
     assert_eq!(
         sites.len(),
