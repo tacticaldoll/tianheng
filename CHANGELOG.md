@@ -87,6 +87,14 @@ them.
 
 ### Self-governance
 
+- **The bounds-method reader reads only an `Observer`'s method, and its declared bound narrows to the name.**
+  It anchored on the unique line-start occurrence of `fn bounds(`, so with the definition moved out of the file a
+  same-named method on an unrelated `impl` was read as the `Observer`'s. The walk that finds the body now records
+  a method only inside an `impl` whose trait path ends in `Observer`, so that copy declines like a commented one.
+  The trait is matched by name rather than resolved, so the bound now states only an `impl` of another trait
+  named `Observer`, pinned by the reader's shape table. A decline names the condition it met instead of
+  reporting every failed extent as a missing brace.
+
 - **The merge wrapper's unreadable-body direction no longer skips silently under the exhaustive suite.** It
   asked a probe of its own whether mode 000 binds and returned when it did not, under `TIANHENG_WORKSPACE_TESTS`
   as outside it, so a run as root reported the direction passed without running it. The probe now asks through
