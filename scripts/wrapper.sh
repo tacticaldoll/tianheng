@@ -26,9 +26,9 @@
 
 # --- the exit codes, declared once -------------------------------------------------------------------------
 #
-# Spelled in `kanhe::verdict_channel` and read here, never typed twice: `wrapper_exit` owns the two classes and
-# `LIBRARY_MISUSE` the guard's answer, and `each_wrapper_uses_the_channel_the_gates_report_on` holds these
-# three against them. Every `exit` in this file and in both wrappers names one of them; the one literal is
+# Owned by `kanhe::verdict_channel` and written here once, each held against its owner: `wrapper_exit` owns the
+# two classes and `LIBRARY_MISUSE` the guard's answer, and `each_wrapper_uses_the_channel_the_gates_report_on`
+# holds these three against them and refuses a second `NAME=value` assignment to any of them. Every `exit` in this file and in both wrappers names one of them; the one literal is
 # each wrapper's bootstrap guard, which runs before this file is loaded.
 #
 # `2` is everything a wrapper could not judge: a misconfigured invocation, and an input it could not read.

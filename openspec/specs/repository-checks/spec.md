@@ -676,8 +676,10 @@ its class open is what a reaction is for.
 
 ### Requirement: A workflow SHALL declare its shell strictness once
 
-`.github/workflows/ci.yml` SHALL declare `defaults.run.shell` as a strict `bash`, and no step SHALL take that
-strictness back — neither by naming `bash` without the flags nor by restating `set -` inside a `run:` block.
+`.github/workflows/ci.yml` SHALL declare `defaults.run.shell` as a strict `bash`, and no job or step SHALL take
+that strictness back — neither by declaring a `shell:` other than the workflow's own, whatever it names, nor by
+restating `set -` inside a `run:` block. `sh`, `bash -e {0}` and a path to bash each run without `pipefail`, so
+the rule is the workflow's value rather than a list of what may not be named.
 Both wrappers in `scripts/` argue that a script choosing its exit class in one place beats every author
 choosing it again; a workflow whose steps each decide their own strictness is that defect one layer out.
 
@@ -694,7 +696,8 @@ about a license for a fact about an absent interpreter. Under `pipefail` the sam
 
 #### Scenario: A step takes the strictness back
 
-- **WHEN** a step declares `shell: bash` without the flags, or a `run:` block restates `set -e`
+- **WHEN** a job or step declares a `shell:` other than the workflow's own — `bash` without the flags, `sh`, or
+  any other — or a `run:` block restates `set -e`
 - **THEN** the reaction refuses, naming the line — the second spelling is the one that drifts
 - **PINNED-BY** `shell_strictness_is_declared_once_for_the_whole_workflow`
 
@@ -1296,7 +1299,10 @@ neither class `kanhe::verdict_channel::wrapper_exit` returns, held beside the en
 **Every exit code SHALL be owned in Rust and read in the shell.** `kanhe::verdict_channel` owns the codes —
 `wrapper_exit` for the two classes, by an exhaustive match over `refusal::Kind`, and `LIBRARY_MISUSE` — and
 the library SHALL declare one `WRAPPER_EXIT_<NAME>` per code, each held equal to its owner by a repository
-check. Every word the library and the wrappers spell as `exit` — under any quoting the shell removes, and wherever
+check, which reads every `NAME=value` word the library's executed text spells for that name — `local`,
+`declare`, `export` and `readonly` ones included — and refuses unless there is exactly one. An assignment in
+another form is declared as a bound below; a value it changes is caught only where a direction runs the wrapper
+down that path and asserts the class it exits with. Every word the library and the wrappers spell as `exit` — under any quoting the shell removes, and wherever
 it stands — SHALL be followed by one of those declarations, and each code SHALL be chosen at one site. Where a
 command begins is not asked: `exit` as another command's argument is held the same way, and is quoted into a
 longer word instead. A command name computed only when a line runs is the one form outside it, declared as a
@@ -1385,6 +1391,18 @@ judged.
   read whole rather than a line at a time, because a quote opened on one line closes on a later one, and a
   backslash-newline joins two lines
 - **PINNED-BY** `the_exit_reader_decides_every_shape_a_wrapper_line_takes`
+
+#### Scenario: An assignment spelled other than `NAME=value` is not read — a stated bound
+
+- **WHEN** the library or a wrapper assigns a declared exit code or channel class in a form that is not a
+  `NAME=value` word — `NAME+=0`, `read NAME`, `printf -v NAME`, `(( NAME = 3 ))`, `${NAME:=3}`
+- **THEN** the declaration check reports no offence for it. bash's assignment forms are the enumeration a reader
+  stops short of, and declaring the names `readonly` was measured and refused: a plain assignment to a readonly
+  name ends a non-interactive bash with status `1`, outside the ERR trap — the class reserved for a gate that ran
+  and refused. What holds a changed value is running it, and only where the run is observed: a direction that runs
+  a wrapper down a path and asserts the class it exits with fails on a value changed there. Not every direction
+  that runs a wrapper asserts its class, so a path no class-asserting direction runs is what is left
+- **PINNED-BY** `an_assignment_spelled_other_than_name_equals_value_is_not_read`
 
 #### Scenario: A command name computed when the line runs is not read — a stated bound
 
@@ -2759,7 +2777,7 @@ what to do next does not, and buys the same thing.
 Removing it ends a class rather than closing an instance. The reader SHALL be kept as a **convenience** and
 stated as one: it decides **when** an operator learns a job may now skip, not **whether**, since a skipping
 job reports `SKIPPED` and the wrapper refuses regardless. Its remaining blind spots SHALL be
-recorded at that severity rather than as false negatives — **per mechanism, since the five keys reach the
+recorded at that severity rather than as false negatives — **per mechanism, since the keys reach the
 rollup by two of them**. A job key moves a check's conclusion, so the check appears as `SKIPPED` and the
 refusal happens whatever the reader did. A trigger filter stops the workflow running, so its checks are
 **absent** from the rollup; that refuses only while one workflow exists, because an empty rollup takes the
@@ -2773,7 +2791,10 @@ arises instead of after. **Every key SHALL be read at the position it can occupy
 `continue-on-error:` sit on a **job**: a `steps:` entry may carry `if:` or `continue-on-error:` without the
 job's own conclusion moving, so refusing those would refuse correct code. `paths:` and `paths-ignore:` are
 **trigger** conditions and sit under `on:`, quoted or not — YAML 1.1 reads a bare `on` as a boolean, so both
-spellings name the block.
+spellings name the block. What a trigger condition is SHALL be decided by the event rather than by a list of key
+names: a pull request's head gets this workflow's checks only from an event that runs it for a pull request —
+`pull_request` or `pull_request_target` — so every key under such an event is a filter, a workflow subscribing to
+neither is the widest filter of all, and `push:`'s filters move no pull request's checks.
 
 **The keys SHALL be read from the parsed workflow**, so which job a key belongs to, whether it sits on the job
 or on a step inside it, and whether it sits under `on:` are the grammar's answers rather than a line reader's.
@@ -2807,8 +2828,8 @@ key named in a comment.
 
 #### Scenario: A job acquires a key that lets it skip
 
-- **WHEN** a job in the workflow carries `if:`, `needs:` or `continue-on-error:`, or the workflow carries a
-  path filter
+- **WHEN** a job in the workflow carries `if:`, `needs:` or `continue-on-error:`, or the workflow's pull-request
+  event carries any filter — `paths`, `branches`, `types` or another — or it subscribes to no pull-request event
 - **THEN** the check fails naming the key and its line, so the decision is made deliberately rather than met
   at a merge — either `SKIPPED` moves back beside agreement with the measurement that earns it, or the key
   goes. The merge is refused either way; what this changes is when the operator finds out

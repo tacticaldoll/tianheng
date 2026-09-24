@@ -329,9 +329,9 @@ dimensions and depends on no other workspace member; **unlike** `xuanji` it *obs
 so it is a substrate, not the measure-only model. A dimension depending on either shared base is a
 downward edge, never a cross-dimension one.
 
-A dimension's crate is **born when it is built** — never pre-created empty. The heavy
-dependencies (AST, runtime) are quarantined to their own crates, and the static core stays
-dependency-light — what each crate may depend on is declared in the law and rendered in
+A dimension's crate is **born when it is built** — never pre-created empty. A heavy dependency
+lives in the one dimension that needs it — among the packaged crates, only 渾儀 depends on the AST
+parser — and the static core stays dependency-light — what each crate may depend on is declared in the law and rendered in
 [`AGENTS.self-law.md`](AGENTS.self-law.md). See
 [`BACKLOG.md`](BACKLOG.md) for the deferred phases (their observation sources and open
 design questions) and the governance/observability layer.

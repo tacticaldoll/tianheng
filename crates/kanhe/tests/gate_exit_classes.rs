@@ -80,7 +80,7 @@ const TARGETS_SPAWNING_A_PROCESS: [(&str, &str); 30] = [
     (
         "crates/kanhe/tests/gate_exit_classes.rs",
         "git: two enumerations — the test targets this direction reads, and the tracked scripts the \
-         wrapper direction beside it reads",
+         wrapper direction beside it reads; bash, to ask which function holds the violation exit",
     ),
     (
         "crates/kanhe/tests/hermetic_invocations.rs",
@@ -684,6 +684,79 @@ fn exit_sites(text: &str) -> Vec<(usize, String)> {
     sites
 }
 
+/// The value of every `NAME=value` word among `words` — what a plain assignment to `name` spells.
+fn plain_assignments(words: &[ShellWord], name: &str) -> Vec<String> {
+    let prefix = format!("{name}=");
+    words
+        .iter()
+        .filter(|word| !word.operator)
+        .filter_map(|word| word.value.strip_prefix(&prefix).map(str::to_string))
+        .collect()
+}
+
+/// An assignment spelled other than `NAME=value` is not read — a stated bound, shown rather than described.
+///
+/// bash assigns through `+=`, `read`, `printf -v`, `let`, `(( ))`, `${NAME:=…}` and more, and a reader listing
+/// them is the enumeration `AGENTS.md`'s *A repair loop is a diagnosis* says to stop. Making the names
+/// `readonly` instead was measured and refused: a plain assignment to a readonly name ends a non-interactive
+/// bash with status `1`, outside the ERR trap, which is the class reserved for a gate that ran and refused. What
+/// holds a changed value is its execution, and only where it is observed: a direction that runs a wrapper down a
+/// path and asserts the class it exits with fails on a value changed there. Not every direction that runs a
+/// wrapper asserts its class — some read only what it asked of `gh` — so a path no class-asserting direction
+/// runs is what is left.
+#[test]
+fn an_assignment_spelled_other_than_name_equals_value_is_not_read() {
+    let rows: [(&str, &[&str]); 8] = [
+        ("X=1", &["1"]),
+        ("local X=1", &["1"]),
+        ("declare -r X=1", &["1"]),
+        // The bound: each assigns X, and none is a `X=value` word.
+        ("X+=0", &[]),
+        ("read X <<< 3", &[]),
+        ("printf -v X 3", &[]),
+        ("(( X = 3 ))", &[]),
+        (": \"${X:=3}\"", &[]),
+    ];
+    for (text, expected) in rows {
+        assert_eq!(
+            plain_assignments(&shell_words(text), "X"),
+            expected
+                .iter()
+                .map(|value| value.to_string())
+                .collect::<Vec<_>>(),
+            "the plain assignments of X in `{text}`"
+        );
+    }
+}
+
+/// The body bash holds for function `name` once `library` is sourced, as `declare -f` prints it.
+///
+/// Run with `BASH_ENV` and `ENV` removed, so no ambient startup file runs before the library does.
+fn body_as_bash_holds_it(root: &Path, library: &str, name: &str) -> String {
+    let output = std::process::Command::new("bash")
+        .current_dir(root)
+        .env_remove("BASH_ENV")
+        .env_remove("ENV")
+        .args(["-c", &format!("source {library} && declare -f {name}")])
+        .output()
+        .unwrap_or_else(|error| {
+            panic!("bash could not be run to read {library}'s `{name}`: {error}")
+        });
+    let body = String::from_utf8_lossy(&output.stdout).into_owned();
+    assert!(
+        output.status.success(),
+        "sourcing {library} did not complete ({}): a statement outside every function ran and ended it — an \
+         `exit` there stands outside `{name}` by construction — so where its exits stand is not known: {}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !body.trim().is_empty(),
+        "bash holds no function `{name}` after sourcing {library}, so where its exits stand is not known"
+    );
+    body
+}
+
 /// The executed text of a script, each executed line at its own line number and every other line empty, so a
 /// word's line is the one a reader of the file finds it on.
 fn executed_text(lines: &[(usize, String)]) -> String {
@@ -1227,6 +1300,25 @@ fn each_wrapper_uses_the_channel_the_gates_report_on() {
         );
     }
     let text = read(&root, kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY);
+    let lines: Vec<(usize, String)> = Source::of(text.clone())
+        .shell()
+        .numbered_lines()
+        .map(|(number, line)| (number, line.to_string()))
+        .collect();
+    let words = shell_words(&executed_text(&lines));
+    // Every `NAME=value` word the library's executed text spells for `name` — `local`, `declare`, `export` and
+    // `readonly` ones included, since each is a word of its own — and exactly one of them. An assignment in
+    // another form is the stated bound `plain_assignments` shows.
+    let declaration = |name: &str| {
+        kanhe::selection::the_only(
+            &format!(
+                "assignment of `{name}` in {}",
+                kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY
+            ),
+            plain_assignments(&words, name),
+        )
+        .unwrap_or_else(|refusal| panic!("{}", refusal.message))
+    };
     for (name, expected) in [
         (
             "GATE_VIOLATION_CLASS",
@@ -1234,16 +1326,7 @@ fn each_wrapper_uses_the_channel_the_gates_report_on() {
         ),
         ("GATE_CLEAN_CLASS", verdict_channel::CLEAN.to_string()),
     ] {
-        let declared = text
-            .lines()
-            .find_map(|line| line.trim().strip_prefix(&format!("{name}=")))
-            .unwrap_or_else(|| {
-                panic!(
-                    "{} declares no `{name}`, so the class the wrappers read off the channel rests on \
-                     nothing this check can compare",
-                    kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY
-                )
-            });
+        let declared = declaration(name);
         assert_eq!(
             declared,
             expected,
@@ -1253,16 +1336,7 @@ fn each_wrapper_uses_the_channel_the_gates_report_on() {
     }
     for (name, expected) in DECLARED_EXITS {
         let variable = format!("WRAPPER_EXIT_{name}");
-        let declared = text
-            .lines()
-            .find_map(|line| line.trim().strip_prefix(&format!("{variable}=")))
-            .unwrap_or_else(|| {
-                panic!(
-                    "{} declares no `{variable}`, so the code its exits name rests on nothing this check can \
-                     compare",
-                    kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY
-                )
-            });
+        let declared = declaration(&variable);
         assert_eq!(
             declared,
             expected.to_string(),
@@ -1324,9 +1398,10 @@ fn a_wrapper_exits_the_violation_class_only_for_a_gates_own_verdict() {
         .numbered_lines()
         .map(|(number, line)| (number, line.to_string()))
         .collect();
+    const VIOLATION: &str = "\"$WRAPPER_EXIT_VIOLATION\"";
     let sites: Vec<usize> = exit_sites(&executed_text(&lines))
         .into_iter()
-        .filter(|(_, argument)| argument == "\"$WRAPPER_EXIT_VIOLATION\"")
+        .filter(|(_, argument)| argument == VIOLATION)
         .map(|(number, _)| number)
         .collect();
     assert_eq!(
@@ -1335,16 +1410,20 @@ fn a_wrapper_exits_the_violation_class_only_for_a_gates_own_verdict() {
         "{library} exits the violation class at {sites:?}; exactly one site may, behind the gate's own verdict"
     );
     let site = sites[0];
-    // The enclosing function: the nearest definition above the site.
-    let enclosing = lines
-        .iter()
-        .rev()
-        .find(|(number, line)| *number < site && line.trim_end().ends_with("() {"))
-        .map(|(_, line)| line.trim().to_string());
+    // **Which function holds it is bash's answer, not a reading of braces.** A brace is syntax only where the
+    // shell parses it as one — unquoted, in a command's position — which is the grammar this file stopped
+    // modelling for `exit`. So the body is asked of bash: the library is sourced, which runs only its
+    // declarations and a guard that does not fire when sourced, and `declare -f` prints the function as bash
+    // parsed it. The one site in the file being the one site in that body is the site being inside it.
+    let body = body_as_bash_holds_it(&root, library, "exit_for_the_gates_refusal");
+    let inside = exit_sites(&body)
+        .into_iter()
+        .filter(|(_, argument)| argument == VIOLATION)
+        .count();
     assert_eq!(
-        enclosing.as_deref(),
-        Some("exit_for_the_gates_refusal() {"),
-        "{library}:{site} exits the violation class outside the one function that reads the gate's verdict"
+        inside, 1,
+        "{library}:{site} exits the violation class outside the one function that reads the gate's verdict — \
+         the body bash holds for `exit_for_the_gates_refusal` carries {inside} such exits:\n{body}"
     );
     let window: String = lines
         .iter()
