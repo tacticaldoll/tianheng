@@ -30,6 +30,13 @@ version = 2
 # Adding a dependency under any other license fails CI until it is reviewed here.
 allow = ["MIT", "Apache-2.0", "Unlicense", "Unicode-3.0"]
 confidence-threshold = 0.9
+# Dev-dependencies too. cargo-deny leaves a crate reached only through `[dev-dependencies]` out of the
+# license check unless this is set — its default since 0.14.2 — and the self-law's crate boundaries
+# observe normal edges alone, so without it nothing held *an unlisted license fails CI until it is
+# reviewed here* for the dependencies this repository adds most: the ones only its checks use.
+# Measured on cargo-deny 0.19.9: a Zlib crate planted as a dev-dependency of `kanhe` passes with this
+# unset and is rejected with it set.
+include-dev = true
 
 [bans]
 # New external dependencies are already governed by Tianheng's own reaction (the 圭表
