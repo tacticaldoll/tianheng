@@ -1376,12 +1376,85 @@ disagreement — so a file the wrapper could not open was reported to the operat
 wrongly. Reading once and handing the gate the value also closes the window between the test and the use.
 
 **A wrapper SHALL leave no temporary file behind, on the path that completes the act as well as on the paths that
-do not.** Cleanup SHALL NOT rest on an EXIT trap alone: a trap does not run when `exec` replaces the shell image,
-so the one path that completes the act is the one path a trap never cleans. The trap SHALL remain, because it is
-what covers the failure paths, and `exec` SHALL remain, because the tool's exit status becoming the script's is
-deliberate — so the removal belongs immediately before the `exec`, where the file's purpose is spent. A direction
-holding this SHALL observe an isolated temporary directory as a whole rather than one known name, so a temporary
-file added later is covered without the direction being touched.
+do not.** A trap does not run when `exec` replaces the shell image, and no wrapper `exec`s its act, so the EXIT
+trap is the one removal and covers every path. A direction holding this SHALL observe an isolated temporary
+directory as a whole rather than one known name, so a temporary file added later is covered without the direction
+being touched.
+
+**Each wrapper SHALL perform its act through the library's one function, and decide the class from what it
+observes of the act, never from the tool's status.** A tool's status is the tool's class: `gh pr merge` exits `1`
+when it does not merge and `cargo publish` exits `1` on an argument it cannot parse, and `1` is the class reserved
+for a gate that ran and refused. So no wrapper SHALL `exec` its act, and an act that did not complete SHALL exit the
+unjudged class. A status is also not an observation of the far side — a client can exit non-zero after the server
+acted, when the response is what was lost — so a sentence saying an act did or did not happen SHALL rest on a
+reading of its outcome, and where no reading is available the wrapper SHALL say the outcome is unknown.
+
+The merge wrapper reads the pull request back after the act, on both paths. Read as merged, it SHALL exit clean
+and print the pull request and its squash commit, printing the commit only where the reading is a commit ID and
+saying it is unknown otherwise, since gh prints nothing on success when its output is not a terminal; where gh had
+exited non-zero it SHALL say so beside the report. Read as not merged, it SHALL exit the unjudged class and say no
+merge was recorded. Unreadable, it SHALL exit clean saying the squash commit is unknown if gh reported success, and
+the unjudged class saying whether it merged is unknown if gh did not. The publish wrapper has nothing to read back
+and SHALL, where cargo does not complete, exit the unjudged class and say that what cargo reported uploading stays
+on the registry, since a workspace publish stops crate by crate.
+
+**No write SHALL choose a wrapper's class.** Every line a wrapper or its library prints goes through a writer that
+cannot fail, and a broken pipe is a failed write rather than a signal, so a caller that closed or abandoned a
+stream receives the same class as one that read it.
+
+#### Scenario: A merge completes
+
+- **WHEN** the gate agrees and gh merges
+- **THEN** the wrapper prints the pull request and its squash commit and exits clean
+- **PINNED-BY** `a_completed_merge_names_the_squash_commit_it_recorded`
+
+#### Scenario: gh does not complete the merge
+
+- **WHEN** the gate agrees, gh exits `1`, and the pull request reads as open
+- **THEN** the wrapper exits the unjudged class saying no merge was recorded, never gh's own `1`
+- **PINNED-BY** `a_merge_gh_does_not_complete_exits_the_unjudged_class`
+
+#### Scenario: gh reports a failure after the merge landed
+
+- **WHEN** gh exits `1` and the pull request reads as merged
+- **THEN** the wrapper exits clean, naming the squash commit and gh's failure beside it
+- **PINNED-BY** `a_merge_gh_reports_failed_but_github_reads_merged_is_a_completed_merge`
+
+#### Scenario: gh reports a failure and the outcome cannot be read
+
+- **WHEN** gh exits `1` and the pull request cannot be read back
+- **THEN** the wrapper exits the unjudged class saying whether it merged is unknown, never that nothing landed
+- **PINNED-BY** `a_failed_merge_whose_state_cannot_be_read_says_whether_it_merged_is_unknown`
+
+#### Scenario: A completed merge's squash cannot be read back
+
+- **WHEN** gh merges and the read-back fails, or succeeds carrying something other than a commit ID
+- **THEN** the wrapper says the merge completed and which half is unknown, and exits clean
+- **PINNED-BY** `a_merge_whose_squash_cannot_be_read_back_says_so`
+
+#### Scenario: cargo does not complete the publish
+
+- **WHEN** the source gate agrees and `cargo publish` exits `1`
+- **THEN** the wrapper exits the unjudged class and says what was uploaded stays uploaded
+- **PINNED-BY** `a_publish_cargo_does_not_complete_exits_the_unjudged_class`
+
+#### Scenario: No wrapper execs its act
+
+- **WHEN** either wrapper or the library is read for `exec` and `perform_the_act` in statement position
+- **THEN** no `exec` is found, and each wrapper performs exactly one act
+- **PINNED-BY** `each_wrapper_performs_its_act_and_execs_nothing`
+
+#### Scenario: A closed stream moves no class the library chooses
+
+- **WHEN** the library's violation, unjudged and ERR-trap paths run with standard error closed
+- **THEN** each exits the class it exits with the stream open
+- **PINNED-BY** `no_closed_stream_moves_the_library_s_classes`
+
+#### Scenario: A completed merge exits clean whatever became of its report's stream
+
+- **WHEN** a completed merge reports to a closed or a broken standard output
+- **THEN** the wrapper exits clean
+- **PINNED-BY** `no_closed_stream_moves_the_merge_s_class`
 
 A direction holding any of these SHALL NOT skip on the subject's own behaviour. A skip for an environment that
 cannot produce the condition SHALL be decided by a probe of the direction's own; deciding it from the wrapper's

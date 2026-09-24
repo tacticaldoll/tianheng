@@ -68,7 +68,7 @@ WRAPPER_SUBJECT='publish source'
 # itself rather than trapping. `a_wrapper_without_its_library_is_the_unjudged_class` holds the class by
 # running this wrapper with the library removed.
 if ! source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)/scripts/wrapper.sh"; then
-    printf '%s: cannot read the shared wrapper library, so the tree the source gate judges and the one `cargo publish` would package cannot be located — which is not the same fact as a gate that ran and refused\n' "$WRAPPER_SUBJECT" >&2
+    printf '%s: cannot read the shared wrapper library, so the tree the source gate judges and the one `cargo publish` would package cannot be located — which is not the same fact as a gate that ran and refused\n' "$WRAPPER_SUBJECT" >&2 || :
     exit 2
 fi
 
@@ -209,17 +209,26 @@ require_a_verdict
 cd "$repo" || cannot_judge \
     "cannot enter $repo, the tree \`cargo publish\` would package, after the source gate had already passed \
 — which is not the same fact as a gate that ran and refused"
-# Removed here, not left to the trap. An EXIT trap does not run when `exec` replaces the shell image —
-# measured, `bash -c 'trap "echo T" EXIT; exec true'` prints nothing while the same script without `exec` prints
-# `T`. So the trap fired on every path where nothing happened and was skipped on the one path that completes the
-# act: three successful runs left three empty files in `$TMPDIR`, measured against an isolated one. The trap
-# stays, because it is what covers the failure paths; `exec` stays, because the tool's exit status becoming this
-# script's is deliberate.
-rm -f "$verdict_file"
+# What the publish did, decided by `perform_the_act` rather than handed to cargo with `exec`: cargo's status is
+# cargo's class, and it exits `1` on an argument it cannot parse — the class reserved for a gate that ran and
+# refused. The allowlist above keeps every such argument away today; this is what keeps the class right without
+# relying on that.
+#
+# Nothing is read back, and a success says nothing of its own: `cargo publish` names every crate it uploads as it
+# goes, so its output already is the record. A failure is the case that needs a sentence, because a workspace
+# publish uploads crate by crate — a run that stops has uploaded what it said it uploaded, permanently.
+account_for_the_publish() {
+    local status=$1
+    if ((status != 0)); then
+        cannot_judge "cargo publish exited $status without completing, after the source gate had agreed. Any crate \
+it reported uploading above is on the registry and stays there — a version can be yanked, never replaced — so \
+read that output before running this again. This is not the same fact as a gate that ran and refused"
+    fi
+}
 
 # `forwarded` may be empty, and `"${empty[@]}"` under `set -u` is an unbound variable before bash 4.4 —
 # where this wrapper would abort through the ERR trap reporting "an unguarded command failed", a sentence
 # about the wrong cause, on the argument-free invocation that is the ordinary one. `selection` is never empty
 # and needs no guard. The `+` form is used rather than a version check, so no minimum has to be declared
 # anywhere and kept in step.
-exec cargo publish "${selection[@]}" ${forwarded[@]+"${forwarded[@]}"}
+perform_the_act account_for_the_publish cargo publish "${selection[@]}" ${forwarded[@]+"${forwarded[@]}"}

@@ -549,12 +549,17 @@ const DECLARED_EXITS: [(&str, u8); 3] = [
 
 /// The argument of every `exit` that begins a command on `line`, as written.
 fn exit_arguments(line: &str) -> Vec<String> {
+    command_arguments(line, "exit")
+}
+
+/// The first argument of every `command` that begins a command on `line`, as written — empty where it has none.
+fn command_arguments(line: &str, command: &str) -> Vec<String> {
     const OPENERS: [&str; 8] = [";", "&&", "||", "then", "else", "do", "{", "("];
     let words: Vec<&str> = line.split_whitespace().collect();
     let mut arguments = Vec::new();
     for (index, word) in words.iter().enumerate() {
         let word = word.trim_end_matches(';');
-        if word != "exit" {
+        if word != command {
             continue;
         }
         let in_position = index == 0
@@ -569,6 +574,96 @@ fn exit_arguments(line: &str) -> Vec<String> {
         }
     }
     arguments
+}
+
+/// No wrapper `exec`s, and each performs its act through `perform_the_act`, once.
+///
+/// **The act's class is decided after the act, so the act must return.** An `exec`d tool's status became the
+/// wrapper's: `gh pr merge` and `cargo publish` each exit `1` on a failure of their own, the class reserved for
+/// a gate that ran and refused, and an `exec` also skips the EXIT trap that removes the verdict file. Read in
+/// statement position, as `each_wrapper_chooses_its_exit_class_in_one_place` reads `exit`, over the library too,
+/// since a function there runs inside each wrapper.
+#[test]
+fn each_wrapper_performs_its_act_and_execs_nothing() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let library = kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY;
+    let mut files: Vec<&str> = WRAPPERS.to_vec();
+    files.push(library);
+    for script in files {
+        let lines: Vec<(usize, String)> = Source::of(read(&root, script))
+            .shell()
+            .numbered_lines()
+            .map(|(number, line)| (number, line.to_string()))
+            .collect();
+        let execs: Vec<usize> = lines
+            .iter()
+            .filter(|(_, line)| !command_arguments(line, "exec").is_empty())
+            .map(|(number, _)| *number)
+            .collect();
+        assert!(
+            execs.is_empty(),
+            "{script} `exec`s at {execs:?}; an act handed its process decides the class with the tool's own status"
+        );
+        let acts = lines
+            .iter()
+            .filter(|(_, line)| !command_arguments(line, "perform_the_act").is_empty())
+            .count();
+        let expected = usize::from(script != library);
+        assert_eq!(
+            acts, expected,
+            "{script} performs {acts} acts through `perform_the_act`; a wrapper performs exactly one, the library none"
+        );
+    }
+}
+
+/// A closed stream moves no class the library chooses.
+///
+/// Measured on bash 5.2 before every write went through `tell` and `say`: with standard error closed,
+/// `cannot_judge` exited `1` — its `printf` failed, the ERR trap re-entered it, and the second failure left
+/// through errexit with printf's own status. So every unjudged stop of both wrappers read, to a caller whose
+/// stderr was gone, as a gate that ran and refused. Run over the library itself, sourced as a wrapper sources
+/// it, on each of the three paths that choose a class: the violation, the unjudged stop, and the ERR trap.
+#[test]
+fn no_closed_stream_moves_the_library_s_classes() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let library = root.join(kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY);
+    let scratch =
+        std::env::temp_dir().join(format!("tianheng-closed-stream-{}", std::process::id()));
+    std::fs::create_dir_all(&scratch).expect("create the closed-stream scratch directory");
+    let verdict = scratch.join("verdict");
+    std::fs::write(&verdict, verdict_channel::rendered(Kind::Violation))
+        .expect("write the gate's verdict for the violation path");
+    let cases = [
+        ("exit_for_the_gates_refusal out", Kind::Violation),
+        ("cannot_judge out", Kind::CannotJudge),
+        ("false", Kind::CannotJudge),
+    ];
+    for (statement, kind) in cases {
+        let output = std::process::Command::new("bash")
+            .args([
+                "-c",
+                &format!(
+                    r#"exec 2>&-; set -Eeuo pipefail; WRAPPER_SUBJECT=probe; source "$1"; install_exit_class_trap; verdict_file=$2; {statement}"#
+                ),
+            ])
+            // `$0` is the probe's own name: were it the library's path, the library's misuse guard would read
+            // the probe as the library run as a command.
+            .arg("probe")
+            .arg(&library)
+            .arg(&verdict)
+            .output()
+            .expect("run the library with its stderr closed");
+        assert_eq!(
+            output.status.code(),
+            Some(i32::from(verdict_channel::wrapper_exit(kind))),
+            "`{statement}` with stderr closed must exit the {kind:?} class"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&scratch);
 }
 
 /// The lines of a wrapper's bootstrap guard: from `if ! source` to the `fi` that closes it.

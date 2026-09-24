@@ -98,6 +98,30 @@ fn run_wrapper_with_ambient(
     cwd: Option<&Path>,
     ambient: &[(&str, &Path)],
 ) -> Run {
+    run_wrapper_over(root, mode, extra, cwd, ambient, Streams::Open)
+}
+
+/// What the wrapper's own output streams are when it runs.
+///
+/// A class that a closed terminal can move is the defect `no_closed_stream_moves_the_merge_s_class` holds, and
+/// a harness that always hands the wrapper a working pipe cannot construct it.
+#[derive(Clone, Copy, Debug)]
+enum Streams {
+    Open,
+    /// Standard output closed outright, so a write fails with `EBADF`.
+    ClosedStdout,
+    /// Standard output a pipe whose reader has gone, so a write meets `SIGPIPE` or `EPIPE`.
+    BrokenStdout,
+}
+
+fn run_wrapper_over(
+    root: &Path,
+    mode: &str,
+    extra: &[&str],
+    cwd: Option<&Path>,
+    ambient: &[(&str, &Path)],
+    streams: Streams,
+) -> Run {
     static NEXT: AtomicUsize = AtomicUsize::new(0);
     let scratch = loop {
         let candidate = std::env::temp_dir().join(format!(
@@ -258,6 +282,20 @@ elif [[ $1 == pr && $2 == view && $* == *"--json statusCheckRollup"* ]]; then
     *) body='{"statusCheckRollup":[{"conclusion":"SUCCESS","name":"Definition of Done"},{"conclusion":"SUCCESS","name":"Examples dogfood"}]}' ;;
     esac
     printf '%s' "$body" | jq -r "$filter"
+elif [[ $1 == pr && $2 == view && $* == *"--json state,mergeCommit"* ]]; then
+    # The pull request as GitHub reads it after the act, in the `<state> <commit>` shape the wrapper's filter
+    # renders. The commit is an opaque token for the same reason the head is one.
+    case $FAKE_GH_MODE in
+    merged-unreadable | merge-lost-unreadable)
+        printf '%s\n' 'controlled read-back failure' >&2
+        exit 1
+        ;;
+    # A read that succeeds and carries no commit ID: the response a client renders from a `null`. What this
+    # rendering is does not matter — the wrapper must not print anything but a commit ID as one.
+    merged-null) printf '%s\n' 'MERGED null' ;;
+    merge-refused) printf '%s\n' 'OPEN ' ;;
+    *) printf '%s\n' 'MERGED 0123456789abcdef0123456789abcdef01234567' ;;
+    esac
 elif [[ $1 == pr && $2 == view && $* == *"--json headRefOid"* ]]; then
     if [[ $FAKE_GH_MODE == unreadable-head ]]; then
         printf '%s\n' ''
@@ -278,7 +316,7 @@ elif [[ $1 == api ]]; then
     empty)
         :
         ;;
-    subjects | ambient-gh-repo | invalid-number | unreadable-head | unreadable-base | unreadable-head-branch | unreadable-body | body-moved | title-moved | base-moved | head-branch-moved | clean | no-verdict | ci-red | ci-red-status | ci-expected-status | ci-no-evidence | ci-pending | ci-unclaimed | empty-diff | unreadable-count)
+    subjects | ambient-gh-repo | invalid-number | unreadable-head | unreadable-base | unreadable-head-branch | unreadable-body | body-moved | title-moved | base-moved | head-branch-moved | clean | no-verdict | ci-red | ci-red-status | ci-expected-status | ci-no-evidence | ci-pending | ci-unclaimed | empty-diff | unreadable-count | merge-refused | merged-unreadable | merged-null | merge-lost | merge-lost-unreadable)
         if [[ $* != *"--paginate"* ]]; then
             printf '%s\n' 'feat(x): live first subject'
         else
@@ -315,6 +353,18 @@ elif [[ $1 == pr && $2 == merge ]]; then
         esac
     done
     printf '%s' "$merge_body" > "$FAKE_GH_BODY"
+    # gh exits 1 when it does not merge — a moved head under `--match-head-commit`, a closed pull request — and
+    # equally when the merge landed and the response was lost, which the `merge-lost` modes stand for.
+    case $FAKE_GH_MODE in
+    merge-refused)
+        printf '%s\n' 'controlled merge refusal: head moved' >&2
+        exit 1
+        ;;
+    merge-lost | merge-lost-unreadable)
+        printf '%s\n' 'controlled response failure: connection reset' >&2
+        exit 1
+        ;;
+    esac
 else
     printf 'unexpected gh invocation: %s\n' "$*" >&2
     exit 97
@@ -337,9 +387,8 @@ fi
 # `1 passed` is a gate that ran and judged nothing — which is what the wrapper's success path now refuses.
 # `no-verdict` is the mode that keeps that state constructible.
 #
-# Only where the channel was opened: this executable also stands in for the tool the wrapper `exec`s, and the
-# wrapper hands the channel to the gate alone — so an unguarded write would both fail under `set -u` on that
-# second invocation and recreate the file the wrapper removed one statement earlier.
+# Only where the channel was opened: the wrapper hands the channel to the gate alone, so a run of this
+# executable without it is not the gate's run and must not write one.
 if [[ ${FAKE_GATE_VERDICT-} != none && -n ${TIANHENG_GATE_VERDICT-} ]]; then
     printf '%s' 'Clean' > "$TIANHENG_GATE_VERDICT"
 fi
@@ -350,6 +399,21 @@ printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 fil
     let old_path = std::env::var_os("PATH").unwrap_or_default();
     let path = format!("{}:{}", bin.display(), old_path.to_string_lossy());
     let mut command = Command::new("bash");
+    // The launcher is a shell of its own, so the stream is taken away from the wrapper and from nothing else;
+    // the status reported is the wrapper's, read from `PIPESTATUS` where a pipe stands after it.
+    match streams {
+        Streams::Open => {}
+        Streams::ClosedStdout => {
+            command.args(["-c", r#"exec >&-; exec bash "$@""#, "launcher"]);
+        }
+        Streams::BrokenStdout => {
+            command.args([
+                "-c",
+                r#"bash "$@" | true; exit "${PIPESTATUS[0]}""#,
+                "launcher",
+            ]);
+        }
+    }
     command
         .arg(root.join("scripts/merge-pr.sh"))
         .args(["42", "--body-file"])
@@ -1224,10 +1288,10 @@ static MODE_PROBE: AtomicUsize = AtomicUsize::new(0);
 /// The wrapper leaves no temporary file behind, on the path that completes the act as well as on the paths that
 /// do not.
 ///
-/// **The successful path was the one not cleaned.** Cleanup was left to `trap 'rm -f …' EXIT`, and an EXIT trap
-/// does not run when `exec` replaces the shell image — measured, `bash -c 'trap "echo T" EXIT; exec true'` prints
-/// nothing while the same script without `exec` prints `T`. So the trap fired on every path where nothing
-/// happened and was skipped on the one path that merges: three successful runs left three empty files.
+/// **The successful path is the one a trap can miss.** An EXIT trap does not run when `exec` replaces the shell
+/// image — measured, `bash -c 'trap "echo T" EXIT; exec true'` prints nothing while the same script without `exec`
+/// prints `T` — so a wrapper that `exec`d its act would have to remove the file itself. No wrapper does:
+/// `perform_the_act` runs the act, so the trap covers the path that merges as it covers every other.
 ///
 /// Asserted over the whole of an isolated `TMPDIR` rather than over one known name, so a temporary file added
 /// later is covered without this direction being touched. Both halves, because removing the trap would satisfy
@@ -1245,7 +1309,7 @@ fn no_temporary_file_survives_the_wrapper() {
     );
     assert!(
         completed.leftover.is_empty(),
-        "the path that completes the merge left {:?} behind — an `exec` never reaches an EXIT trap",
+        "the path that completes the merge left {:?} behind",
         completed.leftover
     );
 
@@ -2558,4 +2622,141 @@ fn what_ci_said_is_read_last_before_the_merge() {
         merge_at.saturating_sub(rollup[0] + 1),
         run.gh_log
     );
+}
+
+/// A completed merge says what it recorded: the pull request and the squash commit it became.
+///
+/// A silent exit 0 is indistinguishable, to the operator, from a wrapper that stopped before the act for a reason
+/// it did not print — so every merge was confirmed by reading GitHub afterwards.
+#[test]
+fn a_completed_merge_names_the_squash_commit_it_recorded() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "subjects", &[]);
+    assert_eq!(run.status.code(), Some(0), "{}{}", run.stdout, run.stderr);
+    assert!(
+        run.stdout
+            .contains("merged pull request 42 as 0123456789abcdef0123456789abcdef01234567"),
+        "the merge must name the squash commit it recorded, got stdout {:?}",
+        run.stdout
+    );
+}
+
+/// A merge gh does not complete, and GitHub reads as still open, is the unjudged class — never gh's own `1`.
+///
+/// gh exits `1` when it does not merge, and `1` is the class reserved for a gate that ran and refused — so a
+/// wrapper handing over its process to gh reported a moved head as a disagreement the gate never found. That no
+/// merge was recorded is said because the read-back observed it, not because gh's status implied it.
+#[test]
+fn a_merge_gh_does_not_complete_exits_the_unjudged_class() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "merge-refused", &[]);
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "a merge gh did not complete is not a gate that refused: {}{}",
+        run.stdout,
+        run.stderr
+    );
+    assert!(
+        run.stderr
+            .contains("reads the pull request as OPEN, so no merge was recorded"),
+        "the operator is told what GitHub reads after the failed act, got {:?}",
+        run.stderr
+    );
+}
+
+/// A merge gh reports as failed but GitHub reads as merged is a completed merge, and is reported as one.
+///
+/// A client can exit non-zero after the server acted, when the response is what was lost. Deciding from gh's
+/// status told the operator an irreversible act had not happened when it had.
+#[test]
+fn a_merge_gh_reports_failed_but_github_reads_merged_is_a_completed_merge() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "merge-lost", &[]);
+    assert_eq!(run.status.code(), Some(0), "{}{}", run.stdout, run.stderr);
+    assert!(
+        run.stdout
+            .contains("merged pull request 42 as 0123456789abcdef0123456789abcdef01234567")
+            && run
+                .stderr
+                .contains("GitHub reads the pull request as merged"),
+        "the merge that landed is named, and gh's failure beside it, got stdout {:?} stderr {:?}",
+        run.stdout,
+        run.stderr
+    );
+}
+
+/// A merge gh reports as failed, whose state cannot be read back, says that whether it merged is unknown.
+#[test]
+fn a_failed_merge_whose_state_cannot_be_read_says_whether_it_merged_is_unknown() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "merge-lost-unreadable", &[]);
+    assert_eq!(run.status.code(), Some(2), "{}{}", run.stdout, run.stderr);
+    assert!(
+        run.stderr.contains("whether it merged is unknown")
+            && !run.stderr.contains("no merge was recorded"),
+        "the operator is told the outcome is unknown, never that nothing landed, got {:?}",
+        run.stderr
+    );
+}
+
+/// A merge gh completed whose squash cannot be read back is still a completed merge, and says which part is unknown.
+#[test]
+fn a_merge_whose_squash_cannot_be_read_back_says_so() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    for mode in ["merged-unreadable", "merged-null"] {
+        let run = run_wrapper(&root, mode, &[]);
+        assert_eq!(
+            run.status.code(),
+            Some(0),
+            "{mode}: {}{}",
+            run.stdout,
+            run.stderr
+        );
+        assert!(
+            run.stdout.contains("merged pull request 42")
+                && run.stdout.contains("could not be read back")
+                && !run.stdout.contains("as 0123456789abcdef")
+                && !run.stdout.contains("as null"),
+            "{mode}: the operator is told the merge completed and which half is unknown, got {:?}",
+            run.stdout
+        );
+    }
+}
+
+/// A completed merge exits clean whatever became of the stream its report was written to.
+///
+/// The report is written after the act, and a write that fails under `set -e` would reach the ERR trap and exit
+/// the unjudged class — calling the merge just made a run that reached no verdict — or, into a broken pipe, end the
+/// shell with `SIGPIPE`'s `141`, which is neither class.
+#[test]
+fn no_closed_stream_moves_the_merge_s_class() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    for streams in [Streams::ClosedStdout, Streams::BrokenStdout] {
+        let run = run_wrapper_over(&root, "subjects", &[], None, &[], streams);
+        assert_eq!(
+            run.status.code(),
+            Some(0),
+            "{streams:?}: a completed merge must exit clean, got {:?}: {}",
+            run.status,
+            run.stderr
+        );
+        assert!(
+            run.gh_log.contains("pr merge"),
+            "{streams:?}: the merge must have been reached for the class to be the act's: {}",
+            run.stderr
+        );
+    }
 }

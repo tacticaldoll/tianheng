@@ -87,6 +87,18 @@ them.
 
 ### Self-governance
 
+- **Both wrappers decide their act's class from what they observe of it, and a closed stream moves no class.**
+  Each wrapper handed its process to its tool with `exec`, so the tool's status became the wrapper's: `gh pr
+  merge` exits `1` when it does not merge and `cargo publish` exits `1` on an argument it cannot parse, and `1`
+  is the class reserved for a gate that ran and refused. The act now runs through one library function,
+  `perform_the_act`, and each wrapper's account decides the class. The merge wrapper reads the pull request back
+  on both paths, since gh can exit non-zero after the merge landed: a merged pull request is reported with its
+  squash commit — printed only where the reading is a commit ID — and an open one as no merge recorded, while an
+  unreadable one is said to be unknown rather than assumed either way. A publish cargo does not complete exits
+  the unjudged class and says that what it uploaded stays uploaded. Separately, every write the wrappers make
+  now cannot fail: with standard error closed, `cannot_judge` exited `1`, so every unjudged stop read as a gate's
+  refusal, and a report printed after a completed merge exited `2`.
+
 - **Dev-dependencies' licenses are checked.** `deny.toml` says a dependency under a license it does not
   allow fails CI until reviewed, and cargo-deny leaves a crate reached only through `[dev-dependencies]` out
   of that check unless `licenses.include-dev` is set — while the self-law's crate boundaries observe normal

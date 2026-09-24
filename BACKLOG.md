@@ -1560,6 +1560,18 @@ consumer for an undemonstrated deduplication.
   a tree the library is absent from. What the entry's re-opening halves still watch is unchanged: a merge or
   publish made outside the wrapper, and the publish-side re-read window cargo cannot yet close.
 
+  **The act moved into the library too, so the observed-pressure list above no longer describes either
+  wrapper's ending.** Neither `exec`s its tool, and the pre-`exec` `rm` is gone from both: `perform_the_act`
+  runs the act and hands its status to the wrapper's own account, and the EXIT trap is the one removal of the
+  verdict file on every path. What each account reads is the half that differs — the merge reads the pull
+  request back, the publish has nothing to read — and that difference is stated in each account and in
+  `repository-checks`. *Trigger evaluation, 2026-09-24:* checked for a shared construct present in one wrapper
+  and absent from the other, by reading both tails and the library, and for a defect in one copy and not the
+  other, by running each new direction against both. **Not fired**: the one divergence is the account's
+  body, answered differently for a stated reason, which this entry's own reading excludes; the defect the
+  review found — a tool's status choosing the class — was in both copies, and is closed in the one place both
+  now call. `each_wrapper_performs_its_act_and_execs_nothing` holds the shape.
+
 - **ACCEPTED DEBT: A branch name is governed by prose alone, and the gate that would hold it is declined.**
   *Class:* ACCEPTED DEBT, re-classified 2026-09-01 when the trigger fired and the steward re-decided; WATCH
   until then, and the sentence that first declined a check was wrong about why. *Observed pressure:* `AGENTS.md` requires `<type>/<scope>-<slug>` with `<type>` drawn from
@@ -2627,7 +2639,7 @@ consumer for an undemonstrated deduplication.
   not a state of the tree. Until one exists there is nothing to look for.
 
 - **WATCH: the window the publish wrapper can only narrow.** *Observed pressure:* the publish wrapper runs
-  the source gate, then `cd`s and `exec`s `cargo publish`. Between those the repository can be altered — a
+  the source gate, then `cd`s and runs `cargo publish`. Between those the repository can be altered — a
   commit, an amend, a tag moved, the remote's `main` advancing — and the gate's verdict is about the tree as
   it was. *Observation source:* a sweep for limits declared on one wrapper and not on its sibling. The merge
   wrapper declares this class for its own title and pins its other two inputs by construction; the publish

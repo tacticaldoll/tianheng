@@ -77,7 +77,7 @@ fn the_supplied_message() -> Verdict {
     // made** — was read with `env::var`, which answers *not set* and *not UTF-8* with one `Err`. The wrapper
     // takes the subject from `argv`, where arbitrary bytes are expressible, so a subject it did supply took
     // the arm that returns clean: the run exited `0`, `require_one_pass` saw `1 passed`, and
-    // `exec gh pr merge` recorded a subject no judgement had read. Two spellings of one rule is what let the
+    // `gh pr merge` recorded a subject no judgement had read. Two spellings of one rule is what let the
     // repair that closed the other three leave `TIANHENG_MERGE_SUBJECT` reading by the rule it replaced.
     let subject = match supplied::from_env("TIANHENG_MERGE_SUBJECT") {
         Supplied::Absent => {
@@ -781,7 +781,7 @@ static SUBJECT_PROBE: std::sync::atomic::AtomicUsize = std::sync::atomic::Atomic
 /// `scripts/merge-pr.sh` takes the subject from `argv` — `--subject <text>` — which on this platform carries
 /// arbitrary bytes. Read with `env::var`, *not set* and *set but not UTF-8* are one `Err`, and the arm that
 /// answers it means **no merge is being made**: the gate prints "not judged", returns, and the run exits `0`.
-/// The wrapper's `require_one_pass` then sees `1 passed`, and `exec gh pr merge` records a subject no
+/// The wrapper's `require_one_pass` then sees `1 passed`, and `gh pr merge` records a subject no
 /// judgement ever read — the one direction the Core Contract forbids, in front of a record that cannot be
 /// amended.
 ///

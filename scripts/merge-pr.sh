@@ -41,7 +41,7 @@ WRAPPER_SUBJECT='merge message'
 # itself rather than trapping. `a_wrapper_without_its_library_is_the_unjudged_class` holds the class by
 # running this wrapper with the library removed.
 if ! source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)/scripts/wrapper.sh"; then
-    printf '%s: cannot read the shared wrapper library, so the gate it must install before `gh pr merge` cannot be located — which is not the same fact as a gate that ran and refused\n' "$WRAPPER_SUBJECT" >&2
+    printf '%s: cannot read the shared wrapper library, so the gate it must install before `gh pr merge` cannot be located — which is not the same fact as a gate that ran and refused\n' "$WRAPPER_SUBJECT" >&2 || :
     exit 2
 fi
 
@@ -72,8 +72,8 @@ fi
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GH_REPO
 
 usage() {
-    printf 'usage: %s <pr-number> --body-file <path> [--subject <text>] [gh args…]\n' "${0##*/}" >&2
-    printf '  The subject defaults to the pull request title, which is what the rule requires anyway.\n' >&2
+    tell "usage: ${0##*/} <pr-number> --body-file <path> [--subject <text>] [gh args…]" \
+        '  The subject defaults to the pull request title, which is what the rule requires anyway.'
 }
 
 # A misconfigured invocation: the same class, plus the usage line, since what the operator needs here is the
@@ -660,14 +660,6 @@ fi
 # those plus a whole `cargo test`.
 require_ci_green
 
-# Removed here, not left to the trap. An EXIT trap does not run when `exec` replaces the shell image —
-# measured, `bash -c 'trap "echo T" EXIT; exec true'` prints nothing while the same script without `exec` prints
-# `T`. So the trap fired on every path where nothing happened and was skipped on the one path that completes the
-# act: three successful runs left three empty files in `$TMPDIR`, measured against an isolated one. The trap
-# stays, because it is what covers the failure paths; `exec` stays, because the tool's exit status becoming this
-# script's is deliberate.
-rm -f "$verdict_file"
-
 # The body travels as the VALUE the gate judged, never as the path it was read from.
 #
 # `--body-file` would have gh open the file again, after the gate has run — and what sits between the two is a
@@ -684,15 +676,61 @@ rm -f "$verdict_file"
 # `passthrough` can never carry one: gh takes the last spelling of a repeated flag, and this argument is spliced
 # before it. That safety belongs to the allowlist rather than to the order these are written in.
 #
-# `--body` over a wrapper-owned temporary file, which would close the same race: such a file must outlive the
-# `exec` for gh to read it, so it could not be removed beforehand and no EXIT trap survives an `exec` — which is
-# the leak closed by removing the file just before the `exec`, reintroduced to fix a different defect. A
-# value in `argv` has an `ARG_MAX` ceiling a path does not, and that ceiling fails loud with `E2BIG` before the merge rather than
-# recording something wrong.
+# `--body` rather than a wrapper-owned temporary file, which would close the same race: a value needs no file to
+# outlive anything, and it has an `ARG_MAX` ceiling a path does not — a ceiling that fails loud with `E2BIG`
+# before the merge rather than recording something wrong.
 #
 # `passthrough` may be empty, and `"${empty[@]}"` under `set -u` is an unbound variable before bash 4.4 —
 # where this wrapper would abort through the ERR trap reporting "an unguarded command failed", a sentence
 # about the wrong cause, on the invocation with no passthrough flags that is the ordinary one. The `+` form
 # is used rather than a version check, so no minimum has to be declared anywhere and kept in step.
-exec gh pr merge "$pr_number" --repo "$repository" --squash --subject "$subject" --body "$body" \
+#
+# What the merge recorded, decided from the pull request as GitHub reads it after the act, never from gh's status.
+#
+# gh prints nothing on success when its output is not a terminal, so without this a completed merge was a silent
+# exit 0 every operator confirmed by reading GitHub afterwards. And gh's status alone cannot say what happened on
+# the other side: it exits `1` when it does not merge — a head that moved under `--match-head-commit`, a closed
+# pull request — and equally when the merge landed and the response was what failed. So the state is read back
+# on both paths, and each sentence below says only what that reading, or its absence, establishes:
+#
+#   read MERGED            → the merge happened; the squash commit is named where it reads as a commit ID, and
+#                            said to be unknown where it does not — a successful response can carry `null`
+#   read, not MERGED       → no merge was recorded, which the reading observed; unjudged if gh said it failed,
+#                            and unjudged too if gh said it succeeded, since the two then disagree
+#   unreadable             → gh's own report is all there is: a completed merge whose squash is unknown, or a
+#                            failed one where whether anything landed is unknown
+#
+# Every branch but a completed merge leaves through `cannot_judge`, so a failed act is never gh's `1`.
+account_for_the_merge() {
+    local status=$1 reading state="" commit=""
+    reading=$(gh pr view "$pr_number" --repo "$repository" --json state,mergeCommit \
+        --jq '.state + " " + (.mergeCommit.oid // "")') || reading=""
+    read -r state commit <<< "$reading" || :
+    local exited="gh exited $status from the merge of pull request $pr_number"
+    if [[ $state == MERGED ]]; then
+        if [[ $commit =~ ^[0-9a-f]{40}$ ]]; then
+            say "merged pull request $pr_number as $commit"
+        else
+            say "merged pull request $pr_number; its squash commit could not be read back — check it on GitHub"
+        fi
+        if ((status != 0)); then
+            tell "$WRAPPER_SUBJECT: $exited, but GitHub reads the pull request as merged, so the merge is what was recorded"
+        fi
+    elif [[ -n $state ]]; then
+        if ((status != 0)); then
+            cannot_judge "$exited, and GitHub reads the pull request as $state, so no merge was recorded, although \
+the gate had agreed — gh's own message is above. That is not the same fact as a message that disagrees"
+        fi
+        cannot_judge "gh reported the merge of pull request $pr_number complete, yet GitHub reads it as $state — \
+check it on GitHub before running this again"
+    elif ((status != 0)); then
+        cannot_judge "$exited, and the pull request's state could not be read back, so whether it merged is \
+unknown — check it on GitHub before running this again. The gate had agreed; this is not a message that disagrees"
+    else
+        say "merged pull request $pr_number, as gh reported; its state could not be read back — check it on GitHub"
+    fi
+}
+
+perform_the_act account_for_the_merge \
+    gh pr merge "$pr_number" --repo "$repository" --squash --subject "$subject" --body "$body" \
     --match-head-commit "$head" ${passthrough[@]+"${passthrough[@]}"}
