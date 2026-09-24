@@ -122,6 +122,20 @@ consumer for an undemonstrated deduplication.
   unsatisfiable `engines` warns and exits 0 without it and exits 1 naming both sides with it. The pin can
   therefore fall behind within its major, and cannot silently leave it.
 
+  **What counts as a pin here, so a new literal is judged by a criterion rather than argued.** A pin in this
+  entry is a value fixed to **track an upstream artifact that moves on without it**: an action a tag used to
+  point at, an interpreter release line. It rots by falling behind the upstream, and nothing here reacts to that
+  fall. A literal that declares a decision this repository owns is not one, however many places type it.
+
+  **Not fired by the MSRV literal, read 2026-09-25.** `ci.yml`'s `msrv` job carries `MSRV: "1.85"`, and
+  `AGENTS.md`'s Definition of Done carries the same toolchain on its MSRV line. Read against the criterion:
+  the value tracks no upstream — it is the oldest compiler this workspace promises to build on, and staying old
+  is what it is for; it moves when this repository moves `rust-version`, not when Rust ships. And it is held
+  both ways, which is the half this entry says no pin has: the job's derivation step refuses when the declared
+  `rust-version` differs from `$MSRV`, and `dod_coherence` holds the Definition of Done line against the job's
+  run lines. So it is a declared value held to its producer, the second branch of `AGENTS.md`'s *Bind a claim
+  to its measurement*, and not the third pin the trigger above counts.
+
   *Compatibility class:* patch; CI configuration ships in no crate. *Authority:* this entry, and the workflow
   comment's refresh recipe — `repos/<owner>/<repo>/commits/<tag>`, which dereferences an annotated tag to its
   commit where `git/ref/tags` returns the tag object.
