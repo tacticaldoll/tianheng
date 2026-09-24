@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**58 of 107 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**59 of 108 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -51,6 +51,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `repository-checks/a-refusal-constructed-outside-the-register-s-corpus-is-not-triaged-a-stated-bound` — owner: engine
 - `repository-checks/a-tool-configuration-set-in-the-environment-is-not-observed-a-stated-bound` — owner: engine
 - `repository-checks/a-whitespace-preceded-shell-marker-inside-quotes-is-cut-a-stated-bound` — owner: engine
+- `repository-checks/an-assignment-spelled-other-than-name-value-is-not-read-a-stated-bound` — owner: engine
 - `repository-checks/an-input-edited-inside-its-own-post-gate-re-read-a-stated-bound` — owner: engine
 - `repository-checks/files-no-capability-claims-a-stated-bound` — owner: engine
 - `repository-checks/the-consumer-stands-on-a-later-statement-a-stated-bound` — owner: engine
@@ -475,7 +476,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: refuses to judge
 - **pinned by**: `a_worktree_holding_an_undecodable_path_is_not_judged_clean_or_dirty`
 
-## under-reacts (58)
+## under-reacts (59)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -845,6 +846,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: executed text is deleted, so a property about it is judged over less than the line carries — the direction the Core Contract forbids, and one a sentence in the classifier recorded as reaching the Rust region alone while both run the same rule
 - **its defence must show**: does not react
 - **pinned by**: `a_shell_marker_inside_quotes_is_cut_from_the_region`
+
+### `repository-checks/an-assignment-spelled-other-than-name-value-is-not-read-a-stated-bound`
+
+> an assignment to a declared exit code or channel class that is not a `NAME=value` word — `+=`, `read`, `printf -v`, arithmetic, `${NAME:=…}`
+
+- **because**: the declaration check reads the `NAME=value` words a script spells, and bash's other assignment forms are an enumeration it stops short of; a value one changes is caught only where a direction runs the wrapper down that path and asserts its exit class
+- **its defence must show**: does not react
+- **pinned by**: `an_assignment_spelled_other_than_name_equals_value_is_not_read`
 
 ### `repository-checks/an-input-edited-inside-its-own-post-gate-re-read-a-stated-bound`
 

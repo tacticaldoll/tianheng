@@ -87,6 +87,15 @@ them.
 
 ### Self-governance
 
+- **Four repository-check readers answer their question instead of listing its spellings.** The merge wrapper's
+  skip reader counts every filter on the pull-request event, and a workflow subscribing to none, rather than two
+  key names. The strictness check holds every job or step `shell:` to the workflow's own value rather than
+  refusing only a flagless `bash`. The exit-code check reads every `NAME=value` word for a declared name through
+  the shell tokenizer and requires exactly one, rather than taking the first line; an assignment in another form
+  is a declared bound, caught only where a direction runs the wrapper down that path and asserts the class it
+  exits with. And which function holds the violation exit is asked of bash, as the body `declare -f` prints once
+  the library is sourced, rather than read from the nearest header above or from braces a quote can imitate.
+
 - **A repair loop that keeps finding the next member of one set changes the question.** `AGENTS.md`'s *A repair
   loop is a diagnosis* now names the case where the code was wrong and each round found one more production of a
   grammar the reader enumerated. At the second such finding the reader is re-asked in a form with one syntactic

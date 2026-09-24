@@ -1045,6 +1045,21 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
+                "repository-checks/an-assignment-spelled-other-than-name-value-is-not-read-a-stated-bound",
+            ),
+            "an assignment to a declared exit code or channel class that is not a `NAME=value` word — `+=`, \
+             `read`, `printf -v`, arithmetic, `${NAME:=…}`",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the declaration check reads the `NAME=value` words a script spells, and bash's other \
+                          assignment forms are an enumeration it stops short of; a value one changes is caught \
+                          only where a direction runs the wrapper down that path and asserts its exit class"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "an_assignment_spelled_other_than_name_equals_value_is_not_read",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
                 "repository-checks/a-command-name-computed-when-the-line-runs-is-not-read-a-stated-bound",
             ),
             "an `exit` a wrapper runs through a command name its text does not spell — a variable, or a string \

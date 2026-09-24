@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**27 of 107 declared bounds have no pinning test.** That figure is the register's
+**27 of 108 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -406,6 +406,12 @@ fallback used where no manifest exists, which the register spec describes.
 > the wrapper refuses it, and nothing will admit it short of a per-arm rule. A leading digit means a job count for one arm and nothing for `--package` or `--registry`, so admitting it means the shape question is asked differently per arm — which is the arrangement one shape check exists to replace, and the arrangement whose per-arm reasoning the refusal wording above was just corrected for repeating. The engine owns the narrowing: the caller passes the count instead, one arithmetic step
 
 - **pinned by**: `a_refused_flag_cannot_sit_in_an_admitted_arguments_value_position`
+
+### `repository-checks/an-assignment-spelled-other-than-name-value-is-not-read-a-stated-bound`
+
+> the declaration check reports no offence for it. bash's assignment forms are the enumeration a reader stops short of, and declaring the names `readonly` was measured and refused: a plain assignment to a readonly name ends a non-interactive bash with status `1`, outside the ERR trap — the class reserved for a gate that ran and refused. What holds a changed value is running it, and only where the run is observed: a direction that runs a wrapper down a path and asserts the class it exits with fails on a value changed there. Not every direction that runs a wrapper asserts its class, so a path no class-asserting direction runs is what is left
+
+- **pinned by**: `an_assignment_spelled_other_than_name_equals_value_is_not_read`
 
 ### `repository-checks/a-command-name-computed-when-the-line-runs-is-not-read-a-stated-bound`
 

@@ -1831,12 +1831,12 @@ fn a_pull_request_no_workflow_has_claimed_stops_before_the_merge() {
 fn the_workflow_reader_decides_every_shape_of_the_block() {
     let base = |keys: &str| {
         format!(
-            "name: ci\n\non:\n  push:\n    branches: [main]\n\njobs:\n  alpha:\n{keys}\n  beta:\n    name: B\n    runs-on: x\n"
+            "name: ci\n\non:\n  push:\n    branches: [main]\n  pull_request:\n\njobs:\n  alpha:\n{keys}\n  beta:\n    name: B\n    runs-on: x\n"
         )
     };
 
     // (label, document, jobs it must find, keys it must carry)
-    let rows: [(&str, String, usize, usize); 15] = [
+    let rows: [(&str, String, usize, usize); 20] = [
         ("clean", base("    name: A\n    runs-on: x\n"), 2, 0),
         (
             "if: at the file's own key depth",
@@ -1854,7 +1854,7 @@ fn the_workflow_reader_decides_every_shape_of_the_block() {
         // A column-0 comment inside the block ends nothing.
         (
             "a column-0 comment does not end the block",
-            "name: ci\n\njobs:\n  alpha:\n    name: A\n# --- divider ---\n  beta:\n    name: B\n    if: x\n"
+            "name: ci\n\non: pull_request\n\njobs:\n  alpha:\n    name: A\n# --- divider ---\n  beta:\n    name: B\n    if: x\n"
                 .to_string(),
             2,
             1,
@@ -1873,14 +1873,50 @@ fn the_workflow_reader_decides_every_shape_of_the_block() {
             2,
             0,
         ),
-        // A path filter is a trigger condition and belongs under `on:`, where it does move whether a job
-        // runs at all.
+        // A filter on the pull-request event is a trigger condition: it decides whether a pull request's head
+        // gets this workflow's checks at all. Every key GitHub admits there is such a filter.
         (
             "paths: under on: reacts",
-            "name: ci\n\non:\n  push:\n    paths:\n      - src/**\n\njobs:\n  alpha:\n    name: A\n"
+            "name: ci\n\non:\n  pull_request:\n    paths:\n      - src/**\n\njobs:\n  alpha:\n    name: A\n"
                 .to_string(),
             1,
             1,
+        ),
+        (
+            "branches: on the pull-request event reacts",
+            "name: ci\n\non:\n  pull_request:\n    branches: [main]\n\njobs:\n  alpha:\n    name: A\n"
+                .to_string(),
+            1,
+            1,
+        ),
+        (
+            "types: on the pull-request event reacts",
+            "name: ci\n\non:\n  pull_request:\n    types: [opened]\n\njobs:\n  alpha:\n    name: A\n"
+                .to_string(),
+            1,
+            1,
+        ),
+        // Must NOT react: a push filter decides which pushes run the workflow, and a pull request's checks
+        // come from its own event.
+        (
+            "a push filter moves no pull request's checks",
+            "name: ci\n\non:\n  push:\n    branches: [main]\n    paths: [src/**]\n  pull_request:\n\njobs:\n  alpha:\n    name: A\n"
+                .to_string(),
+            1,
+            0,
+        ),
+        // A workflow no pull request runs is the widest filter of all.
+        (
+            "no pull-request event reacts",
+            "name: ci\n\non: push\n\njobs:\n  alpha:\n    name: A\n".to_string(),
+            1,
+            1,
+        ),
+        (
+            "pull_request_target is a pull-request event",
+            "name: ci\n\non: pull_request_target\n\njobs:\n  alpha:\n    name: A\n".to_string(),
+            1,
+            0,
         ),
         // Must NOT react: `paths` is an ordinary input name for several published actions, and a step input
         // moves no job's conclusion. Reading the key at any depth refused this.
@@ -1894,7 +1930,7 @@ fn the_workflow_reader_decides_every_shape_of_the_block() {
         // exclusive, and this row is the one that fails **open** if they are treated as such.
         (
             "a flow-form trigger block carries its filter on the key's line",
-            "name: ci\n\non: {push: {branches: [main], paths: ['src/**']}}\n\njobs:\n  alpha:\n    name: A\n"
+            "name: ci\n\non: {pull_request: {paths: ['src/**']}}\n\njobs:\n  alpha:\n    name: A\n"
                 .to_string(),
             1,
             1,
@@ -1903,7 +1939,7 @@ fn the_workflow_reader_decides_every_shape_of_the_block() {
         // This is where the rule stated at depth 0 was not applied.
         (
             "a flow-form event under a block-form trigger carries its filter",
-            "name: ci\n\non:\n  push: {branches: [main], paths: ['src/**']}\n\njobs:\n  alpha:\n    name: A\n"
+            "name: ci\n\non:\n  pull_request: {paths: ['src/**']}\n\njobs:\n  alpha:\n    name: A\n"
                 .to_string(),
             1,
             1,
@@ -1912,7 +1948,7 @@ fn the_workflow_reader_decides_every_shape_of_the_block() {
         // non-positional `contains` this replaced reacted to it.
         (
             "a key named in a comment is not a key",
-            "name: ci\n\non: {push: {branches: [main]}} # no paths: filter here\n\njobs:\n  alpha:\n    name: A\n"
+            "name: ci\n\non: {push: {branches: [main]}, pull_request: {}} # no paths: filter here\n\njobs:\n  alpha:\n    name: A\n"
                 .to_string(),
             1,
             0,
@@ -1927,21 +1963,21 @@ fn the_workflow_reader_decides_every_shape_of_the_block() {
         // A flow-form job body is the same mapping as a block-form one, so its job and its key are read.
         (
             "a flow-form job body is read as a job",
-            "name: ci\n\njobs:\n  alpha: {name: A, if: x}\n".to_string(),
+            "name: ci\n\non: pull_request\n\njobs:\n  alpha: {name: A, if: x}\n".to_string(),
             1,
             1,
         ),
         // The quoted spelling names the same block: YAML 1.1 reads a bare `on` as a boolean.
         (
             "paths: under a quoted on: still reacts",
-            "name: ci\n\n\"on\":\n  push:\n    paths:\n      - src/**\n\njobs:\n  alpha:\n    name: A\n"
+            "name: ci\n\n\"on\":\n  pull_request:\n    paths:\n      - src/**\n\njobs:\n  alpha:\n    name: A\n"
                 .to_string(),
             1,
             1,
         ),
         (
             "the whole job block is indented deeper",
-            "name: ci\n\njobs:\n    alpha:\n      name: A\n      if: x\n    beta:\n      name: B\n"
+            "name: ci\n\non: pull_request\n\njobs:\n    alpha:\n      name: A\n      if: x\n    beta:\n      name: B\n"
                 .to_string(),
             2,
             1,
@@ -1972,7 +2008,7 @@ fn the_workflow_reader_decides_every_shape_of_the_block() {
 ///
 /// **Read from the workflow's structure.** Which job a key belongs to, and whether it sits on the job or on a
 /// step inside it, is the grammar's answer: a job's own keys are the keys of its mapping, a step's `if:` is a
-/// key of a step, and a trigger filter is a key somewhere under `on:`. Indentation width, a comment between
+/// key of a step, and a trigger filter is any key under an event that runs the workflow for a pull request. Indentation width, a comment between
 /// jobs, a quoted `"on"`, a flow-form body and a flow-form trigger are therefore not shapes this has to
 /// decide — the parser has, and a shape it cannot hold is refused rather than read past.
 struct WorkflowShape {
@@ -1981,8 +2017,10 @@ struct WorkflowShape {
 }
 
 fn workflow_shape(text: &str) -> WorkflowShape {
-    // Two key classes, each read at the position it can occupy. A path filter is a **trigger** condition
-    // and lives under `on:`; the other three sit on a job. A step input named `paths` — the shape
+    // Two key classes, each read at the position it can occupy. A **trigger** condition is any key under an
+    // event that runs this workflow for a pull request — every key GitHub admits there filters which heads it
+    // runs on — and a workflow subscribing to no such event never runs for one; `push:`'s filters move no pull
+    // request's checks. The other three keys sit on a job. A step input named `paths` — the shape
     // `dorny/paths-filter` and `tj-actions/changed-files` take — moves no job's conclusion, and neither does
     // a step's own `if:`.
     //
@@ -1993,18 +2031,40 @@ fn workflow_shape(text: &str) -> WorkflowShape {
     // [`a_missed_path_filter_costs_a_delay_only_while_one_workflow_exists`] holds the condition that keeps
     // the second cost equal to the first.
     const ON_THE_JOB: [&str; 3] = ["if", "needs", "continue-on-error"];
-    const ON_THE_WORKFLOW: [&str; 2] = ["paths", "paths-ignore"];
+    const PULL_REQUEST_EVENTS: [&str; 2] = ["pull_request", "pull_request_target"];
 
     let workflow = support::workflow::parse(text).unwrap_or_else(|why| {
         panic!("the workflow cannot be read, so which of its jobs can skip is not known: {why}")
     });
     let mut carried = Vec::new();
-    if let Some(on) = &workflow.on {
-        for (key, line) in on.keys_below() {
-            if ON_THE_WORKFLOW.contains(&key.as_str()) {
-                carried.push(format!("  ci.yml:{line}: {key}:"));
+    let runs_for_a_pull_request = |event: &str| PULL_REQUEST_EVENTS.contains(&event);
+    let subscribed = match &workflow.on {
+        Some(support::workflow::Node::Mapping { entries, .. }) => {
+            let events: Vec<_> = entries
+                .iter()
+                .filter(|entry| runs_for_a_pull_request(&entry.key))
+                .collect();
+            for event in &events {
+                for (key, line) in event.value.keys_below() {
+                    carried.push(format!("  ci.yml:{line}: {}.{key}:", event.key));
+                }
             }
+            !events.is_empty()
         }
+        Some(support::workflow::Node::Sequence { items, .. }) => items.iter().any(|item| {
+            matches!(item, support::workflow::Node::Scalar { value, .. } if runs_for_a_pull_request(value))
+        }),
+        Some(support::workflow::Node::Scalar { value, .. }) => runs_for_a_pull_request(value),
+        None => false,
+    };
+    if !subscribed {
+        let line = workflow
+            .on
+            .as_ref()
+            .map_or(1, support::workflow::Node::line);
+        carried.push(format!(
+            "  ci.yml:{line}: on: subscribes to no pull-request event, so no pull request's head gets its checks"
+        ));
     }
     for job in &workflow.jobs {
         for (key, line) in &job.keys {
@@ -2036,9 +2096,9 @@ const JOBS: [&str; 8] = [
 
 /// The trigger keys' severity rests on this directory holding one file, so that is held rather than assumed.
 ///
-/// **Five keys, two mechanisms, and they were priced as one.** `if:`, `needs:` and `continue-on-error:` move
-/// a *check's conclusion*: the job runs, reports `SKIPPED`, appears in the rollup, and
-/// `require_ci_green`'s silent arm refuses. A workflow-level `paths:` filter does something else — the
+/// **Two kinds of key, two mechanisms, and they were priced as one.** `if:`, `needs:` and `continue-on-error:`
+/// move a *check's conclusion*: the job runs, reports `SKIPPED`, appears in the rollup, and
+/// `require_ci_green`'s silent arm refuses. A filter on the pull-request event does something else — the
 /// workflow **never triggers**, so its checks are absent from the rollup rather than reported skipped.
 ///
 /// Today that still refuses, and by an accident of arithmetic: `ci.yml` is the only file here, so a
@@ -2099,27 +2159,26 @@ fn a_missed_path_filter_costs_a_delay_only_while_one_workflow_exists() {
 /// it did not run. Nothing reaches a merge either way. What this buys is that the local Definition of Done
 /// says so first, with the key and its line, instead of the round trip through CI.
 ///
-/// **Which is why its remaining blind spots are not false negatives — for three of the five keys
-/// unconditionally, and for two of them on a condition that is held.** `if:`, `needs:` and
-/// `continue-on-error:` move a check's conclusion, so a job carrying one appears in the rollup as `SKIPPED`
-/// whatever this reader does. `paths:` and `paths-ignore:` stop the workflow triggering, so its checks are
+/// **Which is why its remaining blind spots are not false negatives — for the job keys unconditionally, and
+/// for the trigger filters on a condition that is held.** `if:`, `needs:` and `continue-on-error:` move a
+/// check's conclusion, so a job carrying one appears in the rollup as `SKIPPED` whatever this reader does. A
+/// filter on the pull-request event stops the workflow triggering, so its checks are
 /// **absent**; that still refuses only while `ci.yml` is the sole workflow, because an empty rollup takes the
 /// *no workflow has claimed this head* arm.
 ///
-/// Stating it once for all five would have rested a claim about the wrapper on the number of files in a
+/// Stating it once for all of them would have rested a claim about the wrapper on the number of files in a
 /// directory. [`a_missed_path_filter_costs_a_delay_only_while_one_workflow_exists`] holds that count instead,
 /// so a second workflow re-opens the question where it is priced rather than after.
 ///
 /// Seven review rounds found five positions in the reader below, two of them failing open — and against the
 /// old framing each was a hole in something load-bearing. Against this one, a miss costs a few minutes, and
-/// the reader is kept rather than deleted because a few minutes is worth fifteen fixture rows already
-/// written.
+/// the reader is kept rather than deleted because a few minutes is worth the fixture rows already written.
 ///
 /// **Job level, not the whole file, and the difference is not tidiness.** A `steps:` entry may carry `if:` or
 /// `continue-on-error:` without the job's own conclusion moving: the step is skipped and the job still reports
 /// success, so the rollup this wrapper reads is unaffected and refusing it would refuse correct code. What
-/// moves a job to `SKIPPED` is a key on the job itself, or a workflow-level path filter — so those are what
-/// this reads.
+/// moves a job to `SKIPPED` is a key on the job itself, or a filter on the pull-request event — so those are
+/// what this reads.
 ///
 /// **The names are held against [`JOBS`] both ways**, which is the form `AGENTS.md` prescribes for a claim
 /// something downstream filters on — *the literal is not a weakening here; it is what gives the enumerator
@@ -2506,9 +2565,10 @@ fn no_step_reads_a_value_through_a_process_substitution() {
 /// argue that a script choosing its exit class in one place beats every author choosing it again; a workflow
 /// whose steps each decide their own strictness is that same defect one layer out.
 ///
-/// `defaults.run.shell` makes it one decision. This holds the decision rather than the habit: a step-level
-/// `shell:` naming `bash` without the flags takes the strictness back, and a `set -` line inside a `run:`
-/// block puts the decision in two places again — the shape where one of them drifts.
+/// `defaults.run.shell` makes it one decision. This holds the decision rather than the habit: a job- or
+/// step-level `shell:` other than the workflow's own takes the strictness back — whatever it names, since `sh`,
+/// `bash -e {0}` and a path to bash each run without `pipefail` — and a `set -` line inside a `run:` block puts
+/// the decision in two places again, the shape where one of them drifts.
 ///
 /// The corpus is the one file [`a_missed_path_filter_costs_a_delay_only_while_one_workflow_exists`] holds this
 /// directory to. Comment lines are excluded by position: the paragraph in `ci.yml` that records this
@@ -2545,10 +2605,10 @@ fn shell_strictness_is_declared_once_for_the_whole_workflow() {
 
     let mut lax = Vec::new();
     for shell in declared {
-        if shell.value.starts_with("bash") && !shell.value.contains("-euo pipefail") {
+        if shell.value != STRICT_SHELL {
             lax.push(format!(
-                "  {}:{}: `shell: {}` names bash without `-euo pipefail`, taking back the strictness the \
-                 workflow declares",
+                "  {}:{}: `shell: {}` is not the workflow's `{STRICT_SHELL}`, so this run decides its own \
+                 strictness — remove the override, and the workflow's shell runs it",
                 path.display(),
                 shell.line,
                 shell.value
