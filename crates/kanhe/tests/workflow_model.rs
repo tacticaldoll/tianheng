@@ -1,4 +1,5 @@
-//! The workflow model and the argv tokenizer every `ci.yml` check reads through, held shape by shape.
+//! The workflow model and the argv tokenizer the `ci.yml` checks that judge its structure read through, held
+//! shape by shape. The scans that judge its shell read it as text, and `repository-checks` states why.
 //!
 //! Each row is a shape a line reader got wrong or could not see, and the answer the grammar gives. The checks
 //! built on these readers inherit exactly what is decided here, so a row that moves is a check that moves.

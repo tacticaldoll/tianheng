@@ -1321,10 +1321,12 @@ already refuses.
 the gate to report its class on; the gate SHALL write it at the moment it has a verdict and before it fails; and
 the wrapper SHALL read that file rather than searching the gate's output. An absent, empty or unrecognised value
 SHALL be the unjudged class, so a run that reached no verdict — a compile failure included — is unjudged by
-construction rather than by a default. The variable name and the class spelling SHALL each be defined once —
-in the shared library — and compared against `kanhe::verdict_channel` by a repository check, and a direction
+construction rather than by a default. Each class spelling SHALL be defined once — in the shared library — and
+the variable name SHALL be spelled in each wrapper's own invocation of its gate, where a shell cannot take an
+environment-assignment prefix from a variable; both SHALL be compared against `kanhe::verdict_channel` by a
+repository check, and a direction
 SHALL hold that each gate reports before it fails — the scalars can agree while no gate ever writes, which
-leaves every failing gate reading as unjudged. A wrapper SHALL NOT declare either scalar itself: the channel
+leaves every failing gate reading as unjudged. A wrapper SHALL NOT declare either class scalar itself: the channel
 it opens for the gate is the half that cannot move, and a second declaration beside the library's is the
 two-places-that-must-agree shape this family deletes on sight.
 

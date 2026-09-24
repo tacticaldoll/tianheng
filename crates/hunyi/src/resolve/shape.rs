@@ -1,7 +1,7 @@
 //! 渾儀's type-**shape** layer — the `syn` Visit collectors that observe `dyn`/`impl Trait`
 //! and type-path nodes, the [`ShapeExposure`] they yield, and the hand-rolled renderers that
-//! turn a `syn` type/path node into a **stable finding string** (never `quote`/`syn`'s
-//! `printing` feature, which would breach 渾儀's dependency allowlist). It sits atop the
+//! turn a `syn` type/path node into a **stable finding string** (never `quote`/`syn`'s token
+//! printing, whose form is the printer's rather than this crate's to keep stable). It sits atop the
 //! name-resolution layer (its parent [`mod@super`]): it renders and collects shapes, then leans on
 //! [`resolve_path_all`]/[`strip_raw`] to canonicalize the paths it observes.
 
@@ -301,7 +301,7 @@ fn generic_argument_to_string(arg: &syn::GenericArgument) -> Option<String> {
 ///
 /// Callers store this output in subject, owner, trait, signature, and label fields, so its
 /// exact byte form is published baseline wire rather than presentation-only rendering. It **never**
-/// uses `quote`/`syn`'s `printing` feature, which would breach 渾儀's dependency allowlist. Covers
+/// goes through `quote`/`syn`'s token printing, whose form is the printer's to change. Covers
 /// the common shapes; a shape it cannot render returns `None`, and the caller falls back to a
 /// location-only finding identity.
 ///
