@@ -115,6 +115,14 @@ them.
   tree without the library exits `2` naming the missing file, where the first form exited `1` under
   `source`'s own status.
 
+- **The Definition of Done now carries the declared MSRV as a line of its own.** `TIANHENG_WORKSPACE_TESTS=1
+  cargo +1.85 test --workspace --all-features` sits beside the other env-gated lines, and the `msrv` CI job
+  owns the same number once, in its `env:` pin: the job derives the workspace's declared `rust-version`,
+  refuses when it moves away from the pin, and its run line reads the pin — `dod_coherence` expands the pin
+  into the line, so the DoD's literal joins it textually and a drift in either place fails. The suite runs
+  once. Measured twice, the same `if … && let …` construct compiled on the default toolchain, passed every
+  other line, and failed CI's MSRV job — the latency is now a local failure instead of a CI round trip.
+
 - **The attribute-spelling differential now exercises absent module files.** A separate generated corpus
   checks bare `cfg`, raw-identifier `cfg`, and `cfg_attr` look-alikes against all three dimensions and rustc.
   It records the declared cfg-blind limit: a live bare predicate with no backing file fails in rustc, while

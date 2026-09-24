@@ -1673,6 +1673,16 @@ consumer for an undemonstrated deduplication.
   the sibling wrapper entry gives — the Definition of Done is not edited at a release cut. First work of the
   window after, with the cost now measured rather than assumed.
 
+  **Done in the `0.7.0` window, as scheduled.** The Definition of Done now carries the MSRV suite as an
+  env-shaped line of its own — `TIANHENG_WORKSPACE_TESTS=1 cargo +1.85 test --workspace --all-features`,
+  beside the two env-gated lines it follows — and the `msrv` job runs the identical spelling so
+  `dod_coherence`'s line-by-line join holds the two together. Not a `rust-toolchain` file, for the reason
+  the Shape above records: pinning the workspace to 1.85 would take `--all-features` clippy off the current
+  toolchain. What this closes is the latency: a construct the declared `rust-version` refuses now fails the
+  local list rather than arriving red in CI after a green one. What it does not close is a contributor who
+  lacks the toolchain and skips the line, which is the same trade the two env-gated lines beside it already
+  take, stated in theirs and taken here.
+
 - **WATCH: A constant's literal copies outside its reach are unheld.** *Class:* WATCH. *Observed pressure:*
   `shengmo::workspace::MARKER` owns `TIANHENG_WORKSPACE_TESTS`, and seven sites in `tianheng`, `louke` and
   `xuanji` spell it as a literal because those crates cannot depend on `shengmo` without closing a cycle.

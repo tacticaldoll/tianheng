@@ -17,6 +17,8 @@
 
 use std::path::PathBuf;
 
+use shengmo::workspace::MARKER;
+
 fn workspace_root() -> Option<PathBuf> {
     shengmo::workspace::locate(
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
@@ -125,6 +127,47 @@ fn cargo_deny_action_commands(ci: &str) -> Vec<String> {
     commands
 }
 
+/// Every `NAME: "value"` a workflow declares in a job-level `env:` block, as the `NAME=value` a `run:`
+/// line's text stands in for.
+///
+/// The join below is text, and a run line reading `"$MSRV"` is not the DoD's literal `+1.85` — so the
+/// pinned values a job declares are read and expanded, which is what lets a number have **one owner** in the
+/// workflow instead of a literal on the run line and a second beside it. A name declared twice is refused:
+/// two values for one name is the shape where the join would silently pick one.
+fn job_env_assignments(ci: &str) -> Vec<(String, String)> {
+    let mut assignments = Vec::new();
+    let mut lines = ci.lines().peekable();
+    while let Some(line) = lines.next() {
+        let indent = line.len() - line.trim_start().len();
+        if line.trim() != "env:" {
+            continue;
+        }
+        while let Some(next) = lines.peek() {
+            let next_indent = next.len() - next.trim_start().len();
+            let trimmed = next.trim();
+            if trimmed.is_empty() || next_indent <= indent {
+                break;
+            }
+            if let Some((name, value)) = trimmed.split_once(':') {
+                let value = value.trim().trim_matches(['\'', '"']);
+                if !value.is_empty() {
+                    assignments.push((name.trim().to_string(), value.to_string()));
+                }
+            }
+            lines.next();
+        }
+    }
+    let mut names: Vec<&str> = assignments.iter().map(|(name, _)| name.as_str()).collect();
+    names.sort();
+    names.dedup();
+    assert_eq!(
+        names.len(),
+        assignments.len(),
+        "a job-level env name is declared twice, so which value a run line reads is a coin toss"
+    );
+    assignments
+}
+
 fn missing_from_ci(agents: &str, ci: &str) -> Vec<String> {
     let mut ci_effective: Vec<String> = ci
         .lines()
@@ -136,6 +179,25 @@ fn missing_from_ci(agents: &str, ci: &str) -> Vec<String> {
         })
         .collect();
     ci_effective.extend(cargo_deny_action_commands(ci));
+    // A run line reading a job-level env value is the line with the value in it: `cargo "+$MSRV" …` is the
+    // DoD's `cargo +1.85 …` under the pin the workflow declares, and adding the expansion lets the number
+    // live in one place rather than being spelled twice and held by a comment. The match is on the bare
+    // `$NAME` and the replacement drops the invocation's quotes, so `"+$MSRV"` becomes `+1.85`, the word the
+    // DoD carries.
+    let expansions: Vec<String> = job_env_assignments(ci)
+        .into_iter()
+        .flat_map(|(name, value)| {
+            ci_effective.iter().filter_map(move |line| {
+                let needle = format!("${name}");
+                if line.contains(&needle) {
+                    Some(line.replace(&needle, &value).replace('"', ""))
+                } else {
+                    None
+                }
+            })
+        })
+        .collect();
+    ci_effective.extend(expansions);
 
     dod_commands(agents)
         .into_iter()
@@ -208,4 +270,46 @@ fn an_absent_action_command_does_not_borrow_a_command_from_another_mapping() {
     let agents = "## Definition of Done\n\n```bash\ncargo deny check\n```\n";
     let ci = "jobs:\n  supply-chain:\n    steps:\n      - uses: EmbarkStudios/cargo-deny-action@v2\n        with:\n          log-level: warn\n        env:\n          command: check\n";
     assert_eq!(missing_from_ci(agents, ci), ["cargo deny check"]);
+}
+/// A run line reading a job-level env pin is the DoD's literal line with the value in it.
+///
+/// The MSRV job is the instance: its suite reads `cargo "+$MSRV"`, the DoD carries the pinned literal, and
+/// without the expansion the two could never join — which is what forced the literal onto the run line and
+/// a second copy beside it.
+#[test]
+fn a_job_env_pin_expands_into_the_run_lines_that_read_it() {
+    let agents = format!(
+        "## Definition of Done\n\n```bash\n{MARKER}=1 cargo +1.85 test --workspace --all-features\n```\n"
+    );
+    let ci = format!(
+        "jobs:\n  msrv:\n    env:\n      MSRV: \"1.85\"\n    steps:\n      - run: {MARKER}=1 cargo \"+$MSRV\" test --workspace --all-features\n"
+    );
+    assert!(missing_from_ci(&agents, &ci).is_empty());
+}
+
+#[test]
+fn a_job_env_pin_at_another_value_does_not_satisfy_the_literal() {
+    let agents = format!(
+        "## Definition of Done\n\n```bash\n{MARKER}=1 cargo +1.85 test --workspace --all-features\n```\n"
+    );
+    let ci = format!(
+        "jobs:\n  msrv:\n    env:\n      MSRV: \"1.86\"\n    steps:\n      - run: {MARKER}=1 cargo \"+$MSRV\" test --workspace --all-features\n"
+    );
+    assert_eq!(
+        missing_from_ci(&agents, &ci),
+        [format!(
+            "{MARKER}=1 cargo +1.85 test --workspace --all-features"
+        )]
+    );
+}
+
+#[test]
+fn a_doubled_env_name_is_refused_rather_than_pick_one() {
+    let refused = std::panic::catch_unwind(|| {
+        job_env_assignments("jobs:\n  j:\n    env:\n      A: \"1\"\n      A: \"2\"\n")
+    });
+    assert!(
+        refused.is_err(),
+        "two values for one env name must refuse, not pick one — the join would otherwise pass on a coin toss"
+    );
 }

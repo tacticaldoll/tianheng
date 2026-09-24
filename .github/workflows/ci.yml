@@ -178,6 +178,12 @@ jobs:
   msrv:
     name: MSRV (rust-version)
     runs-on: ubuntu-latest
+    # The pinned minimum, owned here and named once: AGENTS.md's Definition of Done lists the suite against
+    # it as a literal line (`dod_coherence` joins the two), the derivation below refuses when the workspace's
+    # declared `rust-version` moves away from it, and the install and both invocations read it as `$MSRV`, so
+    # the number lives in exactly one place on this side of the join.
+    env:
+      MSRV: "1.85"
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -207,11 +213,16 @@ jobs:
           fi
           msrv="${declared[0]}"
           echo "declared rust-version: ${msrv:?could not read rust-version}"
-          rustup toolchain install "$msrv" --profile minimal --no-self-update
-          cargo "+$msrv" build --workspace
-          # --all-features so the gated CI-scanner tests run on the MSRV toolchain too;
-          # TIANHENG_WORKSPACE_TESTS=1 so a missing workspace manifest fails loud, never skips.
-          TIANHENG_WORKSPACE_TESTS=1 cargo "+$msrv" test --workspace --all-features
+          [[ $msrv == "$MSRV" ]] || {
+            echo "::error::the workspace declares rust-version $msrv while this job is pinned to $MSRV — move the pin and AGENTS.md's MSRV line together"
+            exit 1
+          }
+          rustup toolchain install "$MSRV" --profile minimal --no-self-update
+          cargo "+$MSRV" build --workspace
+          # AGENTS.md's Definition of Done lists this same suite with the toolchain named literally, and
+          # `dod_coherence` joins the two textually — `dod_coherence`'s CI side reads the `env:` pin and
+          # expands it, so the run line reads `"$MSRV"` and the number has one owner on this side of the join.
+          TIANHENG_WORKSPACE_TESTS=1 cargo "+$MSRV" test --workspace --all-features
 
   license-files:
     name: License texts bundled
