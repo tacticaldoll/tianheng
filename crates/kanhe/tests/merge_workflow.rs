@@ -2343,16 +2343,27 @@ fn a_flag_shaped_value_is_refused_in_every_value_position() {
 ///
 /// **The corpus is a parameter, and it used to be one file.** The reaction was written for `ci.yml` and the
 /// two places the class matters most were left out: both wrappers front an irreversible act and both ran
-/// `printf '%s' "$output" | grep -qE …` under `set -Eeuo pipefail`. `scripts/` is where `gate_exit_classes`
-/// already keeps its own wrapper corpus, so this is a list rather than new machinery.
+/// `printf '%s' "$output" | grep -qE …` under `set -Eeuo pipefail`.
+///
+/// **The scripts come from the one enumeration of them, not from a list.** A list naming the two wrappers
+/// left out the library they source, which runs under the same `set -Eeuo pipefail` the moment it is loaded;
+/// [`kanhe::gate_identity::tracked_scripts`] is what every other direction over `scripts/` reads, and it
+/// refuses an empty listing, so a corpus that lost its scripts cannot report clean over none.
 ///
 /// Each file is read as text rather than through `support::workflow`, because what these scans judge is
 /// shell; `repository-checks` states that choice and the over-inclusion it costs.
-const RUNS_SHELL_UNDER_PIPEFAIL: [&str; 3] = [
-    ".github/workflows/ci.yml",
-    "scripts/merge-pr.sh",
-    "scripts/publish.sh",
-];
+fn runs_shell_under_pipefail(root: &Path) -> Vec<(String, String)> {
+    const WORKFLOW: &str = ".github/workflows/ci.yml";
+    let workflow = std::fs::read_to_string(root.join(WORKFLOW)).unwrap_or_else(|error| {
+        panic!("read {WORKFLOW} — the pipelines this holds are written in it: {error}")
+    });
+    let mut corpus = vec![(WORKFLOW.to_string(), workflow)];
+    corpus.extend(
+        kanhe::gate_identity::tracked_scripts(root)
+            .unwrap_or_else(|error| panic!("the scripts this holds cannot be enumerated: {error}")),
+    );
+    corpus
+}
 
 /// Whether a pipeline stage stops before its producer finishes, and under what name.
 ///
@@ -2425,13 +2436,7 @@ fn no_step_reads_a_value_through_a_pipeline_that_stops_early() {
         return;
     };
     let mut standing = Vec::new();
-    let mut read = 0usize;
-    for name in RUNS_SHELL_UNDER_PIPEFAIL {
-        let path = root.join(name);
-        let text = std::fs::read_to_string(&path).unwrap_or_else(|error| {
-            panic!("read {name} — the pipelines this holds are written in it: {error}")
-        });
-        read += 1;
+    for (name, text) in runs_shell_under_pipefail(&root) {
         for (number, line) in text.lines().enumerate() {
             let trimmed = line.trim();
             // Comments are excluded by position: the paragraphs recording this measurement name the very
@@ -2451,11 +2456,6 @@ fn no_step_reads_a_value_through_a_pipeline_that_stops_early() {
             }
         }
     }
-    assert_eq!(
-        read,
-        RUNS_SHELL_UNDER_PIPEFAIL.len(),
-        "every file in the corpus must be read, or this reports clean over the ones it never opened"
-    );
     assert!(
         standing.is_empty(),
         "these pipelines fail for their own shape rather than for what they read:\n{}",
@@ -2480,12 +2480,7 @@ fn no_step_reads_a_value_through_a_process_substitution() {
         return;
     };
     let mut standing = Vec::new();
-    let mut read = 0usize;
-    for name in RUNS_SHELL_UNDER_PIPEFAIL {
-        let path = root.join(name);
-        let text =
-            std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("read {name}: {error}"));
-        read += 1;
+    for (name, text) in runs_shell_under_pipefail(&root) {
         for (number, line) in text.lines().enumerate() {
             let trimmed = line.trim();
             // By position, as its siblings do: the paragraphs recording this write the shape they forbid.
@@ -2503,11 +2498,6 @@ fn no_step_reads_a_value_through_a_process_substitution() {
             }
         }
     }
-    assert_eq!(
-        read,
-        RUNS_SHELL_UNDER_PIPEFAIL.len(),
-        "every file in the corpus must be read, or this reports clean over the ones it never opened"
-    );
     assert!(
         standing.is_empty(),
         "these derivations stand where their status cannot be seen:\n{}",

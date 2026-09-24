@@ -87,6 +87,18 @@ them.
 
 ### Self-governance
 
+- **Three repository-check readers read the whole of what they judge.** The exit-class check found an `exit`
+  only where it opened a line or followed a listed separator, so one standing in a one-line case arm —
+  `*) exit 3 ;;`, the shape the merge wrapper writes its arms in — or inside `(exit 3)` was not read, and a code
+  no declaration owns passed. It no longer asks where a command begins: every word the scripts spell as `exit`,
+  under any quoting the shell removes and inside any command substitution, is held to a declared code, with
+  words split at bash's own metacharacters and each script read whole so a quote spanning lines is the shell's;
+  a command name computed only when a line runs is a declared bound. The pipeline and process-substitution scans read a list naming the workflow and the
+  two wrappers, and left out the library the wrappers source under the same `pipefail`; they now read every
+  tracked script through the one enumeration of `scripts/`. And the Definition of Done join read the cargo-deny
+  action's `command` input alone, so a step adding `command-arguments: advisories` — which runs the advisories
+  check alone — satisfied `cargo deny check`; the action's other inputs are now read. No published crate changes.
+
 - **Both wrappers decide their act's class from what they observe of it, and a closed or broken stream moves no
   class.** Each wrapper handed its process to its tool with `exec`, so the tool's status became the wrapper's:
   `gh pr merge` exits `1` when it does not merge and `cargo publish` exits `1` on an argument it cannot parse, and

@@ -336,8 +336,10 @@ runs next or what a later line expands to, and an external program can do neithe
 declared value is not the one used. The declared set of such words SHALL be held against bash's own `compgen` in
 both directions. Each can only report a Definition of Done command missing; a Definition of Done line the
 tokenizer cannot read SHALL be refused. The repository's `EmbarkStudios/cargo-deny-action` step SHALL contribute
-`cargo deny <command>` from its declared `with.command` value. A DoD command SHALL NOT be exempted merely
-because CI normally expresses it through an action.
+`cargo deny <command> <command-arguments>` from its declared `with` inputs, and SHALL contribute nothing where it
+sets `arguments` or `manifest-path`: the action passes those before the command, so the step then runs another
+command than the one the Definition of Done spells. A DoD command SHALL NOT be exempted merely because CI
+normally expresses it through an action.
 
 The action projection is intentionally limited to the cargo-deny action whose command semantics this repository
 uses; the check SHALL NOT claim to interpret arbitrary GitHub Actions.
@@ -355,6 +357,14 @@ uses; the check SHALL NOT claim to interpret arbitrary GitHub Actions.
   absent command
 - **THEN** the coherence check fails and names `cargo deny check` as missing from CI
 - **PINNED-BY** `a_missing_supply_chain_action_leaves_cargo_deny_missing`
+
+#### Scenario: An action input narrows the command
+
+- **WHEN** the DoD contains `cargo deny check` and the cargo-deny action's `with.command` is `check` beside a
+  `command-arguments`, `arguments` or `manifest-path` input
+- **THEN** the coherence check fails and names `cargo deny check` as missing from CI — `command-arguments:
+  advisories` runs the advisories check alone, and the other two change the flags or the manifest it runs over
+- **PINNED-BY** `an_action_input_narrowing_the_command_does_not_satisfy_check`
 
 #### Scenario: A pinned toolchain is read in the job that pins it
 
@@ -703,8 +713,9 @@ failure names the document, which is why nobody reads it as the pipeline's shape
 inside `<(…)`: a failure there arrives as an empty value, so the floor that catches it names the data for a
 fact about the tool — measured, exit 0 and array length 0.
 
-The corpus is every tracked text this repository runs shell in — the workflow and both wrappers — because the
-two places the class matters most stand in front of the irreversible acts.
+The corpus is every tracked text this repository runs shell in — the workflow, and every tracked file under
+`scripts/` through the one enumeration of them, so the shared library the wrappers source is read as they are —
+because the places the class matters most stand in front of the irreversible acts.
 
 **That corpus is read as text, not through the workflow model, and the choice is about its subject.** What it
 judges is shell, and the same reading covers both wrappers, which are shell files; narrowing the workflow's half
@@ -716,7 +727,7 @@ a YAML value outside every `run:` block that is spelled as a pipeline is judged 
 #### Scenario: A pipeline stage exits before its producer finishes
 
 - **WHEN** any stage fed by a pipe stops early — `printf … | grep -q`, `… | head -n1`, or one standing
-  mid-pipeline, in the workflow or in either wrapper
+  mid-pipeline, in the workflow or in any tracked script, the shared library included
 - **THEN** the reaction refuses, naming the file, the line and the consumer — the value is read without a pipe
   instead, through a here-string or a glob become a value
 - **PINNED-BY** `no_step_reads_a_value_through_a_pipeline_that_stops_early`
@@ -1285,8 +1296,11 @@ neither class `kanhe::verdict_channel::wrapper_exit` returns, held beside the en
 **Every exit code SHALL be owned in Rust and read in the shell.** `kanhe::verdict_channel` owns the codes —
 `wrapper_exit` for the two classes, by an exhaustive match over `refusal::Kind`, and `LIBRARY_MISUSE` — and
 the library SHALL declare one `WRAPPER_EXIT_<NAME>` per code, each held equal to its owner by a repository
-check. Every `exit` in the library and the wrappers SHALL name one of those declarations, and each code SHALL
-be chosen at one site; the one literal SHALL be each wrapper's bootstrap guard, which runs before the library
+check. Every word the library and the wrappers spell as `exit` — under any quoting the shell removes, and wherever
+it stands — SHALL be followed by one of those declarations, and each code SHALL be chosen at one site. Where a
+command begins is not asked: `exit` as another command's argument is held the same way, and is quoted into a
+longer word instead. A command name computed only when a line runs is the one form outside it, declared as a
+bound below; the one literal SHALL be each wrapper's bootstrap guard, which runs before the library
 is loaded and whose code the direction running it holds against `wrapper_exit`.
 
 **The `source` that loads the library is the one stop before that machinery exists, and it SHALL be the
@@ -1356,6 +1370,27 @@ judged.
   variable that is not a declared `WRAPPER_EXIT_<NAME>`
 - **THEN** the check fails naming the site, and a declared code chosen at a second site fails the same way
 - **PINNED-BY** `each_wrapper_chooses_its_exit_class_in_one_place`
+
+#### Scenario: An exit word is judged wherever it stands
+
+- **WHEN** a word whose value is `exit` stands anywhere in a wrapper's or the library's executed text — as a
+  command, in a one-line case arm, in a condition, in a pipeline, as another command's argument, inside a command
+  substitution wherever it stands (`"$(exit 3)"`, `` `exit 3` ``) — under any quoting the shell removes, ANSI-C
+  quoting and each of its escapes included (`$'exit'`, `$'\x65xit'`)
+- **THEN** it is judged by the word after it, and a bare `exit` by none. Words and operators are split where
+  bash's definition of a metacharacter splits them, so a parenthesis inside quotes (`"(exit"`) is the word's text
+  and a word whose value is longer than `exit` — a quoted message saying *and exit 0* — is not one. The text is
+  read whole rather than a line at a time, because a quote opened on one line closes on a later one, and a
+  backslash-newline joins two lines
+- **PINNED-BY** `the_exit_reader_decides_every_shape_a_wrapper_line_takes`
+
+#### Scenario: A command name computed when the line runs is not read — a stated bound
+
+- **WHEN** a wrapper or the library runs `exit` through a command name its text does not spell — `$stop 3` with
+  `stop=exit`, or a string another command parses again: `eval "exit 3"`, `trap 'exit 3' EXIT`, `bash -c 'exit 3'`
+- **THEN** the exit-class check reports no offence for it. The name exists only when the line runs, so there is no
+  word to read; every word the text spells as `exit` is read, which is the scenario above
+- **PINNED-BY** `a_command_name_computed_when_the_line_runs_is_not_read`
 
 #### Scenario: A wrapper whose library cannot be read
 

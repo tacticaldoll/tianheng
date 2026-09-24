@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**28 of 106 declared bounds have no pinning test.** That figure is the register's
+**28 of 107 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -406,6 +406,12 @@ fallback used where no manifest exists, which the register spec describes.
 > the wrapper refuses it, and nothing will admit it short of a per-arm rule. A leading digit means a job count for one arm and nothing for `--package` or `--registry`, so admitting it means the shape question is asked differently per arm — which is the arrangement one shape check exists to replace, and the arrangement whose per-arm reasoning the refusal wording above was just corrected for repeating. The engine owns the narrowing: the caller passes the count instead, one arithmetic step
 
 - **pinned by**: `a_refused_flag_cannot_sit_in_an_admitted_arguments_value_position`
+
+### `repository-checks/a-command-name-computed-when-the-line-runs-is-not-read-a-stated-bound`
+
+> the exit-class check reports no offence for it. The name exists only when the line runs, so there is no word to read; every word the text spells as `exit` is read, which is the scenario above
+
+- **pinned by**: `a_command_name_computed_when_the_line_runs_is_not_read`
 
 ### `repository-checks/files-no-capability-claims-a-stated-bound`
 

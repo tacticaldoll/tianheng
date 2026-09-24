@@ -1042,6 +1042,20 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "a_construction_through_a_rename_or_inside_a_macro_is_read",
         ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "repository-checks/a-command-name-computed-when-the-line-runs-is-not-read-a-stated-bound",
+            ),
+            "an `exit` a wrapper runs through a command name its text does not spell — a variable, or a string \
+             another command runs: `eval`, `trap`, `bash -c`",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the exit-class check reads every word the text spells as `exit`, through every quoting \
+                          the shell removes, and a name that exists only when the line runs has no word to read"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "a_command_name_computed_when_the_line_runs_is_not_read",
+        ),
         BoundDecl::unpinned(
             BoundId::new("repository-checks/a-block-comment-is-not-read-a-stated-bound"),
             "implementation prose in a `/* ... */` block comment under a governed published-crate source",
