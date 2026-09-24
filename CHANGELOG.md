@@ -87,6 +87,12 @@ them.
 
 ### Self-governance
 
+- **The bounds-method reader's declared bound names the one shape it still misses.** Its declaration, spec
+  scenario and both projections said the reader knows nothing of comments or literals, so a signature copy in
+  either anchors the read — while the reader's own shape table, which parses the file for the body, declines
+  both. What it still reads wrongly is a real method of the same name on an unrelated `impl`, and that is now
+  the whole of the bound.
+
 - **Claims about which crate depends on what, and about what the wrapper library holds, say what the tree
   holds.** A sweep of absolute quantifiers near a dependency or wrapper subject found them wider than the
   manifests and scripts they describe: 漏刻 said to depend on 璇璣 *only* where its `audit` feature reaches 星表;
