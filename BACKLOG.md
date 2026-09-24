@@ -1108,6 +1108,21 @@ consumer for an undemonstrated deduplication.
   is a producer for a claim someone chose to arm, and this class's instances are the claims nobody would
   have. The sweep is what the next window should run, from the subject side, at each pre-release review.
 
+  **Fired, read 2026-09-24 — by that sweep, run from the subject side as written above.** Two corpora: every
+  tracked document and comment, for the quantifier vocabulary within reach of a dependency subject, held
+  against every manifest's dependency tables and `AGENTS.self-law.md`; and the lines the window rooted at the
+  `v0.6.1` snapshot added, for the same vocabulary near any subject the tree enumerates. The set-membership
+  form this entry counts, found false: a root-manifest comment and a runtime-origin scenario saying 漏刻
+  depends on 璇璣 *only*, where its `audit` feature reaches 星表; a spec listing 渾儀's allowlist without 星表;
+  `crates/tianheng/README.md` saying `syn` *is quarantined to* 渾儀, the retired wording minus its last word;
+  and, written in the window, a spec clause placing the verdict channel's variable name in the shared library,
+  where the wrappers alone spell it. Every one is a claim its author believed, which is this entry's own
+  thesis met again: none would have been declared, and the sweep found them. Each is repaired in the change
+  that records this reading. What the firing does **not** supply is a new instrument — the measured reason
+  above that a declared set holds only a doubted claim is unchanged — so whether the entry stays READY-PATCH
+  with the sweep as its instrument, or moves to ACCEPTED DEBT beside a standing pre-release step, is a
+  steward's decision rather than a patch.
+
 
 ### WATCH / ACCEPTED / DECLINED / BUILT
 

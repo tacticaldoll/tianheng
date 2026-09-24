@@ -2347,7 +2347,7 @@ fn a_flag_shaped_value_is_refused_in_every_value_position() {
 ///
 /// **The scripts come from the one enumeration of them, not from a list.** A list naming the two wrappers
 /// left out the library they source, which runs under the same `set -Eeuo pipefail` the moment it is loaded;
-/// [`kanhe::gate_identity::tracked_scripts`] is what every other direction over `scripts/` reads, and it
+/// [`kanhe::gate_identity::tracked_scripts`] is what a direction that must see every script reads, and it
 /// refuses an empty listing, so a corpus that lost its scripts cannot report clean over none.
 ///
 /// Each file is read as text rather than through `support::workflow`, because what these scans judge is

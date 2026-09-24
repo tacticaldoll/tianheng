@@ -14,8 +14,8 @@ use crate::region::Source;
 /// location, which is why nothing filters it by extension.
 pub const SCRIPTS_DIRECTORY: &str = "scripts/";
 
-/// Every tracked file under [`SCRIPTS_DIRECTORY`], with its text: the one enumeration each direction over
-/// the scripts reads.
+/// Every tracked file under [`SCRIPTS_DIRECTORY`], with its text: what a direction that must see every script
+/// reads, and what a list naming scripts is held against.
 ///
 /// **No extension filter.** The citation check and the wrapper inventory each filtered the listing to `.sh`,
 /// so an extensionless script was invisible to both at once while the requirement says what `git ls-files

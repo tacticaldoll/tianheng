@@ -57,8 +57,10 @@ if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
     exit "$WRAPPER_EXIT_MISUSE"
 fi
 
-# **A write never chooses the class.** Every line a wrapper prints goes through `tell` or `say`, and neither can
-# fail: a write to a closed or broken stream is dropped rather than let reach `set -e`. Measured on bash 5.2
+# **A write never chooses the class.** Every line printed once this library is loaded goes through `tell` or
+# `say`, and neither can fail: a write to a closed or broken stream is dropped rather than let reach `set -e`.
+# The writes made before it — the misuse guard above and each wrapper's bootstrap guard — end in `|| :` the same
+# way. Measured on bash 5.2
 # before these existed, with the stream closed: `cannot_judge` exited `1` — its `printf` failed, the ERR trap
 # re-entered it, and the second failure left through errexit with printf's own status, the class reserved for a
 # gate that ran and refused — and a report printed after a completed act exited `2`, calling the merge it had
@@ -85,8 +87,9 @@ say() {
 }
 
 # The subject the refusal is about — `merge message` or `publish source` — is the one thing the two copies
-# never shared, and the WRAPPER_SUBJECT global each wrapper sets before sourcing is its one owner: every
-# helper here reads it, so a call site cannot spell one wrapper's prefix inside the other.
+# never shared, and the WRAPPER_SUBJECT global each wrapper sets before sourcing is its one owner: the helpers
+# that prefix a line with it — `say` and `cannot_judge`, which `refuse` delegates to — read it, so a call site
+# cannot spell one wrapper's prefix inside the other.
 cannot_judge() {
     tell "$WRAPPER_SUBJECT: $1"
     exit "$WRAPPER_EXIT_UNJUDGED"
@@ -94,7 +97,8 @@ cannot_judge() {
 
 # The refusal idiom, delegating the class to the function above rather than choosing it again.
 #
-# Every stop in both wrappers delegates here or to `cannot_judge`; a stop that exits on its own is refused by
+# Every stop in both wrappers after its bootstrap guard delegates here, to `cannot_judge`, or to
+# `exit_for_the_gates_refusal`; a stop that exits on its own is refused by
 # `each_wrapper_chooses_its_exit_class_in_one_place`.
 refuse() {
     cannot_judge "refusing \`$1\`: $2"

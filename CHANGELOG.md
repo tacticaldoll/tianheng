@@ -87,6 +87,16 @@ them.
 
 ### Self-governance
 
+- **Claims about which crate depends on what, and about what the wrapper library holds, say what the tree
+  holds.** A sweep of absolute quantifiers near a dependency or wrapper subject found them wider than the
+  manifests and scripts they describe: 漏刻 said to depend on 璇璣 *only* where its `audit` feature reaches 星表;
+  渾儀's allowlist listed without 星表, and its hand-written renderer justified by an allowlist breach its `syn`
+  default features already carry, where the reason is a finding string's stable form; `crates/tianheng/README.md`
+  saying `syn` is quarantined to 渾儀, which is the only *packaged* crate depending on it; and, in the wrapper
+  library and its requirement, the verdict channel's variable name placed in the library, every write routed
+  through two helpers, and every stop routed through two functions, each narrower in the scripts than stated.
+  No behaviour, verdict or published API changes.
+
 - **Three repository-check readers read the whole of what they judge.** The exit-class check found an `exit`
   only where it opened a line or followed a listed separator, so one standing in a one-line case arm —
   `*) exit 3 ;;`, the shape the merge wrapper writes its arms in — or inside `(exit 3)` was not read, and a code
@@ -129,12 +139,13 @@ them.
   severities are unchanged, and a planted normal edge reacts with the same identity before and after.
 
 - **The two irreversible-act wrappers now share one lifecycle, written once.** `scripts/wrapper.sh` carries
-  the exit-class helper and refusal idiom, the ERR trap, the verdict channel's scalars, the two guards over
+  the exit-class helper and refusal idiom, the ERR trap, the verdict channel's class scalars, the two guards over
   the gate's run, the verdict file's lifecycle and the failing path of a gate's run; `merge-pr.sh` and
   `publish.sh` source it and keep only their own allowlist, evidence and gate. Every exit code is owned in
   Rust — `kanhe::verdict_channel::wrapper_exit` for the two classes and `LIBRARY_MISUSE` for the library run
   as a command — and the library's declarations are held against them, so every `exit` in the three scripts
-  names a declared code chosen at one site. A wrapper run without its library is the unjudged class in its
+  names a declared code chosen at one site, apart from the literal `2` of each wrapper's bootstrap guard, which
+  runs before the library is loaded. A wrapper run without its library is the unjudged class in its
   own voice (bash's ERR trap does not fire for a failed `source`, so the guard prints rather than traps), the
   library's exemption from *every tracked script cites a gate* is held both ways, and the acquisition sweep
   now reads the library as well as the wrappers. No product surface or verdict changes; an invocation from a
