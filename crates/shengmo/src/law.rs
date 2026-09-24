@@ -73,35 +73,34 @@ pub fn constitution() -> Constitution {
             CrateBoundary::crate_("xuanji")
                 .restrict_dependencies_to(["serde_json"])
                 .because(
-                    "璇璣 is the dimension-agnostic reaction model: it must not depend on any workspace \
-                     member; serde_json only",
+                    "璇璣 is the dimension-agnostic reaction model: its direct normal edges reach only \
+                     serde_json",
                 ),
         )
         .boundary(
             CrateBoundary::crate_("xingbiao")
                 .restrict_dependencies_to(["serde_json"])
                 .because(
-                    "星表 is the shared metadata substrate: it depends on no workspace member at all; \
-                     serde_json only",
+                    "星表 is the shared metadata substrate: its direct normal edges reach only serde_json",
                 ),
         )
         .boundary(
             CrateBoundary::crate_("guibiao")
                 .restrict_dependencies_to(["serde_json", "xuanji", "xingbiao"])
                 .because(
-                    "the 圭表 static core stays dependency-light: serde_json, xuanji (reaction \
-                     model), and xingbiao (metadata substrate) only. functional core ⊥ imperative \
-                     shell: 圭表 must not depend on the 天衡 shell. 三儀 ⊥ 三儀: it names no \
-                     sibling dimension",
+                    "the 圭表 static core stays dependency-light: its direct normal edges reach only \
+                     serde_json, xuanji (reaction model), and xingbiao (metadata substrate). \
+                     functional core ⊥ imperative shell: none reaches the 天衡 shell. 三儀 ⊥ 三儀: \
+                     none names a sibling dimension",
                 ),
         )
         .boundary(
             CrateBoundary::crate_("hunyi")
                 .restrict_dependencies_to(["xuanji", "xingbiao", "serde_json", "syn"])
                 .because(
-                    "渾儀 is the semantic AST dimension: it depends on 璇璣, 星表, serde_json \
-                     and syn only. 三儀 ⊥ 三儀: it names no sibling dimension and never the 天衡 \
-                     shell (functional dimension ⊥ imperative shell)",
+                    "渾儀 is the semantic AST dimension: its direct normal edges reach only 璇璣, 星表, \
+                     serde_json and syn. 三儀 ⊥ 三儀: none names a sibling dimension or the 天衡 shell \
+                     (functional dimension ⊥ imperative shell)",
                 ),
         )
         .boundary(
@@ -125,33 +124,32 @@ pub fn constitution() -> Constitution {
                 // prod, keep the edges, and the boundary is green while the sentence is false. A test written
                 // beside one clause caught that clause and not this boundary's own `because`.
                 .because(
-                    "漏刻 is the runtime dimension: it depends on 璇璣 and 星表 only. 三儀 ⊥ 三儀: \
-                     naming no sibling dimension and never the 天衡 shell",
+                    "漏刻 is the runtime dimension: its direct normal edges reach only 璇璣 and 星表. \
+                     三儀 ⊥ 三儀: none names a sibling dimension or the 天衡 shell",
                 ),
         )
         .boundary(
             CrateBoundary::crate_("tianheng")
                 .restrict_dependencies_to(["guibiao", "hunyi", "louke", "serde_json"])
                 .because(
-                    "the 天衡 shell's direct normal edges end at the observation dimensions and \
-                     at projection serialization, never at the lower reaction model or metadata \
-                     substrate",
+                    "the 天衡 shell's direct normal edges reach only the observation dimensions and \
+                     projection serialization, never the lower reaction model or metadata substrate",
                 ),
         )
         .boundary(
             CrateBoundary::crate_("shengmo")
                 .restrict_dependencies_to(["tianheng", "serde_json"])
                 .because(
-                    "繩墨 depends on 天衡 and serde_json only: no edge to 圭表, 渾儀, 漏刻 or \
-                     璇璣 can exist",
+                    "繩墨's direct normal edges reach only 天衡 and serde_json: none reaches 圭表, \
+                     渾儀, 漏刻 or 璇璣",
                 ),
         )
         .boundary(
             CrateBoundary::crate_("kanhe")
                 .restrict_dependencies_to(["shengmo", "tianheng", "serde_json", "toml_edit"])
                 .because(
-                    "勘合 depends on 繩墨, 天衡, serde_json and toml_edit only: no edge to 圭表, \
-                     渾儀, 漏刻 or 璇璣 can exist",
+                    "勘合's direct normal edges reach only 繩墨, 天衡, serde_json and toml_edit: none \
+                     reaches 圭表, 渾儀, 漏刻 or 璇璣",
                 ),
         )
         // The first *semantic* self-boundary: the family dogfoods its own `sans_io_pure` profile on

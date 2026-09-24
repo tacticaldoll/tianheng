@@ -87,6 +87,14 @@ them.
 
 ### Self-governance
 
+- **The self-law's dependency reasons say which edges they observe.** The crate boundaries said a crate
+  *depends on* its allowlist *only*, some adding that no other edge *can exist* or that none reaches a
+  workspace member, while `restrict_dependencies_to` reads the names of direct normal dependencies and holds
+  them to a subset: `kanhe` already carried `xingbiao`, `syn` and `proc-macro2` as dev-dependencies, a dev
+  edge from it to `guibiao` reports clean, and removing an allowed edge reports clean too. Each reason now
+  says a crate's direct normal edges *reach only* the crates its allowlist names. Targets, allowlists and
+  severities are unchanged, and a planted normal edge reacts with the same identity before and after.
+
 - **The two irreversible-act wrappers now share one lifecycle, written once.** `scripts/wrapper.sh` carries
   the exit-class helper and refusal idiom, the ERR trap, the verdict channel's scalars, the two guards over
   the gate's run, the verdict file's lifecycle and the failing path of a gate's run; `merge-pr.sh` and
