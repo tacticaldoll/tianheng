@@ -884,6 +884,17 @@ the honest word is *unobserved*. That is the whole of it; per-entry labels sorti
 witnessed were considered and declined, because a field on sixty entries is a form to maintain and these
 two sentences reach the same failure at the point where it actually happens.
 
+**The same occasion runs the set-membership sweep.** A claim that a set this tree enumerates has *only* these
+members, *never* that one, or one *alone* is held by nothing, and a declared set would hold only the claims an
+author already doubted — `BACKLOG.md` accepts that as debt, under *a claim about this tree, written as prose, is
+held only where its author declared it*. So before the cut, absolute quantifiers standing near a named subject
+the tree enumerates — a crate, a dependency, a script, a gate — are swept over every tracked live document and
+over the window's added lines, and each hit is checked against whatever enumerates that set: the manifests,
+`cargo tree`, `git ls-files`. It starts from the subject, not from the meaning of a sentence, so it decides
+nothing and produces a review queue; the reading records the corpus and the pattern it used, as a trigger
+evaluation does. Nothing runs it, for the reason *Do not add a detector over prose* gives: which hits are claims
+about a set is a reading of what the sentence says.
+
 A branching pattern is not an observable architectural fact, so the drift law keeps it out of the
 constitution: it is a convention for humans and agents rather than a Tianheng boundary.
 
