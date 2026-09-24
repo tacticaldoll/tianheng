@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**28 of 107 declared bounds have no pinning test.** That figure is the register's
+**27 of 107 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -195,9 +195,9 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound`
 
-> the reaction reads that method's body and reports it as the `Observer`'s. The anchor is the unique line-start occurrence of the signature, and the body is the one a parse of the file finds starting there, so a copy inside a block comment or a string literal declines — no function starts inside one — while a real, parseable method of the same name anchors exactly as the definition would: the class is "the unique whole-line occurrence is not the definition", and what remains of it is a real function that is not the `Observer`'s. What passes is a **second, hand-maintained path that agrees today**: a *divergent* list does not, because `observation-bound-model` reads every dimension's declarations through `Observer::bounds` and holds them in a bijection with the specs, which fails on any difference of membership or content. Measured both ways. So the residual is narrower than a divergent list slipping through, and wider than a comment. The comment-and-literal half is closed here by parsing, which this test-only reader reaches through `kanhe`'s dev-dependencies; `kanhe::region`'s `Executed` abstraction is library code under the normal-edge law and keeps its own residue over the same two positions, declared where it lives. This bound SHALL be **shown rather than described**: the reaction enumerates every shape it decides together with the decision, the reader is run against that table, and the rows where it reads a body that is not the method's are this bound. The table is held against the reader and nothing holds this prose against the table, so the WHEN above names only the shape the table's wrong-body row carries
+> the reaction reads that method's body and reports it as the protocol's. Which trait a path names is name resolution — `use`s, renames, globs, local definitions — and the reader matches the last segment instead. What passes is a **second, hand-maintained path that agrees today**: a *divergent* list does not, because `observation-bound-model` reads every dimension's declarations through `Observer::bounds` and holds them in a bijection with the specs. The reaction's shape table carries the row, so the bound is shown rather than described
 
-- **unpinned**, tracked by: `BACKLOG.md` — *the bounds-method reader anchors on a whole-line occurrence that is not the definition*
+- **pinned by**: `the_reader_decides_every_shape_as_the_table_says`
 
 ### `observer-protocol/a-trait-object-on-a-wrapped-signature-s-continuation-line-is-not-seen-a-stated-bound`
 

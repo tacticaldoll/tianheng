@@ -778,70 +778,6 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
-- **The bounds-method reader anchors on a whole-line occurrence that is not the definition.** *Class:*
-  READY-PATCH — **reclassified from ACCEPTED DEBT on 2026-09-24, because the closure its acceptance rested on
-  being unreachable is reached.** The debt was accepted on three closures refused, the third being *reading
-  what the compiler resolves needs Rust parsing `kanhe`'s declared allowlist forbids*. That allowlist restricts
-  `kanhe`'s normal edges only, `syn` is one of its dev-dependencies, and `observer_protocol.rs` already parses
-  the inspected file with it to find the anchored body. What that parse closed and what it left are under
-  *Premises re-measured 2026-09-24* at the end of this entry; the paragraphs between are the record that led
-  to the acceptance, kept as written. *Observed pressure:* the reader requires the signature to occur exactly once and at a line
-  start, and knows nothing of comments or literals. So where the definition has moved out of the inspected
-  file, any surviving **whole-line** copy anchors — reproduced with a block-comment copy, and again with a
-  copy inside a `&str` constant, both giving
-  `every_observer_declares_exactly_its_dimension_s_bounds ... ok`. *Observation source:* those two
-  perturbations, run during the closing review of the 0.5.0 window.
-  *Current reaction or bound:* the declared bound
-  `observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound`.
-  *Risk, measured rather than assumed:* **narrower than it first reads.** A *divergent* second list does not
-  pass — `observation-bound-model` reads every dimension through `Observer::bounds` and holds a bijection with
-  the specs, so a difference in membership or content fails `the_extent_projection_is_fresh` and the
-  classification test one capability over. What passes is a second, hand-maintained path that **agrees today**
-  and is maintained by hand from now on: re-run with a list rebuilt element by element from
-  `observation_bounds()`, the whole workspace suite is green. *Promotion trigger:* fired; both perturbations
-  are tree artefacts rather than reports. *Version class:* patch; a `tests/` reaction of this repository,
-  shipping in no crate. *Authority:* `observer-protocol`.
-
-  *Shape, with the corpus measured rather than borrowed:* comment stripping does **not** close this — a string
-  literal is not a comment — so the register's rejection of comment-delimiter lexing is not the reason here,
-  and citing it was wrong. This reader's corpus is the three files `DIMENSIONS` names, none of which carries a
-  string literal with a comment delimiter, so the register's measurement does not transfer in
-  either direction. Two candidate closures, **neither adopted, and neither actually closes the class** —
-  checked against the real corpus rather than left as an abstract choice. Requiring the anchor to be preceded
-  by an `impl Observer for` line was measured against the three real files and refuted as stated: every real
-  `fn bounds(&self)` sits several lines and one sibling method below its `impl Observer for` line (a doc
-  comment and `fn observe` come between them), so a literal adjacency rule would refuse the real definitions
-  too. A looser scope-containment version (nested inside *some* `impl Observer for … { … }` block, not
-  necessarily adjacent) survives that check, but only raises the bar rather than closing the class: a
-  perturbation that wraps the *whole* fake `impl Observer for` block — not just the `fn bounds` line — inside
-  the same comment or string would still be accepted, because a scope tracker blind to comments and literals
-  reads a fake `impl` line inside a comment exactly as it reads a real one. The other candidate — reading the
-  definition the compiler resolves rather than a textual condition — needs real Rust parsing, which `kanhe`'s
-  declared dependency allowlist (`AGENTS.self-law.md`) currently forbids; adopting it would first require
-  amending that law, not just this reader.
-
-  **Not a defect unique to this reader.** `crates/kanhe/src/region.rs`'s own `Executed` abstraction declares
-  the identical residue for the same reason (a `/\* … \*/` span and a string-literal marker both need
-  nested-span lexing this tree has "defeated repeatedly," in that module's own words) and cites this exact
-  bound as its precedent — the citation was one-directional until the 0.5.0 window closed it: see the
-  `observer-protocol` spec, now amended to cite `region.rs` back. Filing them separately let each be
-  rediscovered as a fresh problem; they are one class. If this is ever closed, the closure is a **shared**
-  nested-span lexer serving both sites, not a point patch to either — `guibiao::module_scan` already scans
-  nested block comments and is the instrument `region.rs`'s own doc comment names as existing if the residue
-  is ever worth closing.
-
-  **Premises re-measured 2026-09-24.** Both perturbations named under *Observed pressure* now decline rather
-  than read: `ANCHOR_CASES` carries the block-comment and string-literal copies as `Verdict::Declines`, because
-  no function starts inside either and the body is taken from the function a parse finds at the anchor. So the
-  shared nested-span lexer above is no longer this reader's closure — `region.rs` keeps its residue, as library
-  code under the normal-edge law, and this reader does not share it. What remains is the table's one
-  `ReadsTheWrongBody` row: a real method of the same signature on an unrelated `impl`, with the `Observer`
-  definition moved out of the file. The declared bound, its spec scenario and both projections now name that
-  shape alone. *Shape:* take the body only from a function inside an `impl` whose trait path ends in
-  `Observer` — the visitor that finds the body already walks the `impl` items, so this is a condition on a
-  walk that exists rather than a new reader — and retire the bound in the same change. *Promotion trigger:*
-  fired, as above. *Version class:* patch; a `tests/` reaction shipping in no crate.
-
 - **The ambient-ignore guard reads files where its property belongs to call sites, and says something false
   when one file holds both kinds.** *Class:* READY-PATCH — measured, and the correction touches no published
   surface. *Observed pressure:* `no_judgement_reads_an_ambient_ignore_file` decides per **file**: a file
@@ -3482,6 +3418,25 @@ Two properties from those windows do not expire with a version, so they stay:
 A closed item leaves the live class it was filed under; it does not stay there struck through. Its
 reproduction record moves here, where closed reproduction records belong, so a live class heading
 cannot read as a queue holding work that is already done.
+
+- ~~**The bounds-method reader anchors on a whole-line occurrence that is not the definition.**~~ *Class:*
+  READY-PATCH — closed by taking the body only from an `impl` whose trait path ends in `Observer`, the residue a
+  pinned bound. *Observed pressure:* the reader
+  anchored on the unique line-start occurrence of `fn bounds(`, and a parse of the file found the function at
+  that offset, so a real method of the same signature on an unrelated `impl`, with the `Observer` definition
+  moved out of the file, was read as the `Observer`'s. A comment or string-literal copy already declined, since
+  no function starts inside either. *Observation source:* `ANCHOR_CASES`'s one `ReadsTheWrongBody` row, which
+  the declared bound was read off. *Closed by:* the visitor that finds the body records a method only inside
+  an `impl` whose trait path ends in `Observer`, for the `bounds` read alone. The unrelated-impl row now
+  declines, with rows added for an inherent `impl`, a free function and a path-qualified trait. *Residue:* the
+  trait is matched by its path's last segment, not resolved, so a method on an `impl other::Observer` is still
+  read as the protocol's. Resolving which trait a path names means following `use`s, renames, globs and local
+  definitions, and no dimension's observer source defines or imports a second `Observer`, so the bound stays
+  declared at that narrower shape — pinned by the table's one `ReadsTheWrongBody` row, with a mutation record,
+  rather than tracked here. A decline now says which condition it met, from one typed `Decline`, where a method
+  outside the asked-for `impl` had been reported as a missing brace. Negative runs: the table with the condition
+  dropped fails on the unrelated-impl row, `left: Some("\n        unrelated()\n    ")`, `right: None`; the
+  decline-message direction fails when that message is the brace wording.
 
 - ~~**Absence tolerance has no differential across the three dimensions.**~~ *Class:* READY-PATCH —
   closed by the missing-file corpus in `attribute_spelling_differential`. It feeds bare `cfg` and `r#cfg`

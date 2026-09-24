@@ -472,21 +472,21 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "`BACKLOG.md` — *the shell's semantic delegation, held by construction*",
         ),
-        BoundDecl::unpinned(
+        BoundDecl::pinned(
             BoundId::new(
                 "observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound",
             ),
-            "a same-named method on an unrelated impl, with the definition moved out of the inspected source",
+            "a same-named method on an `impl` of another trait whose path ends in `Observer`, with the definition \
+             moved out of the inspected source",
             Extent::Reached(Reached::UnderReacts {
-                because: "the anchor is the unique line-start occurrence and the body is the function a parse \
-                          finds starting there, so a real method of the same name is read as the Observer's; \
-                          what passes is a second hand-maintained path that agrees today, since a divergent \
-                          one is caught by observation-bound-model's bijection over Observer::bounds — \
-                          measured both ways"
+                because: "the reader takes the body only from an `impl` whose trait path ends in `Observer`, \
+                          matching that last segment rather than resolving which trait the path names; what \
+                          passes is a second hand-maintained path that agrees today, since a divergent one is \
+                          caught by observation-bound-model's bijection over Observer::bounds"
                     .into(),
                 owner: Owner::Engine,
             }),
-            "`BACKLOG.md` — *the bounds-method reader anchors on a whole-line occurrence that is not the definition*",
+            "the_reader_decides_every_shape_as_the_table_says",
         ),
         // --- observation-bound-register ---
         BoundDecl::unpinned(

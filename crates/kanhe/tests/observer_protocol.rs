@@ -265,7 +265,7 @@ fn every_observer_declares_exactly_its_dimension_s_bounds() {
                  neither its absence nor an ambiguous anchor is a pass",
                 dimension.label,
                 dimension.observer_source,
-                decline_reason(&source, "fn bounds(")
+                observer_decline_reason(&source, "fn bounds(")
             )
         });
         assert_eq!(
@@ -347,7 +347,9 @@ fn a_source_with_no_bounds_method_yields_no_body_to_judge() {
     // The discriminator: a body that exists and is EMPTY is `Some(vec![])`, which the check reports as an
     // offence. Without this, the assertion above would also hold for a recognizer that never finds anything.
     assert_eq!(
-        bounds_body(&Source::of("fn bounds(&self) -> Vec<BoundDecl> {\n}\n")),
+        bounds_body(&Source::of(
+            "impl Observer for Probe {\nfn bounds(&self) -> Vec<BoundDecl> {\n}\n}\n"
+        )),
         Some(Vec::new()),
         "an empty body is found and judged, so absence and emptiness are distinguished"
     );
@@ -358,14 +360,14 @@ fn a_source_with_no_bounds_method_yields_no_body_to_judge() {
 /// The truncation this refuses was silent in the one direction that matters: `observation_bounds(); // }`
 /// closed the body at the comment, `bounds_body`'s own `//`-tail stripping turned the remainder into exactly
 /// the delegation, and a `Vec::new()` beneath it — a second list — was never presented to the assertion. The
-/// repair is ordering: the tail is stripped *before* the braces are counted, not after.
+/// extent is now a parse, which reads a comment as a comment, so the `}` inside the tail closes nothing.
 ///
 /// The control is the second case. Without it a masker that blanked every brace everywhere would satisfy the
 /// first assertion and look like a fix, while making every body unclosable.
 #[test]
 fn a_brace_in_a_comment_tail_no_longer_closes_the_body() {
     let hidden_second_list = Source::of(
-        "fn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds(); // }\n    Vec::new()\n}\n",
+        "impl Observer for Probe {\nfn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds(); // }\n    Vec::new()\n}\n}\n",
     );
     assert_eq!(
         bounds_body(&hidden_second_list).as_deref(),
@@ -373,8 +375,9 @@ fn a_brace_in_a_comment_tail_no_longer_closes_the_body() {
         "the body runs to its real closing brace, so the second list is what the check judges"
     );
 
-    let delegation_with_a_comment =
-        Source::of("fn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds() // why\n}\n");
+    let delegation_with_a_comment = Source::of(
+        "impl Observer for Probe {\nfn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds() // why\n}\n}\n",
+    );
     assert_eq!(
         bounds_body(&delegation_with_a_comment).as_deref(),
         Some(["observation_bounds()".to_string()].as_slice()),
@@ -430,8 +433,9 @@ fn a_brace_in_a_block_comment_or_a_string_literal_no_longer_moves_the_body_exten
         "and the same holds for a brace written inside a string literal"
     );
 
-    let same_body_uncommented =
-        Source::of("fn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds()\n}\n");
+    let same_body_uncommented = Source::of(
+        "impl Observer for Probe {\nfn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds()\n}\n}\n",
+    );
     assert_eq!(
         bounds_body(&same_body_uncommented).as_deref(),
         Some([DELEGATION.to_string()].as_slice()),
@@ -449,7 +453,7 @@ fn a_brace_in_a_block_comment_or_a_string_literal_no_longer_moves_the_body_exten
 fn the_reader_decides_every_shape_as_the_table_says() {
     for case in ANCHOR_CASES {
         let source = Source::of(case.source);
-        let read = function_body(&source, "fn bounds(").map(|body| body.whole().to_string());
+        let read = observer_method_body(&source, "fn bounds(").map(|body| body.whole().to_string());
         let expected = match case.verdict {
             Verdict::Reads(body) | Verdict::ReadsTheWrongBody(body) => Some(body.to_string()),
             Verdict::Declines => None,
@@ -484,6 +488,37 @@ fn the_reader_decides_every_shape_as_the_table_says() {
     );
 }
 
+/// Each decline names the condition it met, in the words [`Decline::describe`] gives it.
+///
+/// A method outside the asked-for `impl` is a real function with a balanced body, so a message about braces sends
+/// the maintainer after an error that is not there. Held at the level the change moved — the message — since the
+/// outcome, a decline, is the same for every one of these.
+#[test]
+fn a_decline_names_the_condition_it_met() {
+    let cases = [
+        (
+            "impl OtherTrait for Whatever {\n    fn bounds(&self) -> Vec<BoundDecl> {\n        unrelated()\n    }\n}\n",
+            "not one inside an `impl` of `Observer`",
+        ),
+        (
+            "/*\nfn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds()\n}\n*/\nfn other() -> u8 { 0 }\n",
+            "no function begins there",
+        ),
+        (
+            "fn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds()\n",
+            "does not parse as Rust",
+        ),
+        ("fn other() -> u8 { 0 }\n", "does not occur"),
+    ];
+    for (text, names) in cases {
+        let reason = observer_decline_reason(&Source::of(text), "fn bounds(");
+        assert!(
+            reason.contains(names),
+            "the decline over {text:?} must say `{names}`, got: {reason}"
+        );
+    }
+}
+
 /// A **mid-line** mention anchors nothing, even when it is the signature's only occurrence.
 ///
 /// Occurrence counting alone admits this: one occurrence, in a comment, with the definition absent because the
@@ -491,8 +526,8 @@ fn the_reader_decides_every_shape_as_the_table_says() {
 /// body is returned as this method's. The line-start rule the count replaced declined it — so the two rules
 /// each admit what the other refuses, and [`function_body`] requires both.
 ///
-/// It is **mid-line** and not *mention* that this closes, which an earlier version of this test claimed and got
-/// wrong: a whole-line copy anchors, and that is a declared bound.
+/// It is **mid-line** and not *mention* that this closes: a whole-line copy anchors, and what declines one that
+/// is not the `Observer`'s method is the parse after the anchor, which [`ANCHOR_CASES`] shows.
 ///
 /// The control is an ordinary definition, which must still read — requiring both conditions must decline more,
 /// not decline everything. It cannot be "the same mention beside a definition", because that is two occurrences
@@ -565,11 +600,13 @@ fn a_decoy_bounds_signature_refuses_rather_than_matching_the_conforming_copy() {
 
     let single = Source::of(
         [
+            "impl Observer for Probe {",
             "    fn bounds(&self) -> Vec<BoundDecl> {",
             "        let mut declared = observation_bounds();",
             "        declared.truncate(1);",
             "        declared",
             "    }",
+            "}",
             "",
         ]
         .join("\n"),
@@ -633,14 +670,15 @@ fn a_decoy_bounds_signature_refuses_rather_than_matching_the_conforming_copy() {
 /// The one statement a conforming `bounds()` body holds.
 const DELEGATION: &str = "observation_bounds()";
 
-/// The executed statements inside `fn bounds`'s body, or `None` if no line anchors the method or more than
-/// one does.
+/// The executed statements inside `fn bounds`'s body, or `None` where [`observer_method_body`] declines — a
+/// [`Decline`] says which condition failed.
 ///
-/// Brace-counted from the signature's opening brace, so a nested block inside the body would be included rather
-/// than truncating at the first `}` — the body is required to be one statement, but a *wrong* body must be
-/// reported whole rather than mis-parsed into looking right.
+/// The extent is the block a parse of the file finds for that method, braces inside comments and string
+/// literals included as the text they are, so a nested block inside the body is included rather than
+/// truncating at the first `}` — the body is required to be one statement, but a *wrong* body must be reported
+/// whole rather than mis-parsed into looking right.
 fn bounds_body(source: &Source) -> Option<Vec<String>> {
-    let body = function_body(source, "fn bounds(")?;
+    let body = observer_method_body(source, "fn bounds(")?;
     Some(
         body.rust()
             .lines()
@@ -669,45 +707,67 @@ fn bounds_body(source: &Source) -> Option<Vec<String>> {
 /// exactly there", never "is there a function of this name somewhere". That keeps this step from silently
 /// widening the anchor rule it sits downstream of — a same-named method on some unrelated `impl` elsewhere in
 /// the file is a real, parseable function, and matching by name alone would read its body as this one's. That
-/// shape is still a way the anchor step itself can be fooled (see `ANCHOR_CASES`), not one this step
-/// introduces.
-#[derive(Default)]
+/// method is told apart here instead, by the `impl` it sits in: with [`Self::within`] set, only a method of an
+/// `impl` of that trait is recorded, so the anchor landing on any other declines.
 struct FnBodies {
-    /// `(the fn keyword's byte offset, the block's own `{ … }` byte range, braces included)`.
-    found: Vec<(usize, std::ops::Range<usize>)>,
+    /// `(the fn keyword's byte offset, the block's own `{ … }` byte range, braces included, whether it sits
+    /// where the read asks)`.
+    found: Vec<(usize, std::ops::Range<usize>, bool)>,
+    /// The trait whose `impl` an accepted function must sit in — `None` for any function-like item. Matched by
+    /// the trait path's **last segment**, not resolved: which trait a name denotes is name resolution, and the
+    /// shape that leaves open is a stated bound, shown in [`ANCHOR_CASES`].
+    within: Option<&'static str>,
+    /// Whether the `impl` being walked implements [`Self::within`].
+    in_wanted_impl: bool,
 }
 
 impl FnBodies {
-    fn record(&mut self, fn_token_span: proc_macro2::Span, block: &syn::Block) {
+    fn record(&mut self, fn_token_span: proc_macro2::Span, block: &syn::Block, accepted: bool) {
         self.found.push((
             fn_token_span.byte_range().start,
             block.brace_token.span.join().byte_range(),
+            accepted,
         ));
     }
 }
 
 impl<'ast> Visit<'ast> for FnBodies {
     fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
-        self.record(node.sig.fn_token.span, &node.block);
+        self.record(node.sig.fn_token.span, &node.block, self.within.is_none());
         syn::visit::visit_item_fn(self, node);
     }
 
+    fn visit_item_impl(&mut self, node: &'ast syn::ItemImpl) {
+        let implements = |wanted: &str| {
+            node.trait_.as_ref().is_some_and(|(_, path, _)| {
+                path.segments
+                    .last()
+                    .is_some_and(|segment| segment.ident == wanted)
+            })
+        };
+        let outer = self.in_wanted_impl;
+        self.in_wanted_impl = self.within.is_some_and(implements);
+        syn::visit::visit_item_impl(self, node);
+        self.in_wanted_impl = outer;
+    }
+
     fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
-        self.record(node.sig.fn_token.span, &node.block);
+        let accepted = self.within.is_none() || self.in_wanted_impl;
+        self.record(node.sig.fn_token.span, &node.block, accepted);
         syn::visit::visit_impl_item_fn(self, node);
     }
 
     fn visit_trait_item_fn(&mut self, node: &'ast syn::TraitItemFn) {
         if let Some(block) = &node.default {
-            self.record(node.sig.fn_token.span, block);
+            self.record(node.sig.fn_token.span, block, self.within.is_none());
         }
         syn::visit::visit_trait_item_fn(self, node);
     }
 }
 
 /// The `{ … }` byte range — braces included — of the function-like item whose `fn` keyword begins at byte
-/// offset `at` in `text`, or `None` if `text` does not parse as a Rust file, or parses without any such item
-/// beginning exactly there.
+/// offset `at` in `text`, or the [`Decline`] that says which of three things stopped it: `text` does not parse,
+/// no function begins exactly there, or the one that does sits outside the `impl` `within` asks for.
 ///
 /// This is the extent step alone, once [`anchor`] has already decided which occurrence is the definition — it
 /// does not revisit that decision. What replaces brace-counting here is a real parser: `syn` tokenizes
@@ -720,35 +780,38 @@ impl<'ast> Visit<'ast> for FnBodies {
 /// Declining on a parse failure or on finding no match at `at` is the safe direction that closed gap's own pin
 /// required staying in: this function never reports a span it cannot attribute to a real `fn` sitting exactly
 /// where the anchor said the definition begins.
-fn syn_body_span(text: &str, at: usize) -> Option<std::ops::Range<usize>> {
-    let file = syn::parse_str::<syn::File>(text).ok()?;
-    let mut bodies = FnBodies::default();
+fn syn_body_span(
+    text: &str,
+    at: usize,
+    within: Option<&'static str>,
+) -> Result<std::ops::Range<usize>, Decline> {
+    let file = syn::parse_str::<syn::File>(text).map_err(|_| Decline::Unparsed)?;
+    let mut bodies = FnBodies {
+        found: Vec::new(),
+        within,
+        in_wanted_impl: false,
+    };
     bodies.visit_file(&file);
-    bodies
-        .found
-        .into_iter()
-        .find(|(start, _)| *start == at)
-        .map(|(_, block)| block)
+    match bodies.found.into_iter().find(|(start, _, _)| *start == at) {
+        None => Err(Decline::NoFunctionAt),
+        Some((_, block, true)) => Ok(block),
+        Some((_, _, false)) => Err(Decline::OutsideImpl(within.unwrap_or_default())),
+    }
 }
 
-/// What this reader does with every shape it can meet — **including the shapes it gets wrong**.
+/// What this reader does with every shape it can meet.
 ///
 /// The table is the description. A comment saying which shapes the anchor rule refuses drifted from the code
 /// twice in one window, and each repair corrected the sentence review had named and then wrote the next one; a
-/// row cannot drift, because it runs. `observer-protocol`'s still-open bound over the *anchor* step — a
-/// whole-line occurrence that is not the definition anchors the read — is read off the
-/// [`Verdict::ReadsTheWrongBody`] rows rather than typed beside them, and a reviewer's perturbation lands here
-/// as a row instead of as a finding.
+/// row cannot drift, because it runs, and a reviewer's perturbation lands here as a row instead of as a finding.
 ///
-/// **A block comment or a string literal is no longer among those rows.** [`syn_body_span`] closed the
-/// *extent* bound those two shapes used to demonstrate: the anchor still lands inside the comment or the
-/// literal exactly as before, but there is no real `fn` there for a parser to find, so the read now declines
-/// rather than reading the decoy's body — see the block-comment and string-literal `AnchorCase` rows, each
-/// commented at its own definition with what changed from [`Verdict::ReadsTheWrongBody`] to
-/// [`Verdict::Declines`]. The anchor bug survives them, only its consequence narrowed: what remains reachable
-/// is a whole-line copy that *is* real, parseable Rust — a same-named method on some unrelated `impl`
-/// elsewhere in the file, which the "any other position the reader does not distinguish from executed text"
-/// clause of that bound's own scenario already covers.
+/// **One row reads a body that is not the method's, and it is the stated bound.** The anchor still lands on a
+/// whole-line copy of the signature wherever one stands alone, since it knows nothing of comments, literals or
+/// `impl`s. What follows it is a parse that does: a copy inside a comment or a string literal is no function,
+/// and a real method of the same name on an `impl` of a trait named anything but `Observer` is not the one the
+/// read asks for, so each declines. What the parse does not know is **which** trait a path names — it matches
+/// the path's last segment — so an `impl other::Observer` passes for the protocol's own: the
+/// [`Verdict::ReadsTheWrongBody`] row, which `observer-protocol` declares.
 struct AnchorCase {
     /// The shape, in the words a spec scenario would use for it.
     shape: &'static str,
@@ -770,12 +833,12 @@ enum Verdict {
 const ANCHOR_CASES: &[AnchorCase] = &[
     AnchorCase {
         shape: "an ordinary definition",
-        source: "fn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds()\n}\n",
+        source: "impl Observer for Probe {\nfn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds()\n}\n}\n",
         verdict: Verdict::Reads("\n    observation_bounds()\n"),
     },
     AnchorCase {
         shape: "a definition whose delegation carries a comment tail",
-        source: "fn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds() // why\n}\n",
+        source: "impl Observer for Probe {\nfn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds() // why\n}\n}\n",
         verdict: Verdict::Reads("\n    observation_bounds() // why\n"),
     },
     AnchorCase {
@@ -796,28 +859,49 @@ const ANCHOR_CASES: &[AnchorCase] = &[
     AnchorCase {
         // The anchor still lands here — `anchor()` is untouched and knows nothing of comments — but
         // `syn_body_span` finds no real `fn` starting at that byte offset, because it is text inside a block
-        // comment rather than a token. Was `Verdict::ReadsTheWrongBody`; closed by the extent fix.
+        // comment rather than a token.
         shape: "a whole-line copy in a block comment, the definition moved out of the file",
         source: "/*\nfn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds()\n}\n*/\nfn other() -> u8 { 0 }\n",
         verdict: Verdict::Declines,
     },
     AnchorCase {
-        // Same shape, a string literal in place of the comment. Was `Verdict::ReadsTheWrongBody`; closed by
-        // the extent fix for the identical reason — no real `fn` starts inside a string literal's token.
+        // Same shape, a string literal in place of the comment, declining for the identical reason — no real
+        // `fn` starts inside a string literal's token.
         shape: "a whole-line copy in a string literal, the definition moved out of the file",
         source: "const MOVED: &str = \"\nfn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds()\n}\n\";\nfn other() -> u8 { 0 }\n",
         verdict: Verdict::Declines,
     },
     AnchorCase {
-        // Unlike the block-comment and string-literal rows, this whole-line copy IS real, parseable Rust: a
-        // `bounds` method on an unrelated `impl`, with no `Observer`'s `bounds` anywhere in the source.
-        // `anchor()` cannot tell it apart from the intended definition — it is still just "the unique,
-        // line-start occurrence" — and `syn_body_span` correctly finds a real function there and reads its
-        // real body, which is exactly the wrong one. This is what keeps the anchor bound demonstrable now
-        // that a decoy hidden in prose no longer is.
-        shape: "a same-named method on an unrelated impl anchors the read, the intended definition absent",
+        // A whole-line copy that IS real, parseable Rust: a `bounds` method on an unrelated `impl`, with no
+        // `Observer`'s `bounds` anywhere in the source. `anchor()` cannot tell it from the definition — it is
+        // still the unique line-start occurrence — but the parse knows which `impl` it sits in, and the read
+        // asks for the `Observer`'s alone.
+        shape: "a same-named method on an unrelated impl, the intended definition absent",
         source: "impl OtherTrait for Whatever {\n    fn bounds(&self) -> Vec<BoundDecl> {\n        unrelated()\n    }\n}\n",
+        verdict: Verdict::Declines,
+    },
+    AnchorCase {
+        shape: "a same-named method on an inherent impl, the intended definition absent",
+        source: "impl Whatever {\n    fn bounds(&self) -> Vec<BoundDecl> {\n        unrelated()\n    }\n}\n",
+        verdict: Verdict::Declines,
+    },
+    AnchorCase {
+        shape: "a free function of the same name, the intended definition absent",
+        source: "fn bounds(&self) -> Vec<BoundDecl> {\n    unrelated()\n}\n",
+        verdict: Verdict::Declines,
+    },
+    AnchorCase {
+        // The stated bound: a trait whose path ENDS in `Observer` and is not the protocol's. Telling the two
+        // apart is name resolution — following `use`s, renames, globs and local definitions — and no dimension's
+        // observer source defines or imports a second `Observer`.
+        shape: "a same-named method on an impl of another trait named Observer, the intended definition absent",
+        source: "impl other::Observer for Probe {\n    fn bounds(&self) -> Vec<BoundDecl> {\n        unrelated()\n    }\n}\n",
         verdict: Verdict::ReadsTheWrongBody("\n        unrelated()\n    "),
+    },
+    AnchorCase {
+        shape: "the definition in an impl naming the trait by a path",
+        source: "impl xuanji::Observer for Probe {\nfn bounds(&self) -> Vec<BoundDecl> {\n    observation_bounds()\n}\n}\n",
+        verdict: Verdict::Reads("\n    observation_bounds()\n"),
     },
 ];
 
@@ -868,24 +952,68 @@ fn anchor(text: &str, signature: &str) -> Anchor {
     }
 }
 
-/// Why a read declined, in the reader's own words — each decline naming the condition that failed, because
-/// reporting them all as an anchor count sent a reader hunting for a second definition the same message had
-/// just counted as absent.
+/// Why a read declined — **one** type, so the reader and its diagnostic cannot disagree about which condition
+/// failed. Reporting every decline as an anchor count sent a reader hunting for a second definition the same
+/// message had just counted as absent, and reporting a method outside the asked-for `impl` as a missing brace
+/// sent one hunting for a brace error that was not there.
+#[derive(Debug, PartialEq, Eq)]
+enum Decline {
+    /// The signature does not occur.
+    Absent,
+    /// It occurs once, mid-line: a mention.
+    MentionOnly,
+    /// It occurs more than once.
+    Ambiguous(usize),
+    /// It anchors, and the file does not parse as Rust.
+    Unparsed,
+    /// It anchors, and no function begins there: a copy inside a comment or a string literal.
+    NoFunctionAt,
+    /// It anchors a real function that sits outside an `impl` of the trait the read asks for.
+    OutsideImpl(&'static str),
+}
+
+impl Decline {
+    fn describe(&self, signature: &str) -> String {
+        match self {
+            Self::Absent => format!("`{signature}` does not occur, so there is no body to read"),
+            Self::MentionOnly => format!(
+                "`{signature}` occurs once but not at the start of a line, so it is a mention rather than a \
+                 definition and anchors nothing"
+            ),
+            Self::Ambiguous(many) => format!(
+                "`{signature}` occurs {many} times, so the subject is ambiguous and the reader judges only when \
+                 it occurs exactly once"
+            ),
+            Self::Unparsed => format!(
+                "`{signature}` occurs once, at a line start, but the file does not parse as Rust, so no body \
+                 can be attributed to it"
+            ),
+            Self::NoFunctionAt => format!(
+                "`{signature}` occurs once, at a line start, but no function begins there — a copy inside a \
+                 comment or a string literal — so it is not the definition"
+            ),
+            Self::OutsideImpl(wanted) => format!(
+                "`{signature}` occurs once and begins a real function, but not one inside an `impl` of \
+                 `{wanted}`, so it is not the method the read asks for"
+            ),
+        }
+    }
+}
+
+/// Why [`function_body`] declined for `signature` in `source`.
 fn decline_reason(source: &Source, signature: &str) -> String {
-    match anchor(source.whole(), signature) {
-        Anchor::Absent => format!("`{signature}` does not occur, so there is no body to read"),
-        Anchor::MentionOnly => format!(
-            "`{signature}` occurs once but not at the start of a line, so it is a mention rather than a \
-             definition and anchors nothing"
-        ),
-        Anchor::At(_) => format!(
-            "`{signature}` occurs once, at a line start, but no balanced brace-delimited body follows it, so \
-             the extent could not be taken"
-        ),
-        Anchor::Ambiguous(many) => format!(
-            "`{signature}` occurs {many} times, so the subject is ambiguous and the reader judges only when it \
-             occurs exactly once"
-        ),
+    describe_decline(source, signature, None)
+}
+
+/// Why [`observer_method_body`] declined for `signature` in `source`.
+fn observer_decline_reason(source: &Source, signature: &str) -> String {
+    describe_decline(source, signature, Some("Observer"))
+}
+
+fn describe_decline(source: &Source, signature: &str, within: Option<&'static str>) -> String {
+    match read_body(source, signature, within) {
+        Ok(_) => format!("`{signature}` was read, so there is no decline to describe"),
+        Err(decline) => decline.describe(signature),
     }
 }
 
@@ -895,15 +1023,37 @@ fn decline_reason(source: &Source, signature: &str) -> String {
 /// Declining rather than taking the first is the point: an occurrence in a comment anchors exactly as well as a
 /// definition, so uniqueness is what makes the subject knowable, and the anchor scan therefore reads the whole
 /// source rather than [`Executed`]. What follows the anchor is [`syn_body_span`] rather than a brace count —
-/// see it for why, and what this step decides WRONGLY (nothing, now — the residual is [`anchor`]'s alone) is
-/// still shown in [`ANCHOR_CASES`] rather than described here.
+/// see it for why. What the reader decides for each shape is shown in [`ANCHOR_CASES`] rather than described
+/// here.
 fn function_body(source: &Source, signature: &str) -> Option<Source> {
+    read_body(source, signature, None).ok()
+}
+
+/// The body [`function_body`] reads, taken only from a method of an `impl Observer for …`.
+///
+/// **What the anchor cannot tell apart, the parse can.** The anchor is the unique line-start occurrence, and a
+/// same-named method on an unrelated `impl` is such an occurrence exactly as the definition is; the parse knows
+/// which `impl` a method sits in. So the `bounds` read asks for the method of the one trait the obligation is
+/// about, and a decoy on any other declines — a condition on the walk that already finds the body, not a
+/// second reader.
+fn observer_method_body(source: &Source, signature: &str) -> Option<Source> {
+    read_body(source, signature, Some("Observer")).ok()
+}
+
+fn read_body(
+    source: &Source,
+    signature: &str,
+    within: Option<&'static str>,
+) -> Result<Source, Decline> {
     let text = source.whole();
-    let Anchor::At(at) = anchor(text, signature) else {
-        return None;
+    let at = match anchor(text, signature) {
+        Anchor::At(at) => at,
+        Anchor::Absent => return Err(Decline::Absent),
+        Anchor::MentionOnly => return Err(Decline::MentionOnly),
+        Anchor::Ambiguous(many) => return Err(Decline::Ambiguous(many)),
     };
-    let span = syn_body_span(text, at)?;
-    Some(Source::of(&text[span.start + 1..span.end - 1]))
+    let span = syn_body_span(text, at, within)?;
+    Ok(Source::of(&text[span.start + 1..span.end - 1]))
 }
 
 // --- the fold's ordering directions, on hand-written observers ---
