@@ -455,7 +455,7 @@ fn read(root: &Path, path: &str) -> String {
 ///
 /// A channel has no delimiter to forget. Two scalars travel: the variable name and the class spelling, and both
 /// are compared here against the module the gates call.
-/// A wrapper chooses its exit class in **one place**, which is a count rather than a reading.
+/// A wrapper chooses its exit class in **one place** — and that place is the shared library.
 ///
 /// `repository-checks` requires the classification to be chosen once per wrapper rather than at each site, and
 /// nothing held it: the class constants and `require_one_pass` were compared across both wrappers, so the
@@ -463,13 +463,19 @@ fn read(root: &Path, path: &str) -> String {
 /// positional selector, the URL refusal, `require_value` and the body-file guard — two of which predated the
 /// helper they should have called, and a review found them by reading the two wrappers side by side.
 ///
-/// **An `exit` statement IS the choice**, so counting them decides the property that reading them used to.
-/// Exactly two may say `exit 2`: the one class helper every refusal delegates to, and the gate's own verdict
-/// arm, which must distinguish a gate that refused from a run that reached no verdict. Exactly one may say
-/// `exit 1`, and it is that same arm — the sole site this repository's contract permits the violation class.
+/// **The lifecycle lived twice, and the copies agreed only because a reviewer kept them so** — measured, 66
+/// of `publish.sh`'s 109 executed lines appeared verbatim in its sibling. The helpers, the ERR trap, the
+/// verdict channel and the verdict file's lifecycle are written once now, in the shared library this file
+/// names below, and what this direction asks changed with it: not *the two copies agree* but **one definition
+/// site**, with each wrapper holding only its own verdict arm — the one statement this repository's contract
+/// permits the violation class.
 ///
-/// Executed text, because both wrappers' comments now discuss `exit 2` in prose, and a check that read the
-/// whole file would count the sentence describing the rule as an instance of breaking it.
+/// An `exit` statement IS the choice, so counting them decides the property that reading them used to. The
+/// library may say `exit 2` exactly once, in the one class helper every refusal delegates to, and each wrapper
+/// exactly twice across its verdict arm's two classes.
+///
+/// Executed text, because both wrappers' comments discuss `exit 2` in prose, and a check that read the whole
+/// file would count the sentence describing the rule as an instance of breaking it.
 ///
 /// **What this does not reach**, stated rather than left to be discovered: a refusal spelled `return` inside a
 /// function whose caller then exits, and a class chosen by an unguarded command's own status. The second is
@@ -480,8 +486,11 @@ fn each_wrapper_chooses_its_exit_class_in_one_place() {
     let Some(root) = workspace_root() else {
         return;
     };
-    for wrapper in WRAPPERS {
-        let text = read(&root, wrapper);
+    let library = kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY;
+    let mut files: Vec<&str> = WRAPPERS.to_vec();
+    files.push(library);
+    for script in files {
+        let text = read(&root, script);
         let source = Source::of(text);
         let executed = source.shell();
         let mut sites: Vec<(usize, &str)> = Vec::new();
@@ -494,28 +503,144 @@ fn each_wrapper_chooses_its_exit_class_in_one_place() {
         let shown = || {
             sites
                 .iter()
-                .map(|(n, l)| format!("  {wrapper}:{n}: {l}"))
+                .map(|(n, l)| format!("  {script}:{n}: {l}"))
                 .collect::<Vec<_>>()
                 .join("\n")
         };
         let unjudged = sites.iter().filter(|(_, l)| *l == "exit 2").count();
         let violation = sites.iter().filter(|(_, l)| *l == "exit 1").count();
+        if script == library {
+            // One site: the class helper's own `exit 2`, which IS the definition — every refusal in both
+            // wrappers delegates to it. A second site is the classification chosen twice, the shape this
+            // extraction exists to end.
+            assert_eq!(
+                unjudged,
+                1,
+                "{script} is where every wrapper's unjudged class is chosen, so exactly one site may say \
+                 `exit 2` — the class helper every refusal delegates to; a second site is the classification \
+                 chosen twice again, the shape this extraction exists to end:\n{}",
+                shown()
+            );
+            // Zero bare `exit 1` sites: the violation class belongs to each wrapper's own verdict arm, and
+            // the execution guard answers a plain misuse through the named global `WRAPPER_USAGE` rather
+            // than either reserved class.
+            assert_eq!(
+                violation,
+                0,
+                "{script} fronts no gate, so no site in it may say `exit 1` — the violation class belongs to \
+                 each wrapper's own verdict arm, and the execution guard answers through `WRAPPER_USAGE`:\n{}",
+                shown()
+            );
+        } else {
+            // Two sites, one on each side of the `source`: the bootstrap guard is the one stop that must
+            // exist before the library's helper does — a missing library is a could-not-read, so it is the
+            // unjudged class too, spoken by the wrapper because the helper is what is missing. Every stop
+            // after the `source` delegates.
+            assert_eq!(
+                unjudged,
+                2,
+                "{script} chooses the unjudged class at {unjudged} sites; exactly two may — the bootstrap \
+                 guard for a library it cannot read, and its own verdict arm. Every stop after the \
+                 `source` delegates to the class helper the shared library defines:\n{}",
+                shown()
+            );
+            assert_eq!(
+                violation,
+                1,
+                "{script} chooses the violation class at {violation} sites; exactly one may, and it is the \
+                 gate's own verdict arm:\n{}",
+                shown()
+            );
+        }
+    }
+}
+
+/// A wrapper whose library cannot be read is the **unjudged** class, in its own voice.
+///
+/// The one acquisition the shared machinery cannot guard is the one that loads it, and a `source` failing
+/// under `set -e` exits with `source`'s own status — `1`, the class reserved for a gate that ran and
+/// refused. Measured before the guard existed: both wrappers exited 1. And measured against bash itself
+/// while repairing it: the ERR trap does not fire for a failed `source`, which is why the guard speaks
+/// rather than trapping. Held by **running** each wrapper from a fixture tree that has no library — the
+/// class and the message are both asserted, because an exit-2 silence is bash's line alone, and that is a
+/// diagnosis of the wrong thing in this wrapper's own contract.
+#[test]
+fn a_wrapper_without_its_library_is_the_unjudged_class() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    for (wrapper, invocation) in [
+        ("scripts/merge-pr.sh", vec!["42", "--body-file", "body.md"]),
+        ("scripts/publish.sh", vec!["--dry-run"]),
+    ] {
+        let scratch = std::env::temp_dir().join(format!(
+            "tianheng-missing-library-{}-{}",
+            std::process::id(),
+            wrapper.replace('/', "-")
+        ));
+        let _ = std::fs::remove_dir_all(&scratch);
+        xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
+        std::fs::create_dir_all(scratch.join("scripts"))
+            .expect("create the fixture's scripts directory");
+        std::fs::copy(root.join(wrapper), scratch.join(wrapper)).expect("copy the wrapper");
+        // The library is the thing this direction removes — nothing else is planted, so the refusal is
+        // measured against the wrapper's own text rather than a rewrite of it.
+        let output = std::process::Command::new("bash")
+            .arg(scratch.join(wrapper))
+            .args(&invocation)
+            .current_dir(&scratch)
+            .output()
+            .expect("run the wrapper without its library");
+        let _ = std::fs::remove_dir_all(&scratch);
+        let stderr = String::from_utf8_lossy(&output.stderr);
         assert_eq!(
-            unjudged,
-            2,
-            "{wrapper} chooses the unjudged class at {unjudged} sites; exactly two may — the one class helper \
-             every refusal delegates to, and the gate's own verdict arm. Route the extras through that helper \
-             rather than spelling `printf … >&2; exit 2` again:\n{}",
-            shown()
+            output.status.code(),
+            Some(2),
+            "{wrapper} without its library is an input it could not read, not a gate that ran and refused: \
+             {stderr}"
         );
-        assert_eq!(
-            violation,
-            1,
-            "{wrapper} chooses the violation class at {violation} sites; exactly one may, and it is the gate's \
-             own verdict arm — every other stop is a fact this wrapper could not judge:\n{}",
-            shown()
+        assert!(
+            stderr.contains("cannot read the shared wrapper library"),
+            "{wrapper} must say which of its own two facts failed — the library is missing — rather than \
+             leaving bash's line alone to name it: {stderr}"
         );
     }
+}
+
+/// The library run as a command stops without reaching either class a wrapper reserves.
+///
+/// The guard exists so nobody executes the library by mistake; what makes it a guard rather than a sentence
+/// is that the file is **run** and its outcome asserted — a count of its `exit` text beside it passes while
+/// the guard's condition is false and the file runs to its definitions. Asserted on both halves of *stops
+/// without reaching a wrapper's classes*: the exit code, and the message that says what was run instead.
+#[test]
+fn a_library_run_as_a_command_stops_without_reaching_a_wrapper_s_classes() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let library = kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY;
+    let output = std::process::Command::new("bash")
+        .arg(root.join(library))
+        .output()
+        .expect("run the shared library directly");
+    assert!(
+        !output.status.success(),
+        "{library} run as a command succeeded, so its execution guard is not stopping it"
+    );
+    let code = output.status.code();
+    // Outside BOTH reserved classes, asserted rather than approximated: the guard answers a plain misuse,
+    // and this direction passing while the answer were `1` or `2` is the shape that let a comment redefine
+    // the class instead of the code leaving it.
+    assert!(
+        !matches!(code, Some(1 | 2)),
+        "{library} run as a command exited {code:?}, one of the two classes the wrappers reserve — a plain \
+         misuse is neither a gate that refused nor a wrapper that could not judge"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("not a wrapper itself"),
+        "{library} run as a command must say what to run instead, got: {stderr}"
+    );
 }
 
 #[test]
@@ -523,6 +648,11 @@ fn each_wrapper_uses_the_channel_the_gates_report_on() {
     let Some(root) = workspace_root() else {
         return;
     };
+    // The scalars are declared once, in the library the wrappers source — the extraction this file records
+    // — so a wrapper *carrying* one would be the definition site doubled. The comparison below therefore
+    // reads the library for the declaration and each wrapper for the one half that cannot move: the channel
+    // must still be opened for the gate from the wrapper's own invocation, because a shell cannot inherit a
+    // name into an environment-assignment prefix.
     for wrapper in WRAPPERS {
         let text = read(&root, wrapper);
         // **Only the scalar a wrapper actually READS is declared.** `GATE_VERDICT_ENV` was declared beside
@@ -535,32 +665,41 @@ fn each_wrapper_uses_the_channel_the_gates_report_on() {
         // gate produces; the clean class decides whether a *passing* run judged anything at all. The second
         // was missing while the gate wrote nothing on its clean arm, and a run that returned without judging
         // was indistinguishable from one that agreed.
-        for (name, expected) in [
-            (
-                "GATE_VIOLATION_CLASS",
-                verdict_channel::rendered(Kind::Violation),
-            ),
-            ("GATE_CLEAN_CLASS", verdict_channel::CLEAN.to_string()),
-        ] {
-            let declared = text
-                .lines()
-                .find_map(|line| line.trim().strip_prefix(&format!("{name}=")))
-                .unwrap_or_else(|| {
-                    panic!(
-                        "{wrapper} declares no `{name}`, so the class it reads off the channel rests on \
-                         nothing this check can compare"
-                    )
-                });
-            assert_eq!(
-                declared, expected,
-                "{wrapper} uses `{declared}` for {name} while `kanhe::verdict_channel` defines `{expected}`"
-            );
-        }
+        assert!(
+            !text.contains("GATE_VIOLATION_CLASS=") && !text.contains("GATE_CLEAN_CLASS="),
+            "{wrapper} declares a channel scalar itself, and the extraction put both in the shared library \
+             — a second declaration is the two-places-that-must-agree shape this file exists to remove"
+        );
         // The variable must actually be handed to the gate, not merely declared. Declared and unused would make
         // the file absent for every run, so every violation would report as unjudged.
         assert!(
             text.contains(&format!("{}=$verdict_file", verdict_channel::ENV)),
             "{wrapper} declares the channel and never opens it for the gate, so no verdict could ever arrive"
+        );
+    }
+    let text = read(&root, kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY);
+    for (name, expected) in [
+        (
+            "GATE_VIOLATION_CLASS",
+            verdict_channel::rendered(Kind::Violation),
+        ),
+        ("GATE_CLEAN_CLASS", verdict_channel::CLEAN.to_string()),
+    ] {
+        let declared = text
+            .lines()
+            .find_map(|line| line.trim().strip_prefix(&format!("{name}=")))
+            .unwrap_or_else(|| {
+                panic!(
+                    "{} declares no `{name}`, so the class the wrappers read off the channel rests on \
+                     nothing this check can compare",
+                    kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY
+                )
+            });
+        assert_eq!(
+            declared,
+            expected,
+            "{} uses `{declared}` for {name} while `kanhe::verdict_channel` defines `{expected}`",
+            kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY
         );
     }
 }
@@ -750,6 +889,14 @@ fn every_acquisition_is_guarded_so_the_tool_cannot_choose_the_class() {
 ///
 /// Without this the array is a second list beside the tree: a new wrapper would front a gate with its exit
 /// classes compared to nothing, while every direction above kept passing over the two it does name.
+///
+/// **The criterion is the lifecycle, not the `.sh` suffix.** What makes a script a wrapper is that it runs a
+/// gate and stands in front of the act, and since the extraction both wrappers say so the same way: they
+/// **source** [`WRAPPERS_SHARED_LIBRARY`]. Matched as the sourcing line rather than the bare name, because a
+/// comment or a message naming the library is not the act of loading it — this direction's own doc comment
+/// does exactly that, and a file walking the whole text would count it. The library itself fronts nothing, so
+/// it is subtracted by name: the alternative, matching the act and special-casing nothing, would count the
+/// definition site as a third wrapper forever.
 #[test]
 fn every_gate_running_wrapper_is_named() {
     let Some(root) = workspace_root() else {
@@ -768,7 +915,14 @@ fn every_gate_running_wrapper_is_named() {
     let fronting: Vec<&String> = tracked
         .iter()
         .filter(|path| path.ends_with(".sh"))
-        .filter(|path| read(&root, path).contains("require_one_pass"))
+        .filter(|path| path.as_str() != kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY)
+        .filter(|path| {
+            Source::of(read(&root, path)).shell().lines().any(|line| {
+                let line = line.trim_start();
+                (line.starts_with("source ") || line.starts_with("if ! source "))
+                    && line.contains("/scripts/wrapper.sh")
+            })
+        })
         .collect();
     let unnamed: Vec<&&String> = fronting
         .iter()
@@ -776,13 +930,13 @@ fn every_gate_running_wrapper_is_named() {
         .collect();
     assert!(
         unnamed.is_empty(),
-        "these wrappers sequence a gate and are not named by `WRAPPERS`, so their exit classes are compared to \
-         nothing: {unnamed:?}"
+        "these wrappers source the shared lifecycle and are not named by `WRAPPERS`, so their exit classes \
+         are compared to nothing: {unnamed:?}"
     );
     assert_eq!(
         fronting.len(),
         WRAPPERS.len(),
-        "`WRAPPERS` names {} script(s) while {} tracked script(s) sequence a gate",
+        "`WRAPPERS` names {} script(s) while {} tracked script(s) source the shared lifecycle",
         WRAPPERS.len(),
         fronting.len()
     );

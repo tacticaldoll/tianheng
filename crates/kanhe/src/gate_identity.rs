@@ -8,6 +8,13 @@
 use crate::refusal::{Refusal, cannot_judge_at, violation_at};
 use crate::region::Source;
 
+/// The one tracked script under `scripts/` that is not a wrapper: the shared library the wrappers source.
+///
+/// Declared once and named wherever a direction over the scripts would otherwise read it as a third wrapper —
+/// a citation it cannot carry, an exit-class site it must not be counted against. One name, not a pattern:
+/// a second library is a change to the requirement, not a row in a growing list.
+pub const WRAPPERS_SHARED_LIBRARY: &str = "scripts/wrapper.sh";
+
 /// One `--exact` citation found in a script: the identifier, and the invocation it belongs to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Citation {
@@ -198,22 +205,46 @@ pub fn offences(
 /// the requirement rather than one this check could not read. An empty corpus is the different fact, and it is
 /// the caller's to refuse — a set that never arrived is not a set in which every member cites a gate.
 ///
+/// **One named script is not a wrapper and carries no citation: the shared library.** `scripts/wrapper.sh`
+/// holds the lifecycle both wrappers are built on — the class helper, the ERR trap, the verdict channel, the
+/// two guards over the gate's run — and renders no verdict of its own, so the citation stays with the
+/// wrappers that source it. The exception is held **both ways**, because a one-way skip is how a named
+/// exemption silently widens: a citation appearing inside the library is refused rather than skipped, and a
+/// second library is a change to the requirement rather than a row in a growing exclusion list — the shape
+/// `repository-checks` names when it says a refusal an operator cannot act on is one they work around.
+///
 /// What this buys is the **shape**: a script deferring to nothing cannot exist. It is not a proof that a script
 /// which does defer does nothing else afterwards, and it does not try to be — deciding that from source text is
 /// the judgement over prose this repository has designed, measured three times and rejected.
 pub fn uncited_scripts<'a>(scripts: impl IntoIterator<Item = (&'a str, &'a str)>) -> Vec<Refusal> {
     scripts
         .into_iter()
-        .filter(|(path, text)| citations(path, text).is_empty())
-        .map(|(path, _)| {
-            violation_at(
-                "repository-checks#wrapper-cites-no-gate",
-                format!(
-                "{path}: names no gate by `--exact`, so it renders its own verdict rather than deferring to a \
-                 Rust check. Every tracked script here is a wrapper: it gathers evidence and orders the act, \
-                 and the judgement lives in `crates/kanhe`. A script that is not a wrapper belongs outside \
-                 `scripts/`, or this requirement is amended deliberately"
-            ))
+        .filter_map(|(path, text)| {
+            let cites = !citations(path, text).is_empty();
+            if path == WRAPPERS_SHARED_LIBRARY {
+                return cites.then(|| {
+                    violation_at(
+                        "repository-checks#the-shared-library-names-a-gate",
+                        format!(
+                            "{path}: carries a gate citation, and it is the shared library the wrappers \
+                             source — a citation here belongs to a wrapper, and adding one is a change to \
+                             the requirement, not content the exemption covers"
+                        ),
+                    )
+                });
+            }
+            (!cites).then(|| {
+                violation_at(
+                    "repository-checks#wrapper-cites-no-gate",
+                    format!(
+                        "{path}: names no gate by `--exact`, so it renders its own verdict rather than \
+                         deferring to a Rust check. Every tracked script here is a wrapper: it gathers \
+                         evidence and orders the act, and the judgement lives in `crates/kanhe`. A script \
+                         that is not a wrapper belongs outside `scripts/`, or this requirement is amended \
+                         deliberately"
+                    ),
+                )
+            })
         })
         .collect()
 }

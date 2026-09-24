@@ -1527,6 +1527,22 @@ consumer for an undemonstrated deduplication.
   release cut, in front of the two acts that cannot be undone. Promoting it is the first work of the window
   after this release rather than the last of this one.
 
+  **Extracted in the `0.7.0` window, the work this paragraph named.** `scripts/wrapper.sh` now holds the
+  lifecycle once — the class helper and the refusal idiom, the ERR trap, the verdict channel's scalars, the
+  two guards over the gate's run, and the verdict file's lifecycle — and each wrapper keeps only what only
+  it decides: its allowlist, its evidence, its gate, its verdict arm. The check did not stay a comparison of
+  two copies: `each_wrapper_chooses_its_exit_class_in_one_place` now counts the sites against the **one**
+  definition — the library carrying the unjudged class once, each wrapper carrying it twice (the bootstrap
+  guard for a library it cannot read, which is the one stop before the machinery exists, and its own verdict
+  arm) — so a second site is refused rather than kept in step. The library is the one named exception to
+  *every tracked script cites a gate*, held **both ways**: a citation appearing in it is refused, which the
+  exemption's first form did not hold. The extraction's own review caught the bootstrap half: an unguarded
+  `source` exits with `source`'s status — `1`, the violation class — and bash's ERR trap does not fire for
+  a failed `source`, measured while repairing it, so the guard speaks rather than traps and
+  `a_wrapper_without_its_library_is_the_unjudged_class` holds the class by running each wrapper from a tree
+  the library is absent from. What the entry's re-opening halves still watch is unchanged: a merge or
+  publish made outside the wrapper, and the publish-side re-read window cargo cannot yet close.
+
 - **ACCEPTED DEBT: A branch name is governed by prose alone, and the gate that would hold it is declined.**
   *Class:* ACCEPTED DEBT, re-classified 2026-09-01 when the trigger fired and the steward re-decided; WATCH
   until then, and the sentence that first declined a check was wrong about why. *Observed pressure:* `AGENTS.md` requires `<type>/<scope>-<slug>` with `<type>` drawn from

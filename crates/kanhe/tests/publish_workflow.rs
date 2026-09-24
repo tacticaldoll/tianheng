@@ -652,6 +652,11 @@ fn the_arrival_matrix_covers_every_argument_the_parser_forwards() {
 /// Held by planting a failure rather than by reading the script for `trap`: a text property would pass for a
 /// trap that never fires, and `set -E` — which is what makes it fire inside a function — is a second token a
 /// reader would have to remember to look for.
+///
+/// **The plant is in the wrapper, and the trap it measures moved to the library.** The wrapper sources the
+/// library through the tree's own root rather than its own directory, so the planted copy still runs under the
+/// real lifecycle — the arrangement the library exists to keep exact. A plant inside the library would instead
+/// measure every wrapper at once, which this direction does not ask.
 #[test]
 fn an_unguarded_failure_exits_the_unjudged_class() {
     let Some(root) = workspace_root() else {
@@ -662,17 +667,31 @@ fn an_unguarded_failure_exits_the_unjudged_class() {
     let _ = std::fs::remove_dir_all(&scratch);
     xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
 
+    // The plant goes into a copy of the wrapper sitting at `scripts/` beneath a fake root, which is where
+    // the wrapper's own `source` resolves the library from — so what runs is the wrapper's text under the
+    // real lifecycle, the arrangement the library exists to keep exact.
     let script =
         std::fs::read_to_string(root.join("scripts/publish.sh")).expect("read the wrapper");
     // Before the gate and after the trap: a command that fails, guarded by nothing. `false` rather than a
     // failing tool, so the direction is about the wrapper's own contract and not about any tool's behaviour.
-    let planted = script.replacen("verdict_file=$(mktemp)", "false\nverdict_file=$(mktemp)", 1);
+    // The site is the call that creates the verdict file, which the extraction made the library's own name
+    // for the moment — planting beside it lands after the trap exactly as planting beside the `mktemp` did.
+    let planted = script.replacen("open_verdict_file", "false\nopen_verdict_file", 1);
     assert_ne!(
         planted, script,
         "the plant site moved; this direction is judging an unmodified script"
     );
-    let path = scratch.join("planted.sh");
+    std::fs::create_dir_all(scratch.join("scripts"))
+        .expect("create the fixture's scripts directory");
+    let path = scratch.join("scripts/publish.sh");
     std::fs::write(&path, &planted).expect("write the planted wrapper");
+    // The library beside it is a copy rather than a symlink or a reference: the planted wrapper must owe
+    // nothing to the tree it was read from, or the direction measures the tree and not the text.
+    std::fs::copy(
+        root.join(kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY),
+        scratch.join(kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY),
+    )
+    .expect("place the shared library beside the planted wrapper");
 
     let output = Command::new("bash")
         .arg(&path)

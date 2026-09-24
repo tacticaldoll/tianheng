@@ -87,6 +87,20 @@ them.
 
 ### Self-governance
 
+- **The two irreversible-act wrappers now share one lifecycle, written once.** `scripts/wrapper.sh` carries
+  the exit-class helper and refusal idiom, the ERR trap, the verdict channel's scalars, the two guards over
+  the gate's run, and the verdict file's lifecycle; `merge-pr.sh` and `publish.sh` source it and keep only
+  their own allowlist, evidence, gate, and verdict arm. The exit-class check moved with it: instead of
+  comparing two agreeing copies it counts each definition against the one site. Two limits the extraction
+  opened are held by new directions rather than by review: a wrapper run without its library is the unjudged
+  class in its own voice (the one stop before the machinery exists, which bash's ERR trap cannot reach —
+  measured, the trap does not fire for a failed `source`), and the library run as a command answers the
+  plain-misuse code (`EX_USAGE`, 64), outside both classes the wrappers reserve, with the direction asserting
+  the code against both rather than only *not clean*. The library's exemption from *every tracked script
+  cites a gate* is held both ways: a citation appearing in it is refused. No product surface or verdict
+  changes; an invocation from a tree without the library now exits `2` naming the missing file, where the
+  first form exited `1` under `source`'s own status.
+
 - **The attribute-spelling differential now exercises absent module files.** A separate generated corpus
   checks bare `cfg`, raw-identifier `cfg`, and `cfg_attr` look-alikes against all three dimensions and rustc.
   It records the declared cfg-blind limit: a live bare predicate with no backing file fails in rustc, while
