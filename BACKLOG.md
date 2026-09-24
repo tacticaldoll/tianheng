@@ -66,59 +66,6 @@ consumer for an undemonstrated deduplication.
 
 ### ACCEPTED DEBT
 
-- **The bounds-method reader anchors on a whole-line occurrence that is not the definition.** *Class:*
-  ACCEPTED DEBT — **reclassified from READY-PATCH, which claimed a patch this entry's own Shape refutes.** All
-  three closures it names are refused there: literal adjacency to `impl Observer for` was measured against the
-  three real files and would refuse the real definitions; scope containment survives that and still admits a
-  perturbation wrapping the whole fake `impl` block; and reading what the compiler resolves needs Rust parsing
-  `kanhe`'s declared allowlist forbids. The remaining closure — a **shared** nested-span lexer serving this
-  reader and `region.rs`'s identical residue — exists as `guibiao::module_scan`, and `kanhe` may not depend on
-  圭表. Debt accepted with a declared bound and a named instrument it cannot reach is what ACCEPTED DEBT is
-  for; READY-PATCH said *someone may patch this now*. *Observed pressure:* the reader requires the signature to occur exactly once and at a line
-  start, and knows nothing of comments or literals. So where the definition has moved out of the inspected
-  file, any surviving **whole-line** copy anchors — reproduced with a block-comment copy, and again with a
-  copy inside a `&str` constant, both giving
-  `every_observer_declares_exactly_its_dimension_s_bounds ... ok`. *Observation source:* those two
-  perturbations, run during the closing review of the 0.5.0 window.
-  *Current reaction or bound:* the declared bound
-  `observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound`.
-  *Risk, measured rather than assumed:* **narrower than it first reads.** A *divergent* second list does not
-  pass — `observation-bound-model` reads every dimension through `Observer::bounds` and holds a bijection with
-  the specs, so a difference in membership or content fails `the_extent_projection_is_fresh` and the
-  classification test one capability over. What passes is a second, hand-maintained path that **agrees today**
-  and is maintained by hand from now on: re-run with a list rebuilt element by element from
-  `observation_bounds()`, the whole workspace suite is green. *Promotion trigger:* fired; both perturbations
-  are tree artefacts rather than reports. *Version class:* patch; a `tests/` reaction of this repository,
-  shipping in no crate. *Authority:* `observer-protocol`.
-
-  *Shape, with the corpus measured rather than borrowed:* comment stripping does **not** close this — a string
-  literal is not a comment — so the register's rejection of comment-delimiter lexing is not the reason here,
-  and citing it was wrong. This reader's corpus is the three files `DIMENSIONS` names, none of which carries a
-  string literal with a comment delimiter, so the register's measurement does not transfer in
-  either direction. Two candidate closures, **neither adopted, and neither actually closes the class** —
-  checked against the real corpus rather than left as an abstract choice. Requiring the anchor to be preceded
-  by an `impl Observer for` line was measured against the three real files and refuted as stated: every real
-  `fn bounds(&self)` sits several lines and one sibling method below its `impl Observer for` line (a doc
-  comment and `fn observe` come between them), so a literal adjacency rule would refuse the real definitions
-  too. A looser scope-containment version (nested inside *some* `impl Observer for … { … }` block, not
-  necessarily adjacent) survives that check, but only raises the bar rather than closing the class: a
-  perturbation that wraps the *whole* fake `impl Observer for` block — not just the `fn bounds` line — inside
-  the same comment or string would still be accepted, because a scope tracker blind to comments and literals
-  reads a fake `impl` line inside a comment exactly as it reads a real one. The other candidate — reading the
-  definition the compiler resolves rather than a textual condition — needs real Rust parsing, which `kanhe`'s
-  declared dependency allowlist (`AGENTS.self-law.md`) currently forbids; adopting it would first require
-  amending that law, not just this reader.
-
-  **Not a defect unique to this reader.** `crates/kanhe/src/region.rs`'s own `Executed` abstraction declares
-  the identical residue for the same reason (a `/\* … \*/` span and a string-literal marker both need
-  nested-span lexing this tree has "defeated repeatedly," in that module's own words) and cites this exact
-  bound as its precedent — the citation was one-directional until the 0.5.0 window closed it: see the
-  `observer-protocol` spec, now amended to cite `region.rs` back. Filing them separately let each be
-  rediscovered as a fresh problem; they are one class. If this is ever closed, the closure is a **shared**
-  nested-span lexer serving both sites, not a point patch to either — `guibiao::module_scan` already scans
-  nested block comments and is the instrument `region.rs`'s own doc comment names as existing if the residue
-  is ever worth closing.
-
 - **A hand-maintained pin has no mechanism keeping it from rotting — the action SHAs, and now the Node
   version.** *Class:* ACCEPTED DEBT.
   *Observed pressure:* pinning `.github/workflows/ci.yml`'s `uses:` entries to commits closed the one
@@ -630,6 +577,25 @@ consumer for an undemonstrated deduplication.
   spelling is the un-reacted-SHALL entry — which is also the only entry this reading found **fired**, so the
   single condition that mattered had to be taken from a heading rather than from a field.
 
+  **The reading of 2026-09-24, taken against the whole entry rather than its trigger field.** The corpus is
+  what landed on the release branch after the `v0.6.1` snapshot. One entry **fired**: the prose-claim entry,
+  whose sweep, run from the subject side, found set-membership claims false and is recorded there. One entry
+  had a **premise falsified** without its trigger firing, which a reading keyed to the trigger would have
+  passed: the bounds-method reader's acceptance rested on a parse `kanhe` was said not to reach, while its own
+  test file had parsed with it since before the `v0.6.1` snapshot — reclassified, and the reason this reading
+  read whole entries. A closed record's corpus was found narrower than its claim, and its residue is filed.
+  The rest were read against the delta and not fired, each against what its trigger names: the merge gate's
+  message rule, whose diff is a comment; the ambient-ignore control file, untouched, with no ignore-sensitive
+  read added anywhere; the citations added, every one on an ordinary scenario and so outside what a mutation
+  may name; published-crate sources, with no block comment added; the round-count command, still answering
+  the files it named; the workflow's step names, unchanged over the Definition of Done job; the Node support
+  window, not reached; the breaking marks, one per breaking entry with its migration; the prelude and the
+  shell's semantic accessor, untouched. Two were not observed and say so: the unreleased-version sweep waits
+  for the workspace version to move for release preparation, and the validator's payload was not opened.
+  One is a steward's call rather than a verdict — whether the MSRV literal the `msrv` job now carries is the
+  third hand-maintained pin the pin entry counts, when it is a floor held to `rust-version` rather than a
+  version tracking an upstream.
+
 - **A codename index for a defect lives in the half of the corpus `doc_provenance` declares out of scope,
   and the token that would find it is shared with a measurement that must stay.** *Class:* WATCH — the
   class is emptied and the emptying has no reaction behind it. *Observed pressure:* swept over every
@@ -811,6 +777,84 @@ consumer for an undemonstrated deduplication.
   patch; no crate is touched. *Authority:* `repository-checks`, and `AGENTS.md`'s carrier taxonomy row.
 
 ### READY-PATCH
+
+- **The bounds-method reader anchors on a whole-line occurrence that is not the definition.** *Class:*
+  READY-PATCH — **reclassified from ACCEPTED DEBT on 2026-09-24, because the closure its acceptance rested on
+  being unreachable is reached.** The debt was accepted on three closures refused, the third being *reading
+  what the compiler resolves needs Rust parsing `kanhe`'s declared allowlist forbids*. That allowlist restricts
+  `kanhe`'s normal edges only, `syn` is one of its dev-dependencies, and `observer_protocol.rs` already parses
+  the inspected file with it to find the anchored body. What that parse closed and what it left are under
+  *Premises re-measured 2026-09-24* at the end of this entry; the paragraphs between are the record that led
+  to the acceptance, kept as written. *Observed pressure:* the reader requires the signature to occur exactly once and at a line
+  start, and knows nothing of comments or literals. So where the definition has moved out of the inspected
+  file, any surviving **whole-line** copy anchors — reproduced with a block-comment copy, and again with a
+  copy inside a `&str` constant, both giving
+  `every_observer_declares_exactly_its_dimension_s_bounds ... ok`. *Observation source:* those two
+  perturbations, run during the closing review of the 0.5.0 window.
+  *Current reaction or bound:* the declared bound
+  `observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound`.
+  *Risk, measured rather than assumed:* **narrower than it first reads.** A *divergent* second list does not
+  pass — `observation-bound-model` reads every dimension through `Observer::bounds` and holds a bijection with
+  the specs, so a difference in membership or content fails `the_extent_projection_is_fresh` and the
+  classification test one capability over. What passes is a second, hand-maintained path that **agrees today**
+  and is maintained by hand from now on: re-run with a list rebuilt element by element from
+  `observation_bounds()`, the whole workspace suite is green. *Promotion trigger:* fired; both perturbations
+  are tree artefacts rather than reports. *Version class:* patch; a `tests/` reaction of this repository,
+  shipping in no crate. *Authority:* `observer-protocol`.
+
+  *Shape, with the corpus measured rather than borrowed:* comment stripping does **not** close this — a string
+  literal is not a comment — so the register's rejection of comment-delimiter lexing is not the reason here,
+  and citing it was wrong. This reader's corpus is the three files `DIMENSIONS` names, none of which carries a
+  string literal with a comment delimiter, so the register's measurement does not transfer in
+  either direction. Two candidate closures, **neither adopted, and neither actually closes the class** —
+  checked against the real corpus rather than left as an abstract choice. Requiring the anchor to be preceded
+  by an `impl Observer for` line was measured against the three real files and refuted as stated: every real
+  `fn bounds(&self)` sits several lines and one sibling method below its `impl Observer for` line (a doc
+  comment and `fn observe` come between them), so a literal adjacency rule would refuse the real definitions
+  too. A looser scope-containment version (nested inside *some* `impl Observer for … { … }` block, not
+  necessarily adjacent) survives that check, but only raises the bar rather than closing the class: a
+  perturbation that wraps the *whole* fake `impl Observer for` block — not just the `fn bounds` line — inside
+  the same comment or string would still be accepted, because a scope tracker blind to comments and literals
+  reads a fake `impl` line inside a comment exactly as it reads a real one. The other candidate — reading the
+  definition the compiler resolves rather than a textual condition — needs real Rust parsing, which `kanhe`'s
+  declared dependency allowlist (`AGENTS.self-law.md`) currently forbids; adopting it would first require
+  amending that law, not just this reader.
+
+  **Not a defect unique to this reader.** `crates/kanhe/src/region.rs`'s own `Executed` abstraction declares
+  the identical residue for the same reason (a `/\* … \*/` span and a string-literal marker both need
+  nested-span lexing this tree has "defeated repeatedly," in that module's own words) and cites this exact
+  bound as its precedent — the citation was one-directional until the 0.5.0 window closed it: see the
+  `observer-protocol` spec, now amended to cite `region.rs` back. Filing them separately let each be
+  rediscovered as a fresh problem; they are one class. If this is ever closed, the closure is a **shared**
+  nested-span lexer serving both sites, not a point patch to either — `guibiao::module_scan` already scans
+  nested block comments and is the instrument `region.rs`'s own doc comment names as existing if the residue
+  is ever worth closing.
+
+  **Premises re-measured 2026-09-24.** Both perturbations named under *Observed pressure* now decline rather
+  than read: `ANCHOR_CASES` carries the block-comment and string-literal copies as `Verdict::Declines`, because
+  no function starts inside either and the body is taken from the function a parse finds at the anchor. So the
+  shared nested-span lexer above is no longer this reader's closure — `region.rs` keeps its residue, as library
+  code under the normal-edge law, and this reader does not share it. What remains is the table's one
+  `ReadsTheWrongBody` row: a real method of the same signature on an unrelated `impl`, with the `Observer`
+  definition moved out of the file. The declared bound, its spec scenario and both projections now name that
+  shape alone. *Shape:* take the body only from a function inside an `impl` whose trait path ends in
+  `Observer` — the visitor that finds the body already walks the `impl` items, so this is a condition on a
+  walk that exists rather than a new reader — and retire the bound in the same change. *Promotion trigger:*
+  fired, as above. *Version class:* patch; a `tests/` reaction shipping in no crate.
+
+- **The merge-workflow fixture still hand-rolls the unreadable-file check that `xingbiao::Unreadable` closed
+  elsewhere.** *Class:* READY-PATCH. *Observed pressure:* `crates/kanhe/tests/merge_workflow.rs` makes a body
+  file unreadable with `set_mode(0o000)` and asks its own `mode_is_enforced()` probe whether the mode binds,
+  and `an_unreadable_body_file_is_unjudgeable_rather_than_an_empty_body` returns when it does not — under
+  `TIANHENG_WORKSPACE_TESTS` as outside it. That is the policy the closed record says was converged: a silent
+  skip inside the exhaustive suite reads as coverage. *Observation source:* `git grep -n '0o000' -- '*.rs'`,
+  run over the whole tree rather than for the one spelling the closing sweep used. *Current reaction or
+  bound:* none; the direction passes under a privileged user without having run. *Risk:* the unreadable-body
+  class goes unjudged wherever the suite runs as root, and says nothing. *Promotion trigger:* fired — the
+  instance is in the tree. *Shape:* make the fixture's file through `xingbiao::Unreadable` and let its
+  `TIANHENG_WORKSPACE_TESTS` policy decide, keeping the direction's own-probe property, which its comment
+  records a reason for. *Version class:* patch; a `tests/` fixture shipping in no crate. *Authority:* the
+  closed record under *Closed — reproduction records*.
 
 - **The ambient-ignore guard reads files where its property belongs to call sites, and says something false
   when one file holds both kinds.** *Class:* READY-PATCH — measured, and the correction touches no published
@@ -3482,6 +3526,10 @@ cannot read as a queue holding work that is already done.
   `per_target_corpus` direction, which omitted the check, and the sweep of `from_mode(0o000)` across
   `crates/` that followed.
   *Closed by:* `xingbiao::Unreadable`, restoring permissions on drop and asserting under `TIANHENG_WORKSPACE_TESTS`.
+  *The closure's corpus was narrower than its claim, read 2026-09-24:* its sweep was `from_mode(0o000)`, and
+  `crates/kanhe/tests/merge_workflow.rs` spells the same act `set_mode(0o000)`, with a hand-written
+  `mode_is_enforced()` probe beside it. The residue is a live entry under READY-PATCH — *the merge-workflow
+  fixture still hand-rolls the unreadable-file check* — rather than an open question kept here.
 
 ## Explicitly not on the roadmap
 

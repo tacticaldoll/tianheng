@@ -476,12 +476,13 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             BoundId::new(
                 "observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound",
             ),
-            "a whole-line signature copy — commented, in a string literal, or otherwise — with the definition moved out of the inspected source",
+            "a same-named method on an unrelated impl, with the definition moved out of the inspected source",
             Extent::Reached(Reached::UnderReacts {
-                because: "the reader knows nothing of comments or literals, so one whole-line occurrence \
-                          anchors whatever follows it; what passes is a second hand-maintained path that \
-                          agrees today, since a divergent one is caught by observation-bound-model's \
-                          bijection over Observer::bounds — measured both ways"
+                because: "the anchor is the unique line-start occurrence and the body is the function a parse \
+                          finds starting there, so a real method of the same name is read as the Observer's; \
+                          what passes is a second hand-maintained path that agrees today, since a divergent \
+                          one is caught by observation-bound-model's bijection over Observer::bounds — \
+                          measured both ways"
                     .into(),
                 owner: Owner::Engine,
             }),
