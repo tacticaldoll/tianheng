@@ -194,6 +194,27 @@ fn a_script_citing_a_gate_is_a_wrapper() {
     assert!(uncited_scripts([("scripts/merge-pr.sh", invocation("the_gate").as_str())]).is_empty());
 }
 
+/// The named library is exempt while it cites nothing, and **refused when it starts to** — the two halves
+/// of the exemption, held together so the skip cannot silently widen into accepting a gate it defers.
+#[test]
+fn the_shared_library_is_exempt_only_while_it_defers_nothing() {
+    let library = crate::gate_identity::WRAPPERS_SHARED_LIBRARY;
+    // Citing nothing is the state the exemption is for.
+    assert!(
+        uncited_scripts([(library, "#!/usr/bin/env bash\nset -eu\n")]).is_empty(),
+        "the library defers nothing, so nothing is owed"
+    );
+    // A citation appearing inside it is a change to the requirement, refused rather than skipped.
+    let refusals = uncited_scripts([(library, invocation("the_gate").as_str())]);
+    assert_eq!(refusals.len(), 1, "{refusals:?}");
+    assert_eq!(refusals[0].kind, Kind::Violation);
+    crate::refusal::expect(
+        "repository-checks#the-shared-library-names-a-gate",
+        &refusals[0],
+    );
+    assert!(refusals[0].message.contains(library));
+}
+
 /// A script citing nothing renders its own verdict, and is named.
 #[test]
 fn a_script_citing_no_gate_is_named() {

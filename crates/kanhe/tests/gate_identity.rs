@@ -38,32 +38,9 @@ fn run(root: &Path, args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&out.stdout).to_string())
 }
 
-/// Every tracked shell script and its text, enumerated once for the two directions that read it.
-///
-/// One implementation because two would be two enumerations that must agree, and a script the second forgot
-/// would be judged by one direction and not the other — which is the granularity defect this file's newer
-/// direction exists to close, reintroduced one level up.
+/// Every tracked script and its text, from the one enumeration every direction over the scripts reads.
 fn tracked_scripts(root: &Path) -> Vec<(String, String)> {
-    let listing = kanhe::hermetic_git::tracked_paths(root, &["scripts/"]).expect(
-        "the tracked scripts are enumerable; a failed enumeration returns exactly what a repository holding \
-         no scripts returns, and reporting that as clean is the vacuity direction",
-    );
-    let scripts: Vec<String> = listing
-        .into_iter()
-        .filter(|path| path.ends_with(".sh"))
-        .collect();
-    assert!(
-        !scripts.is_empty(),
-        "no tracked shell script was enumerated, so this check would report clean over nothing"
-    );
-    scripts
-        .into_iter()
-        .map(|script| {
-            let text = std::fs::read_to_string(root.join(&script))
-                .unwrap_or_else(|err| panic!("cannot read tracked {script}: {err}"));
-            (script, text)
-        })
-        .collect()
+    kanhe::gate_identity::tracked_scripts(root).unwrap_or_else(|why| panic!("{why}"))
 }
 
 /// Every tracked script defers its verdict to a gate it names.
@@ -75,8 +52,8 @@ fn tracked_scripts(root: &Path) -> Vec<(String, String)> {
 /// sibling covered for all the rest.
 ///
 /// Holding this closes `scripts/` as a category. A tracked script that is not a wrapper cannot be added while
-/// it stands, which is what `repository-checks` already claims when it says `git ls-files scripts/` names only
-/// wrappers — the claim is now held rather than written.
+/// it stands, which is what `repository-checks` already claims when it says `git ls-files scripts/` names the
+/// two wrappers and the one shared library they source — the claim is held rather than written.
 #[test]
 fn every_tracked_script_defers_its_verdict_to_a_gate() {
     let Some(root) = workspace_root() else {

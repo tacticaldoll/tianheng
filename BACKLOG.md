@@ -1527,6 +1527,19 @@ consumer for an undemonstrated deduplication.
   release cut, in front of the two acts that cannot be undone. Promoting it is the first work of the window
   after this release rather than the last of this one.
 
+  **Extracted in the `0.7.0` window, the work this paragraph named.** `scripts/wrapper.sh` now holds the
+  lifecycle once — the class helper and the refusal idiom, the ERR trap, the verdict channel's scalars, the
+  two guards over the gate's run, the verdict file's lifecycle, and the failing path of a gate's run — and
+  each wrapper keeps only what only it decides: its allowlist, its evidence, its gate. The exit codes are
+  owned by `kanhe::verdict_channel` and declared once in the library against it, and
+  `each_wrapper_chooses_its_exit_class_in_one_place` refuses any `exit` that names no declared code, so a
+  second site is refused rather than kept in step. The library is the one named exception to *every tracked
+  script cites a gate*, held **both ways**: a citation appearing in it is refused. The bootstrap half —
+  an unguarded `source` exits with `source`'s status, `1`, and bash's ERR trap does not fire for a failed
+  `source` — is held by `a_wrapper_without_its_library_is_the_unjudged_class`, which runs each wrapper from
+  a tree the library is absent from. What the entry's re-opening halves still watch is unchanged: a merge or
+  publish made outside the wrapper, and the publish-side re-read window cargo cannot yet close.
+
 - **ACCEPTED DEBT: A branch name is governed by prose alone, and the gate that would hold it is declined.**
   *Class:* ACCEPTED DEBT, re-classified 2026-09-01 when the trigger fired and the steward re-decided; WATCH
   until then, and the sentence that first declined a check was wrong about why. *Observed pressure:* `AGENTS.md` requires `<type>/<scope>-<slug>` with `<type>` drawn from

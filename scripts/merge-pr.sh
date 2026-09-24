@@ -26,6 +26,25 @@
 # A merge made in the GitHub web UI reaches no wrapper at all; that is a declared bound, not an oversight.
 set -Eeuo pipefail
 
+WRAPPER_SUBJECT='merge message'
+# The lifecycle this wrapper is built on: the two exit classes and the one helper that chooses them, the
+# ERR trap, the verdict file's lifecycle, and the two guards over the gate's run. It lived twice and the
+# copies agreed by maintenance; it is written once now, and what stays below is what only this wrapper
+# decides — the allowlist, the evidence, the gate, and the merge. Resolved through the tree the wrapper names,
+# so a copy of this file planted outside the tree — a direction's fixture — answers *library not found*
+# rather than judging under no lifecycle.
+#
+# **The one acquisition the shared machinery cannot guard is the one that loads it.** `cannot_judge` is the
+# library's, so a `source` that fails has nowhere to delegate to, and unguarded under `set -e` it exits with
+# `source`'s own status — `1`, the class that means a gate ran and refused. Measured on bash 5: the ERR trap
+# does not fire for a failed `source` (it does for a bare failing command), so the guard prints the refusal
+# itself rather than trapping. `a_wrapper_without_its_library_is_the_unjudged_class` holds the class by
+# running this wrapper with the library removed.
+if ! source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)/scripts/wrapper.sh"; then
+    printf '%s: cannot read the shared wrapper library, so the gate it must install before `gh pr merge` cannot be located — which is not the same fact as a gate that ran and refused\n' "$WRAPPER_SUBJECT" >&2
+    exit 2
+fi
+
 # **Ambient repository selectors are cleared before anything reads a repository.**
 #
 # `GIT_DIR`, `GIT_WORK_TREE` and `GIT_INDEX_FILE` move WHICH repository a git command acts on, past
@@ -57,38 +76,6 @@ usage() {
     printf '  The subject defaults to the pull request title, which is what the rule requires anyway.\n' >&2
 }
 
-# --- the two exit classes, chosen in one place ------------------------------------------------------------
-#
-# `2` is everything this wrapper could not judge: a misconfigured invocation, and an input it could not read.
-# `1` is a gate that ran and refused. The contract is this repository's own — `crates/shengmo/src/law.rs`:
-# *0 clean, 1 violation, 2 constitution/usage error* — and its sibling `scripts/publish.sh` states the rule for
-# arguments already.
-#
-# **Five could-not-read conditions were split across both classes with no rule.** An unresolvable repository
-# exited 2 while an unreadable body file, an unreadable head, an unresolvable pull-request number and an
-# unreadable commit set exited 1. Two of those facts are ones the gate this wrapper fronts types the other way:
-# `merge_message_gate::judge` returns cannot-judge for an unavailable title and for unavailable commit subjects,
-# because "which is not the same fact as a subject that disagrees". So the wrapper reported as a disagreement
-# what its own gate calls unjudgeable — telling an operator, in the words of the sibling publish gate, "to go
-# looking for a disagreement that does not exist".
-#
-cannot_judge() {
-    printf 'merge message: %s\n' "$1" >&2
-    exit 2
-}
-
-# The refusal idiom, delegating the class to the function above rather than choosing it again.
-#
-# **Converging the `case` arms onto this helper left four sites behind, and two of them predated it.** The
-# positional selector and the body-file guard exited through a bare `usage; exit 2` carrying none of the
-# prefix above; the URL refusal hand-copied that function's body because both helpers were defined below it;
-# and `require_value` re-spelled it fifty-nine lines after it. Every stop now delegates, and what decides that
-# is `each_wrapper_chooses_its_exit_class_in_one_place` rather than the next reader — a helper's existence was
-# never the property, since three of those four sites were written with it in scope.
-refuse() {
-    cannot_judge "refusing \`$1\`: $2"
-}
-
 # A misconfigured invocation: the same class, plus the usage line, since what the operator needs here is the
 # shape of the call rather than a fact about the pull request.
 #
@@ -118,27 +105,9 @@ repository it is run in. Pass the number, or run it from a checkout of that repo
 fi
 shift
 
-# **The class a wrapper exits is now decided by construction, not by a sweep that must be exhaustive.**
-#
-# Under `set -e` any unguarded failure exits with the TOOL's status, and this repository reserves `1` for a
-# gate that ran and refused. Two sweeps were widened to catch that — first by tool name, then by command
-# substitution — and a bare `cd` walked through both, because the axis was never *which shape the statement
-# has*: it is *any statement whose failure can choose the class*. That is every command, which is why
-# enumerating them is the wrong instrument. Enumerating what may exit `1` is the right one, and there is
-# exactly one such statement: the gate's own verdict arm.
-#
-# Measured on bash 5.x rather than reasoned about. A bare failure traps and exits 2, including a failed `cd`.
-# A `||`-guarded command does not trap, so every existing guard still decides its own outcome. A failure in a
-# condition — `if`, `while`, `!`, `&&` — does not trap, so the `grep -q` that checks the gate ran is
-# unaffected. An explicit `exit 1` is not intercepted, so the gate's verdict still reaches the caller. `set -E`
-# is required and is not optional: without it a failure inside a function exits 1 and the trap never sees it.
-trap 'cannot_judge "an unguarded command failed, so this wrapper stopped without reaching a verdict — which is not the same fact as a gate that ran and refused"' ERR
-
-# This wrapper's own root, from which the gate is run — acquired after `cannot_judge` rather than at the top
-# of the file, because it is an acquisition like any other and must report the class that function defines.
-# Unguarded it was the one statement `set -e` answered for: a failed `cd` exits 1, so a wrapper that never
-# found its gate would have reported the class that means the gate ran and refused.
-repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd) || cannot_judge \
+# This wrapper's own root, from which the gate is run. The helper in the shared library owns the
+# acquisition and its guard; the message this wrapper adds is only what its own act would lose without it.
+repo=$(wrapper_own_root) || cannot_judge \
     "cannot resolve this wrapper's own root from ${BASH_SOURCE[0]}, so the gate it must run before reaching \
 \`gh pr merge\` cannot be located — which is not the same fact as a gate that ran and refused"
 
@@ -167,6 +136,11 @@ fi
 subject=""
 body_file=""
 passthrough=()
+# The ERR trap is installed BEFORE the parser, so an unguarded failure inside it — the shape the
+# `require_value` paragraph below measures — is read as the cannot-judge it is rather than as the class a
+# gate's refusal owns. The bootstrap guard above speaks for the one statement it covers, because an ERR trap
+# does not fire for a failed `source`; this one covers everything after.
+install_exit_class_trap
 # A value-taking flag given no value is an OBSERVABLE misconfiguration, so it fails loud. Before this it failed
 # silent: `shift 2` with one argument left returns non-zero, `set -e` took that as the exit, and the wrapper
 # stopped with no output at all — while every other refusal below prints `merge message: …`. Reproduced by
@@ -418,42 +392,6 @@ fi
 
 # The gate. A failure aborts before the merge, which is the point: the record below cannot be amended.
 
-# The channel the gate reports its refusal class on, and the class that means a disagreement.
-#
-# Both are held against `kanhe::verdict_channel` by `crates/kanhe/tests/gate_exit_classes.rs`, so neither the
-# variable name nor the class spelling can drift from the gate's side.
-#
-# **This replaced grepping the gate's output.** Searching stdout for `(Violation)` put the parentheses in this
-# script and the variant name in Rust — two owners for one token — and measured, changing the gate's format
-# string left every direction green while this pattern matched nothing, so every violation would have reported as
-# unjudged. It also searched a stream carrying arbitrary tooling output, where a class could be read from text no
-# judgement wrote. A file the gate writes only when it has a verdict makes *absent* mean unjudged by
-# construction.
-GATE_VIOLATION_CLASS=Violation
-# The class a gate reports when it JUDGED AND AGREED, and the guard that requires it on the success path.
-#
-# **`require_one_pass` answers a different question and cannot cover this one.** It asks *did the selected
-# test pass* — which a harness that returned without judging satisfies, and one did: a subject supplied as
-# bytes the gate could not read took an arm that printed "not judged" and returned, so `1 passed` was true
-# and nothing had been judged. The two guards catch different states and both stay: `require_one_pass` sees a
-# renamed test (nothing ran), this sees a test that ran, passed, and reached no verdict.
-#
-# The gate now writes the channel on its clean arm too, so *absent on success* means unjudged by
-# construction rather than by a wrapper remembering to check. Held against `kanhe::verdict_channel::CLEAN` by
-# `crates/kanhe/tests/gate_exit_classes.rs`, so neither spelling can drift from the gate's side.
-GATE_CLEAN_CLASS=Clean
-
-require_a_verdict() {
-    local reached=""
-    if [[ -f $verdict_file ]]; then
-        reached=$(cat -- "$verdict_file") || reached=""
-    fi
-    if [[ $reached != "$GATE_CLEAN_CLASS" ]]; then
-        cannot_judge \
-            "the gate ran and passed without reaching a verdict — the channel carries ${reached:-nothing}, and a run that judged nothing is not a run that agreed. This is the class a passing test cannot distinguish on its own, which is why it is read rather than inferred"
-    fi
-}
-
 # The other suite: what CI said about this pull request's head.
 #
 # **Measured, this wrapper merged nineteen consecutive red runs.** Every local gate reported green each time —
@@ -604,35 +542,7 @@ not in it. Check that the branch you pushed is the branch holding the commits"
     fi
 }
 
-verdict_file=$(mktemp) || cannot_judge \
-    "cannot open a file for the gate to report its refusal class on, so a failing gate could not be told from \
-an input it could not read"
-trap 'rm -f "$verdict_file"' EXIT
-
-# `libtest` exits 0 when `--exact` selects no test — measured, an unknown name reports `0 passed` and exits 0,
-# and an `#[ignore]`d one reports `0 passed; 1 ignored` and exits 0 too. So the exit status answers *did the
-# selected tests pass* while the question here is *did the gate judge this act*, and those differ exactly when
-# a rename has quietly happened. Require the run to say it judged one thing.
-#
-# Asserted here rather than inside the gate: a renamed or silenced test cannot report that it did not run.
-#
-# A gate that did not run is a cannot-judge, so this exits 2. It reads as the sharpest case of the class: the
-# message says *the gate did not run* in so many words, and reporting that as a violation names a disagreement
-# no judgement ever formed.
-require_one_pass() {
-    local output=$1
-    # A here-string, not a pipe. `grep -q` exits at its first match, and under `set -o pipefail` the
-    # `printf` upstream takes SIGPIPE and that becomes the pipeline's status — so this would report *the
-    # gate did not run* for a closed pipe, immediately before an irreversible act. Measured: with the token
-    # at the end of a 405 KB stream, which is where a `cargo test` summary sits, 0 of 8 runs returned
-    # non-zero; with the same token near the start, 8 of 8 did. Both wrappers were holding by where the
-    # token happened to sit, which nothing declares and nothing keeps true.
-    if ! grep -qE 'test result: ok\. 1 passed' <<< "$output"; then
-        printf '%s\n' "$output" >&2
-        cannot_judge \
-            "the gate did not run — its invocation selected no passing test, so the name in this script no longer names one. libtest exits 0 for a filter that matches nothing, which is why this is checked rather than trusted"
-    fi
-}
+open_verdict_file
 
 # The pull request's own LIVE commit subjects, so the gate can ask whether this body *is* their concatenation
 # rather than whether it looks like one. Local remote-tracking refs can lag the pull request or carry no fork
@@ -657,17 +567,7 @@ gate_output=$(TIANHENG_GATE_VERDICT=$verdict_file \
     TIANHENG_MERGE_HEAD=$head_branch \
     cargo test --manifest-path "$repo/Cargo.toml" -p kanhe --test merge_message \
     -- --exact the_squash_message_is_the_pull_request_it_records 2>&1) || {
-    printf '%s\n' "$gate_output" >&2
-    # The class the gate reported, on the channel it was given. Absent, empty or anything else is a run that
-    # reached no verdict — a compile error included — and that is not a disagreement.
-    verdict=""
-    if [[ -f $verdict_file ]]; then
-        verdict=$(cat -- "$verdict_file") || verdict=""
-    fi
-    if [[ $verdict == "$GATE_VIOLATION_CLASS" ]]; then
-        exit 1
-    fi
-    exit 2
+    exit_for_the_gates_refusal "$gate_output"
 }
 require_one_pass "$gate_output"
 require_a_verdict

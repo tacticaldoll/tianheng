@@ -8,7 +8,7 @@ deliberately does not reach, and none of them is product.
 
 This capability replaces `gate-shape-contract`, which specified the pairing of a `scripts/check_*.sh` gate
 with a `scripts/test_*.sh` twin and the exit contract between them. That subject no longer exists —
-`git ls-files scripts/` names only wrappers, no gate — and its
+`git ls-files scripts/` names the two wrappers and the one shared library they source, no gate — and its
 check had reached the vacuity its own bounds warned about, enumerating **zero** gates, projecting
 `0 gates, 11 properties each`, and reporting clean over all of it.
 
@@ -957,7 +957,7 @@ every statement to be guarded makes the obligation as large as the script. Two s
 hold it — first by tool name, then by command substitution — and a bare `cd` walked through both, because the
 axis was never which shape a statement has. A wrapper SHALL therefore install an `ERR` trap reporting the
 unjudged class, with `set -E` so it reaches failures inside functions, leaving exactly one statement able to
-exit `1`: the arm carrying the gate's verdict. Measured on bash 5: a bare failure traps, a `||`-guarded
+exit `1`: `exit_for_the_gates_refusal`, the library's arm carrying the gate's verdict. Measured on bash 5: a bare failure traps, a `||`-guarded
 command does not, a failure in an `if`/`while`/`!`/`&&` condition does not, and an explicit `exit 1` is not
 intercepted.
 
@@ -1186,7 +1186,34 @@ diagnostics they carry, but they SHALL decide nothing the default refusal would 
 
 A sanctioned wrapper SHALL exit `1` — the violation class — **only** where a gate ran and reported a
 disagreement. Every other stop SHALL exit `2`: a misconfigured invocation, an input the wrapper could not read,
-and a gate that did not run. The classification SHALL be chosen in one place per wrapper rather than at each site.
+and a gate that did not run.
+
+**The lifecycle the two wrappers share SHALL be written once, in a library they source.** The classification,
+the ERR trap, the verdict channel's scalars, the two guards over the gate's run, and the verdict file's
+lifecycle SHALL each have **one definition site**, `scripts/wrapper.sh` — not two copies that agree: measured,
+the copies did agree and were kept agreeing by review alone, which is the drift a seam exists to end. What each
+wrapper keeps is what only it decides: its allowlist, its evidence, and its gate. The failing path of a
+gate's run is identical for both, so it is the library's too: each wrapper routes its gate's failure to
+`exit_for_the_gates_refusal` from the `|| {` of the statement that runs the gate, and that function exits the
+violation class only for a `Violation` the gate wrote on its channel. The library is sourced, never executed:
+it installs the wrappers' machinery into the caller and renders no verdict of its own, and a direction SHALL
+hold it to that by **running** it — run as a command, it stops with the plain-misuse code
+`kanhe::verdict_channel::LIBRARY_MISUSE` owns, in a message that says what to run instead. That code SHALL be
+neither class `kanhe::verdict_channel::wrapper_exit` returns, held beside the enumeration of `refusal::Kind`.
+
+**Every exit code SHALL be owned in Rust and read in the shell.** `kanhe::verdict_channel` owns the codes —
+`wrapper_exit` for the two classes, by an exhaustive match over `refusal::Kind`, and `LIBRARY_MISUSE` — and
+the library SHALL declare one `WRAPPER_EXIT_<NAME>` per code, each held equal to its owner by a repository
+check. Every `exit` in the library and the wrappers SHALL name one of those declarations, and each code SHALL
+be chosen at one site; the one literal SHALL be each wrapper's bootstrap guard, which runs before the library
+is loaded and whose code the direction running it holds against `wrapper_exit`.
+
+**The `source` that loads the library is the one stop before that machinery exists, and it SHALL be the
+unjudged class in the wrapper's own voice.** A missing or unreadable library is an input the wrapper could
+not read, yet unguarded it exits with `source`'s own status — measured, `1`, the violation class — and bash's
+ERR trap does not fire for a failed `source` at all, which is why the guard SHALL print its refusal rather
+than trap. A direction SHALL hold the class and the message by running each wrapper from a tree the library
+is absent from.
 
 **A gate that did not run belongs to the unjudged class, however loudly its message says so.** The distinction is
 already typed where the judgement lives: `refusal::Kind` separates a source that disagrees from one that could
@@ -1199,9 +1226,12 @@ already refuses.
 the gate to report its class on; the gate SHALL write it at the moment it has a verdict and before it fails; and
 the wrapper SHALL read that file rather than searching the gate's output. An absent, empty or unrecognised value
 SHALL be the unjudged class, so a run that reached no verdict — a compile failure included — is unjudged by
-construction rather than by a default. The variable name and the class spelling SHALL each be defined once and
-compared against the wrappers by a repository check, and a direction SHALL hold that each gate reports before it
-fails — the scalars can agree while no gate ever writes, which leaves every failing gate reading as unjudged.
+construction rather than by a default. The variable name and the class spelling SHALL each be defined once —
+in the shared library — and compared against `kanhe::verdict_channel` by a repository check, and a direction
+SHALL hold that each gate reports before it fails — the scalars can agree while no gate ever writes, which
+leaves every failing gate reading as unjudged. A wrapper SHALL NOT declare either scalar itself: the channel
+it opens for the gate is the half that cannot move, and a second declaration beside the library's is the
+two-places-that-must-agree shape this family deletes on sight.
 
 **A channel that was opened and cannot be written SHALL fail the gate loudly**, naming the path and the error.
 Absence is the unjudged class, and a discarded write outcome gives absence a second cause — a verdict the gate
@@ -1225,6 +1255,33 @@ judged.
 - **WHEN** the verdict that could not be delivered is a refusal
 - **THEN** the wrapper still reads the unjudged class and exits `2` — the channel is absent either way, so the
   gate's own output is what distinguishes a verdict lost from a verdict never reached
+
+#### Scenario: The shared library run as a command
+
+- **WHEN** `scripts/wrapper.sh` is executed directly rather than sourced
+- **THEN** it stops with the misuse code `kanhe` owns, saying what to run instead; a count of its `exit` text
+  would pass while the guard's condition is false, so the file is **run** and the code compared with its owner
+- **PINNED-BY** `a_library_run_as_a_command_stops_without_reaching_a_wrapper_s_classes`
+
+#### Scenario: The misuse code collides with a class
+
+- **WHEN** `LIBRARY_MISUSE` equals a code `wrapper_exit` returns for some `refusal::Kind`
+- **THEN** the check fails naming the kind it would be read as
+- **PINNED-BY** `the_library_misuse_code_is_outside_every_wrapper_class`
+
+#### Scenario: An exit names a code nothing owns
+
+- **WHEN** the library or a wrapper exits with a numeral outside the bootstrap guard, a bare `exit`, or a
+  variable that is not a declared `WRAPPER_EXIT_<NAME>`
+- **THEN** the check fails naming the site, and a declared code chosen at a second site fails the same way
+- **PINNED-BY** `each_wrapper_chooses_its_exit_class_in_one_place`
+
+#### Scenario: A wrapper whose library cannot be read
+
+- **WHEN** a sanctioned wrapper is run from a tree that has no `scripts/wrapper.sh`
+- **THEN** it exits the unjudged class naming the missing library in its own voice, before any evidence is
+  read or gate is run — an input it could not read, never the class that means a gate refused
+- **PINNED-BY** `a_wrapper_without_its_library_is_the_unjudged_class`
 
 Reading the class out of the gate's output was the first attempt and it was the wrong channel twice over. It put
 the delimiter in the shell and the variant name in Rust, so a check pinning the rendering's *arguments* stayed
@@ -1253,7 +1310,8 @@ could not fail.
 **Every acquisition SHALL be guarded.** An unguarded command substitution under `set -e` exits with the *tool's*
 status and only the tool's stderr, so the class reported is neither of the two the wrapper defines and the
 operator receives the tool's words for a fact about the wrapper. Measured: a failing commits read left the merge
-wrapper exiting `91` in silence.
+wrapper exiting `91` in silence. The corpus SHALL include the shared library, whose functions run inside each
+wrapper, so an acquisition written there chooses the class exactly as one written in a wrapper would.
 
 A direction holding any of these stops SHALL assert the **class**, not merely that the wrapper failed. Asserting
 non-zero cannot see `1` from `2`, which is how five could-not-read conditions were split across both classes while
@@ -1692,25 +1750,38 @@ require the run to report exactly one passing test, and SHALL surface what it sa
 A renamed or `#[ignore]`d test cannot report that it did not run, so a guard the disarming disables is not a
 guard.
 
-**The cited identity SHALL be pinned by a check.** For every tracked shell script, each `--exact <ident>`
+**The cited identity SHALL be pinned by a check.** For every tracked file under `scripts/`, each `--exact <ident>`
 SHALL be joined to the `--test <target>` of the same invocation, and that target SHALL register `<ident>`
 exactly once. A test identifier is a reference into this repository exactly as a path is, and the reference
 gate matches paths only.
 
-**Every tracked script SHALL carry at least one such citation, and that SHALL be held per script.** A script
-citing no gate renders its own verdict, which is the shape this capability's Purpose refuses and the shape its
-retired predecessor described in full: `check_*.sh` gates paired with `test_*.sh` twins over a shared shell
-library, 1562 lines of it — a figure measured when that shell was deleted and standing as a record of that
-moment, not a census: no reaction produces it, and the set it counted no longer exists. The direction that
-enumerates the scripts folded every citation into one list and
+**Every tracked script SHALL carry at least one such citation, and that SHALL be held per script — with one
+named exception.** A script citing no gate renders its own verdict, which is the shape this capability's
+Purpose refuses and the shape its retired predecessor described in full: `check_*.sh` gates paired with
+`test_*.sh` twins over a shared shell library, 1562 lines of it — a figure measured when that shell was
+deleted and standing as a record of that moment, not a census: no reaction produces it, and the set it
+counted no longer exists. The direction that enumerates the scripts folded every citation into one list and
 asserted that **list** was non-empty, so a script contributing nothing was invisible while any sibling
 contributed something — the whole way back was open, and the enumeration that would have seen it was already
 running.
 
+The exception is `scripts/wrapper.sh`, the shared library above: it carries no citation because it defers
+nothing — the wrappers that source it name their own gates. The exception is **held both ways**: a citation
+appearing inside the library is refused rather than skipped, and a second library is a change to this
+requirement rather than a row in a growing exclusion list.
+
+#### Scenario: A citation appearing in the shared library
+
+- **WHEN** the one exempt script carries an `--exact <ident>` citation
+- **THEN** the check fails naming it — the exemption covers a script that defers nothing, and a citation is
+  the exemption widened, which is the direction a one-way skip cannot see
+- **PINNED-BY** `the_shared_library_is_exempt_only_while_it_defers_nothing`
+
 **The consequence is stated rather than discovered: `scripts/` becomes a closed category.** A tracked script
-that is not a wrapper cannot be added there while this holds, which is what the capability already claims when
-it says `git ls-files scripts/` names only wrappers. Making that claim hold is the point; a convenience script
-belongs somewhere this requirement does not reach, or the requirement is amended deliberately.
+that is not a wrapper or the one named library cannot be added there while this holds, which is what the
+capability already claims when it says `git ls-files scripts/` names no gate. Making that claim hold is the
+point; a convenience script belongs somewhere this requirement does not reach, or the requirement is amended
+deliberately.
 
 **Both SHALL hold, and neither substitutes for the other.** Measured rather than reasoned: `--list` includes an
 `#[ignore]`d test, so the check cannot see a silenced gate, while `--exact` on one reports `0 passed; 1
@@ -1740,7 +1811,8 @@ before that.
 
 #### Scenario: A tracked script cites no gate at all
 
-- **WHEN** a tracked shell script carries no `--exact <ident>` citation anywhere, while its siblings do
+- **WHEN** a tracked file under `scripts/` other than the named shared library carries no `--exact <ident>`
+  citation anywhere, while its siblings do
 - **THEN** the check fails naming that script, because a script that defers its verdict to nothing is rendering
   one itself; the aggregate being non-empty says only that some script cites a gate, never that this one does
 
