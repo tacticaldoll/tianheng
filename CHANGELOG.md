@@ -87,6 +87,11 @@ them.
 
 ### Self-governance
 
+- **A repair loop that keeps finding the next member of one set changes the question.** `AGENTS.md`'s *A repair
+  loop is a diagnosis* now names the case where the code was wrong and each round found one more production of a
+  grammar the reader enumerated. At the second such finding the reader is re-asked in a form with one syntactic
+  answer, given its set from the producer and held both ways, or given a pinned bound for what stays undecidable.
+
 - **The set-membership sweep is a standing pre-cut step, and the claim it finds is accepted debt.** A prose claim
   that a set the tree enumerates has only certain members is held by nothing, and a declared set would hold only
   a claim an author already doubted. `AGENTS.md` now runs a subject-side sweep for such claims at the pre-cut
