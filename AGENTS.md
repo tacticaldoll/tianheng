@@ -582,6 +582,30 @@ Two moves end those two classes, and neither is a review:
   enumerating the outcomes is then a census of a set the type already holds — see *A census is produced, never
   typed*.
 
+**When the code was wrong and each round finds the next member of one set, stop adding members.** A reader that
+decides its question by enumerating a grammar — separators, reserved words, spellings, quoting forms — answers
+wrongly one production at a time, and each repair adds the production the last review named. A second finding of
+that kind on the same reader is the signal: the set belongs to the shell or the compiler, not to the reader, so
+the next round finds the next member. Change the question instead, in one of three ways:
+
+- **Ask it in a form with a single syntactic answer.** *Does this stand where a command begins* needs the
+  grammar; *is this word `exit`* needs only quote removal, which is finite. A rule over what is done is stricter
+  than one over how it is written, so say what it refuses beyond the property and give that its one-step repair.
+- **Take the set from its producer, and hold the copy both ways.** Where a list must exist, compare it with the
+  producer's own definition — bash(1)'s metacharacters, `compgen`'s reserved words — so a member the reader
+  forgot fails rather than passes.
+- **Declare what stays undecidable as a bound, and pin it.** Which trait a path names is name resolution; a reader
+  that matches a path's last segment says so in a bound with a row showing the wrong read, rather than claiming
+  the class closed.
+
+Measured in the window rooted at the `v0.6.1` snapshot: the exit-class reader was repaired one production at a
+time across consecutive review rounds — a quoted case pattern, ANSI-C quoting, a numeric escape, a precommand's
+argument, an `if` condition — each round finding the one the last had not modelled. Rewritten to judge every word
+whose value is `exit`, with words split at bash's own metacharacters, it closed the class, and the rewrite
+surfaced a line-at-a-time read of a multi-line quote that no production-level repair had reached. This has no
+repository check: telling that a finding is the next member of a set its reader enumerates is a reading of what
+the finding means, so it is the question to ask when the second such finding arrives.
+
 **This rule has no repository check, and that is stated rather than left to be discovered.** Deciding that a comment
 describes something a run could falsify is a judgement over prose, which this repository has designed and
 measured three times and rejected. What it is instead is the question to ask when a repair round comes back
