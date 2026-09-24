@@ -842,20 +842,6 @@ consumer for an undemonstrated deduplication.
   walk that exists rather than a new reader — and retire the bound in the same change. *Promotion trigger:*
   fired, as above. *Version class:* patch; a `tests/` reaction shipping in no crate.
 
-- **The merge-workflow fixture still hand-rolls the unreadable-file check that `xingbiao::Unreadable` closed
-  elsewhere.** *Class:* READY-PATCH. *Observed pressure:* `crates/kanhe/tests/merge_workflow.rs` makes a body
-  file unreadable with `set_mode(0o000)` and asks its own `mode_is_enforced()` probe whether the mode binds,
-  and `an_unreadable_body_file_is_unjudgeable_rather_than_an_empty_body` returns when it does not — under
-  `TIANHENG_WORKSPACE_TESTS` as outside it. That is the policy the closed record says was converged: a silent
-  skip inside the exhaustive suite reads as coverage. *Observation source:* `git grep -n '0o000' -- '*.rs'`,
-  run over the whole tree rather than for the one spelling the closing sweep used. *Current reaction or
-  bound:* none; the direction passes under a privileged user without having run. *Risk:* the unreadable-body
-  class goes unjudged wherever the suite runs as root, and says nothing. *Promotion trigger:* fired — the
-  instance is in the tree. *Shape:* make the fixture's file through `xingbiao::Unreadable` and let its
-  `TIANHENG_WORKSPACE_TESTS` policy decide, keeping the direction's own-probe property, which its comment
-  records a reason for. *Version class:* patch; a `tests/` fixture shipping in no crate. *Authority:* the
-  closed record under *Closed — reproduction records*.
-
 - **The ambient-ignore guard reads files where its property belongs to call sites, and says something false
   when one file holds both kinds.** *Class:* READY-PATCH — measured, and the correction touches no published
   surface. *Observed pressure:* `no_judgement_reads_an_ambient_ignore_file` decides per **file**: a file
@@ -3528,8 +3514,15 @@ cannot read as a queue holding work that is already done.
   *Closed by:* `xingbiao::Unreadable`, restoring permissions on drop and asserting under `TIANHENG_WORKSPACE_TESTS`.
   *The closure's corpus was narrower than its claim, read 2026-09-24:* its sweep was `from_mode(0o000)`, and
   `crates/kanhe/tests/merge_workflow.rs` spells the same act `set_mode(0o000)`, with a hand-written
-  `mode_is_enforced()` probe beside it. The residue is a live entry under READY-PATCH — *the merge-workflow
-  fixture still hand-rolls the unreadable-file check* — rather than an open question kept here.
+  `mode_is_enforced()` probe beside it, which skipped under `TIANHENG_WORKSPACE_TESTS` as outside it.
+  *Residue closed:* that probe now asks through `xingbiao::Unreadable`, so the direction follows the one policy —
+  a skip outside the marker, a refusal inside it — while keeping its own probe, which its comment records a
+  reason for: asking the wrapper's behaviour instead swallowed the defect it guards. The fixture still makes its
+  body file unreadable with `set_mode`, since the file must stay unreadable while the wrapper runs, after the
+  fixture has returned; the policy is the probe's, and the probe is the workspace's. Negative run, under
+  `unshare -r` with `TIANHENG_WORKSPACE_TESTS=1`, where mode 000 does not bite: before, `1 passed` in 0.00s,
+  having run nothing; after, `mode 000 did not restrict the path — running as root would make this direction
+  vacuous`, `1 failed`.
 
 ## Explicitly not on the roadmap
 
