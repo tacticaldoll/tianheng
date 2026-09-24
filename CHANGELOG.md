@@ -118,10 +118,23 @@ them.
 - **The Definition of Done now carries the declared MSRV as a line of its own.** `TIANHENG_WORKSPACE_TESTS=1
   cargo +1.85 test --workspace --all-features` sits beside the other env-gated lines, and the `msrv` CI job
   owns the same number once, in its `env:` pin: the job derives the workspace's declared `rust-version`,
-  refuses when it moves away from the pin, and its run line reads the pin — `dod_coherence` expands the pin
-  into the line, so the DoD's literal joins it textually and a drift in either place fails. The suite runs
-  once. Measured twice, the same `if … && let …` construct compiled on the default toolchain, passed every
-  other line, and failed CI's MSRV job — the latency is now a local failure instead of a CI round trip.
+  refuses when it moves away from the pin, and its run line reads the pin. Measured twice, the same
+  `if … && let …` construct compiled on the default toolchain, passed every other line, and failed CI's MSRV
+  job — the latency is now a local failure instead of a CI round trip.
+
+- **The checks that read `.github/workflows/ci.yml` read its structure.** A GitHub workflow is parsed once,
+  with `yaml-rust2` as a dev-dependency, and the Definition of Done join, the interpreter support window and
+  the merge wrapper's skip and shell premises read the parsed jobs, steps and scoped environments rather than
+  deciding structure from indentation. The join compares a Definition of Done line and a CI step as argv,
+  expanding only the variables the workflow declares, in the scope GitHub gives them — what an earlier step
+  exports at run time is not read — so a pin in one job is no witness in another, `$MSRVX` is not `$MSRV`, and
+  a script carrying any line whose words are decided at run time, or whose command word is the shell's own, is
+  no witness at all, since such a line can make the lines after it data or end the script before them. The
+  interpreter pin is the `node-version` input of the one `actions/setup-node` step, and its support window
+  must be declared as a comment inside that step — a comment being a line the parsed workflow does not change
+  without. A shape the model cannot hold — an anchor, an alias, a merge key, a tag, a second document, a key
+  written twice in one mapping — is refused rather than read past. `deny.toml` accepts Zlib for `foldhash`
+  alone, which the parser's hash map reaches.
 
 - **The attribute-spelling differential now exercises absent module files.** A separate generated corpus
   checks bare `cfg`, raw-identifier `cfg`, and `cfg_attr` look-alikes against all three dimensions and rustc.

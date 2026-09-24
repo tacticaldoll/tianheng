@@ -179,7 +179,7 @@ jobs:
     name: MSRV (rust-version)
     runs-on: ubuntu-latest
     # The pinned minimum, owned here and named once: AGENTS.md's Definition of Done lists the suite against
-    # it as a literal line (`dod_coherence` joins the two), the derivation below refuses when the workspace's
+    # it as a literal line (`dod_coherence` compares the two), the derivation below refuses when the workspace's
     # declared `rust-version` moves away from it, and the install and both invocations read it as `$MSRV`, so
     # the number lives in exactly one place on this side of the join.
     env:
@@ -188,7 +188,7 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0
-      - name: build and test on the declared minimum supported Rust version
+      - name: the declared minimum supported Rust version is the one this job pins
         run: |
           # **One `rust-version`, or this step says which members disagree.** A greedy `sed` over the
           # single-line JSON followed by `head -n1` answered with one arbitrary member's value and
@@ -217,11 +217,14 @@ jobs:
             echo "::error::the workspace declares rust-version $msrv while this job is pinned to $MSRV — move the pin and AGENTS.md's MSRV line together"
             exit 1
           }
+      - name: build and test on the declared minimum supported Rust version
+        # A step of its own, holding simple commands only: AGENTS.md's Definition of Done lists this suite with
+        # the toolchain named literally, and `dod_coherence` reads a step as a witness only when every line of it
+        # is a simple command — so the derivation above, whose lines are not, cannot share its script. `$MSRV`
+        # is this job's `env:`, read in this job's scope, so the number has one owner on this side.
+        run: |
           rustup toolchain install "$MSRV" --profile minimal --no-self-update
           cargo "+$MSRV" build --workspace
-          # AGENTS.md's Definition of Done lists this same suite with the toolchain named literally, and
-          # `dod_coherence` joins the two textually — `dod_coherence`'s CI side reads the `env:` pin and
-          # expands it, so the run line reads `"$MSRV"` and the number has one owner on this side of the join.
           TIANHENG_WORKSPACE_TESTS=1 cargo "+$MSRV" test --workspace --all-features
 
   license-files:

@@ -317,10 +317,27 @@ when someone remembers is worse than one that costs — the cost is visible and 
 
 ### Requirement: Definition-of-Done coherence SHALL compare effective CI commands
 
-Every command in AGENTS.md's Definition of Done SHALL have an effective counterpart in CI. Commands expressed
-by `run:` SHALL be compared directly after the existing normalization. The repository's
-`EmbarkStudios/cargo-deny-action` step SHALL contribute `cargo deny <command>` from its declared `with.command`
-value. A DoD command SHALL NOT be exempted merely because CI normally expresses it through an action.
+Every command in AGENTS.md's Definition of Done SHALL have an effective counterpart in CI. A command SHALL be
+compared as argv, not as text: each step's `run:` script is split into the shell's logical lines, and each line
+is tokenized by the same tokenizer that reads the Definition of Done line, expanding **only the environment the
+workflow declares** — the workflow's, its job's and its step's own, each overriding the one before. The reader
+SHALL NOT be taken to determine what a variable holds when the line runs: a value an earlier step writes to
+`$GITHUB_ENV`, or an action exports, is not observed, so what is compared is the argv the declared values give,
+not necessarily the argv the shell runs. A pin in one job is therefore no witness in another, a longer variable
+name is another variable, and an unquoted expansion to nothing removes its word as the shell does. A CI line
+whose words are decided when it runs, or by expansion rules the tokenizer does not implement — a command
+substitution, an operator, a glob, a brace expansion, a tilde, a variable its scope does not define — SHALL be
+no witness, and SHALL make its whole script no witness: such a line can turn the lines after it into data — a
+here-document's body, a string left open — and no reading of one line on its own can see that. A script SHALL
+likewise be no witness when any of its lines is the shell's own act — a command word the shell owns, a builtin
+or a reserved word, or a line of assignments alone, an append (`NAME+=value`) included — since those decide what
+runs next or what a later line expands to, and an external program can do neither to the shell that runs it:
+`exit 0` before a command means the command is never reached, and `COLOR=never` before `"$COLOR"` means the
+declared value is not the one used. The declared set of such words SHALL be held against bash's own `compgen` in
+both directions. Each can only report a Definition of Done command missing; a Definition of Done line the
+tokenizer cannot read SHALL be refused. The repository's `EmbarkStudios/cargo-deny-action` step SHALL contribute
+`cargo deny <command>` from its declared `with.command` value. A DoD command SHALL NOT be exempted merely
+because CI normally expresses it through an action.
 
 The action projection is intentionally limited to the cargo-deny action whose command semantics this repository
 uses; the check SHALL NOT claim to interpret arbitrary GitHub Actions.
@@ -339,6 +356,46 @@ uses; the check SHALL NOT claim to interpret arbitrary GitHub Actions.
 - **THEN** the coherence check fails and names `cargo deny check` as missing from CI
 - **PINNED-BY** `a_missing_supply_chain_action_leaves_cargo_deny_missing`
 
+#### Scenario: A pinned toolchain is read in the job that pins it
+
+- **WHEN** a job declares `MSRV: "1.85"` in its `env:` and a step in it runs `cargo "+$MSRV" test`
+- **THEN** the step is the Definition of Done's `cargo +1.85 test` line, and a pin at another value is not
+- **PINNED-BY** `a_job_env_pin_expands_into_the_run_lines_that_read_it`
+
+#### Scenario: A pin in one job is read in another
+
+- **WHEN** one job declares the pin and a different job's step reads `$MSRV`
+- **THEN** that step is no witness and the Definition of Done line is reported missing, because the variable is
+  not in force where it is read
+- **PINNED-BY** `a_pin_in_another_job_does_not_satisfy_the_literal`
+
+#### Scenario: A CI line's words are decided when it runs
+
+- **WHEN** the only CI line resembling a Definition of Done command carries a command substitution
+- **THEN** it is no witness and the command is reported missing, rather than matched on the words around it
+- **PINNED-BY** `a_line_decided_at_run_time_is_no_witness`
+
+#### Scenario: A command is spelled inside data
+
+- **WHEN** the only CI text spelling a Definition of Done command is a here-document's body, or a line inside a
+  string that spans lines
+- **THEN** the script is no witness and the command is reported missing, because the script carries a line the
+  tokenizer declines and is read whole or not at all
+- **PINNED-BY** `a_here_document_body_is_no_witness`
+
+#### Scenario: A command follows a line that ends the script
+
+- **WHEN** the only CI line spelling a Definition of Done command follows `exit 0` in the same script
+- **THEN** the script is no witness and the command is reported missing, because a line whose command word is
+  the shell's own can end the script before the command is reached
+- **PINNED-BY** `a_command_after_the_script_ends_is_no_witness`
+
+#### Scenario: A script reassigns a variable before reading it
+
+- **WHEN** a job declares `COLOR: always` and its script sets `COLOR=never` before running `"$COLOR"`
+- **THEN** the script is no witness, because the value the later line expands is not the declared one
+- **PINNED-BY** `a_script_reassigning_a_variable_is_no_witness`
+
 ### Requirement: A hand-maintained pin SHALL carry the window it is good for
 
 A pin this repository maintains by hand SHALL declare the window it is good for, and a reaction SHALL hold
@@ -351,27 +408,36 @@ so npm stops rather than warns — and what remains is bounded risk on a tree re
 interpreter **past the point its major is maintained** is the half with teeth, and nothing reacted to it: the
 only thing that would notice was someone remembering.
 
-**Adjacency is a convention rather than a requirement, and this says so because it read as one.** The
-sentence here was *the declaration SHALL sit beside the pin it bounds*, and nothing observed it: the reader
-takes the workflow's whole text and a day, and never computes a line index. Measured in the `0.5.0` window's
-static review — the declaration moved 92 lines from the pin and outside every job, and the reaction stayed
-green 3 of 3. Giving it a reaction would mean defining how near counts as *beside*, for a property whose whole
-value is that a reader meets the two together, so it stays where a branch name stays: a convention for humans
-and agents, stated as one rather than as law. What the reaction holds instead is that the major and the date
-are read together and compared with the pin — which is the half that can go wrong silently.
+**The declaration SHALL stand inside the step whose pin it bounds.** The pin is the `node-version` input of
+the one `actions/setup-node` step, read through the workflow's structure, and the declaration SHALL sit within
+that step's lines — from its first key to the line before the next step, or before whatever of its job's keys
+follows `steps` — and at the step's own depth or deeper, since YAML attaches a comment to nothing and a comment
+between the last step and a later job key is the job's. *Beside* is therefore decided by the structure rather
+than by a distance: a declaration outside every step, in a sibling step, beside a job key written after
+`steps`, or beside a `node-version` input of another action refuses, and so does a workflow with no
+`actions/setup-node` step, one with several, and one whose step pins no `node-version`. A comment is not part of
+YAML's structure, so the declaration itself is still read as text — and a line spelled as the declaration is
+one only where **blanking it leaves the parsed workflow unchanged**. Anywhere else it is part of a value — a
+literal or folded block, a quoted scalar spanning lines — and refuses, since folding joins a content line to its
+neighbour and a value's text no longer shows where its lines began.
 
-**The pin has three legs and the reaction SHALL read all three.** `node-version` in the workflow, the
-declaration beside it, and `engines.node` in the package manifest are one commitment written three times, and
-only two of them were held against each other. Widening `engines.node` to a range with no upper bound passes
-every other reaction while letting a local Definition of Done take a different major than CI — the
+**The pin has three legs and the reaction SHALL read all three.** The `actions/setup-node` step's
+`node-version`, the declaration beside it, and `engines.node` in the package manifest are one commitment written
+three times, and only two of them were held against each other. Widening `engines.node` to a range with no upper
+bound passes every other reaction while letting a local Definition of Done take a different major than CI — the
 local-versus-CI divergence the merge wrapper's CI read exists for. What the reaction SHALL hold is that the
 range admits **exactly** the pinned major: its lower bound names that major and its upper bound names the
-successor. A manifest declaring several ranges, or none, SHALL refuse.
+successor. The range SHALL be read as JSON — the `node` member of the manifest's top-level `engines` object, a
+string — rather than as any `"node"` line in the file, and a manifest declaring several ranges, none, a
+non-string one, or any key written twice in one object SHALL refuse.
 
 The declaration SHALL name the **major it speaks for** as well as the date, so a pin moved without it refuses
 rather than inheriting a window chosen for something else. The reaction SHALL refuse when no window is
 declared, when more than one is — a reader that takes one leaves the others binding nothing — when the major
-declared is not the major pinned, and when the date has been reached.
+declared is not the major pinned, and when the date has been reached. The major SHALL be a **number**, and the
+pin's major and the range's bounds SHALL be compared with it as numbers: a word agreeing with itself across the
+three legs is not a major they agree on. A major with no successor SHALL refuse, since no range can be bounded
+above it.
 
 **The declaration SHALL be a commitment of this repository rather than an assertion about the tool.** Nothing
 here can hold a vendor's release calendar: it is not in this tree, and every reaction runs offline. A claim
@@ -408,7 +474,7 @@ so the date a reader is refused on is the same date everywhere.
 
 - **WHEN** `engines.node` bounds a range that is not exactly the pinned major and its successor — no upper
   bound, an upper bound a major too high, a lower bound below the pin, a different major, an exact version,
-  none at all, or several
+  none at all, several, one that is not a string, or a `node` key outside `engines`
 - **THEN** the reaction refuses, naming the declared range and the pinned major, rather than holding two of
   the three legs against each other and resting the third on prose
 - **PINNED-BY** `the_engines_range_is_held_against_the_major_the_workflow_pins`
@@ -416,9 +482,17 @@ so the date a reader is refused on is the same date everywhere.
 #### Scenario: The window is absent, doubled, or unreadable
 
 - **WHEN** the workflow declares no window, declares more than one, or declares one whose fields are not a
-  major and a `YYYY-MM-DD` date
+  numeric major with a successor and a `YYYY-MM-DD` date
 - **THEN** the reaction refuses and says what to write, rather than passing over a declaration it could not
   read
+- **PINNED-BY** `the_window_reader_decides_every_shape_of_the_declaration`
+
+#### Scenario: The window or the pin stands where it does not take effect
+
+- **WHEN** the declaration is outside the `actions/setup-node` step, in a sibling step, beside a job key
+  written after `steps`, or beside another action's `node-version`; a line inside a literal or folded value is
+  spelled as the declaration; or the workflow has no such step, several, or one that pins nothing
+- **THEN** the reaction refuses, because the date then binds no pin
 - **PINNED-BY** `the_window_reader_decides_every_shape_of_the_declaration`
 
 ### Requirement: A figure a sweep cannot represent SHALL refuse
@@ -631,6 +705,13 @@ fact about the tool — measured, exit 0 and array length 0.
 
 The corpus is every tracked text this repository runs shell in — the workflow and both wrappers — because the
 two places the class matters most stand in front of the irreversible acts.
+
+**That corpus is read as text, not through the workflow model, and the choice is about its subject.** What it
+judges is shell, and the same reading covers both wrappers, which are shell files; narrowing the workflow's half
+to its `run:` bodies would give one rule two corpora of different kinds. The `set -` restatement the strictness
+requirement refuses is read the same way, for the same reason. Reading the workflow's whole text over-includes:
+a YAML value outside every `run:` block that is spelled as a pipeline is judged as one — measured, a job's
+`name:` ending in `| grep -q x` is refused at its line. That direction refuses rather than passes.
 
 #### Scenario: A pipeline stage exits before its producer finishes
 
@@ -2545,50 +2626,28 @@ job's own conclusion moving, so refusing those would refuse correct code. `paths
 **trigger** conditions and sit under `on:`, quoted or not — YAML 1.1 reads a bare `on` as a boolean, so both
 spellings name the block.
 
-**Under `on:` includes the flow form**, where the whole block sits on the key's own line. Entering a block
-and reading it SHALL NOT be exclusive: a reader that sets its scope from a top-level key and then moves to the
-next line never examines the rest of that line, so `on: {push: {paths: ['src/**']}}` carries a real filter
-past a premise that reports itself intact. That direction is **open**, which is the one this requirement
-exists to close: the depth and scope defects above each refused too much rather than too little.
-
-**The rule is general and SHALL be applied at every level, which the first statement of it was not.** Saying
-it of the top-level key alone left the same open direction one level down — a block-form `on:` whose event is
-written in flow form, `push: {branches: [main], paths: […]}`, which is the more ordinary of the two spellings.
-The reaction SHALL therefore ask *what does this line open, and what does it still carry* through one
-implementation used wherever that question arises, rather than through a branch that happens to have been
-corrected.
-
-**A key SHALL be recognised in key position, not as a substring.** The reaction asked that question in three
-spellings, and the one that was not positional reacted to a trailing comment: `# no paths: filter here` named
-a filter that is a word in a sentence. Splitting a flow body on its separators puts every key at the start of
-its own segment, and a block-form line is the degenerate case of the same rule — so one implementation answers
-for both forms at both levels, which is what stops a fourth spelling appearing.
-
-**The job side SHALL NOT be given the same treatment**, and the asymmetry is a decision rather than an
-oversight. A flow-form `jobs: {alpha: {…}}` leaves no line ending in a colon at the name depth, so no job is
-found and the set equality reports them missing — measured, `missing ["examples"]`. Reading that line the same
-way would turn a loud failure into a quiet pass unless the flow body were parsed, which is a YAML parser
-rather than a line reader. Failing loudly on a shape this repository's workflow does not use is the better of
-the two.
+**The keys SHALL be read from the parsed workflow**, so which job a key belongs to, whether it sits on the job
+or on a step inside it, and whether it sits under `on:` are the grammar's answers rather than a line reader's.
+Block and flow form are one structure — `on: {push: {paths: ['src/**']}}`, `push: {branches: [main], paths:
+[…]}` under a block-form `on:`, and a job written as `alpha: {name: A, if: x}` carry their keys exactly as their
+block spellings do. A key named in a comment is not a key, because a comment is not part of the structure, and
+indentation is not a question the reader decides. A shape the parser's model cannot hold — an anchor, an alias,
+a merge key, a tag, a second document, a key written twice in one mapping — SHALL refuse rather than be read
+past, since a premise reporting itself intact over a value it never read is the open direction.
 
 Reading the trigger pair at any depth instead SHALL NOT be treated as harmless breadth. It was, justified as
 *those two keys have no other meaning anywhere in it* — a claim about one file's current content rather than
-about the keys, and the same kind of assumption the indentation rule had just been rewritten to remove.
-Measured: a step input named `paths`, the shape several published actions take, made the reaction refuse and
-tell a maintainer that a job can now legitimately skip, about an input that moves no job's conclusion. The
-reaction fails closed, so the cost is a false refusal rather than a merge — which is why it is scoped rather
-than deleted. It SHALL hold the job names it reads against a declared set **in both
-directions**, since a read that loses jobs otherwise satisfies *none of them carries a forbidden key* over
-whatever it happened to reach. A count of what was read is not sufficient: it catches a reader that found
-nothing and not one that found fewer.
+about the keys. Measured: a step input named `paths`, the shape several published actions take, made the
+reaction refuse and tell a maintainer that a job can now legitimately skip, about an input that moves no job's
+conclusion. The reaction fails closed, so the cost is a false refusal rather than a merge — which is why it is
+scoped rather than deleted. It SHALL hold the job names it reads against a declared set **in both directions**,
+since a read that loses jobs otherwise satisfies *none of them carries a forbidden key* over whatever it
+happened to reach. A count of what was read is not sufficient: it catches a reader that found nothing and not
+one that found fewer.
 
-**The block's indentation SHALL be read out of the document rather than assumed.** YAML fixes no width — only
-consistency within a mapping — so a job whose keys sit deeper than another document's is the same document,
-and a reader keyed to one width loses **keys** rather than names: the job is still found, the set equality
-still holds, and the forbidden key is never examined. That is the one loss the equality cannot catch, so it is
-removed rather than guarded. The reader SHALL be exercised by a fixture over the shapes the tracked workflow
-does not currently have, including the two that must **not** react — a `steps:` entry's own `if:`, and a
-sequence item written at a job key's depth.
+The reader SHALL be exercised by a fixture over the shapes the tracked workflow does not currently have,
+including the ones that must **not** react — a `steps:` entry's own `if:`, a step input named `paths`, and a
+key named in a comment.
 
 #### Scenario: A second workflow file appears
 
@@ -2610,37 +2669,43 @@ sequence item written at a job key's depth.
 
 - **WHEN** a job's keys, or the job names themselves, sit at a depth other than the one the tracked workflow
   happens to use
-- **THEN** the reader still finds them, because it derives both depths from the document — a reader keyed to
-  one width loses keys without losing names, which the set equality cannot see
+- **THEN** the reader still finds them, because indentation is the parser's to decide — a reader keyed to one
+  width loses keys without losing names, which the set equality cannot see
 - **PINNED-BY** `the_workflow_reader_decides_every_shape_of_the_block`
 
 #### Scenario: A trigger block is written in flow form
 
 - **WHEN** the trigger block sits on its own key's line — `on: {push: {paths: […]}}` — with or without quotes
   on the key
-- **THEN** the filter is still found, because entering the block and reading it are the same line's work; and
-  a flow-form list carrying no filter still reacts to nothing
+- **THEN** the filter is still found, because flow and block form are one structure; and a flow-form list
+  carrying no filter still reacts to nothing
 - **PINNED-BY** `the_workflow_reader_decides_every_shape_of_the_block`
 
 #### Scenario: An event under a block-form trigger is written in flow form
 
 - **WHEN** `on:` opens a block and one of its events carries its filter inline — `push: {paths: […]}`
-- **THEN** the filter is found, by the same rule the top-level key uses, since the rule is about lines rather
-  than about one position in the file
+- **THEN** the filter is found, because every key under `on:` is read wherever it sits in that block
 - **PINNED-BY** `the_workflow_reader_decides_every_shape_of_the_block`
 
 #### Scenario: A key is named in a comment
 
 - **WHEN** a trailing comment on a trigger line names one of the keys in prose
-- **THEN** nothing reacts, because the key is recognised in key position rather than as a substring
+- **THEN** nothing reacts, because a comment is not part of the structure the keys are read from
 - **PINNED-BY** `the_workflow_reader_decides_every_shape_of_the_block`
 
 #### Scenario: A job body is written in flow form
 
 - **WHEN** a job is written as `alpha: {name: A, if: x}`
-- **THEN** no job is read and the set equality names it missing, rather than the key being read out of a body
-  the reader cannot parse — the loud failure is chosen over a quiet pass
+- **THEN** the job and its `if:` are read exactly as their block spelling would be, so the key is carried
 - **PINNED-BY** `the_workflow_reader_decides_every_shape_of_the_block`
+
+#### Scenario: The workflow holds a shape the model cannot hold
+
+- **WHEN** the workflow carries an anchor, an alias, a merge key, a tag, a second document, a key written twice
+  in one mapping, or a `jobs`, `steps`, `env` or `with` of a kind the schema does not admit
+- **THEN** reading it refuses and names what was met, rather than reading past it — and a name written once in
+  each of two jobs is two scopes, not a doubled key
+- **PINNED-BY** `shapes_the_model_cannot_hold_are_refused`
 
 #### Scenario: A key of one class appears where the other class lives
 
