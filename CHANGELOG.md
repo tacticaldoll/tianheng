@@ -87,6 +87,11 @@ them.
 
 ### Self-governance
 
+- **The merge wrapper's unreadable-body direction no longer skips silently under the exhaustive suite.** It
+  asked a probe of its own whether mode 000 binds and returned when it did not, under `TIANHENG_WORKSPACE_TESTS`
+  as outside it, so a run as root reported the direction passed without running it. The probe now asks through
+  `xingbiao::Unreadable`, which refuses inside the marker as every other such direction does.
+
 - **The bounds-method reader's declared bound names the one shape it still misses.** Its declaration, spec
   scenario and both projections said the reader knows nothing of comments or literals, so a signature copy in
   either anchors the read — while the reader's own shape table, which parses the file for the body, declines

@@ -1296,28 +1296,19 @@ fn an_unreadable_body_file_is_unjudgeable_rather_than_an_empty_body() {
 
 /// Whether a `0o000` file is unreadable to this process — root, and some filesystems, ignore the mode.
 ///
-/// Asked of a file this function makes and removes, so the answer cannot come from the subject under test.
+/// Asked of a file this function makes and removes, so the answer cannot come from the subject under test. The
+/// asking is [`xingbiao::Unreadable`]'s, so this direction's skip follows the workspace's one policy: outside
+/// `TIANHENG_WORKSPACE_TESTS` a mode that does not bite skips it, and inside, where a silent skip reads as
+/// coverage, it refuses. A probe that cannot be written refuses too, rather than reading as a mode that does not
+/// bite.
 fn mode_is_enforced() -> bool {
-    use std::os::unix::fs::PermissionsExt;
-
     let probe = std::env::temp_dir().join(format!(
         "tianheng-mode-probe-{}-{}",
         std::process::id(),
         MODE_PROBE.fetch_add(1, Ordering::Relaxed)
     ));
-    if std::fs::write(&probe, b"probe").is_err() {
-        return false;
-    }
-    let mut permissions = match std::fs::metadata(&probe) {
-        Ok(metadata) => metadata.permissions(),
-        Err(_) => return false,
-    };
-    permissions.set_mode(0o000);
-    if std::fs::set_permissions(&probe, permissions).is_err() {
-        let _ = std::fs::remove_file(&probe);
-        return false;
-    }
-    let enforced = std::fs::read_to_string(&probe).is_err();
+    std::fs::write(&probe, b"probe").expect("write this direction's own mode probe");
+    let enforced = xingbiao::Unreadable::try_new(&probe).is_some();
     let _ = std::fs::remove_file(&probe);
     enforced
 }
