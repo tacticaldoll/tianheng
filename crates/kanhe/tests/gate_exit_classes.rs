@@ -13,6 +13,8 @@
 //! gate calls unjudgeable. No direction could have caught it: the ones covering those sites asserted only that
 //! the wrapper failed, which cannot see `1` from `2`.
 
+mod support;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
@@ -569,6 +571,128 @@ fn exit_arguments(line: &str) -> Vec<String> {
         }
     }
     arguments
+}
+
+/// A closed or broken stream moves no class the library chooses, nor any a wrapper chooses before its trap.
+///
+/// Measured on bash 5.2 before every write went through `tell` and `say`: with standard error closed,
+/// `cannot_judge` exited `1` — its `printf` failed, the ERR trap re-entered it, and the second failure left
+/// through errexit with printf's own status. So every unjudged stop of both wrappers read, to a caller whose
+/// stderr was gone, as a gate that ran and refused. And with SIGPIPE ignored only by the trap installer, a usage
+/// error into a broken stderr exited `141`, which is neither class.
+///
+/// Two halves, each over both streams' failures. The library's three class-choosing paths, sourced as a wrapper
+/// sources it: the violation, the unjudged stop, and the ERR trap. And the stops that run before any trap is
+/// installed: a wrapper refusing its arguments, a wrapper whose library is absent, and the library run as a
+/// command — each the first thing its script writes.
+#[test]
+fn no_closed_stream_moves_the_library_s_classes() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let library = root.join(kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY);
+    let scratch =
+        std::env::temp_dir().join(format!("tianheng-closed-stream-{}", std::process::id()));
+    std::fs::create_dir_all(&scratch).expect("create the closed-stream scratch directory");
+    let verdict = scratch.join("verdict");
+    std::fs::write(&verdict, verdict_channel::rendered(Kind::Violation))
+        .expect("write the gate's verdict for the violation path");
+    // A tree holding the wrappers and not their library: the bootstrap guard's one reachable state.
+    let bare = scratch.join("bare");
+    std::fs::create_dir_all(bare.join("scripts")).expect("create the library-less tree");
+    for wrapper in WRAPPERS {
+        std::fs::copy(root.join(wrapper), bare.join(wrapper))
+            .expect("copy a wrapper into the library-less tree");
+    }
+
+    let unjudged = i32::from(verdict_channel::wrapper_exit(Kind::CannotJudge));
+    let probe = |statement: &str| -> Vec<String> {
+        vec![
+            "-c".to_string(),
+            format!(
+                r#"set -Eeuo pipefail; trap '' PIPE; WRAPPER_SUBJECT=probe; source "$1"; install_exit_class_trap; verdict_file=$2; {statement}"#
+            ),
+            // `$0` is the probe's own name: were it the library's path, the library's misuse guard would read the
+            // probe as the library run as a command.
+            "probe".to_string(),
+            library.display().to_string(),
+            verdict.display().to_string(),
+        ]
+    };
+    let mut cases: Vec<(String, Vec<String>, i32)> = vec![
+        (
+            "exit_for_the_gates_refusal".to_string(),
+            probe("exit_for_the_gates_refusal out"),
+            i32::from(verdict_channel::wrapper_exit(Kind::Violation)),
+        ),
+        (
+            "cannot_judge".to_string(),
+            probe("cannot_judge out"),
+            unjudged,
+        ),
+        ("the ERR trap".to_string(), probe("false"), unjudged),
+        (
+            "the library run as a command".to_string(),
+            vec![library.display().to_string()],
+            i32::from(verdict_channel::LIBRARY_MISUSE),
+        ),
+    ];
+    for wrapper in WRAPPERS {
+        cases.push((
+            format!("{wrapper} without its library"),
+            vec![bare.join(wrapper).display().to_string()],
+            unjudged,
+        ));
+    }
+    cases.push((
+        "scripts/merge-pr.sh with no arguments".to_string(),
+        vec![root.join("scripts/merge-pr.sh").display().to_string()],
+        unjudged,
+    ));
+    cases.push((
+        "scripts/publish.sh refusing an argument".to_string(),
+        vec![
+            root.join("scripts/publish.sh").display().to_string(),
+            "--allow-dirty".to_string(),
+        ],
+        unjudged,
+    ));
+
+    for (name, arguments, expected) in &cases {
+        let open = std::process::Command::new("bash")
+            .args(arguments)
+            .output()
+            .expect("run the stop with its streams open");
+        assert_eq!(
+            open.status.code(),
+            Some(*expected),
+            "{name} with its streams open is the baseline, and it does not exit its class: {}",
+            String::from_utf8_lossy(&open.stderr)
+        );
+        for (stream, launcher) in [
+            (
+                "closed",
+                vec!["-c", r#"exec 2>&-; exec bash "$@""#, "launcher"],
+            ),
+            (
+                "broken",
+                vec!["-c", support::streams::BROKEN, "launcher", "2"],
+            ),
+        ] {
+            let output = std::process::Command::new("bash")
+                .args(&launcher)
+                .args(arguments)
+                .output()
+                .expect("run the stop with its stderr taken away");
+            assert_eq!(
+                output.status.code(),
+                Some(*expected),
+                "{name} with stderr {stream} exits {:?}, where it exits {expected} with the stream open",
+                output.status
+            );
+        }
+    }
+    let _ = std::fs::remove_dir_all(&scratch);
 }
 
 /// The lines of a wrapper's bootstrap guard: from `if ! source` to the `fi` that closes it.

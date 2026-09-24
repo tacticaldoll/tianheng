@@ -50,17 +50,45 @@ WRAPPER_EXIT_MISUSE=64
 # read as a gate that refused and `2` as a wrapper that could not judge.
 # `a_library_run_as_a_command_stops_without_reaching_a_wrapper_s_classes` runs the file.
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+    trap '' PIPE
     printf '%s\n' \
         'wrapper.sh is a library the two wrappers source, not a wrapper itself. Run scripts/merge-pr.sh or scripts/publish.sh' \
-        >&2
+        >&2 || :
     exit "$WRAPPER_EXIT_MISUSE"
 fi
+
+# **A write never chooses the class.** Every line a wrapper prints goes through `tell` or `say`, and neither can
+# fail: a write to a closed or broken stream is dropped rather than let reach `set -e`. Measured on bash 5.2
+# before these existed, with the stream closed: `cannot_judge` exited `1` — its `printf` failed, the ERR trap
+# re-entered it, and the second failure left through errexit with printf's own status, the class reserved for a
+# gate that ran and refused — and a report printed after a completed act exited `2`, calling the merge it had
+# just made a run that reached no verdict. The class is the one fact a closed terminal must not move; the text is
+# what an operator loses by closing it.
+#
+# **A broken pipe is a failed write, never a signal**, and that half cannot live here. SIGPIPE's default ends the
+# shell with `141`, which is neither class, so each wrapper ignores it immediately after `set -Eeuo pipefail` —
+# before this file is sourced, because the bootstrap guard and the argument refusals run before this library's
+# trap is installed, and measured with stderr into a broken pipe, a usage error exited `141` while the ignore sat
+# in `install_exit_class_trap`. The misuse guard above, which runs with no wrapper around it, ignores it for
+# itself. The disposition is inherited by every tool a wrapper runs, which then meets a broken pipe as a write
+# error of its own: the gate's output is captured rather than written, and the act's status is read by its
+# account rather than trusted.
+#
+# `tell` is for the operator's diagnostics and goes to stderr; `say` is the one line of result a completed act
+# reports, and goes to stdout, where a caller capturing the result reads it.
+tell() {
+    printf '%s\n' "$@" >&2 || :
+}
+
+say() {
+    printf '%s: %s\n' "$WRAPPER_SUBJECT" "$1" || :
+}
 
 # The subject the refusal is about — `merge message` or `publish source` — is the one thing the two copies
 # never shared, and the WRAPPER_SUBJECT global each wrapper sets before sourcing is its one owner: every
 # helper here reads it, so a call site cannot spell one wrapper's prefix inside the other.
 cannot_judge() {
-    printf '%s: %s\n' "$WRAPPER_SUBJECT" "$1" >&2
+    tell "$WRAPPER_SUBJECT: $1"
     exit "$WRAPPER_EXIT_UNJUDGED"
 }
 
@@ -147,7 +175,7 @@ require_one_pass() {
     # non-zero; with the same token near the start, 8 of 8 did. Both wrappers were holding by where the
     # token happened to sit, which nothing declares and nothing keeps true.
     if ! grep -qE 'test result: ok\. 1 passed' <<< "$output"; then
-        printf '%s\n' "$output" >&2
+        tell "$output"
         cannot_judge \
             "the gate did not run — its invocation selected no passing test, so the name in this script no longer names one. libtest exits 0 for a filter that matches nothing, which is why this is checked rather than trusted"
     fi
@@ -168,7 +196,7 @@ verdict_on_channel() {
 # channel rather than of where a wrapper calls it.
 exit_for_the_gates_refusal() {
     local output=$1 reached
-    printf '%s\n' "$output" >&2
+    tell "$output"
     reached=$(verdict_on_channel) || reached=""
     if [[ $reached == "$GATE_VIOLATION_CLASS" ]]; then
         exit "$WRAPPER_EXIT_VIOLATION"
@@ -177,14 +205,34 @@ exit_for_the_gates_refusal() {
         "the gate failed without reporting a disagreement — its channel carries ${reached:-nothing} — so this stops as a run that could not judge, not as one that refused"
 }
 
-# The verdict file's lifecycle: created where the gate is about to run, removed where the act completes.
-# An EXIT trap does not run when `exec` replaces the shell image — measured, `bash -c 'trap "echo T" EXIT;
-# exec true'` prints nothing while the same script without `exec` prints `T`. So the trap fired on every
-# path where nothing happened and was skipped on the one path that completes the act. The trap stays,
-# because it is what covers the failure paths; the removal stays explicit, immediately before the `exec`.
+# The verdict file's lifecycle: created where the gate is about to run, removed by the EXIT trap on every path.
+# That holds because no wrapper `exec`s — `perform_the_act` below runs the act — and an EXIT trap does not run
+# when `exec` replaces the shell image: measured, `bash -c 'trap "echo T" EXIT; exec true'` prints nothing while
+# the same script without `exec` prints `T`.
 open_verdict_file() {
     verdict_file=$(mktemp) || cannot_judge \
         "cannot open a file for the gate to report its refusal class on, so a failing gate could not be told \
 from an input it could not read"
     trap 'rm -f "$verdict_file"' EXIT
+}
+
+# **The act, run and accounted for in one place.** Both wrappers end here: `perform_the_act <account> <command…>`
+# runs the irreversible command — never `exec`s it — and hands its exit status to the wrapper's own `<account>`,
+# which decides the class from what it can **observe** of the act rather than from that status.
+#
+# Two defects had one cause, and this is the shape that removes it. A tool's status is the tool's class, not this
+# repository's: `gh pr merge` exits `1` when it does not merge and `cargo publish` exits `1` on an argument it
+# cannot parse, and `1` is reserved for a gate that ran and refused — so an `exec`d act reported its own failure
+# as a disagreement the gate never found. And a status is not an observation of the remote side: a client can
+# exit non-zero after the server acted, when the response is what was lost, so a sentence built from the status
+# alone can tell an operator an irreversible act did not happen when it did. The account reads what it can and
+# says which half it could not.
+#
+# An account returns for a completed act, or leaves through `cannot_judge`; it never exits on its own, which
+# `each_wrapper_chooses_its_exit_class_in_one_place` holds.
+perform_the_act() {
+    local account=$1 status=0
+    shift
+    "$@" || status=$?
+    "$account" "$status"
 }

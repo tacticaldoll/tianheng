@@ -25,6 +25,8 @@
 #
 # A merge made in the GitHub web UI reaches no wrapper at all; that is a declared bound, not an oversight.
 set -Eeuo pipefail
+# The stream policy, before anything can write: `scripts/wrapper.sh`'s paragraph on `tell` says why it is here.
+trap '' PIPE
 
 WRAPPER_SUBJECT='merge message'
 # The lifecycle this wrapper is built on: the two exit classes and the one helper that chooses them, the
@@ -41,7 +43,7 @@ WRAPPER_SUBJECT='merge message'
 # itself rather than trapping. `a_wrapper_without_its_library_is_the_unjudged_class` holds the class by
 # running this wrapper with the library removed.
 if ! source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)/scripts/wrapper.sh"; then
-    printf '%s: cannot read the shared wrapper library, so the gate it must install before `gh pr merge` cannot be located — which is not the same fact as a gate that ran and refused\n' "$WRAPPER_SUBJECT" >&2
+    printf '%s: cannot read the shared wrapper library, so the gate it must install before `gh pr merge` cannot be located — which is not the same fact as a gate that ran and refused\n' "$WRAPPER_SUBJECT" >&2 || :
     exit 2
 fi
 
@@ -72,8 +74,8 @@ fi
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GH_REPO
 
 usage() {
-    printf 'usage: %s <pr-number> --body-file <path> [--subject <text>] [gh args…]\n' "${0##*/}" >&2
-    printf '  The subject defaults to the pull request title, which is what the rule requires anyway.\n' >&2
+    tell "usage: ${0##*/} <pr-number> --body-file <path> [--subject <text>] [gh args…]" \
+        '  The subject defaults to the pull request title, which is what the rule requires anyway.'
 }
 
 # A misconfigured invocation: the same class, plus the usage line, since what the operator needs here is the
@@ -660,14 +662,6 @@ fi
 # those plus a whole `cargo test`.
 require_ci_green
 
-# Removed here, not left to the trap. An EXIT trap does not run when `exec` replaces the shell image —
-# measured, `bash -c 'trap "echo T" EXIT; exec true'` prints nothing while the same script without `exec` prints
-# `T`. So the trap fired on every path where nothing happened and was skipped on the one path that completes the
-# act: three successful runs left three empty files in `$TMPDIR`, measured against an isolated one. The trap
-# stays, because it is what covers the failure paths; `exec` stays, because the tool's exit status becoming this
-# script's is deliberate.
-rm -f "$verdict_file"
-
 # The body travels as the VALUE the gate judged, never as the path it was read from.
 #
 # `--body-file` would have gh open the file again, after the gate has run — and what sits between the two is a
@@ -684,15 +678,105 @@ rm -f "$verdict_file"
 # `passthrough` can never carry one: gh takes the last spelling of a repeated flag, and this argument is spliced
 # before it. That safety belongs to the allowlist rather than to the order these are written in.
 #
-# `--body` over a wrapper-owned temporary file, which would close the same race: such a file must outlive the
-# `exec` for gh to read it, so it could not be removed beforehand and no EXIT trap survives an `exec` — which is
-# the leak closed by removing the file just before the `exec`, reintroduced to fix a different defect. A
-# value in `argv` has an `ARG_MAX` ceiling a path does not, and that ceiling fails loud with `E2BIG` before the merge rather than
-# recording something wrong.
+# `--body` rather than a wrapper-owned temporary file, which would close the same race: a value needs no file to
+# outlive anything, and it has an `ARG_MAX` ceiling a path does not — a ceiling that fails loud with `E2BIG`
+# before the merge rather than recording something wrong.
 #
 # `passthrough` may be empty, and `"${empty[@]}"` under `set -u` is an unbound variable before bash 4.4 —
 # where this wrapper would abort through the ERR trap reporting "an unguarded command failed", a sentence
 # about the wrong cause, on the invocation with no passthrough flags that is the ordinary one. The `+` form
 # is used rather than a version check, so no minimum has to be declared anywhere and kept in step.
-exec gh pr merge "$pr_number" --repo "$repository" --squash --subject "$subject" --body "$body" \
+#
+# What the merge recorded, decided from what GitHub holds after the act, never from gh's status.
+#
+# gh prints nothing on success when its output is not a terminal, so without this a completed merge was a silent
+# exit 0 every operator confirmed by reading GitHub afterwards. And gh's status is not an observation of the far
+# side: it exits `1` when it does not merge — a head that moved under `--match-head-commit`, a pull request
+# already merged or closed — and equally when the merge landed and the response was what was lost.
+#
+# **A merged pull request is not this act; the record it carries is.** A pull request read as merged may have
+# been merged by an earlier run, in the web UI, or by another actor between the re-reads above and the call —
+# so the squash commit's message and the head it merged are read back and compared with the subject, body and
+# head the gate judged. Only a record carrying all three is the judged act, whoever's call produced it; one
+# carrying anything else is refused as not this act, which is what a re-run after an unknown outcome needs told
+# apart.
+#
+# The comparison is exact, which rests on GitHub recording `--subject` and `--body` as given. Measured
+# 2026-09-24 over the last 40 squash commits on `release/0.7.0`, all merged through this wrapper: no appended
+# trailer and no `(#N)`, and `gh api …/commits/<sha> --jq .commit.message` byte-identical to `git log -1
+# --format=%B` for the same commit. A record GitHub did rewrite would be refused here as not the judged message,
+# which is true of it.
+#
+# **An empty body is recorded as the subject alone.** The gate admits one — the release snapshot, by
+# `merge_message_gate`'s release exception — and GitHub writes no separator after it: at `v0.6.0` and `v0.6.1`,
+# `git log -1 --format=%B <tag>` is the subject followed by `\n\n` and `\n`, which command substitution reads
+# back as the subject. So the judged message is the subject where the body is empty and the subject, a blank
+# line and the body otherwise; appending the separator unconditionally refused a release merge as not its own
+# act. The exception's owner is the gate and this comparison restates it, so a second exception there needs a
+# second arm here — `BACKLOG.md` carries that as a watch rather than a reaction.
+#
+# **Trailing newlines are compared on neither side, deliberately.** The body the gate judged and the one `--body`
+# carries were both read by command substitution, which strips them, and the record is read back the same way.
+# GitHub's own trailing bytes are not stable for one shape: at `v0.6.0` the raw commit message ends in a newline
+# and at `v0.6.1` it does not, both release snapshots with an empty body — so comparing them would refuse a
+# record that carries exactly the judged message.
+#
+# Each sentence below says only what its reading, or the reading's absence, establishes:
+#
+#   state unreadable       → unknown, whatever gh reported: a queued merge also exits 0 with nothing merged
+#   read, not MERGED       → GitHub records no merge, whatever gh reported
+#   MERGED, record unread  → clean if gh reported the merge, since it made it; unknown whose merge it is if not
+#   MERGED, record differs → a merge that is not the act the gate judged
+#   MERGED, record matches → the judged act, named with its squash commit
+account_for_the_merge() {
+    local status=$1 reading state="" commit="" merged_head="" recorded="" differs="" judged=$subject
+    local gh_said="gh reported the merge of pull request $pr_number complete"
+    if ((status != 0)); then
+        gh_said="gh exited $status from the merge of pull request $pr_number"
+    fi
+    # `|`-joined, because `read` collapses a run of whitespace separators and a missing commit would shift the
+    # head into its field.
+    reading=$(gh pr view "$pr_number" --repo "$repository" --json state,mergeCommit,headRefOid \
+        --jq '[.state, (.mergeCommit.oid // ""), .headRefOid] | join("|")') || reading=""
+    IFS='|' read -r state commit merged_head <<< "$reading" || :
+    if [[ -z $state ]]; then
+        cannot_judge "$gh_said, and its state could not be read back, so whether it merged is unknown — check it \
+on GitHub before running this again. The gate had agreed; this is not a message that disagrees"
+    fi
+    if [[ $state != MERGED ]]; then
+        cannot_judge "$gh_said, and GitHub reads it as $state, so it records no merge, although the gate had \
+agreed — gh's own message, if any, is above. That is not the same fact as a message that disagrees"
+    fi
+    if [[ $commit =~ ^[0-9a-f]{40}$ ]]; then
+        recorded=$(gh api "repos/$repository/commits/$commit" --jq .commit.message) || recorded=""
+    fi
+    if [[ -z $recorded ]]; then
+        if ((status == 0)); then
+            say "merged pull request $pr_number; its squash commit could not be read back — check it on GitHub"
+            return
+        fi
+        cannot_judge "$gh_said, and GitHub reads it as merged, but its squash commit could not be read back, so \
+whether that merge is the one the gate judged is unknown — check it on GitHub before running this again"
+    fi
+    if [[ -n $body ]]; then
+        judged+=$'\n\n'$body
+    fi
+    if [[ $recorded != "$judged" ]]; then
+        differs="its message is not the subject and body the gate judged"
+    elif [[ $merged_head != "$head" ]]; then
+        differs="it merged head ${merged_head:-unknown}, not the head $head the gate judged"
+    fi
+    if [[ -n $differs ]]; then
+        cannot_judge "pull request $pr_number is merged as $commit, but that merge is not the act the gate judged: \
+$differs. $gh_said — check the pull request on GitHub, since a squash commit cannot be amended without \
+decoupling it from the pull request's record"
+    fi
+    say "merged pull request $pr_number as $commit, carrying the message the gate judged"
+    if ((status != 0)); then
+        tell "$WRAPPER_SUBJECT: $gh_said, but the merge GitHub records is the one the gate judged"
+    fi
+}
+
+perform_the_act account_for_the_merge \
+    gh pr merge "$pr_number" --repo "$repository" --squash --subject "$subject" --body "$body" \
     --match-head-commit "$head" ${passthrough[@]+"${passthrough[@]}"}

@@ -97,11 +97,16 @@ printf '%s |env CARGO_BUILD_TARGET=[%s]\n' "$*" "${CARGO_BUILD_TARGET-}" >> "$FA
 # `1 passed` is a gate that ran and judged nothing — which is what the wrapper's success path now refuses.
 # `no-verdict` is the mode that keeps that state constructible.
 #
-# Only where the channel was opened: this executable also stands in for the tool the wrapper `exec`s, and the
-# wrapper hands the channel to the gate alone — so an unguarded write would both fail under `set -u` on that
-# second invocation and recreate the file the wrapper removed one statement earlier.
+# Only where the channel was opened: this executable also stands in for the tool the wrapper runs as its act,
+# and the wrapper hands the channel to the gate alone — so an unguarded write would fail under `set -u` on that
+# second invocation, and would write a verdict no gate reached.
 if [[ ${FAKE_GATE_VERDICT-} != none && -n ${TIANHENG_GATE_VERDICT-} ]]; then
     printf '%s' 'Clean' > "$TIANHENG_GATE_VERDICT"
+fi
+# The act's own failure, at the status cargo gives an argument it cannot parse — `1`, the violation class.
+if [[ $1 == publish && -n ${FAKE_PUBLISH_EXIT-} ]]; then
+    printf '%s\n' 'controlled publish failure' >&2
+    exit "$FAKE_PUBLISH_EXIT"
 fi
 printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'
 "##,
@@ -140,7 +145,7 @@ printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 fil
     run
 }
 
-/// The line the wrapper's final `exec` produces, if it got there.
+/// The line the wrapper's act produces, if it got there.
 fn publish_invocation(cargo_log: &str) -> Option<&str> {
     cargo_log
         .lines()
@@ -531,8 +536,8 @@ fn a_tool_configuration_set_in_the_environment_is_a_stated_bound() {
 /// The wrapper leaves no temporary file behind, on the path that completes the act as well as on the paths that
 /// do not.
 ///
-/// The same defect as its sibling's, from the same line: cleanup left to an EXIT trap that `exec` never reaches,
-/// so the publishing path was the one path not cleaned. Asserted over the whole of an isolated `TMPDIR` rather
+/// The successful path is the one an EXIT trap misses when the act is `exec`d, which is why neither wrapper `exec`s:
+/// `perform_the_act` runs it, so the trap covers the publishing path as it covers every other. Asserted over the whole of an isolated `TMPDIR` rather
 /// than over one known name, so a temporary file added later is covered for free.
 #[test]
 fn no_temporary_file_survives_the_wrapper() {
@@ -547,7 +552,7 @@ fn no_temporary_file_survives_the_wrapper() {
     );
     assert!(
         completed.leftover.is_empty(),
-        "the path that completes the publish left {:?} behind — an `exec` never reaches an EXIT trap",
+        "the path that completes the publish left {:?} behind — an `exec`d act never reaches an EXIT trap",
         completed.leftover
     );
 
@@ -743,6 +748,40 @@ fn a_gate_that_passes_without_judging_stops_before_the_publish() {
     assert!(
         run.stderr.contains("without reaching a verdict"),
         "the operator is told which of the two it met, got: {}",
+        run.stderr
+    );
+}
+
+/// A publish cargo does not complete is the unjudged class, never cargo's own status.
+///
+/// `cargo publish` exits `1` on an argument it cannot parse, and `1` is the class reserved for a gate that ran
+/// and refused — so an `exec`d publish reported its own failure as a disagreement the gate never found. The
+/// operator is told which crates were published is unknown, because a workspace publish stops crate by crate and
+/// nothing here reads the registry back.
+#[test]
+fn a_publish_cargo_does_not_complete_exits_the_unjudged_class() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper_with_env(&root, &[], &[("FAKE_PUBLISH_EXIT", "1")]);
+    assert!(
+        publish_invocation(&run.cargo_log).is_some(),
+        "the publish must have been reached for this to be about the act: {}",
+        run.cargo_log
+    );
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "a publish cargo did not complete is not a gate that refused: {}",
+        run.stderr
+    );
+    assert!(
+        run.stderr
+            .contains("cargo publish exited 1 without completing")
+            && run
+                .stderr
+                .contains("which of the crates it named were published is unknown"),
+        "the operator is told the act failed and what it may have left, got: {}",
         run.stderr
     );
 }

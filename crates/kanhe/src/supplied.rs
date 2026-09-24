@@ -8,7 +8,7 @@
 //! **It was drawn for every judged input of one gate but one**, and the one left out was the one whose
 //! absence means *no merge is being made*. So a subject the wrapper supplied as bytes the gate could not read
 //! took the arm that returns clean, the run exited `0`, `require_one_pass` saw `1 passed`, and
-//! `exec gh pr merge` recorded a subject no judgement had read — the one outcome the Core Contract forbids,
+//! `gh pr merge` recorded a subject no judgement had read — the one outcome the Core Contract forbids,
 //! in front of a record that cannot be amended. Two spellings of one rule is what let the repair that closed
 //! the others stop one line short of it.
 //!
