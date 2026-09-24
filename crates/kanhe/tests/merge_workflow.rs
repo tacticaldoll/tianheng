@@ -158,6 +158,10 @@ fn run_wrapper_over(
     // would let the value travel through `argv` without ever exercising the newline the controlled `gh` has
     // to log safely, so every direction here would pass while the shape they all read stayed fragile.
     std::fs::write(&body, JUDGED_BODY).expect("write merge body");
+    if mode == "release-snapshot" {
+        // The one message the gate admits with an empty body: `chore(release): X.Y.Z`, `release/X.Y.Z` -> `main`.
+        std::fs::write(&body, "").expect("write the release snapshot's empty body");
+    }
     if mode == "unreadable-body" {
         use std::os::unix::fs::PermissionsExt;
         let mut permissions = std::fs::metadata(&body)
@@ -193,7 +197,11 @@ elif [[ $1 == pr && $2 == view && $* == *"--json headRefName"* ]]; then
     if [[ $FAKE_GH_MODE == head-branch-moved ]] && ((calls >= 2)); then
         printf '%s\n' 'renamed/after-the-gate'
     else
-        printf '%s\n' "${FAKE_GH_HEAD_BRANCH:-fix/some-repair}"
+        if [[ $FAKE_GH_MODE == release-snapshot ]]; then
+            printf '%s\n' 'release/0.0.0'
+        else
+            printf '%s\n' "${FAKE_GH_HEAD_BRANCH:-fix/some-repair}"
+        fi
     fi
 elif [[ $1 == pr && $2 == view && $* == *"--json baseRefName"* ]]; then
     if [[ $FAKE_GH_MODE == unreadable-base ]]; then
@@ -212,6 +220,8 @@ elif [[ $1 == pr && $2 == view && $* == *"--json baseRefName"* ]]; then
     printf '%s' "$calls" > "$FAKE_BASE_CALLS"
     if [[ $FAKE_GH_MODE == base-moved ]] && ((calls >= 2)); then
         printf '%s\n' 'main'
+    elif [[ $FAKE_GH_MODE == release-snapshot ]]; then
+        printf '%s\n' 'main'
     else
         printf '%s\n' "${FAKE_GH_BASE:-release/0.0.0}"
     fi
@@ -225,6 +235,8 @@ elif [[ $1 == pr && $2 == view && $* == *"--json title"* ]]; then
     printf '%s' "$calls" > "$FAKE_TITLE_CALLS"
     if [[ $FAKE_GH_MODE == title-moved ]] && ((calls >= 2)); then
         printf '%s\n' 'fix(kanhe): a title edited while the gate ran'
+    elif [[ $FAKE_GH_MODE == release-snapshot ]]; then
+        printf '%s\n' 'chore(release): 0.0.0'
     else
         printf '%s\n' 'fix(kanhe): harden workflow evidence'
     fi
@@ -326,7 +338,7 @@ elif [[ $1 == api ]]; then
     empty)
         :
         ;;
-    subjects | ambient-gh-repo | invalid-number | unreadable-head | unreadable-base | unreadable-head-branch | unreadable-body | body-moved | title-moved | base-moved | head-branch-moved | clean | no-verdict | ci-red | ci-red-status | ci-expected-status | ci-no-evidence | ci-pending | ci-unclaimed | empty-diff | unreadable-count | merge-refused | merged-unreadable | merged-null | merge-lost | merge-lost-unreadable | merge-queued | merged-elsewhere | merged-other-head | commit-unreadable | merge-lost-commit-unreadable)
+    subjects | ambient-gh-repo | invalid-number | unreadable-head | unreadable-base | unreadable-head-branch | unreadable-body | body-moved | title-moved | base-moved | head-branch-moved | clean | no-verdict | ci-red | ci-red-status | ci-expected-status | ci-no-evidence | ci-pending | ci-unclaimed | empty-diff | unreadable-count | merge-refused | merged-unreadable | merged-null | merge-lost | merge-lost-unreadable | merge-queued | merged-elsewhere | merged-other-head | commit-unreadable | merge-lost-commit-unreadable | release-snapshot)
         if [[ $* != *"--paginate"* ]]; then
             printf '%s\n' 'feat(x): live first subject'
         else
@@ -2670,6 +2682,33 @@ fn a_completed_merge_names_the_squash_commit_it_recorded() {
     );
 }
 
+/// A release snapshot's merge, whose judged body is empty, is the judged act when GitHub records its subject alone.
+///
+/// The gate admits one message with an empty body, and GitHub records it as the subject with no separator: at
+/// `v0.6.0` and `v0.6.1`, `git log -1 --format=%B <tag>` is the subject followed by `\n\n` and `\n` respectively,
+/// which command substitution reads back as the subject alone. A comparison that appends `\n\n` to every subject
+/// refuses that record as not the judged act, after the one merge onto `main` a release makes.
+#[test]
+fn a_release_snapshot_s_empty_body_is_the_judged_act() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "release-snapshot", &[]);
+    assert_eq!(
+        run.status.code(),
+        Some(0),
+        "a release snapshot merged as judged must exit clean: {}{}",
+        run.stdout,
+        run.stderr
+    );
+    assert!(
+        run.stdout
+            .contains("merged pull request 42 as 0123456789abcdef0123456789abcdef01234567"),
+        "the release merge must name the squash commit it recorded, got stdout {:?}",
+        run.stdout
+    );
+}
+
 /// A merge gh does not complete, and GitHub reads as still open, is the unjudged class — never gh's own `1`.
 ///
 /// Its sibling with gh at `0` is `a_merge_gh_reports_complete_but_github_reads_open_records_no_merge`.
@@ -2723,29 +2762,45 @@ fn a_merge_gh_reports_failed_but_github_reads_merged_is_a_completed_merge() {
     );
 }
 
-/// A merge gh reports as failed, whose state cannot be read back, says that whether it merged is unknown.
+/// A merge whose state cannot be read back says that whether it merged is unknown, whatever gh reported.
+///
+/// gh at `0` is not a reading of the merge: a merge queue's enqueue exits `0` with the pull request still open,
+/// which is the shape `a_merge_gh_reports_complete_but_github_reads_open_records_no_merge` reads. With the
+/// state unreadable the two are indistinguishable, so neither answer is given.
 #[test]
-fn a_failed_merge_whose_state_cannot_be_read_says_whether_it_merged_is_unknown() {
+fn a_merge_whose_state_cannot_be_read_says_whether_it_merged_is_unknown() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let run = run_wrapper(&root, "merge-lost-unreadable", &[]);
-    assert_eq!(run.status.code(), Some(2), "{}{}", run.stdout, run.stderr);
-    assert!(
-        run.stderr.contains("whether it merged is unknown")
-            && !run.stderr.contains("records no merge"),
-        "the operator is told the outcome is unknown, never that nothing landed, got {:?}",
-        run.stderr
-    );
+    for mode in ["merged-unreadable", "merge-lost-unreadable"] {
+        let run = run_wrapper(&root, mode, &[]);
+        assert_eq!(
+            run.status.code(),
+            Some(2),
+            "{mode}: {}{}",
+            run.stdout,
+            run.stderr
+        );
+        assert!(
+            run.stderr.contains("whether it merged is unknown")
+                && !run.stderr.contains("records no merge")
+                && !run.stdout.contains("merged pull request"),
+            "{mode}: the operator is told the outcome is unknown, never that it landed or that nothing did, got \
+             stdout {:?} stderr {:?}",
+            run.stdout,
+            run.stderr
+        );
+    }
 }
 
-/// A merge gh completed whose squash cannot be read back is still a completed merge, and says which part is unknown.
+/// A merge GitHub reads as merged, whose squash cannot be read back, is a completed merge that says which part is
+/// unknown.
 #[test]
 fn a_merge_whose_squash_cannot_be_read_back_says_so() {
     let Some(root) = workspace_root() else {
         return;
     };
-    for mode in ["merged-unreadable", "merged-null", "commit-unreadable"] {
+    for mode in ["merged-null", "commit-unreadable"] {
         let run = run_wrapper(&root, mode, &[]);
         assert_eq!(
             run.status.code(),

@@ -705,15 +705,31 @@ require_ci_green
 # 2026-09-24 over the last 40 squash commits on `release/0.7.0`, all merged through this wrapper: no appended
 # trailer and no `(#N)`, and `gh api …/commits/<sha> --jq .commit.message` byte-identical to `git log -1
 # --format=%B` for the same commit. A record GitHub did rewrite would be refused here as not the judged message,
-# which is true of it. Each sentence below says only what its reading, or the reading's absence, establishes:
+# which is true of it.
 #
-#   state unreadable       → gh's own report is all there is: clean if it reported the merge, unknown if not
+# **An empty body is recorded as the subject alone.** The gate admits one — the release snapshot, by
+# `merge_message_gate`'s release exception — and GitHub writes no separator after it: at `v0.6.0` and `v0.6.1`,
+# `git log -1 --format=%B <tag>` is the subject followed by `\n\n` and `\n`, which command substitution reads
+# back as the subject. So the judged message is the subject where the body is empty and the subject, a blank
+# line and the body otherwise; appending the separator unconditionally refused a release merge as not its own
+# act. The exception's owner is the gate and this comparison restates it, so a second exception there needs a
+# second arm here — `BACKLOG.md` carries that as a watch rather than a reaction.
+#
+# **Trailing newlines are compared on neither side, deliberately.** The body the gate judged and the one `--body`
+# carries were both read by command substitution, which strips them, and the record is read back the same way.
+# GitHub's own trailing bytes are not stable for one shape: at `v0.6.0` the raw commit message ends in a newline
+# and at `v0.6.1` it does not, both release snapshots with an empty body — so comparing them would refuse a
+# record that carries exactly the judged message.
+#
+# Each sentence below says only what its reading, or the reading's absence, establishes:
+#
+#   state unreadable       → unknown, whatever gh reported: a queued merge also exits 0 with nothing merged
 #   read, not MERGED       → GitHub records no merge, whatever gh reported
 #   MERGED, record unread  → clean if gh reported the merge, since it made it; unknown whose merge it is if not
 #   MERGED, record differs → a merge that is not the act the gate judged
 #   MERGED, record matches → the judged act, named with its squash commit
 account_for_the_merge() {
-    local status=$1 reading state="" commit="" merged_head="" recorded="" differs=""
+    local status=$1 reading state="" commit="" merged_head="" recorded="" differs="" judged=$subject
     local gh_said="gh reported the merge of pull request $pr_number complete"
     if ((status != 0)); then
         gh_said="gh exited $status from the merge of pull request $pr_number"
@@ -724,10 +740,6 @@ account_for_the_merge() {
         --jq '[.state, (.mergeCommit.oid // ""), .headRefOid] | join("|")') || reading=""
     IFS='|' read -r state commit merged_head <<< "$reading" || :
     if [[ -z $state ]]; then
-        if ((status == 0)); then
-            say "merged pull request $pr_number, as gh reported; its state could not be read back — check it on GitHub"
-            return
-        fi
         cannot_judge "$gh_said, and its state could not be read back, so whether it merged is unknown — check it \
 on GitHub before running this again. The gate had agreed; this is not a message that disagrees"
     fi
@@ -746,7 +758,10 @@ agreed — gh's own message, if any, is above. That is not the same fact as a me
         cannot_judge "$gh_said, and GitHub reads it as merged, but its squash commit could not be read back, so \
 whether that merge is the one the gate judged is unknown — check it on GitHub before running this again"
     fi
-    if [[ $recorded != "$subject"$'\n\n'"$body" ]]; then
+    if [[ -n $body ]]; then
+        judged+=$'\n\n'$body
+    fi
+    if [[ $recorded != "$judged" ]]; then
         differs="its message is not the subject and body the gate judged"
     elif [[ $merged_head != "$head" ]]; then
         differs="it merged head ${merged_head:-unknown}, not the head $head the gate judged"

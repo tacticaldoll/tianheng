@@ -649,6 +649,14 @@ fn no_closed_stream_moves_the_library_s_classes() {
         vec![root.join("scripts/merge-pr.sh").display().to_string()],
         unjudged,
     ));
+    cases.push((
+        "scripts/publish.sh refusing an argument".to_string(),
+        vec![
+            root.join("scripts/publish.sh").display().to_string(),
+            "--allow-dirty".to_string(),
+        ],
+        unjudged,
+    ));
 
     for (name, arguments, expected) in &cases {
         let open = std::process::Command::new("bash")

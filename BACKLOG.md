@@ -476,6 +476,23 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH
 
+- **The merge wrapper's account restates how a judged squash message is composed, which the gate owns.**
+  *Class:* WATCH — one rule with two implementations, one measured divergence, repaired in place.
+  *Observed pressure:* `account_for_the_merge` compares the squash commit GitHub records with the message the
+  gate judged, so it has to know how that message is composed; the gate's release exception admits an empty
+  body, and the account appended a blank line to every subject, so a release merge onto `main` would have been
+  refused as not its own act. *Observation source:* `a_release_snapshot_s_empty_body_is_the_judged_act`, which exited `2`
+  against that comparison, and the records at `v0.6.0` and `v0.6.1`, whose `git log -1 --format=%B` is the
+  subject alone followed by newlines. *Current reaction or bound:* the account composes the subject alone for
+  an empty body and says so beside the comparison, and that direction holds the arm.
+  Nothing compares the account's composition with the gate's. *Risk:* a second shape the gate admits — another
+  exception, or a normalisation of the body — lands in the gate alone, and a correct merge is reported as not
+  the judged act after it is irreversible. *Promotion trigger:* the gate's message rule gains a second exception
+  or any rewrite of the body it judges; then the comparison moves behind the gate's own composition rather than
+  gaining a second arm here. Moving it now was considered and declined: it puts a `cargo test` after the act,
+  where a build failure turns a completed merge into an unknown one. *Version class:* patch; repository
+  tooling only. *Authority:* `repository-checks`'s account requirement and `scripts/merge-pr.sh`.
+
 - **A sentence describing a current state has no owner for the event that falsifies it.** *Class:* WATCH —
   three candidates measured, two dissolved and one refused by a reaction, and the remaining surface is
   unmeasured rather than absent.
