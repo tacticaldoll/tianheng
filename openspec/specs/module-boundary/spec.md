@@ -852,7 +852,8 @@ module, import path) pair rather than the path alone.
   a build script
 - **THEN** the system reports a constitution error (exit 2) naming the package, rather than judging its `src/`
   directory: no compiled root reads it, so a finding there would be about source nothing builds
-- **PINNED-BY** `a_package_whose_targets_compile_no_root_is_refused` - **PINNED-BY** `guibiao_and_hunyi_agree_on_the_parallel_no_compiled_root_wording`
+- **PINNED-BY** `a_package_whose_targets_compile_no_root_is_refused`
+- **PINNED-BY** `guibiao_and_hunyi_agree_on_the_parallel_no_compiled_root_wording`
 
 #### Scenario: An example, test, bench or build-script root is not governed — a stated bound
 
