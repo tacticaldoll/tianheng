@@ -22,6 +22,12 @@ pub struct TempFixture {
 impl TempFixture {
     /// Write a fixture crate named `name` with `lib.rs` set to `body`.
     pub fn new(name: &str, body: &str) -> Self {
+        Self::with_manifest_extra(name, "", body)
+    }
+
+    /// The same fixture carrying extra manifest lines (an autotargets switch, a target table), for
+    /// a package shape the plain form cannot express.
+    pub fn with_manifest_extra(name: &str, manifest_extra: &str, body: &str) -> Self {
         let dir = std::env::temp_dir().join(format!(
             "tianheng-conformance-{name}-{}",
             std::process::id()
@@ -33,12 +39,22 @@ impl TempFixture {
         let manifest = dir.join("Cargo.toml");
         std::fs::write(
             &manifest,
-            format!("[package]\nname = \"{name}\"\nversion = \"0.0.0\"\nedition = \"2021\"\n"),
+            format!(
+                "[package]\nname = \"{name}\"\nversion = \"0.0.0\"\nedition = \"2021\"\n{manifest_extra}"
+            ),
         )
         .expect("write Cargo.toml");
         let lib = src.join("lib.rs");
         std::fs::write(&lib, body).expect("write lib.rs");
         Self { dir, manifest, lib }
+    }
+
+    /// Write an additional file into the fixture, relative to its root, creating parent directories.
+    pub fn write(&self, rel: &str, contents: &str) {
+        let path = self.dir.join(rel);
+        std::fs::create_dir_all(path.parent().expect("file has a parent"))
+            .expect("create parent dirs");
+        std::fs::write(path, contents).expect("write fixture file");
     }
 
     pub fn manifest(&self) -> &Path {

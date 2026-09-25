@@ -9,7 +9,9 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use crate::errors::{crate_not_found_error, missing_src_error, out_of_package_root_error};
+use crate::errors::{
+    crate_not_found_error, missing_src_error, no_compiled_root_error, out_of_package_root_error,
+};
 use xingbiao::find_package;
 
 /// One compilation unit: its root file, that root's own source directory, and the unit's identity label.
@@ -18,8 +20,9 @@ pub(crate) type CompilationUnit = (PathBuf, PathBuf, String);
 /// Every compilation unit of a package: `(root file, its source directory, the unit's identity role)`.
 ///
 /// The shared preamble every `check_*_boundary` opens with, and one home for the constitution errors
-/// resolution can raise — crate-not-found, missing-src (a target with no crate-root file, or a root
-/// file with no parent dir), and a root outside the package's own directory — so no capability can
+/// resolution can raise — crate-not-found, no-compiled-root (every reported target an example, a test,
+/// a bench or a build script), missing-src (metadata reporting no target, or a root file with no
+/// parent dir), and a root outside the package's own directory — so no capability can
 /// drift from another on any of them. Each `src_dir` is owned (it would otherwise borrow
 /// its root file), so callers hold both.
 ///
@@ -40,7 +43,10 @@ pub(crate) fn resolve_crate_units<'m>(
     let mut units = Vec::new();
     let roots = match xingbiao::crate_roots(package) {
         xingbiao::CrateRoots::Compiled(roots) => roots,
-        xingbiao::CrateRoots::NoneCompiled | xingbiao::CrateRoots::Unreported => {
+        xingbiao::CrateRoots::NoneCompiled => {
+            return Err(no_compiled_root_error(crate_package));
+        }
+        xingbiao::CrateRoots::Unreported => {
             return Err(missing_src_error(crate_package));
         }
     };

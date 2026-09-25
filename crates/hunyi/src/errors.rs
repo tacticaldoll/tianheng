@@ -28,6 +28,20 @@ pub(crate) fn missing_src_error(crate_package: &str) -> String {
     )
 }
 
+/// A package whose every target is an example, a test, a bench or a build script: no compiled root
+/// reads its `src/`, so a semantic boundary there could never react.
+///
+/// Deliberate **parallel** twin of guibiao's `no_compiled_root_error`: same intent and structure,
+/// differing only in the dimension noun ("semantic" here in 渾儀, "module" in 圭表) — not a
+/// verbatim twin, because each dimension names its own boundary kind.
+pub(crate) fn no_compiled_root_error(crate_package: &str) -> String {
+    format!(
+        "a semantic boundary is observed from a compiled crate root, and '{crate_package}' has none: no target \
+         Cargo reports for it is a library or a binary, so nothing its src directory holds is compiled into a \
+         root this boundary could govern"
+    )
+}
+
 pub(crate) fn unknown_module_error(module: &str, crate_package: &str) -> String {
     format!(
         "a boundary must anchor to a real module or it silently never reacts: module '{module}' is \
