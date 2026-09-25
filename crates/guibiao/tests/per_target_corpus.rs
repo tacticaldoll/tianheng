@@ -1,15 +1,12 @@
 //! **Every** compiled root of a package is governed: a `main.rs` beside a `lib.rs`, a `src/bin/*.rs`, a
 //! `[[bin]] path` inside the source directory, and one outside it.
 //!
-//! This file previously pinned the opposite — that only the first resolved root was governed — as a
-//! stated bound, and said so in both directions so that "if this now reacts, the bound has been closed".
-//! It did, in the same window: these tests started failing the moment the per-target corpus landed,
-//! which is exactly the transition they were written to detect. They are inverted here rather than
-//! deleted, because the direction they now assert is the one an adopter depends on and the one a future
-//! regression would silently undo.
+//! The directions here assert the governed side of each root on purpose: it is the one an adopter depends
+//! on, and the one a regression would silently undo — a root dropped from the corpus reports nothing, which
+//! reads exactly as a clean root.
 //!
 //! Pinned at the **real** resolution: a real manifest, real `cargo metadata`, real
-//! `xingbiao::crate_root_files`. Each root's violation must be reported with its own file, and — since
+//! `xingbiao::crate_roots`. Each root's violation must be reported with its own file, and — since
 //! every root denotes the module path `crate` — with its own compilation-unit identity, so accepting one
 //! in a baseline cannot suppress another.
 use std::path::{Path, PathBuf};
@@ -135,7 +132,11 @@ fn every_binary_target_root_is_governed_wherever_it_lives() {
         files.iter().any(|f| f.ends_with("src/lib.rs")),
         "the resolved library root must react: {files:?}"
     );
-    for governed in ["src/bin/conventional.rs", "src/custom_in_src.rs"] {
+    for governed in [
+        "src/bin/conventional.rs",
+        "src/custom_in_src.rs",
+        "tools/outside.rs",
+    ] {
         assert!(
             files.iter().any(|f| f.ends_with(governed)),
             "{governed} is a compiled root, so its violation must react — a conventional `src/bin` \
@@ -145,9 +146,8 @@ fn every_binary_target_root_is_governed_wherever_it_lives() {
 }
 
 #[test]
-fn a_package_with_no_library_governs_its_first_binary_root() {
-    // The other half of the resolution, so the bound above reads as scope rather than as "binaries
-    // are never governed": with no library target, the first `bin` IS the resolved root.
+fn a_package_with_no_library_governs_its_binary_root() {
+    // With no library target the binary root is still a root, so it is governed like any other.
     let probe = RootProbe::new(
         "binonly",
         "",
@@ -157,19 +157,19 @@ fn a_package_with_no_library_governs_its_first_binary_root() {
     let files = reacting_files(&check(&root_scope_fs_law("binonly"), probe.manifest()));
     assert!(
         files.iter().any(|f| f.ends_with("src/main.rs")),
-        "with no library target, the first binary root is the governed one: {files:?}"
+        "with no library target, the binary root is still a compiled root and is governed: {files:?}"
     );
 }
 
 /// A root Cargo reports **twice** yields one violation, not two.
 ///
-/// **This test pins the contract, not a change.** It passed before `xingbiao::crate_root_files` was made
+/// **This test pins the contract, not a change.** It passed before `xingbiao::crate_roots` was made
 /// totally unique and passes after, and saying so is the point: the reason it passed is that both static
 /// dimensions dedup violations by [`xuanji::ViolationId`] before reporting (`guibiao/src/lib.rs`,
 /// `hunyi/src/driver.rs`), each for its own unrelated stated reason — two identical boundaries declared
 /// on one constitution. That dedup is what kept a duplicated corpus from ever being visible, which is
 /// exactly why the duplication survived unnoticed. Measured directly: with `dedup` in place
-/// `crate_root_files` returned `[shared.rs, between.rs, shared.rs]` for the manifest below, and this
+/// the root reader returned `[shared.rs, between.rs, shared.rs]` for the manifest below, and this
 /// assertion still held.
 ///
 /// It is kept because the property an adopter depends on is this one — a root Cargo names twice is one
@@ -402,7 +402,7 @@ fn an_inline_target_in_one_root_is_refused_even_when_another_root_backs_it_with_
 /// The inline-target refusal names the responsible compilation unit and suggests an
 /// extraction path within that root's layout that rustc actually resolves
 /// ({root directory}/{leaf}.rs), covering a bin main.rs, a library lib.rs, a binary in
-/// src/bin/*.rs, and omitting the compilation unit qualifier under the no-target fallback.
+/// src/bin/*.rs, and a module nested in the library.
 #[test]
 fn an_inline_target_refusal_names_its_root_and_a_path_rustc_resolves() {
     let inline_in_the_tool_binary: &[(&str, &str)] = &[
@@ -414,25 +414,10 @@ fn an_inline_target_refusal_names_its_root_and_a_path_rustc_resolves() {
             "mod seam {\n    use brick::B;\n}\nfn main() {}\n",
         ),
     ];
-    let inline_with_no_targets: &[(&str, &str)] = &[
-        ("examples/dummy.rs", "fn main() {}\n"),
-        (
-            "src/lib.rs",
-            "pub mod forbidden;\npub mod seam {\n    use crate::forbidden::X;\n}\n",
-        ),
-        ("src/forbidden.rs", "pub struct X;\n"),
-    ];
     let inline_nested_in_the_library: &[(&str, &str)] = &[
         ("src/lib.rs", "pub mod outer;\n"),
         ("src/outer.rs", "pub mod inner {\n    use brick::B;\n}\n"),
     ];
-    let no_target_manifest = concat!(
-        "autolib = false\n",
-        "autobins = false\n",
-        "[[example]]\n",
-        "name = \"dummy\"\n",
-        "path = \"examples/dummy.rs\"\n",
-    );
 
     let confined_to = |package: &str, module: &str| {
         Constitution::new("root-scope").boundary(
@@ -449,7 +434,7 @@ fn an_inline_target_refusal_names_its_root_and_a_path_rustc_resolves() {
             "",
             INLINE_IN_THE_BINARY,
             "crate::seam",
-            Some("src/main.rs"),
+            "src/main.rs",
             "src/seam.rs",
         ),
         (
@@ -457,7 +442,7 @@ fn an_inline_target_refusal_names_its_root_and_a_path_rustc_resolves() {
             "",
             INLINE_IN_THE_LIBRARY,
             "crate::seam",
-            Some("src/lib.rs"),
+            "src/lib.rs",
             "src/seam.rs",
         ),
         (
@@ -465,23 +450,15 @@ fn an_inline_target_refusal_names_its_root_and_a_path_rustc_resolves() {
             "",
             inline_in_the_tool_binary,
             "crate::seam",
-            Some("src/bin/tool.rs"),
+            "src/bin/tool.rs",
             "src/bin/seam.rs",
-        ),
-        (
-            "notarget",
-            no_target_manifest,
-            inline_with_no_targets,
-            "crate::seam",
-            None,
-            "src/seam.rs",
         ),
         (
             "nestedlib",
             "",
             inline_nested_in_the_library,
             "crate::outer::inner",
-            Some("src/lib.rs"),
+            "src/lib.rs",
             "src/outer/inner.rs",
         ),
     ] {
@@ -497,23 +474,67 @@ fn an_inline_target_refusal_names_its_root_and_a_path_rustc_resolves() {
                     message.contains(&format!("`{expected_path}`")),
                     "{package}: expected suggested path `{expected_path}`, got: {message}"
                 );
-                if let Some(unit) = expected_unit {
-                    assert!(
-                        message.contains(&format!("in compilation unit '{unit}'")),
-                        "{package}: expected refusal to name compilation unit '{unit}', \
-                         got: {message}"
-                    );
-                } else {
-                    assert!(
-                        !message.contains("compilation unit"),
-                        "{package}: expected no compilation unit qualifier for no-target \
-                         fallback, got: {message}"
-                    );
-                }
+                assert!(
+                    message.contains(&format!("in compilation unit '{expected_unit}'")),
+                    "{package}: expected refusal to name compilation unit '{expected_unit}', \
+                     got: {message}"
+                );
             }
             other => panic!("{package}: expected the inline-target refusal: {other:?}"),
         }
     }
+}
+
+/// A package whose every target is an example compiles no root, so a boundary over it is refused rather than
+/// judged over a `src/` nothing builds.
+///
+/// Cargo reports the example as the package's one target; the library source beside it is compiled by no target,
+/// so an import there is in no root's corpus and a violation read from it would be a finding about nothing built.
+#[test]
+fn a_package_whose_targets_compile_no_root_is_refused() {
+    let probe = RootProbe::new(
+        "noncompiled",
+        concat!(
+            "autolib = false\n",
+            "autobins = false\n",
+            "[[example]]\n",
+            "name = \"dummy\"\n",
+            "path = \"examples/dummy.rs\"\n",
+        ),
+        &[
+            ("examples/dummy.rs", "fn main() {}\n"),
+            ("src/lib.rs", "pub mod seam;\nuse brick::B;\n"),
+            ("src/seam.rs", "\n"),
+        ],
+    );
+    match check(&confined_to_seam("noncompiled"), probe.manifest()) {
+        Outcome::ConstitutionError(message) => assert!(
+            message.contains("has none: no target Cargo reports for it is a library or a binary"),
+            "expected the no-compiled-root refusal, got: {message}"
+        ),
+        other => panic!("expected the no-compiled-root refusal, got {other:?}"),
+    }
+}
+
+/// An example root importing the confined crate is not governed — a stated bound, shown rather than described.
+///
+/// `module-boundary/an-example-test-bench-or-build-script-root-is-not-governed-a-stated-bound`: the library root
+/// is judged and clean, and the example beside it compiles its own `crate` that no boundary reads.
+#[test]
+fn an_example_root_is_not_governed() {
+    let outcome = confinement_report(
+        "exampleroot",
+        "[[example]]\nname = \"e\"\npath = \"examples/e.rs\"\n",
+        &[
+            ("src/lib.rs", "pub mod seam;\n"),
+            ("src/seam.rs", "\n"),
+            ("examples/e.rs", "use brick::B;\nfn main() {}\n"),
+        ],
+    );
+    assert!(
+        matches!(outcome, Outcome::Clean(_)),
+        "an example root is outside the governed corpus, got {outcome:?}"
+    );
 }
 
 fn confinement_report(package: &str, manifest_extra: &str, files: &[(&str, &str)]) -> Outcome {

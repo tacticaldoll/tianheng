@@ -1,16 +1,15 @@
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
+use xingbiao::CrateRoots;
 use xuanji::ScanDepth;
 
-use crate::cargo_metadata::{
-    compilation_unit_label, crate_root_file, crate_root_files, find_package,
-};
+use crate::cargo_metadata::{compilation_unit_label, crate_roots, find_package};
 use crate::errors::{
     confine_external_crate_on_crate_error, crate_not_found_error, inline_empty_prefix_error,
     inline_empty_verbs_error, inline_module_target_error, inline_narrow_and_strict_error,
     missing_src_error, must_not_be_imported_by_on_crate_error,
-    must_only_be_imported_by_on_crate_error, out_of_package_root_error,
+    must_only_be_imported_by_on_crate_error, no_compiled_root_error, out_of_package_root_error,
     restrict_imports_to_on_crate_error, unknown_module_error, unreadable_governed_file_error,
 };
 use crate::finding::ModuleFact;
@@ -18,24 +17,18 @@ use crate::model::module_rule::Perimeter;
 use crate::module_scan::{
     ImportedPath, InlineFinding, canonical_module_path, declaration_text,
     external_imports_with_importers, governed_files, imports_with_importers,
-    inline_symbol_findings, is_another_crate_root, package_name_to_import_ident, path_within,
+    inline_symbol_findings, names_crate_by_path_alone, package_name_to_import_ident, path_within,
     reachable_modules, rust_files, value_namespace_item_names,
 };
 use crate::{BoundaryKind, ModuleBoundary, ModuleRule, Violation, ViolationId};
 
-/// The source-root directory for a package's lib/proc-macro/bin target (resolved by 星表's
-/// `crate_root_file`). Prefer Cargo's observed `targets[].src_path` so custom `[lib] path =
-/// "lib.rs"`, proc-macro, and bin-only crates are scanned at the real compiled root; fall back to
-/// `manifest_dir/src` only for synthetic unit-test metadata that omits targets.
+/// The conventional source directory, `manifest_dir/src`, for metadata reporting no target — the one case a root
+/// is judged without a root file, since every package Cargo reports carries its targets.
 fn package_src_dir(package: &Value) -> Option<PathBuf> {
-    crate_root_file(package)
-        .and_then(|root| root.parent().map(Path::to_path_buf))
-        .or_else(|| {
-            package["manifest_path"]
-                .as_str()
-                .and_then(|manifest| Path::new(manifest).parent())
-                .map(|crate_dir| crate_dir.join("src"))
-        })
+    package["manifest_path"]
+        .as_str()
+        .and_then(|manifest| Path::new(manifest).parent())
+        .map(|crate_dir| crate_dir.join("src"))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -598,7 +591,8 @@ fn check_outbound_rule(
 ///
 /// If metadata reports no target at all, the conventional source directory fallback is used.
 /// Only missing-module errors are deferred; an inline target, unreadable files and other scan failures
-/// propagate immediately.
+/// propagate immediately. A package whose every target is an example, a test, a bench or a build script is
+/// refused before any root is read: no compiled root reads its `src/`, so a boundary over it could never react.
 pub(crate) fn check_module_boundary(
     metadata: &Value,
     boundary: &ModuleBoundary,
@@ -606,25 +600,29 @@ pub(crate) fn check_module_boundary(
 ) -> Result<(), String> {
     let package = find_package(metadata, &boundary.crate_package)
         .ok_or_else(|| crate_not_found_error(&boundary.crate_package))?;
-    let roots = crate_root_files(package);
-    if roots.is_empty() {
-        let mut found = Vec::new();
-        return match check_one_root(package, None, None, boundary, &mut found)? {
-            RootOutcome::Governed => {
-                violations.append(&mut found);
-                Ok(())
-            }
-            RootOutcome::ModuleAbsent(reason) => Err(reason),
-        };
-    }
+    let compiled = match crate_roots(package) {
+        CrateRoots::Compiled(roots) => roots,
+        CrateRoots::NoneCompiled => return Err(no_compiled_root_error(&boundary.crate_package)),
+        CrateRoots::Unreported => {
+            let mut found = Vec::new();
+            return match check_one_root(package, None, None, boundary, &mut found)? {
+                RootOutcome::Governed => {
+                    violations.append(&mut found);
+                    Ok(())
+                }
+                RootOutcome::ModuleAbsent(reason) => Err(reason),
+            };
+        }
+    };
+    let roots = compiled.as_slice();
     let mut deferred: Option<String> = None;
     let mut governed_somewhere = false;
     let mut found = Vec::new();
-    for root in &roots {
+    for root in roots {
         match check_one_root(
             package,
             Some(root.as_path()),
-            Some(&roots),
+            Some(roots),
             boundary,
             &mut found,
         )? {
@@ -702,7 +700,7 @@ fn check_one_root(
     if let Some(siblings) = sibling_roots {
         files.retain(|f| root_file.is_some_and(|r| r == f.as_path()) || !siblings.contains(f));
     }
-    files.retain(|f| !is_another_crate_root(f, &src_dir, root_relative.as_deref()));
+    files.retain(|f| !names_crate_by_path_alone(f, &src_dir, root_relative.as_deref()));
     let (reachable, inline_only, remapped, remap_shadowed) =
         reachable_modules(&src_dir, &files, root_relative.as_deref())?;
     let root_modules: Vec<String> = reachable

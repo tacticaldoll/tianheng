@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**27 of 108 declared bounds have no pinning test.** That figure is the register's
+**27 of 109 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -120,6 +120,14 @@ fallback used where no manifest exists, which the register spec describes.
 > the system does NOT react (the fully-qualified un-`use`d external call is a stated non-observation under the default; behavior is unchanged from before this capability)
 
 - **pinned by**: `inline_strict_external_absent_fully_qualified_call_is_a_bound`
+
+## module-boundary
+
+### `module-boundary/an-example-test-bench-or-build-script-root-is-not-governed-a-stated-bound`
+
+> the system reports no violation for it: the governed corpus is the library-kind and `bin` roots, the code the package ships, and those targets are compiled beside it rather than into it
+
+- **pinned by**: `an_example_root_is_not_governed`
 
 ## observation-bound-model
 

@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 use crate::errors::{crate_not_found_error, missing_src_error, out_of_package_root_error};
-use xingbiao::{crate_root_file, find_package};
+use xingbiao::find_package;
 
 /// One compilation unit: its root file, that root's own source directory, and the unit's identity label.
 pub(crate) type CompilationUnit = (PathBuf, PathBuf, String);
@@ -38,17 +38,13 @@ pub(crate) fn resolve_crate_units<'m>(
     let package = find_package(metadata, crate_package)
         .ok_or_else(|| crate_not_found_error(crate_package))?;
     let mut units = Vec::new();
-    for root_file in xingbiao::crate_root_files(package) {
-        let src_dir = root_file
-            .parent()
-            .ok_or_else(|| missing_src_error(crate_package))?
-            .to_path_buf();
-        let unit = xingbiao::compilation_unit_label(package, &root_file)
-            .ok_or_else(|| out_of_package_root_error(crate_package, &root_file))?;
-        units.push((root_file, src_dir, unit));
-    }
-    if units.is_empty() {
-        let root_file = crate_root_file(package).ok_or_else(|| missing_src_error(crate_package))?;
+    let roots = match xingbiao::crate_roots(package) {
+        xingbiao::CrateRoots::Compiled(roots) => roots,
+        xingbiao::CrateRoots::NoneCompiled | xingbiao::CrateRoots::Unreported => {
+            return Err(missing_src_error(crate_package));
+        }
+    };
+    for root_file in roots.as_slice().iter().cloned() {
         let src_dir = root_file
             .parent()
             .ok_or_else(|| missing_src_error(crate_package))?

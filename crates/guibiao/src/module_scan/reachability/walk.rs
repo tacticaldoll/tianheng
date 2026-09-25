@@ -108,9 +108,13 @@ struct ConditionalPathSource {
     ancestors: HashSet<PathBuf>,
 }
 
+/// What one child's declarations across the scanned sources say about where its source is.
+///
+/// `bodies` is non-empty exactly when the child is declared inline somewhere, since every inline declaration
+/// carries a body. An inline-only child's suggested extraction path is the first declaring source's base, in
+/// the order the sources were scanned — an example of a path rustc resolves, which the refusal words as one.
 #[derive(Default)]
 struct ChildSources {
-    seen_inline: bool,
     seen_plain_file: bool,
     bodies: Vec<InlineBody>,
     plain: Vec<PlainSource>,
@@ -131,8 +135,7 @@ fn collect_children(scan_sources: &[ScanSource]) -> Result<BTreeMap<String, Chil
         let loaded = source.load()?;
         for declared in declared_modules_in(&loaded.cleaned, loaded.range) {
             let child_sources = children.entry(declared.name.clone()).or_default();
-            if declared.is_inline {
-                child_sources.seen_inline = true;
+            if let Some((start, end)) = declared.body {
                 let base_at = |eq_cleaned: usize| -> Option<PathBuf> {
                     let &orig_eq = loaded.positions.get(eq_cleaned)?;
                     let rel =
@@ -149,17 +152,15 @@ fn collect_children(scan_sources: &[ScanSource]) -> Result<BTreeMap<String, Chil
                         .filter_map(base_at)
                         .collect(),
                 };
-                if let Some((start, end)) = declared.body {
-                    child_sources.bodies.push(InlineBody {
-                        file: loaded.file.clone(),
-                        start,
-                        end,
-                        base: loaded.child_base.clone(),
-                        relocated_base,
-                        candidate_bases,
-                        ancestors: loaded.ancestors.clone(),
-                    });
-                }
+                child_sources.bodies.push(InlineBody {
+                    file: loaded.file.clone(),
+                    start,
+                    end,
+                    base: loaded.child_base.clone(),
+                    relocated_base,
+                    candidate_bases,
+                    ancestors: loaded.ancestors.clone(),
+                });
                 continue;
             }
             let mut resolved_conditional = Vec::new();
@@ -584,7 +585,6 @@ pub(crate) fn reachable_modules(
         let children = collect_children(&scan_sources)?;
         for (child, child_sources) in children {
             let ChildSources {
-                seen_inline,
                 seen_plain_file,
                 bodies,
                 plain,
@@ -593,7 +593,7 @@ pub(crate) fn reachable_modules(
             } = child_sources;
             let child_path = format!("{module}::{child}");
             let inline_extraction_base = bodies.first().map(|b| b.base.clone());
-            if seen_inline {
+            if !bodies.is_empty() {
                 register_inline_sources(&child, &child_path, bodies, &mut graph)?;
             }
             let plain_file_resolved = if seen_plain_file {
@@ -609,11 +609,8 @@ pub(crate) fn reachable_modules(
             } else {
                 false
             };
-            if seen_inline && !plain_file_resolved {
-                let suggested = inline_extraction_base
-                    .map(|base| base.join(format!("{child}.rs")))
-                    .unwrap_or_else(|| src_dir.join(format!("{child}.rs")));
-                inline_only.insert(child_path.clone(), suggested);
+            if let Some(base) = inline_extraction_base.filter(|_| !plain_file_resolved) {
+                inline_only.insert(child_path.clone(), base.join(format!("{child}.rs")));
             }
             resolve_direct_paths(&child_path, seen_plain_file, direct, &mut graph)?;
             resolve_conditional_paths(&child_path, seen_plain_file, conditional, &mut graph)?;

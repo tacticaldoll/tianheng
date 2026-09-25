@@ -140,5 +140,18 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "inline_strict_external_absent_fully_qualified_call_is_a_bound",
         ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "module-boundary/an-example-test-bench-or-build-script-root-is-not-governed-a-stated-bound",
+            ),
+            "an example, test, bench or build-script target's source",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the governed corpus is a package's library-kind and `bin` roots, the code it ships; \
+                          a target compiled beside those rather than into them is outside it"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "an_example_root_is_not_governed",
+        ),
     ]
 }

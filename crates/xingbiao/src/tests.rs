@@ -261,20 +261,20 @@ fn a_label_never_carries_a_platform_separator() {
 /// both, and reports targets sorted by NAME, so the duplicate reports are adjacent only when no third
 /// target's name sorts between them. The `[x, y, x]` arrangement below is that case, and it is what
 /// `dedup` alone left untouched — measured against a real three-`[[bin]]` manifest, where
-/// `crate_root_files` returned `[shared.rs, between.rs, shared.rs]`.
+/// the root reader returned `[shared.rs, between.rs, shared.rs]`.
 ///
 /// Adjacency is asserted alongside it so the test states the whole rule rather than one arrangement of
 /// it: `[x, x, y]` collapsed under `dedup` too, so a fixture using only that shape would pass against
 /// the defect.
 #[test]
-fn crate_root_files_is_unique_by_root_not_by_adjacency() {
+fn crate_roots_are_unique_by_root_not_by_adjacency() {
     let non_adjacent = json!({ "targets": [
         { "kind": ["bin"], "src_path": "/p/src/shared.rs" },
         { "kind": ["bin"], "src_path": "/p/src/between.rs" },
         { "kind": ["bin"], "src_path": "/p/src/shared.rs" }
     ]});
     assert_eq!(
-        crate_root_files(&non_adjacent),
+        crate_roots(&non_adjacent).compiled(),
         [
             PathBuf::from("/p/src/shared.rs"),
             PathBuf::from("/p/src/between.rs")
@@ -288,13 +288,38 @@ fn crate_root_files_is_unique_by_root_not_by_adjacency() {
         { "kind": ["bin"], "src_path": "/p/src/other.rs" }
     ]});
     assert_eq!(
-        crate_root_files(&adjacent),
+        crate_roots(&adjacent).compiled(),
         [
             PathBuf::from("/p/src/shared.rs"),
             PathBuf::from("/p/src/other.rs")
         ],
         "the adjacent arrangement collapses too — this half held before the fix, and is here so the \
          test cannot be mistaken for pinning only it"
+    );
+}
+
+/// No reported target and no compiled target are two answers, and a compiled root is a third.
+#[test]
+fn crate_roots_tell_no_target_from_no_compiled_target() {
+    assert_eq!(crate_roots(&json!({})), CrateRoots::Unreported);
+    assert_eq!(
+        crate_roots(&json!({ "targets": [] })),
+        CrateRoots::Unreported
+    );
+    assert_eq!(
+        crate_roots(&json!({ "targets": [
+            { "kind": ["example"], "src_path": "/p/examples/e.rs" },
+            { "kind": ["custom-build"], "src_path": "/p/build.rs" }
+        ]})),
+        CrateRoots::NoneCompiled,
+        "targets none of which is a library or a binary compile no root this reads"
+    );
+    assert_eq!(
+        crate_roots(&json!({ "targets": [
+            { "kind": ["example"], "src_path": "/p/examples/e.rs" },
+            { "kind": ["bin"], "src_path": "/p/src/main.rs" }
+        ]})),
+        CrateRoots::Compiled(CompiledRoots(vec![PathBuf::from("/p/src/main.rs")]))
     );
 }
 
