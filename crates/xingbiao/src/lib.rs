@@ -146,7 +146,8 @@ impl CrateRoots {
 /// slice positionally against the root it is currently walking.
 ///
 /// A target Cargo reports always carries its `src_path`, so a library or binary target without one is metadata
-/// no Cargo wrote; it contributes no root, the answer synthetic metadata that omits the field would expect.
+/// no Cargo wrote; it contributes no root, and where no other target does either the package reads as
+/// [`CrateRoots::NoneCompiled`] — no root path was resolved, whatever the kinds claimed.
 pub fn crate_roots(package: &Value) -> CrateRoots {
     let targets = match package["targets"].as_array() {
         Some(targets) if !targets.is_empty() => targets,
