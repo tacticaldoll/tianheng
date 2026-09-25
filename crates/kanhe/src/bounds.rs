@@ -474,7 +474,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
-                "observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound",
+                "observer-protocol/a-method-on-another-trait-named-observer-is-read-a-stated-bound",
             ),
             "a same-named method on an `impl` of another trait whose path ends in `Observer`, with the definition \
              moved out of the inspected source",
@@ -1045,18 +1045,21 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
-                "repository-checks/an-assignment-spelled-other-than-name-value-is-not-read-a-stated-bound",
+                "repository-checks/an-assignment-that-is-not-an-assignment-word-is-not-read-a-stated-bound",
             ),
-            "an assignment to a declared exit code or channel class that is not a `NAME=value` word — `+=`, \
-             `read`, `printf -v`, arithmetic, `${NAME:=…}`",
+            "an assignment to a declared exit code or channel class that is not an assignment word — `read`, \
+             `printf -v`, arithmetic, `${NAME:=…}`",
             Extent::Reached(Reached::UnderReacts {
-                because: "the declaration check reads the `NAME=value` words a script spells, and bash's other \
-                          assignment forms are an enumeration it stops short of; a value one changes is caught \
-                          only where a direction runs the wrapper down that path and asserts its exit class"
+                because: "the declaration check reads the assignment words a script spells, `NAME=value` and \
+                          `NAME+=value`, and bash's other assignment forms are an enumeration it stops short of; \
+                          once the library is loaded each name is `readonly`, so bash refuses a later \
+                          assignment in any form and the wrapper exits the unjudged class. Before it is loaded \
+                          a wrapper's own statements run, and the declaration check refuses a wrapper that \
+                          writes any of the names as a word, in whatever form"
                     .into(),
                 owner: Owner::Engine,
             }),
-            "an_assignment_spelled_other_than_name_equals_value_is_not_read",
+            "an_assignment_that_is_not_an_assignment_word_is_not_read",
         ),
         BoundDecl::pinned(
             BoundId::new(

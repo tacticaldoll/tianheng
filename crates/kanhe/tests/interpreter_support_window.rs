@@ -77,12 +77,21 @@ fn support_window(workflow: &str, engines: &str, today: i64) -> Result<(), Strin
                 .is_some_and(|uses| uses.value.starts_with("actions/setup-node@"))
         })
         .collect();
-    let [step] = setup_node.as_slice() else {
-        return Err(format!(
-            "{} `actions/setup-node` steps are present, and a window declared beside one pin cannot speak \
-             for several. Bound each pin where it stands",
-            setup_node.len()
-        ));
+    let step = match setup_node.as_slice() {
+        [step] => step,
+        [] => {
+            return Err(
+                "no `actions/setup-node` step is present, so a support window bounds no interpreter pin"
+                    .to_string(),
+            );
+        }
+        several => {
+            return Err(format!(
+                "{} `actions/setup-node` steps are present, and a window declared beside one pin cannot \
+                 speak for several. Bound each pin where it stands",
+                several.len()
+            ));
+        }
     };
 
     let declarations: Vec<(usize, &str, &str)> = workflow
@@ -593,4 +602,37 @@ fn the_engines_range_is_held_against_the_major_the_workflow_pins() {
             if reacts { "react" } else { "pass" }
         );
     }
+}
+
+/// No `actions/setup-node` step and several are two refusals, and each says its own.
+///
+/// One sentence served both, and its second clause — a window beside one pin cannot speak for several — is false
+/// of a workflow with none.
+#[test]
+fn no_setup_node_step_and_several_are_told_apart() {
+    let day = 0;
+    let none = support_window(
+        "jobs:\n  j:\n    steps:\n      - run: echo\n",
+        ENGINES_FOR_24,
+        day,
+    )
+    .expect_err("a workflow with no setup-node step bounds nothing");
+    assert!(
+        none.contains("no `actions/setup-node` step") && !none.contains("several"),
+        "the refusal over no step says there is none, and nothing about several: {none}"
+    );
+    let two = support_window(
+        &format!(
+            "{}{}",
+            step_pinning("# NOT-BEYOND: 24 2028-04-30", "24.16.0"),
+            "      - uses: actions/setup-node@abc\n        with:\n          node-version: '22'\n"
+        ),
+        ENGINES_FOR_24,
+        day,
+    )
+    .expect_err("two setup-node steps cannot share one window");
+    assert!(
+        two.contains("2 `actions/setup-node` steps") && two.contains("several"),
+        "the refusal over two steps names the count and the several: {two}"
+    );
 }

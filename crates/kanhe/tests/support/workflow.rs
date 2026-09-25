@@ -27,6 +27,8 @@ pub enum Node {
     Scalar {
         value: String,
         line: usize,
+        /// Written without quotes or a block indicator, which is where YAML reads `null` and `~` as no value.
+        plain: bool,
     },
     Sequence {
         items: Vec<Node>,
@@ -123,7 +125,13 @@ pub struct Step {
     pub env: Vec<Entry<String>>,
     pub shell: Option<Entry<String>>,
     pub run: Option<Entry<String>>,
+    /// The step carries `if:` or `continue-on-error:`, so whether it runs, or whether its failure fails the job,
+    /// is decided when the workflow runs.
+    pub gated: bool,
 }
+
+/// The keys by which GitHub decides at run time whether a job or step runs, or whether its failure counts.
+pub const RUN_TIME_GATES: [&str; 2] = ["if", "continue-on-error"];
 
 impl Step {
     /// Whether the comment `text` on `line` is this step's: within its lines, and indented at least as deep as
@@ -166,7 +174,7 @@ pub fn parse(text: &str) -> Result<Workflow, String> {
     let top = |key: &str| entries.iter().find(|entry| entry.key == key);
 
     let env = match top("env") {
-        Some(entry) => scalar_mapping(&entry.value, "env")?,
+        Some(entry) => env_mapping(&entry.value)?,
         None => Vec::new(),
     };
     let defaults_shell = match top("defaults") {
@@ -208,13 +216,29 @@ pub fn is_comment_line(text: &str, line: usize) -> Result<bool, String> {
     Ok(document(&blanked).is_ok_and(|after| after == before))
 }
 
-/// `defaults: run: shell:`, read on a workflow or on a job.
+/// The shell a `defaults: run: shell:` block declares, on a workflow or on a job — `None` where it declares none.
+///
+/// **A `defaults` or `run` that is not a mapping is refused, not read as declaring nothing.** [`Node::get`]
+/// answers `None` both for a key that is absent and for a node that is not a mapping, and only the first is a
+/// workflow declaring no shell; the second is a value this model cannot hold.
 fn shell_of(defaults: &Node) -> Result<Option<Entry<String>>, String> {
+    let Node::Mapping { .. } = defaults else {
+        return Err(format!(
+            "line {}: `defaults` is not a mapping",
+            defaults.line()
+        ));
+    };
     let Some(run) = defaults.get("run") else {
         return Ok(None);
     };
+    let Node::Mapping { .. } = run else {
+        return Err(format!(
+            "line {}: `defaults.run` is not a mapping",
+            run.line()
+        ));
+    };
     match run.get("shell") {
-        Some(Node::Scalar { value, line }) => Ok(Some(Entry {
+        Some(Node::Scalar { value, line, .. }) => Ok(Some(Entry {
             key: "shell".to_string(),
             line: *line,
             value: value.clone(),
@@ -258,7 +282,7 @@ fn jobs_of(jobs: &Node, lines: usize) -> Result<Vec<Job>, String> {
                 .map(|field| (field.key.clone(), field.line))
                 .collect(),
             env: match field("env") {
-                Some(env) => scalar_mapping(&env.value, "env")?,
+                Some(env) => env_mapping(&env.value)?,
                 None => Vec::new(),
             },
             defaults_shell: match field("defaults") {
@@ -292,7 +316,7 @@ fn steps_of(steps: &Node, steps_end: usize) -> Result<Vec<Step>, String> {
         let scalar = |key: &str| -> Result<Option<Entry<String>>, String> {
             match field(key) {
                 Some(Entry {
-                    value: Node::Scalar { value, line },
+                    value: Node::Scalar { value, line, .. },
                     ..
                 }) => Ok(Some(Entry {
                     key: key.to_string(),
@@ -309,28 +333,51 @@ fn steps_of(steps: &Node, steps_end: usize) -> Result<Vec<Step>, String> {
             column: *column,
             uses: scalar("uses")?,
             with: match field("with") {
-                Some(with) => scalar_mapping(&with.value, "with")?,
+                Some(with) => scalar_mapping(&with.value, "with", false)?,
                 None => Vec::new(),
             },
             env: match field("env") {
-                Some(env) => scalar_mapping(&env.value, "env")?,
+                Some(env) => env_mapping(&env.value)?,
                 None => Vec::new(),
             },
             shell: scalar("shell")?,
             run: scalar("run")?,
+            gated: entries
+                .iter()
+                .any(|entry| RUN_TIME_GATES.contains(&entry.key.as_str())),
         });
     }
     Ok(read)
 }
 
-/// A mapping every value of which is a scalar — `env:` and `with:`.
-fn scalar_mapping(node: &Node, what: &str) -> Result<Vec<Entry<String>>, String> {
+/// An `env:` mapping: scalars, none of them the null a name could not be expanded to.
+fn env_mapping(node: &Node) -> Result<Vec<Entry<String>>, String> {
+    scalar_mapping(node, "env", true)
+}
+
+/// A mapping every value of which is a scalar — `env:` and `with:` — refusing a null value where `refuse_null`
+/// says the mapping's values are expanded.
+fn scalar_mapping(
+    node: &Node,
+    what: &str,
+    refuse_null: bool,
+) -> Result<Vec<Entry<String>>, String> {
     let Node::Mapping { entries, .. } = node else {
         return Err(format!("line {}: `{what}` is not a mapping", node.line()));
     };
     entries
         .iter()
         .map(|entry| match &entry.value {
+            // YAML's core schema reads these plain spellings as null, and GitHub Actions takes no value from them,
+            // so a reader holding the text as a string would expand a variable the step does not set.
+            Node::Scalar {
+                value,
+                plain: true,
+                ..
+            } if refuse_null && ["", "~", "null", "Null", "NULL"].contains(&value.as_str()) => Err(format!(
+                "line {}: `{what}.{}` is null, which gives the name no value this reader can expand",
+                entry.line, entry.key
+            )),
             Node::Scalar { value, .. } => Ok(Entry {
                 key: entry.key.clone(),
                 line: entry.line,
@@ -385,9 +432,14 @@ enum Open {
     },
 }
 
+/// Record the first reason the model cannot hold the document; a later one adds nothing a reader needs.
+fn refuse(refusal: &mut Option<String>, why: String) {
+    refusal.get_or_insert(why);
+}
+
 impl Builder {
     fn refuse(&mut self, why: String) {
-        self.refusal.get_or_insert(why);
+        refuse(&mut self.refusal, why);
     }
 
     /// Hand a completed node to whatever is open around it; `column` is where the parser marked it.
@@ -403,27 +455,33 @@ impl Builder {
             }) => match pending.take() {
                 None => match node {
                     // A key: YAML allows a mapping or sequence here, and a workflow never writes one.
-                    Node::Scalar { value, line } => {
+                    Node::Scalar { value, line, .. } => {
                         let duplicated = entries.iter().any(|entry| entry.key == value);
                         if value == "<<" {
-                            self.refusal.get_or_insert(format!(
-                                "line {line}: a merge key copies a mapping in by reference, and this model \
+                            refuse(
+                                &mut self.refusal,
+                                format!(
+                                    "line {line}: a merge key copies a mapping in by reference, and this model \
                                  reads what is written where it is written"
-                            ));
+                                ),
+                            );
                         } else if duplicated {
-                            self.refusal.get_or_insert(format!(
-                                "line {line}: `{value}` is written twice in one mapping, so which value \
+                            refuse(
+                                &mut self.refusal,
+                                format!(
+                                    "line {line}: `{value}` is written twice in one mapping, so which value \
                                  applies is not something a reader can decide"
-                            ));
+                                ),
+                            );
                         }
                         column.get_or_insert(at_column);
                         *pending = Some((value, line));
                     }
                     other => {
-                        self.refusal.get_or_insert(format!(
-                            "line {}: a mapping key that is not a scalar",
-                            other.line()
-                        ));
+                        refuse(
+                            &mut self.refusal,
+                            format!("line {}: a mapping key that is not a scalar", other.line()),
+                        );
                         *pending = Some((String::new(), other.line()));
                     }
                 },
@@ -450,11 +508,12 @@ impl MarkedEventReceiver for Builder {
             )),
             // The parser marks a block scalar at its first content line rather than at its `|` or `>`, so every
             // scalar's line is the mark's — measured, and held by `block_scalars_read_as_yaml_reads_them`.
-            Event::Scalar(value, _, anchor, tag) => {
+            Event::Scalar(value, style, anchor, tag) => {
                 if anchor != 0 || tag.is_some() {
                     self.refuse(format!("line {line}: an anchor or a tag on a scalar"));
                 }
-                self.place(Node::Scalar { value, line }, mark.col());
+                let plain = style == yaml_rust2::scanner::TScalarStyle::Plain;
+                self.place(Node::Scalar { value, line, plain }, mark.col());
             }
             Event::SequenceStart(anchor, tag) => {
                 if anchor != 0 || tag.is_some() {

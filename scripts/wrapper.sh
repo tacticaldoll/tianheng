@@ -42,9 +42,30 @@
 # subjects, because "which is not the same fact as a subject that disagrees". So the wrapper reported as a
 # disagreement what its own gate calls unjudgeable — telling an operator, in the words of the publish gate,
 # "to go looking for a disagreement that does not exist".
-WRAPPER_EXIT_VIOLATION=1
-WRAPPER_EXIT_UNJUDGED=2
-WRAPPER_EXIT_MISUSE=64
+#
+# **Each is `readonly`, so a later assignment in any form ends the wrapper rather than moving a class.** bash
+# refuses an assignment to a readonly name however it is spelled — `NAME=`, `read`, `printf -v`, `(( ))` — and
+# the refusal ends a non-interactive shell with status `1` outside the ERR trap; `wrapper_on_exit` holds that
+# status to the unjudged class, since no stop chose it.
+readonly WRAPPER_EXIT_VIOLATION=1
+readonly WRAPPER_EXIT_UNJUDGED=2
+readonly WRAPPER_EXIT_MISUSE=64
+
+# The class the stop that is leaving chose, set immediately before its `exit`. The EXIT trap holds every other
+# nonzero status to the unjudged class, so a status is this library's only where this library chose it.
+wrapper_exit_chosen=0
+# The channel's file, and the one `open_verdict_file` made, which the EXIT trap removes — or, where it cannot,
+# says it left. Two names, because only a file this library created is its to remove.
+verdict_file=""
+verdict_file_created=""
+# Set by `perform_the_act` once the irreversible command has been started, so a stop after it does not say that
+# nothing irreversible ran.
+wrapper_act_started=0
+# A signal that arrived while the act ran, held until the act's account has read its outcome.
+wrapper_pending_signal=""
+# The signal the wrapper is ending by, once it has said so: the EXIT trap then runs with `$?` as `0`, and the run
+# has already said how it ends.
+wrapper_ending_signal=""
 
 # Executed rather than sourced is a plain misuse, answered outside both classes a wrapper reserves: `1` would
 # read as a gate that refused and `2` as a wrapper that could not judge.
@@ -92,6 +113,10 @@ say() {
 # cannot spell one wrapper's prefix inside the other.
 cannot_judge() {
     tell "$WRAPPER_SUBJECT: $1"
+    if [[ -n $wrapper_pending_signal ]]; then
+        wrapper_stop_by_signal "$wrapper_pending_signal"
+    fi
+    wrapper_exit_chosen=$WRAPPER_EXIT_UNJUDGED
     exit "$WRAPPER_EXIT_UNJUDGED"
 }
 
@@ -113,13 +138,76 @@ refuse() {
 # enumerating them is the wrong instrument. Enumerating what may exit `1` is the right one, and there is
 # exactly one such statement: `exit_for_the_gates_refusal`, below.
 #
+# **And the class is decided at the exit, not only at the failure.** An expansion error — an unset name under
+# `set -u`, a division by zero — ends the shell without running the ERR trap, with status `1`: measured on bash
+# 5.2, `set -Eeuo pipefail; trap 'exit 2' ERR; echo "${typo}"` exits 1. The EXIT trap does run, so it holds
+# every nonzero status that no stop chose to the unjudged class, and `1` stays the gate's by construction rather
+# than by every failure happening to trap.
+#
 # Measured on bash 5.x rather than reasoned about. A bare failure traps and exits 2, including a failed `cd`.
 # A `||`-guarded command does not trap, so every existing guard still decides its own outcome. A failure in a
 # condition — `if`, `while`, `!`, `&&` — does not trap, so the `grep -q` that checks the gate ran is
-# unaffected. An explicit `exit` is not intercepted, so the gate's verdict still reaches the caller. `set -E`
-# is required and is not optional: without it a failure inside a function exits 1 and the trap never sees it.
+# unaffected. An `exit` a stop makes after recording its class passes through the EXIT trap unchanged, so the
+# gate's verdict still reaches the caller. `set -E` is required and is not optional: without it a failure
+# inside a function exits 1 and the trap never sees it.
+#
+# **A signal is the one stop outside both classes, and it ends the wrapper by that signal.** A shell running this
+# wrapper in a loop decides whether to stop the loop from how the wrapper ended: measured on bash 5.3, with SIGINT
+# sent to the process group, a wrapper that trapped it and exited `2` let the loop run its next iteration — the
+# next merge — while one that re-raised the signal on itself stopped the loop. So the handler says what it stopped
+# before, then resets the signal and sends it to itself. A signal delivered while a child runs is handled once the
+# child returns; one arriving during the act is held until the act's account has read the outcome, so the
+# operator is told what happened rather than that it is unknown.
 install_exit_class_trap() {
     trap 'cannot_judge "an unguarded command failed, so this wrapper stopped without reaching a verdict — which is not the same fact as a gate that ran and refused"' ERR
+    trap wrapper_on_exit EXIT
+    trap 'wrapper_on_signal INT' INT
+    trap 'wrapper_on_signal TERM' TERM
+    trap 'wrapper_on_signal HUP' HUP
+}
+
+# A signal's arrival: held while the act runs, so its account reads the outcome first, and a stop otherwise.
+wrapper_on_signal() {
+    if ((wrapper_act_started)); then
+        wrapper_pending_signal=$1
+        return 0
+    fi
+    wrapper_stop_by_signal "$1"
+}
+
+# The stop a signal makes: what it stopped before, said, then the wrapper ended by that signal.
+wrapper_stop_by_signal() {
+    trap '' INT TERM HUP
+    if ((wrapper_act_started)); then
+        tell "$WRAPPER_SUBJECT: stopped by SIG$1 once the act had run; its outcome is the one reported above"
+    else
+        tell "$WRAPPER_SUBJECT: stopped by SIG$1 before the act was started, so nothing irreversible ran"
+    fi
+    wrapper_ending_signal=$1
+    trap - "$1"
+    kill -"$1" "$$"
+}
+
+# The one EXIT trap: the channel's file removed, and a status no stop chose held to the unjudged class.
+#
+# **A file it cannot remove is a stop, like every other failure.** On a run that was otherwise leaving clean, a
+# verdict file left behind is the one fact the success path promises not to leave, so the run leaves unjudged and
+# says the act itself completed; on a run already leaving through a stop, the removal is said and the stop's own
+# class stands, so the first cause stays the one reported.
+wrapper_on_exit() {
+    local status=$?
+    # A signal arriving now would stop a run that has already decided how it ends.
+    trap '' INT TERM HUP
+    if [[ -n $verdict_file_created ]] && ! rm -f -- "$verdict_file_created"; then
+        if [[ $status == 0 && -z $wrapper_ending_signal ]]; then
+            cannot_judge "the run completed, and its verdict file $verdict_file_created could not be removed — the act is done; the file is what is left"
+        fi
+        tell "$WRAPPER_SUBJECT: its verdict file $verdict_file_created could not be removed"
+    fi
+    if [[ -z $wrapper_ending_signal && $status != 0 && $status != "$wrapper_exit_chosen" ]]; then
+        cannot_judge \
+            "this wrapper ended with status $status that no stop chose — an expansion error or an assignment to a readonly name ends bash without the ERR trap — so it stopped without reaching a verdict"
+    fi
 }
 
 # A wrapper's own root: the tree its gate is run from. Acquired here rather than at the top of each wrapper,
@@ -128,6 +216,25 @@ install_exit_class_trap() {
 # would have reported the class that means the gate ran and refused.
 wrapper_own_root() {
     cd -- "$(dirname -- "${BASH_SOURCE[1]}")/.." && pwd
+}
+
+# **A value-taking flag's value, one rule for both wrappers.** `value_refusal <count> <flag> <value>` prints why
+# the value is refused and fails, or prints nothing and succeeds; each wrapper's own guard refuses in its own
+# form — `why=$(value_refusal "$@") || usage_error "$why"`. A value is refused two ways: absent, and
+# beginning with `-`. The second is checked by shape rather than against a list of the tool's flags, because a
+# refused argument does not become admitted by sitting in a value position, and neither wrapper reads its tool's
+# handling of a flag-shaped value, which differs by flag and by version — measured on cargo 1.96.0,
+# `--package --no-verify` packages without verifying, and `--subject --admin` made a merge subject the literal
+# string `--admin` while the operator's flag never reached `gh`.
+value_refusal() {
+    if (($1 < 2)); then
+        printf '%s' "refusing \`$2\` with no value: every value is read as the argument after its flag, so pass it that way or drop the flag"
+        return 1
+    fi
+    if [[ $3 == -* ]]; then
+        printf '%s' "refusing \`$2\`: its value is \`$3\`, and a value beginning with \`-\` is not accepted. A refused argument does not become admitted by sitting in a value position. Pass a value, or drop the flag"
+        return 1
+    fi
 }
 
 # The channel the gate reports its refusal class on, and the class that means a disagreement.
@@ -141,7 +248,7 @@ wrapper_own_root() {
 # reported as unjudged. It also searched a stream carrying arbitrary tooling output, where a class could be
 # read from text no judgement wrote. A file the gate writes only when it has a verdict makes *absent* mean
 # unjudged by construction.
-GATE_VIOLATION_CLASS=Violation
+readonly GATE_VIOLATION_CLASS=Violation
 # The class a gate reports when it JUDGED AND AGREED, and the guard that requires it on the success path.
 #
 # **`require_one_pass` answers a different question and cannot cover this one.** It asks *did the selected
@@ -153,7 +260,7 @@ GATE_VIOLATION_CLASS=Violation
 # The gate now writes the channel on its clean arm too, so *absent on success* means unjudged by
 # construction rather than by a wrapper remembering to check. Held against `kanhe::verdict_channel::CLEAN` by
 # `crates/kanhe/tests/gate_exit_classes.rs`, so neither spelling can drift from the gate's side.
-GATE_CLEAN_CLASS=Clean
+readonly GATE_CLEAN_CLASS=Clean
 
 require_a_verdict() {
     local reached
@@ -203,13 +310,15 @@ exit_for_the_gates_refusal() {
     tell "$output"
     reached=$(verdict_on_channel) || reached=""
     if [[ $reached == "$GATE_VIOLATION_CLASS" ]]; then
+        wrapper_exit_chosen=$WRAPPER_EXIT_VIOLATION
         exit "$WRAPPER_EXIT_VIOLATION"
     fi
     cannot_judge \
         "the gate failed without reporting a disagreement — its channel carries ${reached:-nothing} — so this stops as a run that could not judge, not as one that refused"
 }
 
-# The verdict file's lifecycle: created where the gate is about to run, removed by the EXIT trap on every path.
+# The verdict file's lifecycle: created where the gate is about to run, and removed by `wrapper_on_exit` on every
+# path, which says so where the removal itself fails.
 # That holds because no wrapper `exec`s — `perform_the_act` below runs the act — and an EXIT trap does not run
 # when `exec` replaces the shell image: measured, `bash -c 'trap "echo T" EXIT; exec true'` prints nothing while
 # the same script without `exec` prints `T`.
@@ -217,7 +326,7 @@ open_verdict_file() {
     verdict_file=$(mktemp) || cannot_judge \
         "cannot open a file for the gate to report its refusal class on, so a failing gate could not be told \
 from an input it could not read"
-    trap 'rm -f "$verdict_file"' EXIT
+    verdict_file_created=$verdict_file
 }
 
 # **The act, run and accounted for in one place.** Both wrappers end here: `perform_the_act <account> <command…>`
@@ -237,6 +346,10 @@ from an input it could not read"
 perform_the_act() {
     local account=$1 status=0
     shift
+    wrapper_act_started=1
     "$@" || status=$?
     "$account" "$status"
+    if [[ -n $wrapper_pending_signal ]]; then
+        wrapper_stop_by_signal "$wrapper_pending_signal"
+    fi
 }

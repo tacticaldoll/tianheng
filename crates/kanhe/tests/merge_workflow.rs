@@ -7,8 +7,10 @@ mod support;
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus};
+use std::process::ExitStatus;
 use std::sync::atomic::{AtomicUsize, Ordering};
+
+use support::fixture::{read_if_present, write_executable};
 
 fn workspace_root() -> Option<PathBuf> {
     shengmo::workspace::locate(
@@ -50,25 +52,6 @@ struct Run {
     gh_body: String,
     cargo_log: String,
     commits: String,
-}
-
-fn write_executable(path: &Path, text: &str) {
-    use std::os::unix::fs::PermissionsExt;
-
-    std::fs::write(path, text).expect("write controlled executable");
-    let mut permissions = std::fs::metadata(path)
-        .expect("read controlled executable metadata")
-        .permissions();
-    permissions.set_mode(0o755);
-    std::fs::set_permissions(path, permissions).expect("make controlled executable runnable");
-}
-
-fn read_if_present(path: &Path) -> std::io::Result<String> {
-    match std::fs::read_to_string(path) {
-        Ok(text) => Ok(text),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
-        Err(err) => Err(err),
-    }
 }
 
 /// The wrapper run from the workspace it lives in, which is how every direction but two exercises it.
@@ -122,32 +105,12 @@ fn run_wrapper_over(
     ambient: &[(&str, &Path)],
     streams: Streams,
 ) -> Run {
-    static NEXT: AtomicUsize = AtomicUsize::new(0);
-    let scratch = loop {
-        let candidate = std::env::temp_dir().join(format!(
-            "tianheng-merge-workflow-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        match xingbiao::claim_scratch(&candidate) {
-            Ok(()) => break candidate,
-            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(err) => {
-                assert_eq!(
-                    err.kind(),
-                    std::io::ErrorKind::AlreadyExists,
-                    "cannot acquire controlled merge-workflow root {}: {err}",
-                    candidate.display()
-                );
-            }
-        }
-    };
-    let bin = scratch.join("bin");
-    std::fs::create_dir(&bin).expect("create controlled PATH");
-    // The wrapper's own `TMPDIR`, so what it leaves behind is observable and lands in the fixture rather than in
-    // the developer's `/tmp`.
-    let tmp = scratch.join("tmp");
-    std::fs::create_dir(&tmp).expect("create the wrapper's temporary directory");
+    // The `gh` stub filters its answers through `jq`.
+    support::fixture::require_host_tool("jq");
+    let harness = support::fixture::Harness::claim("tianheng-merge-workflow");
+    let scratch = harness.path();
+    let bin = harness.bin();
+    let tmp = harness.tmp();
 
     let gh_log = scratch.join("gh.log");
     let gh_body = scratch.join("gh.body");
@@ -415,7 +378,8 @@ fi
     );
     write_executable(
         &bin.join("cargo"),
-        r##"#!/usr/bin/env bash
+        &[
+            r##"#!/usr/bin/env bash
 set -eu
 printf '%s\n' "$*" >> "$FAKE_CARGO_LOG"
 printf '%s' "${TIANHENG_MERGE_COMMITS-}" > "$FAKE_COMMITS"
@@ -425,28 +389,21 @@ printf '%s' "${TIANHENG_MERGE_COMMITS-}" > "$FAKE_COMMITS"
 if [[ -n ${FAKE_BODY_REWRITE-} ]]; then
     printf '%s' "$FAKE_BODY_REWRITE_TEXT" > "$FAKE_BODY_REWRITE"
 fi
-# The gate reports on the channel whether it agrees or refuses, so a controlled gate that only prints
-# `1 passed` is a gate that ran and judged nothing — which is what the wrapper's success path now refuses.
-# `no-verdict` is the mode that keeps that state constructible.
-#
-# Only where the channel was opened: the wrapper hands the channel to the gate alone, so a run of this
-# executable without it is not the gate's run and must not write one.
-if [[ ${FAKE_GATE_VERDICT-} != none && -n ${TIANHENG_GATE_VERDICT-} ]]; then
-    printf '%s' 'Clean' > "$TIANHENG_GATE_VERDICT"
-fi
-printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'
 "##,
+            support::fixture::GATE_VERDICT_STUB,
+            &support::fixture::gate_pass_stub(),
+        ]
+        .concat(),
     );
 
-    let old_path = std::env::var_os("PATH").unwrap_or_default();
-    let path = format!("{}:{}", bin.display(), old_path.to_string_lossy());
-    let mut command = Command::new("bash");
+    let path = support::fixture::path_with(bin);
+    let mut command = support::bash::bash();
     // The launcher is a shell of its own, so the stream is taken away from the wrapper and from nothing else;
     // the status reported is the wrapper's, read from `PIPESTATUS` where a pipe stands after it.
     match streams {
         Streams::Open => {}
         Streams::ClosedStdout => {
-            command.args(["-c", r#"exec >&-; exec bash "$@""#, "launcher"]);
+            command.args(["-c", support::streams::CLOSED, "launcher", "1"]);
         }
         Streams::BrokenStdout => {
             command.args(["-c", support::streams::BROKEN, "launcher", "1"]);
@@ -467,7 +424,7 @@ printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 fil
         .env("FAKE_TITLE_CALLS", scratch.join("title-calls"))
         .env("FAKE_BASE_CALLS", scratch.join("base-calls"))
         .env("FAKE_HEAD_BRANCH_CALLS", scratch.join("head-branch-calls"))
-        .env("TMPDIR", &tmp);
+        .env("TMPDIR", tmp);
     if let Some(cwd) = cwd {
         command.current_dir(cwd);
     }
@@ -487,17 +444,8 @@ printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 fil
     }
     let output = command.output().expect("run controlled merge workflow");
 
-    let run = Run {
-        leftover: std::fs::read_dir(&tmp)
-            .expect("read the wrapper's temporary directory")
-            .map(|entry| {
-                entry
-                    .expect("a temporary directory entry")
-                    .file_name()
-                    .to_string_lossy()
-                    .into_owned()
-            })
-            .collect(),
+    Run {
+        leftover: harness.leftover(),
         status: output.status,
         stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
         stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
@@ -506,9 +454,7 @@ printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 fil
             .expect("read the body the controlled merge would record"),
         cargo_log: read_if_present(&cargo_log).expect("read controlled cargo log"),
         commits: read_if_present(&commits).expect("read commits received by controlled gate"),
-    };
-    let _ = std::fs::remove_dir_all(&scratch);
-    run
+    }
 }
 
 /// A gate from one repository never judges another repository's pull request.
@@ -757,7 +703,7 @@ fn a_value_taking_flag_with_no_value_is_named_and_refused() {
         return;
     };
     for flag in ["--subject", "--body-file"] {
-        let output = Command::new("bash")
+        let output = support::bash::bash()
             .arg(root.join("scripts/merge-pr.sh"))
             .args(["42", flag])
             .output()
@@ -818,7 +764,7 @@ fn every_usage_refusal_carries_the_wrappers_own_diagnostic() {
     // empty one is something a person wrote rather than a side effect of touching something else, and
     // `clippy::const_is_empty` refuses the assertion as a constant expression besides.
     for (args, phrase) in shapes {
-        let output = Command::new("bash")
+        let output = support::bash::bash()
             .arg(root.join("scripts/merge-pr.sh"))
             .args(args)
             .output()
@@ -916,22 +862,43 @@ fn every_call_names_one_repository_and_another_one_is_refused() {
 
     // Refused before anything is read: a URL names a repository this wrapper does not read its evidence from.
     let url = run_wrapper(&root, "subjects", &[]);
-    let refused = std::process::Command::new("bash")
-        .arg(root.join("scripts/merge-pr.sh"))
-        .args(["https://github.com/other/thing/pull/42", "--body-file"])
-        .arg(root.join("README.md"))
-        .output()
-        .expect("run the wrapper with a cross-repository URL");
-    assert_eq!(
-        refused.status.code(),
-        Some(2),
-        "a pull-request URL must be refused as a usage error"
+    // Any selector holding `:` — a URL in either case, or another fork's `owner:branch` — names a repository.
+    // Refused before `gh` is reached, which a stub first on `PATH` holds: it leaves a mark if it runs.
+    let harness = support::fixture::Harness::claim("tianheng-selector-refusal");
+    let bin = harness.bin();
+    let mark = harness.path().join("reached");
+    support::fixture::write_executable(
+        &bin.join("gh"),
+        "#!/usr/bin/env bash\nprintf gh >> \"$FAKE_REACHED\"\nexit 99\n",
     );
-    let stderr = String::from_utf8_lossy(&refused.stderr);
-    assert!(
-        stderr.contains("merge message:") && stderr.contains("names its own repository"),
-        "the refusal must say why, got {stderr:?}"
-    );
+    for selector in [
+        "https://github.com/other/thing/pull/42",
+        "HTTPS://github.com/other/thing/pull/42",
+        "other:branch",
+    ] {
+        let refused = support::bash::bash()
+            .arg(root.join("scripts/merge-pr.sh"))
+            .args([selector, "--body-file"])
+            .arg(root.join("README.md"))
+            .env("PATH", support::fixture::path_with(bin))
+            .env("FAKE_REACHED", &mark)
+            .output()
+            .expect("run the wrapper with a cross-repository selector");
+        assert_eq!(
+            refused.status.code(),
+            Some(2),
+            "`{selector}` must be refused as a usage error"
+        );
+        let stderr = String::from_utf8_lossy(&refused.stderr);
+        assert!(
+            stderr.contains("merge message:") && stderr.contains("names its own repository"),
+            "the refusal of `{selector}` must say why, got {stderr:?}"
+        );
+        assert!(
+            !mark.exists(),
+            "`{selector}` reached `gh` before it was refused"
+        );
+    }
 
     // And on the accepted path, every invocation carries the one identity this checkout resolved.
     let invocations: Vec<&str> = url
@@ -2028,7 +1995,7 @@ fn workflow_shape(text: &str) -> WorkflowShape {
     // a *check's conclusion*: the job runs, reports `SKIPPED`, and the silent arm refuses — missing one costs
     // a delay. A trigger filter stops the workflow *running at all*, so its checks are **absent** from the
     // rollup rather than skipped, and what happens then depends on whether anything else claimed the head.
-    // [`a_missed_path_filter_costs_a_delay_only_while_one_workflow_exists`] holds the condition that keeps
+    // [`a_missed_event_filter_costs_a_delay_only_while_one_workflow_exists`] holds the condition that keeps
     // the second cost equal to the first.
     const ON_THE_JOB: [&str; 3] = ["if", "needs", "continue-on-error"];
     const PULL_REQUEST_EVENTS: [&str; 2] = ["pull_request", "pull_request_target"];
@@ -2112,7 +2079,7 @@ const JOBS: [&str; 8] = [
 /// repository removes on sight; it is held here instead. A second workflow is legitimate work — this fails
 /// so that the trigger pair's cost is re-priced when it happens, not discovered afterwards.
 #[test]
-fn a_missed_path_filter_costs_a_delay_only_while_one_workflow_exists() {
+fn a_missed_event_filter_costs_a_delay_only_while_one_workflow_exists() {
     let Some(root) = workspace_root() else {
         return;
     };
@@ -2167,7 +2134,7 @@ fn a_missed_path_filter_costs_a_delay_only_while_one_workflow_exists() {
 /// *no workflow has claimed this head* arm.
 ///
 /// Stating it once for all of them would have rested a claim about the wrapper on the number of files in a
-/// directory. [`a_missed_path_filter_costs_a_delay_only_while_one_workflow_exists`] holds that count instead,
+/// directory. [`a_missed_event_filter_costs_a_delay_only_while_one_workflow_exists`] holds that count instead,
 /// so a second workflow re-opens the question where it is priced rather than after.
 ///
 /// Seven review rounds found five positions in the reader below, two of them failing open — and against the
@@ -2369,7 +2336,7 @@ fn a_flag_shaped_value_is_refused_in_every_value_position() {
     };
     for arm in ["--subject", "--body-file"] {
         for value in ["--admin", "--repo", "--delete-branch", "-t"] {
-            let output = Command::new("bash")
+            let output = support::bash::bash()
                 .arg(root.join("scripts/merge-pr.sh"))
                 .args(["42", arm, value])
                 .output()
@@ -2402,7 +2369,7 @@ fn a_flag_shaped_value_is_refused_in_every_value_position() {
 ///
 /// Each file is read as text rather than through `support::workflow`, because what these scans judge is
 /// shell; `repository-checks` states that choice and the over-inclusion it costs.
-fn runs_shell_under_pipefail(root: &Path) -> Vec<(String, String)> {
+fn pipefail_corpus(root: &Path) -> Vec<(String, String)> {
     const WORKFLOW: &str = ".github/workflows/ci.yml";
     let workflow = std::fs::read_to_string(root.join(WORKFLOW)).unwrap_or_else(|error| {
         panic!("read {WORKFLOW} — the pipelines this holds are written in it: {error}")
@@ -2486,7 +2453,7 @@ fn no_step_reads_a_value_through_a_pipeline_that_stops_early() {
         return;
     };
     let mut standing = Vec::new();
-    for (name, text) in runs_shell_under_pipefail(&root) {
+    for (name, text) in pipefail_corpus(&root) {
         for (number, line) in text.lines().enumerate() {
             let trimmed = line.trim();
             // Comments are excluded by position: the paragraphs recording this measurement name the very
@@ -2530,7 +2497,7 @@ fn no_step_reads_a_value_through_a_process_substitution() {
         return;
     };
     let mut standing = Vec::new();
-    for (name, text) in runs_shell_under_pipefail(&root) {
+    for (name, text) in pipefail_corpus(&root) {
         for (number, line) in text.lines().enumerate() {
             let trimmed = line.trim();
             // By position, as its siblings do: the paragraphs recording this write the shape they forbid.
@@ -2570,7 +2537,7 @@ fn no_step_reads_a_value_through_a_process_substitution() {
 /// `bash -e {0}` and a path to bash each run without `pipefail` — and a `set -` line inside a `run:` block puts
 /// the decision in two places again, the shape where one of them drifts.
 ///
-/// The corpus is the one file [`a_missed_path_filter_costs_a_delay_only_while_one_workflow_exists`] holds this
+/// The corpus is the one file [`a_missed_event_filter_costs_a_delay_only_while_one_workflow_exists`] holds this
 /// directory to. Comment lines are excluded by position: the paragraph in `ci.yml` that records this
 /// measurement writes the flags it forbids, so a reader matching the bare string would refuse its own reason.
 #[test]

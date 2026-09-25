@@ -29,10 +29,7 @@ pub const SCRIPTS_DIRECTORY: &str = "scripts/";
 /// because every one of them returns what a repository holding no scripts would, and reporting that as clean
 /// is the vacuity direction.
 pub fn tracked_scripts(repo: &Path) -> Result<Vec<(String, String)>, String> {
-    let listing =
-        crate::hermetic_git::tracked_paths(repo, &[SCRIPTS_DIRECTORY]).map_err(|failure| {
-            format!("`git ls-files {SCRIPTS_DIRECTORY}` did not answer: {failure:?}")
-        })?;
+    let listing = tracked_script_paths(repo)?;
     if listing.is_empty() {
         return Err(format!(
             "no tracked file under {SCRIPTS_DIRECTORY}, so a direction over the scripts would hold over nothing"
@@ -46,6 +43,20 @@ pub fn tracked_scripts(repo: &Path) -> Result<Vec<(String, String)>, String> {
             Ok((path, text))
         })
         .collect()
+}
+
+/// Every tracked path under `scripts/`: the one enumeration of that set, which [`tracked_scripts`] reads and the
+/// release-coherence gate's machinery set is drawn from.
+///
+/// Empty is an answer here: a tree may hold no scripts, and whether that is a vacuity is the caller's to say.
+///
+/// # Errors
+///
+/// A listing git did not answer.
+pub fn tracked_script_paths(repo: &Path) -> Result<Vec<String>, String> {
+    crate::hermetic_git::tracked_paths(repo, &[SCRIPTS_DIRECTORY]).map_err(|failure| {
+        format!("`git ls-files {SCRIPTS_DIRECTORY}` did not answer: {failure:?}")
+    })
 }
 
 /// The one tracked script under `scripts/` that is not a wrapper: the shared library the wrappers source.
@@ -81,6 +92,11 @@ pub struct Citation {
 /// the space rather than the newline. That sweep decides whether every acquisition in the two
 /// irreversible-act wrappers is guarded, and its failure direction is *reports guarded when it is not*: text
 /// pulled in from a following line can carry the very token the guard is recognised by.
+///
+/// **It reads no quotes, so it joins two lines bash does not**: one ending in an escaped backslash, and one
+/// ending in a backslash inside single quotes. A reader that needs bash's own split lexes the script whole
+/// instead, as the workflow's command reader does; the readers left on this one search a joined statement for a
+/// token, and `BACKLOG.md` carries what an over-joined line costs them.
 pub fn logical_lines(script: &str) -> Vec<(usize, String)> {
     let mut joined = Vec::new();
     let mut current = String::new();

@@ -8,7 +8,7 @@ mod support;
 
 use std::collections::BTreeMap;
 
-use support::shell::{SHELL_OWN_WORDS, script_commands, words};
+use support::shell::{Argv, RESERVED_WORDS, SHELL_OWN_WORDS, script_commands, words};
 use support::workflow::{Workflow, is_comment_line, parse};
 
 fn read(text: &str) -> Workflow {
@@ -46,6 +46,24 @@ fn one_name_in_two_jobs_is_two_scopes() {
 fn one_name_twice_in_one_mapping_is_refused() {
     let refused = parse("jobs:\n  a:\n    env:\n      A: \"1\"\n      A: \"2\"\n");
     assert!(refused.is_err_and(|why| why.contains("written twice")));
+}
+
+/// A `with:` value is handed to an action rather than expanded, so a null there is not refused.
+#[test]
+fn a_null_with_value_is_read() {
+    let workflow =
+        read("jobs:\n  j:\n    steps:\n      - uses: a@v1\n        with:\n          x: ~\n");
+    assert_eq!(workflow.jobs[0].steps[0].with[0].key, "x");
+}
+
+/// A quoted `null` is the text it spells, and only a plain one is YAML's no-value.
+#[test]
+fn a_quoted_null_env_value_is_its_text() {
+    let workflow = read("env:\n  A: \"null\"\n  B: '~'\njobs:\n  j:\n    steps:\n      - run: x\n");
+    let job = &workflow.jobs[0];
+    let seen = workflow.env_for(job, &job.steps[0]);
+    assert_eq!(seen.get("A").map(String::as_str), Some("null"));
+    assert_eq!(seen.get("B").map(String::as_str), Some("~"));
 }
 
 /// A value is in force only where it is declared: job `a`'s pin does not reach job `b`.
@@ -121,6 +139,16 @@ fn shapes_the_model_cannot_hold_are_refused() {
         ("two documents", "a: 1\n---\nb: 2\n", "2 documents"),
         ("a non-mapping root", "- a\n", "mapping"),
         (
+            "a null env value",
+            "env:\n  A: ~\njobs:\n  j:\n    steps:\n      - run: x\n",
+            "null",
+        ),
+        (
+            "an empty env value",
+            "jobs:\n  j:\n    env:\n      A:\n    steps:\n      - run: x\n",
+            "null",
+        ),
+        (
             "jobs as a sequence",
             "jobs: [a]\n",
             "`jobs` is not a mapping",
@@ -134,6 +162,18 @@ fn shapes_the_model_cannot_hold_are_refused() {
             "a nested env value",
             "jobs:\n  j:\n    env:\n      A: {b: c}\n",
             "not a scalar",
+        ),
+        // A `defaults` or `run` that is not a mapping holds no shell this can read, which is not the same fact as
+        // a workflow declaring none.
+        (
+            "workflow defaults as a scalar",
+            "defaults: sh\n",
+            "`defaults` is not a mapping",
+        ),
+        (
+            "a job's defaults.run as a scalar",
+            "jobs:\n  j:\n    defaults: {run: sh}\n",
+            "`defaults.run` is not a mapping",
         ),
     ] {
         let refused = parse(text);
@@ -244,7 +284,38 @@ fn the_tokenizer_reads_argv_or_declines() {
     ] {
         let expected: Option<Vec<String>> =
             expected.map(|w| w.into_iter().map(String::from).collect());
-        assert_eq!(words(line, &msrv), expected, "`{line}`");
+        assert_eq!(
+            words(line, &msrv).map(|argv| argv.words),
+            expected,
+            "`{line}`"
+        );
+    }
+}
+
+/// Which leading words are assignments is read from how each is written, before anything is expanded.
+#[test]
+fn an_assignment_is_one_as_written() {
+    let prefix = env(&[("PREFIX", "X=1"), ("EMPTY", "")]);
+    for (line, assignments) in [
+        ("X=1 cargo", 1),
+        ("X=1 Y+=2 cargo", 2),
+        ("X=\"a b\" cargo", 1),
+        ("X= cargo", 1),
+        // Expanding to an assignment is not being one: the shell runs a command by that name.
+        ("\"$PREFIX\" cargo", 0),
+        ("$PREFIX cargo", 0),
+        // Quoting the name or its `=` makes the word an argument.
+        ("\"X=1\" cargo", 0),
+        ("X\\=1 cargo", 0),
+        // The prefix ends at the first word that is not one, even a word that expands to nothing.
+        ("$EMPTY X=1 cargo", 0),
+        ("cargo X=1", 0),
+    ] {
+        assert_eq!(
+            words(line, &prefix).map(|argv| argv.assignments),
+            Some(assignments),
+            "`{line}`"
+        );
     }
 }
 
@@ -281,13 +352,41 @@ fn a_script_is_read_whole_or_not_at_all() {
             &none
         ),
         Some(vec![
-            vec!["cargo".to_string(), "build".to_string()],
-            vec![
-                "cargo".to_string(),
-                "test".to_string(),
-                "--workspace".to_string()
-            ],
+            Argv {
+                assignments: 0,
+                words: vec!["cargo".to_string(), "build".to_string()],
+            },
+            Argv {
+                assignments: 0,
+                words: vec![
+                    "cargo".to_string(),
+                    "test".to_string(),
+                    "--workspace".to_string()
+                ],
+            },
         ])
+    );
+    // The continuation rule is the lexer's, as bash's: an escaped backslash ends its line, and a backslash
+    // inside single quotes joins nothing.
+    let argv = |words: &[&str]| Argv {
+        assignments: 0,
+        words: words.iter().map(|word| word.to_string()).collect(),
+    };
+    assert_eq!(
+        script_commands("cargo a\\\\\ncargo test --workspace\n", &none),
+        Some(vec![
+            argv(&["cargo", "a\\"]),
+            argv(&["cargo", "test", "--workspace"])
+        ])
+    );
+    // A comment after a backslash-newline is a comment, not words a Definition of Done line could match.
+    assert_eq!(
+        script_commands("cargo build \\\n#cargo test --workspace\n", &none),
+        Some(vec![argv(&["cargo", "build"])])
+    );
+    assert_eq!(
+        script_commands("cargo 'a\\\nb'\n", &none),
+        Some(vec![argv(&["cargo", "a\\\nb"])])
     );
     assert_eq!(script_commands("x=$(date)\ncargo test\n", &none), None);
     assert_eq!(
@@ -317,7 +416,7 @@ fn a_script_is_read_whole_or_not_at_all() {
 /// ends early count as a witness, and a word listed that bash does not own would decline a script for nothing.
 #[test]
 fn the_shell_words_are_the_ones_bash_owns() {
-    let output = std::process::Command::new("bash")
+    let output = support::bash::bash()
         .args(["-c", "compgen -b; compgen -k"])
         .output()
         .expect("bash runs — the scripts these words are about are run by it");
@@ -341,4 +440,23 @@ fn the_shell_words_are_the_ones_bash_owns() {
         owned.difference(&declared).collect::<Vec<_>>(),
         declared.difference(&owned).collect::<Vec<_>>()
     );
+}
+
+/// The reserved words are bash's, held against `compgen -k` both ways: a word missing would leave a command after it
+/// unread as one, and a word listed that bash does not reserve would read an argument as a command.
+#[test]
+fn the_reserved_words_are_the_ones_bash_owns() {
+    let output = support::bash::bash()
+        .args(["-c", "compgen -k"])
+        .output()
+        .expect("bash runs");
+    let reserved: std::collections::BTreeSet<String> = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::to_string)
+        .collect();
+    let declared: std::collections::BTreeSet<String> = RESERVED_WORDS
+        .iter()
+        .map(|word| (*word).to_string())
+        .collect();
+    assert_eq!(declared, reserved);
 }

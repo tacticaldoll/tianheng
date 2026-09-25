@@ -41,6 +41,10 @@ fn dod_commands(agents: &str) -> Vec<String> {
             in_dod = true;
             continue;
         }
+        // The section ends at the next heading of its level, so a fence below it is another section's.
+        if in_dod && !in_code_block && line.starts_with("## ") {
+            break;
+        }
         if in_dod && line.trim() == "```bash" {
             in_code_block = true;
             continue;
@@ -49,11 +53,10 @@ fn dod_commands(agents: &str) -> Vec<String> {
             if line.trim() == "```" {
                 break;
             }
-            let command = line
-                .split_once('#')
-                .map_or(line, |(command, _)| command)
-                .trim();
-            if !command.is_empty() {
+            // A line is a command when the lexer finds a word on it: a comment, whole-line or trailing, is the
+            // lexer's to drop, as bash drops it, so a `#` inside quotes stays the text it is.
+            let command = line.trim();
+            if !shell::lex(command).is_empty() {
                 commands.push(command.to_string());
             }
         }
@@ -83,13 +86,19 @@ fn dod_commands(agents: &str) -> Vec<String> {
 /// contributes nothing either: those are passed before the command, so it runs against another manifest or
 /// with other flags than the Definition of Done line — including where the value written is the action's own
 /// default, which reports the line missing, the direction that fails.
-fn ci_commands(ci: &str) -> Vec<Vec<String>> {
+fn ci_commands(ci: &str) -> Vec<shell::Argv> {
     let workflow = workflow::parse(ci).unwrap_or_else(|why| {
         panic!("the workflow cannot be read, so which commands CI runs is not known: {why}")
     });
     let mut commands = Vec::new();
     for job in &workflow.jobs {
-        for step in &job.steps {
+        // A job or step whose running, or whose failure counting, is decided at run time is no witness: a
+        // Definition of Done line it spells may be skipped or allowed to fail.
+        let job_gated = job
+            .keys
+            .iter()
+            .any(|(key, _)| workflow::RUN_TIME_GATES.contains(&key.as_str()));
+        for step in job.steps.iter().filter(|step| !job_gated && !step.gated) {
             if let Some(run) = &step.run {
                 let env = workflow.env_for(job, step);
                 // A declined script is no witness — deliberately, not a lost read: see the doc above.
@@ -112,7 +121,10 @@ fn ci_commands(ci: &str) -> Vec<Vec<String>> {
                     if let Some(arguments) = input("command-arguments") {
                         words.extend(arguments.value.split_whitespace().map(str::to_string));
                     }
-                    commands.push(words);
+                    commands.push(shell::Argv {
+                        assignments: 0,
+                        words,
+                    });
                 }
             }
         }
@@ -126,7 +138,7 @@ fn ci_commands(ci: &str) -> Vec<Vec<String>> {
 /// read is refused rather than compared: a declaration this check cannot turn into words is not one it can
 /// hold CI to.
 fn missing_from_ci(agents: &str, ci: &str) -> Vec<String> {
-    let ci = ci_commands(ci);
+    let ci_argv = ci_commands(ci);
     dod_commands(agents)
         .into_iter()
         .filter(|command| {
@@ -136,7 +148,7 @@ fn missing_from_ci(agents: &str, ci: &str) -> Vec<String> {
                      so whether CI runs it cannot be decided"
                 )
             });
-            !ci.contains(&words)
+            !ci_argv.contains(&words)
         })
         .collect()
 }
@@ -344,4 +356,57 @@ fn a_script_appending_to_a_variable_is_no_witness() {
     let agents = "## Definition of Done\n\n```bash\ncargo build --features a\n```\n";
     let ci = "jobs:\n  j:\n    env:\n      V: a\n    steps:\n      - run: |\n          V+=,b\n          cargo build --features \"$V\"\n";
     assert_eq!(missing_from_ci(agents, ci), ["cargo build --features a"]);
+}
+
+/// A word that expands to an assignment is the command name, not an assignment: bash marks assignments before
+/// it expands anything, so `"$PREFIX" cargo test` runs a program named by `$PREFIX`'s value and never `cargo`.
+#[test]
+fn a_word_expanding_to_an_assignment_is_the_command_name() {
+    let agents =
+        format!("## Definition of Done\n\n```bash\n{MARKER}=1 cargo test --workspace\n```\n");
+    for run in [
+        "\"$PREFIX\" cargo test --workspace",
+        "$PREFIX cargo test --workspace",
+    ] {
+        let ci = format!(
+            "jobs:\n  j:\n    env:\n      PREFIX: {MARKER}=1\n    steps:\n      - run: '{run}'\n"
+        );
+        assert_eq!(
+            missing_from_ci(&agents, &ci),
+            [format!("{MARKER}=1 cargo test --workspace")],
+            "`{run}` with `PREFIX={MARKER}=1` does not run `cargo test`"
+        );
+    }
+    let ci = format!("jobs:\n  j:\n    steps:\n      - run: {MARKER}=1 cargo test --workspace\n");
+    assert!(missing_from_ci(&agents, &ci).is_empty());
+}
+
+/// A step or job whose running is decided at run time is no witness: `if:` may skip it, and
+/// `continue-on-error:` lets it fail without failing the job.
+#[test]
+fn a_step_gated_at_run_time_is_no_witness() {
+    let agents = "## Definition of Done\n\n```bash\ncargo test --workspace\n```\n";
+    for ci in [
+        "jobs:\n  j:\n    steps:\n      - if: false\n        run: cargo test --workspace\n",
+        "jobs:\n  j:\n    steps:\n      - continue-on-error: true\n        run: cargo test --workspace\n",
+        "jobs:\n  j:\n    if: false\n    steps:\n      - run: cargo test --workspace\n",
+    ] {
+        assert_eq!(
+            missing_from_ci(agents, ci),
+            ["cargo test --workspace"],
+            "a gated step or job witnesses nothing: {ci}"
+        );
+    }
+}
+
+/// The Definition of Done is its own section: a fence under the next heading is another section's.
+#[test]
+fn a_fence_after_the_next_heading_is_not_the_definition_of_done() {
+    let agents =
+        "## Definition of Done\n\nRun these.\n\n## Other\n\n```bash\ncargo test --workspace\n```\n";
+    let refused = std::panic::catch_unwind(|| dod_commands(agents));
+    assert!(
+        refused.is_err(),
+        "a Definition of Done section holding no fence has no commands, and a later section's fence is not it"
+    );
 }

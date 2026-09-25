@@ -2114,21 +2114,13 @@ pub(crate) fn machinery_names(repo: &Path) -> Result<BTreeSet<String>, Refusal> 
             ),
         ));
     }
-    let scripts =
-        crate::hermetic_git::tracked_paths(repo, &[crate::gate_identity::SCRIPTS_DIRECTORY])
-            .map_err(|err| {
-                cannot_judge_at(
-                    "release-coherence#scripts-not-enumerable",
-                    format!("could not enumerate scripts/: {err:?}"),
-                )
-            })?;
-    machinery.extend(
-        scripts
-            .iter()
-            .map(String::as_str)
-            .filter(|l| !l.is_empty())
-            .map(str::to_string),
-    );
+    let scripts = crate::gate_identity::tracked_script_paths(repo).map_err(|why| {
+        cannot_judge_at(
+            "release-coherence#scripts-not-enumerable",
+            format!("could not enumerate scripts/: {why}"),
+        )
+    })?;
+    machinery.extend(scripts);
 
     let mut names: BTreeSet<String> = BTreeSet::new();
     for path in &machinery {

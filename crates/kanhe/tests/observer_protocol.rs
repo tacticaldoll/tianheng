@@ -1010,9 +1010,11 @@ fn observer_decline_reason(source: &Source, signature: &str) -> String {
     describe_decline(source, signature, Some("Observer"))
 }
 
+/// Why the read declined — asked only where it did, so a read that succeeded is the caller's mistake and says
+/// so rather than returning a sentence about a decline that never happened.
 fn describe_decline(source: &Source, signature: &str, within: Option<&'static str>) -> String {
     match read_body(source, signature, within) {
-        Ok(_) => format!("`{signature}` was read, so there is no decline to describe"),
+        Ok(_) => panic!("`{signature}` was read, so there is no decline to describe"),
         Err(decline) => decline.describe(signature),
     }
 }

@@ -99,6 +99,118 @@ them.
 
 ### Self-governance
 
+- **Six smaller repairs to the readers and fixtures the shell lexer serves.** A workflow `defaults` or `defaults.run` that is not a mapping is
+  refused rather than read as declaring no shell. `per_target_corpus` asserts the `[[bin]]` root outside the
+  source directory its header claimed, and its module doc and one test name describe the governed side rather than
+  the retired bound. The interpreter window's refusal tells no `actions/setup-node` step apart from several.
+  `xingbiao::Unreadable` names the path it could not restrict and says when it skips. The bash body read passes
+  the library and function as arguments rather than splicing them into shell text. And three twins converge: the
+  executed-text join, the workflow builder's refusal, and the bootstrap guard's opening line.
+
+- **A signal ends a wrapper by that signal, and the shell readers place a declared set of forms.** Trapped and
+  exited `2`, SIGINT let a shell loop running the wrapper go on to its next merge — measured with the signal sent
+  to the process group — so the wrapper now says what it stopped before and re-raises the signal; one arriving
+  during the act is held until the act's account has read the outcome. The lexer places a declared set of forms
+  and leaves the rest unplaced: arithmetic in its own alphabet, a `((` whose first close is single, a `$` before a
+  character it opens nothing from, and a `case` standing as a command inside `$(…)`, while `$(( $((1)) ))` and
+  `case` as an argument are read. Which functions stop is judged from words in command position, taken with
+  `RESERVED_WORDS` from `compgen -k`, so a function printing `cannot_judge` is not one, and a wrapper naming a
+  library scalar in any form — `read`, `printf -v`, `readonly`, `unset` — is refused. The publish fixture signals
+  the wrapper by the PID its launcher recorded rather than asking `ps`, and the merge fixture states that its
+  stub needs `jq` before it runs.
+
+- **What the reviews found and no reaction can hold is closed in prose where it is decided.** `xingbiao::settle_cleanup`'s
+  doc speaks of the guards that call it, and `BACKLOG.md` names the drop guards still discarding their cleanup
+  with the command that lists them. The controlled-cargo fixture says why its stubs share their verdict block
+  and pass line and keep their own log lines.
+
+- **The shell lexer follows bash where it removes, reads and cannot tell.** A backslash-newline is removed before
+  any word begins, as bash removes it, so a `#` after one opens a comment rather than a word a Definition of Done
+  line could match. Arithmetic, `$((…))` and `((…))`, is read whole, so its `<<` is a shift rather than a
+  here-document. A `case` inside `$(…)` — whose `)` patterns stand where the substitution's close would, and
+  measured on bash 5.3 `v="$(case a in a) exit 4;; esac)"` runs the exit — and a substitution inside arithmetic
+  are refused as unplaced, and what a `${…}` holds unplaced is its outer word's. The stop set, the Definition of
+  Done's comment cut and the wrapper half of the declaration check read through the lexer rather than by line
+  and substring. The controlled gates' pass line is one constant held against the library's `require_one_pass`,
+  and a null `with:` value is read, since only `env:` values are expanded.
+
+- **A verdict file the wrapper cannot remove is a stop.** The EXIT trap discarded a failed removal of the
+  verdict file; a run otherwise leaving clean now exits unjudged saying the act completed and the file is left,
+  and one already leaving through a stop, or by a signal, keeps how it ends and says the file is left. The wrappers' argument-classification comments cite the questions
+  `repository-checks` states rather than counting them, and several comments state their invariant without
+  the history that produced it.
+
+- **Governance prose states what reacts, and the release reviews' deferred items are filed.** The observer
+  reader's declared bound is renamed to what it covers, *a method on another trait named `Observer` is read*,
+  with its id and projections; a completed publish is held to adding no sentence of its own by a direction
+  where the specification said so with nothing behind it; the claim that one crate depends on `syn` says
+  *directly*; and a wrapper-library clause states why two copies drift rather than a measurement nothing can
+  re-run. `BACKLOG.md` records that the restore-guard shape converged and the scratch shape narrowed, files a
+  mutation record held only to killing its pin and the one-workflow interpreter reader as watches, and points
+  an accepted entry's promotion field at its reopening condition.
+
+- **The wrapper directions share one harness, and the smaller residue of the release reviews is closed.** The
+  merge and publish directions' scratch root, stub directory and `TMPDIR` are one `fixture::Harness`, the
+  closed-stream launcher is `support::streams::CLOSED` beside `BROKEN`, and the publish direction's hand-rolled
+  scratch uses the shared one. A cleanup failing inside a `Drop` is settled by one `xingbiao::settle_cleanup`
+  across `Unreadable`, the kanhe scratch root and the baseline CLI's restore guard. The empty-environment control
+  for the bash builder is constructed in the builder, and the comparison refuses a host with nothing to withhold.
+  The spawn census reads `bash::` wherever a target reaches the builder, however it imported it. A stub's mark
+  path reaches it through the environment rather than spliced into its text. The Definition of Done is read from
+  its own section, a step or job carrying `if:` or `continue-on-error:` is no witness, a null `env:` value is
+  refused, and the release gate's machinery set takes the scripts from the one enumeration of them.
+
+- **The shell readers lex a file as written, once, and refuse what they cannot place.** The exit-class check lexed
+  text a line-wise comment cut had already rewritten, with a quoting rule of its own, and read past a quote the
+  text ended inside; it now lexes the file itself, and a here-document, a locale-translated `$"…"` or an
+  unterminated quote refuses the file naming the line, since an `exit` after one stands where the lexer did not
+  decide. A `${…}` ends where bash ends it, past a quoted or escaped brace, and a substitution inside it is read
+  as text the shell runs. The workflow's command reader lexes a script whole and splits it at unquoted newlines,
+  so a line ending in an escaped backslash, or a single-quoted backslash before a newline, is no longer joined to
+  the next. The declaration check reads a wrapper's own declarations through the same assignment-word reading as
+  the library's, the non-word assignment bound's mutation perturbs a form the bound names, and an ANSI-C `\u`
+  naming no character leaves its digits as text.
+
+- **The merge wrapper refuses any selector holding `:`, and a wrapper's `1` is the gate's by construction.** The
+  selector refusal matched lowercase `http://` and `https://` only, so `HTTPS://…/pull/42` reached `gh`, which
+  followed it to that URL's repository; a number holds no `:` and git refuses one in any ref name, so every URL
+  scheme in any case and another fork's `owner:branch` are refused by that one fact. An expansion error — an
+  unset name under `set -u` — ended a wrapper with status `1` without the ERR trap, the class reserved for a gate
+  that refused; the library's one EXIT trap now holds every nonzero status no stop chose to the unjudged class,
+  and each stop records its class before it exits. With that trap, the exit codes and channel classes are
+  `readonly`, so an assignment to one in any form ends the wrapper unjudged rather than moving a class, and the
+  declared bound over non-word assignments names bash as what holds them. The value guard both wrappers call
+  delegates to one `value_refusal` in the library, the acquisition sweep reads which functions stop from the
+  scripts rather than from a list, and several of the merge wrapper's comments state their invariant without
+  the history that produced it.
+
+- **Every `bash` a repository check runs is one builder's, and inherits only what it names.** Each site
+  decided for itself what its `bash` inherited, and one removed a startup file; with `BASH_ENV`
+  set in the host, the shell-words direction read what that file printed as a word bash owns. The sites now run
+  `support::bash::bash`, which clears the environment and hands back `PATH`, `HOME` and `TMPDIR`, and
+  `hermetic_invocations` holds the constructions of `bash` to that builder in both directions. The probe asking
+  bash what a sourced library holds reads only its own output, so a library printing an answer's shape while it
+  is sourced cannot stand in for one.
+
+- **An assignment is judged as written, and where it stands.** The workflow's command reader decided which
+  leading words were assignments from their expanded text, so `"$PREFIX" cargo test` with `PREFIX` holding
+  `NAME=1` counted as the Definition of Done's `NAME=1 cargo test` although bash runs a command named `NAME=1`;
+  it now decides from the written word, before expansion, as bash's parser does. The exit-code declaration check
+  counted an argument spelled `NAME=1` as the declaration, so one standing in its place passed; it now also asks
+  bash, once the library is sourced, for the value it holds — handing it the library joined to its root, since
+  `source` searches `PATH` for a name without a slash. A scratch root that cannot be removed fails the run
+  rather than being left behind unsaid, and the last hand-rolled scratch lifecycle in `gate_exit_classes` uses
+  the shared fixture.
+
+- **One shell lexer, and one fixture for the wrapper directions.** The workflow's command reader and the
+  exit-class check each implemented bash's quoting, with different contracts, so a quoting fix landed in one; they
+  now read through one lexer, which keeps what each word is made of, and each projects what it needs. With it the
+  exit-code check reads `NAME+=value` as the assignment word it is, so the declared bound narrows to assignments
+  that are not assignment words, and a site after an ANSI-C escaped newline reports its own line. The merge and
+  publish directions' shared fixture — scratch root, executables, `PATH`, the controlled gate's verdict block —
+  is written once, and a scratch root is removed when a run fails as well as when it passes. The closed-stream
+  direction runs its stops with stub `gh` and `cargo` first on `PATH`, and refuses if a stop reached either.
+
 - **Four repository-check readers answer their question instead of listing its spellings.** The merge wrapper's
   skip reader counts every filter on the pull-request event, and a workflow subscribing to none, rather than two
   key names. The strictness check holds every job or step `shell:` to the workflow's own value rather than
@@ -122,20 +234,15 @@ them.
   It anchored on the unique line-start occurrence of `fn bounds(`, so with the definition moved out of the file a
   same-named method on an unrelated `impl` was read as the `Observer`'s. The walk that finds the body now records
   a method only inside an `impl` whose trait path ends in `Observer`, so that copy declines like a commented one.
-  The trait is matched by name rather than resolved, so the bound now states only an `impl` of another trait
-  named `Observer`, pinned by the reader's shape table. A decline names the condition it met instead of
-  reporting every failed extent as a missing brace.
+  Its declaration, spec scenario and projections had said the reader knows nothing of comments or literals, while
+  its own shape table, which parses the file for the body, declines both. The trait is matched by name rather
+  than resolved, so the bound now states only an `impl` of another trait named `Observer`, pinned by the reader's
+  shape table. A decline names the condition it met instead of reporting every failed extent as a missing brace.
 
 - **The merge wrapper's unreadable-body direction no longer skips silently under the exhaustive suite.** It
   asked a probe of its own whether mode 000 binds and returned when it did not, under `TIANHENG_WORKSPACE_TESTS`
   as outside it, so a run as root reported the direction passed without running it. The probe now asks through
   `xingbiao::Unreadable`, which refuses inside the marker as every other such direction does.
-
-- **The bounds-method reader's declared bound names the one shape it still misses.** Its declaration, spec
-  scenario and both projections said the reader knows nothing of comments or literals, so a signature copy in
-  either anchors the read — while the reader's own shape table, which parses the file for the body, declines
-  both. What it still reads wrongly is a real method of the same name on an unrelated `impl`, and that is now
-  the whole of the bound.
 
 - **Claims about which crate depends on what, and about what the wrapper library holds, say what the tree
   holds.** A sweep of absolute quantifiers near a dependency or wrapper subject found them wider than the
@@ -220,7 +327,7 @@ them.
   interpreter pin is the `node-version` input of the one `actions/setup-node` step, and its support window
   must be declared as a comment inside that step — a comment being a line the parsed workflow does not change
   without. A shape the model cannot hold — an anchor, an alias, a merge key, a tag, a second document, a key
-  written twice in one mapping — is refused rather than read past. `deny.toml` accepts Zlib for `foldhash`
+  written twice in one mapping, a `defaults` that is not a mapping — is refused rather than read past. `deny.toml` accepts Zlib for `foldhash`
   alone, which the parser's hash map reaches.
 
 - **The attribute-spelling differential now exercises absent module files.** A separate generated corpus

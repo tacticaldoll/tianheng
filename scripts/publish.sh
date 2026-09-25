@@ -14,25 +14,21 @@
 # deletable) and remains confirm-first with a human, and the Definition of Done, the packaged-tarball
 # verification, and the bundled-license check all run before anyone arrives here.
 #
-# What may reach `cargo publish` is an ALLOWLIST. This script used to forward everything except
-# `--manifest-path`, and its sibling `scripts/merge-pr.sh` learned what that costs: naming what may
-# not pass leaked three times there, most sharply through spellings of flags whose long forms were
-# already named. Enumerating what may pass means an argument this script does not know — including one
-# a future cargo adds — is refused by default, which is the property a denylist cannot have. This
-# family argues it in its own law: an allowlist is always stricter than a denylist.
+# What may reach `cargo publish` is an ALLOWLIST: an argument this script does not know — including one a
+# future cargo adds — is refused by default, which is the property a list of what to forbid cannot have.
 #
-# Classified against `cargo publish --help` on cargo 1.96.0 by one question: does the argument move
-# what the gate judged, or what the act records? Admitted are the arguments that change only whether
-# and how the publish proceeds. Refused are the ones that move the source tree (`--manifest-path`),
+# Classified against `cargo publish --help` on cargo 1.96.0 by the questions `repository-checks` states for
+# every wrapper in front of an irreversible act: what the argument moves, whether the tool honours it as the
+# wrapper composes the invocation, and whether it performs a further act. Admitted are the arguments that
+# change only whether and how the publish proceeds. Refused are the ones that move the source tree (`--manifest-path`),
 # the set of crates (`--exclude`, and the `--workspace` this script supplies itself), what cargo
 # verifies before uploading (`--no-verify`, the feature and target selectors), what gets packaged
 # (`--allow-dirty`), and `--config`, which can become any of those and can name a whole configuration
 # file besides.
 #
-# **Admitting an argument takes TWO questions, not one.** The first is above. The second is whether cargo
-# actually HONOURS it beside what this script supplies itself — and `--package` failed that one silently:
-# written after an unconditional `--workspace`, cargo discarded it and published everything. Classify
-# against the tool's real behaviour at a named version, not against its `--help` alone.
+# **Whether cargo HONOURS an argument beside what this script supplies is measured, not read from `--help`.**
+# Measured on cargo 1.96.0: `--package` written after an unconditional `--workspace` is discarded, and the whole
+# workspace is published.
 #
 # Two classifications are worth their sentence. `--package` narrows by NAMING, which a partly
 # completed publish genuinely needs — crates.io accepts the six one at a time and a resumed run must
@@ -44,13 +40,13 @@
 #
 # `--registry` and `--index` stay admitted, keeping the reasoning that admitted them: they change the
 # publish's DESTINATION, not its source, which is a different claim from the one this wrapper and its
-# gate make. `--token` no longer joins them — cargo 1.96.0 answers it with `\`cargo publish --token\`
+# gate make. `--token` is not among them — cargo 1.96.0 answers it with `\`cargo publish --token\`
 # is deprecated in favor of using \`cargo login\` and environment variables`, so the refusal points
 # where cargo does.
 #
-# ONE spelling each, values as separate arguments. Parsing a tool's glued and equals forms is exactly
-# what let the short forms through the sibling wrapper; refusing them costs an argument's worth of
-# typing and removes the parsing question entirely.
+# ONE spelling each, values as separate arguments. Parsing a tool's glued and equals forms would admit
+# short forms whose long forms are refused; refusing them costs an argument's worth of typing and
+# removes the parsing question entirely.
 set -Eeuo pipefail
 # The stream policy, before anything can write: `scripts/wrapper.sh`'s paragraph on `tell` says why it is here.
 trap '' PIPE
@@ -74,27 +70,7 @@ if ! source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)/scripts/wrap
     exit 2
 fi
 
-# A value-taking flag's value, checked for both ways it can be wrong: absent, and flag-shaped.
-#
-# **A value position is not a place a refused flag may sit.** The arms below checked only that *something*
-# followed, and cargo does not consume a flag-shaped value — measured on cargo 1.96.0,
-# `cargo publish --package --no-verify` packages **without verifying**, byte-identical to passing
-# `--no-verify` alone, and exits 0 with no complaint about a package by that name. So every refusal this file
-# argues for was reachable through the one selector it admits.
-#
-# Held for every value-taking arm rather than the one that leaked. cargo's own handling differs per flag —
-# some consume the value and fail later, some are refused by clap — but that is a fact about cargo's error
-# paths at one version, and a wrapper standing in front of an irreversible act does not rest on the tool
-# failing correctly. The property is the script's own: an argument it did not name does not travel, wherever
-# it was written.
-#
-# Checked by SHAPE rather than against the refusal list, because the list is not the property, and the refusal
-# SAYS the shape rather than explaining cargo. The first form told the operator that cargo *reads the value as
-# an argument of its own* — true of `--package --no-verify`, and false of most of what it stops: measured,
-# `--jobs --allow-dirty` has cargo consume the value and fail later with `could not parse --allow-dirty`, and
-# `--registry --config` is refused by clap with `a value is required for '--registry <REGISTRY>'`. Three
-# mechanisms, one sentence, so the sentence was wrong twice. What is true of every arm is this script's own
-# property: it does not accept a value beginning with `-`.
+# A value-taking flag's value is checked by the shared library's `value_refusal`, before the shift.
 #
 # **The sacrifice is `--jobs -N`, and it is named rather than left silent.** cargo documents a negative job
 # count — *If negative, it sets the maximum number of parallel jobs to the number of logical CPUs plus
@@ -104,12 +80,8 @@ fi
 # The cost is one arithmetic step for the caller: pass the count. `repository-checks` carries it as a stated
 # bound.
 require_a_value() {
-    if (($1 < 2)); then
-        refuse "$2" "this script reads every value as the argument after its flag, so pass it that way or drop the flag"
-    fi
-    if [[ $3 == -* ]]; then
-        refuse "$2" "its value is \`$3\`, and this script does not accept a value beginning with \`-\`. It does not read cargo's handling of a flag-shaped value, which differs by flag and by version, so it refuses the shape instead. Pass a value, or drop the flag"
-    fi
+    local why
+    why=$(value_refusal "$@") || cannot_judge "$why"
 }
 
 # This script's own root: the tree the gate judges, the manifest it is run from, and the directory
@@ -231,7 +203,7 @@ gate that ran and refused"
 }
 
 # `forwarded` may be empty, and `"${empty[@]}"` under `set -u` is an unbound variable before bash 4.4 —
-# where this wrapper would abort through the ERR trap reporting "an unguarded command failed", a sentence
+# where it ends bash without the ERR trap and this wrapper would stop as a status no stop chose, a sentence
 # about the wrong cause, on the argument-free invocation that is the ordinary one. `selection` is never empty
 # and needs no guard. The `+` form is used rather than a version check, so no minimum has to be declared
 # anywhere and kept in step.

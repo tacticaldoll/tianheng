@@ -245,7 +245,7 @@ comparison resting on the dimensions that did not.
   every shape it decides together with the decision, and the reader is run against that table
 - **PINNED-BY** `the_reader_decides_every_shape_as_the_table_says`
 
-#### Scenario: A whole-line occurrence that is not the definition anchors the read — a stated bound
+#### Scenario: A method on another trait named Observer is read — a stated bound
 
 - **WHEN** the method's definition is absent from the inspected source and a method of the same signature
   remains on an `impl` of another trait whose path ends in `Observer` — `impl other::Observer for Probe`
