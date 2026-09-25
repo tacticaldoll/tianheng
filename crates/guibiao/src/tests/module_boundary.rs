@@ -250,6 +250,44 @@ pub(super) fn an_inline_module_target_is_a_self_describing_constitution_error() 
     assert_eq!(typo_err, unknown_module_error("crate::ghost", "app"));
 }
 
+/// Metadata reporting NO target falls back to the conventional source directory — the
+/// `Unreported` shape synthetic metadata in a caller's own tests carries, which `module-boundary`
+/// declares load-bearing. An inline target refused on that path has no root file, so the refusal
+/// names NO compilation unit and suggests the conventional `src/<leaf>.rs`. Asserted against the
+/// wording itself, not the constructor, so a qualifier added to the unit-less arm fails here.
+#[test]
+pub(super) fn an_inline_target_with_no_reported_target_names_no_compilation_unit() {
+    let ws = TempWorkspace::new("inline-notarget");
+    ws.write("lib.rs", "pub mod kernel { use crate::secret::Thing; }\n");
+    // No `targets` field at all: the no-target fallback, reachable only through synthetic metadata.
+    let metadata = serde_json::json!({
+        "packages": [{
+            "name": "x",
+            "manifest_path": ws.dir().join("Cargo.toml").to_string_lossy(),
+        }],
+    });
+
+    let boundary = ModuleBoundary::in_crate("x")
+        .module("crate::kernel")
+        .must_not_import("crate::secret")
+        .because("the kernel must not import a secret");
+    let mut violations = Vec::new();
+    let err = check_module_boundary(&metadata, &boundary, &mut violations)
+        .expect_err("an inline target on the no-target fallback is still the inline refusal");
+    assert!(
+        err.contains("declared inline"),
+        "expected the inline-target refusal, got: {err}"
+    );
+    assert!(
+        err.contains("`src/kernel.rs`"),
+        "the suggested extraction path resolves from the conventional source directory: {err}"
+    );
+    assert!(
+        !err.contains("compilation unit"),
+        "no target was reported, so there is no compilation unit to name: {err}"
+    );
+}
+
 /// The inline-target constitution error must hold **even when a same-named conventional orphan
 /// file** sits beside the inline body. Rust compiles the inline body and never the orphan, so
 /// governing the orphan (and silently missing the inline body's imports) is a false negative —
