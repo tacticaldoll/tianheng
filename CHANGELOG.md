@@ -119,7 +119,9 @@ them.
   the wrapper by the PID its launcher recorded rather than asking `ps`, and the merge fixture states that its
   stub needs `jq` before it runs.
 
-- **What the reviews found and no reaction can hold is closed in prose where it is decided.** `xingbiao::settle_cleanup`'s
+- **What the reviews found and no reaction can hold is closed in prose where it is decided.** `AGENTS.md` states
+  that an ordinary scenario's pin has its reason by construction — the mutation register keys on bound ids —
+  so a change owes a bound's pin its record and an ordinary pin its negative run. `xingbiao::settle_cleanup`'s
   doc speaks of the guards that call it, and `BACKLOG.md` names the drop guards still discarding their cleanup
   with the command that lists them. The controlled-cargo fixture says why its stubs share their verdict block
   and pass line and keep their own log lines.

@@ -323,8 +323,9 @@ count of removable copies here is two of three considered.
 **Dissolving one carries the retirement sweep with it, and that half was skipped here.** Removing a
 restated claim retires the thing other prose points at, so *Retiring a capability requires the same sweep*
 applies unchanged: grep every tracked live document for what was removed before closing the change. Skipped
-here, it left this file describing the deleted list's duty in the present tense one section above, found by
-review rather than by anything running. Seeds are what the removed thing was called and what it was said to
+here, it left this file describing the deleted list's duty in the present tense — in *A census is produced, never
+typed*, where a version-horizon paragraph was still *the one that assigns the release number* — found by review
+rather than by anything running. Seeds are what the removed thing was called and what it was said to
 do — a record carrier keeps its sentence, since a dated section is a measurement of its own moment. This has no reaction of its own, for the reason
 *Do not add a detector over prose* gives — deciding that a sentence describes a state is a judgement over prose — so it is a question
 asked when a sentence about *how things currently are* is written, and `BACKLOG.md` carries what it cannot.
@@ -563,6 +564,14 @@ is the shape of the rule above: do it, or say why not, in the change that create
 is a campaign to author mutations for the standing set — that was measured and declined, because the rate is
 against it: the citation set grows faster than mutations can be written, so the move that changes the
 trajectory is stopping the denominator rather than chasing the numerator.
+
+**The obligation is a declared bound's, and an ordinary scenario's pin states its reason by construction.** The
+mutation register keys a record on a bound id, so a `PINNED-BY` under an ordinary scenario cannot carry one, and
+`pin_bites` counts those citations apart on every clean run — which is where their growth is seen. Its evidence is
+the negative run the change records. So a change adding a bound's pin adds its record; a change adding an ordinary
+pin names its negative run, and nothing further is owed. No reaction holds the first half at the moment of the
+change: telling a pin a change just added from one it moved is a reading of the diff's intent, and the count
+`pin_bites` prints is the reaction there is.
 
 Measured, in the window that produced this rule: three consecutive repair rounds on one text reader, and across
 all three **not one finding was a new code defect**. Every one was a sentence describing what the reader does —
@@ -1018,8 +1027,9 @@ TIANHENG_PIN_BITES=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test pin_b
 TIANHENG_SPELLING_DIFFERENTIAL=1 cargo test -p tianheng --test attribute_spelling_differential   # the same trade, for
                                            # the same reason: it compiles one crate per generated spelling
 TIANHENG_WORKSPACE_TESTS=1 cargo +1.85 test --workspace --all-features   # the same trade again, for the MSRV. The
-                                           # name is the pinned toolchain: `ci.yml`'s `msrv` job derives the declared
-                                           # `rust-version` and refuses if it has moved from this literal, so the number
+                                           # name is the pinned toolchain: `ci.yml`'s `msrv` job pins it as its own
+                                           # `MSRV` and refuses if the declared `rust-version` has moved from that pin,
+                                           # and `dod_coherence` holds this line to the job's run lines, so the number
                                            # lives in one place per side and this line is what a contributor runs with
                                            # that toolchain installed. Env-shaped like its neighbours rather than gated
                                            # by one; added because the same `if … && let …` compiled on the default
