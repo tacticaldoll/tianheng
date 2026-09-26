@@ -43,10 +43,10 @@
 # disagreement what its own gate calls unjudgeable — telling an operator, in the words of the publish gate,
 # "to go looking for a disagreement that does not exist".
 #
-# **Each is `readonly`, so a later assignment in any form ends the wrapper rather than moving a class.** bash
-# refuses an assignment to a readonly name however it is spelled — `NAME=`, `read`, `printf -v`, `(( ))` — and
-# the refusal ends a non-interactive shell with status `1` outside the ERR trap; `wrapper_on_exit` holds that
-# status to the unjudged class, since no stop chose it.
+# **Each is `readonly`, so a later assignment in any form ends the wrapper in the unjudged class.** Plain
+# assignments, `read`, `printf -v`, and arithmetic assignment end a non-interactive bash with status `1`
+# outside the ERR trap; `wrapper_on_exit` holds that unchosen status to the unjudged class. `declare`, `local`,
+# and `unset` fail as builtins and reach the ERR trap, which also chooses the unjudged class.
 readonly WRAPPER_EXIT_VIOLATION=1
 readonly WRAPPER_EXIT_UNJUDGED=2
 readonly WRAPPER_EXIT_MISUSE=64

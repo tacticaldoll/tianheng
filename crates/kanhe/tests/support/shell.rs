@@ -120,9 +120,10 @@ pub const RESERVED_WORDS: [&str; 22] = [
     "done", "in", "function", "time", "{", "}", "!", "[[", "]]", "coproc",
 ];
 
-/// The reserved words after which what follows is not a command: a `case` subject, a loop's name and list, a
-/// function's name, a conditional expression. Every other reserved word standing where a command begins leaves the
-/// next word standing there too — `then cmd`, `! cmd`, `{ cmd`.
+/// The reserved words after which this reader does not treat the next word as a command: a `case` subject, a
+/// loop's name and list, a function's name, a conditional expression. Other reserved words open a command
+/// position here, as in `then cmd`, `! cmd`, and `{ cmd`. This reader does not model the optional name after
+/// `coproc` or the `-p` option after `time`.
 const RESERVED_BEFORE_A_NON_COMMAND: [&str; 7] =
     ["case", "for", "select", "in", "function", "[[", "]]"];
 
