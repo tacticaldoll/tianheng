@@ -5,6 +5,7 @@ mod forbidden_marker;
 mod helpers;
 mod impl_trait;
 mod macro_and_body_nested;
+mod reexport_only;
 mod resolver_fidelity;
 mod signature;
 mod trait_impl;

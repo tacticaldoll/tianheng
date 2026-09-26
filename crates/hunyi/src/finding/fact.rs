@@ -76,6 +76,11 @@ pub(crate) enum SemanticFact {
         name: String,
         tail: String,
     },
+    DeclaredItemKind {
+        module: String,
+        item_kind: String,
+        item_name: String,
+    },
     Visibility {
         visibility: String,
         item_kind: VisibleItemKind,
@@ -207,6 +212,17 @@ impl std::fmt::Display for SemanticFact {
             } => {
                 write!(f, "async fn <{owner}>::{name}{tail}")
             }
+            Self::DeclaredItemKind {
+                item_kind,
+                item_name,
+                ..
+            } => {
+                if item_name.is_empty() {
+                    write!(f, "{item_kind}")
+                } else {
+                    write!(f, "{item_kind} {item_name}")
+                }
+            }
             Self::Visibility {
                 visibility,
                 item_kind,
@@ -295,6 +311,26 @@ impl SemanticFact {
             SemanticFact::UnsafeSite { module, site } => {
                 return unsafe_site_finding(module, site, text, unit);
             }
+            SemanticFact::DeclaredItemKind {
+                module,
+                item_kind,
+                item_name,
+            } => {
+                let qualified_name = format!("{module}::{item_name}");
+                return Finding::new(
+                    text,
+                    StructuredFactIdentity::of(
+                        "tianheng.fact/hunyi/declared-item-kind",
+                        "declared-item-kind",
+                        [
+                            ("item_kind", item_kind.as_str()),
+                            ("item_name", qualified_name.as_str()),
+                            ("unit", unit),
+                            ("governing_package", governing_package),
+                        ],
+                    ),
+                );
+            }
             _ => {}
         }
         let (fact_type, shape, mut fields): (&str, &str, Vec<(&str, &str)>) = match &self {
@@ -335,6 +371,7 @@ impl SemanticFact {
                     ("owner", owner),
                 ],
             ),
+
             SemanticFact::Visibility {
                 visibility,
                 item_kind,
@@ -351,6 +388,7 @@ impl SemanticFact {
             SemanticFact::AsyncFreeFn { .. }
             | SemanticFact::AsyncTraitMethod { .. }
             | SemanticFact::AsyncInherentMethod { .. }
+            | SemanticFact::DeclaredItemKind { .. }
             | SemanticFact::UnsafeSite { .. } => unreachable!("handled above"),
         };
         fields.push(("governing_package", governing_package));
@@ -965,6 +1003,7 @@ mod fact_tests {
                 name: _,
                 tail: _,
             } => {}
+            SemanticFact::DeclaredItemKind { .. } => {}
             SemanticFact::Visibility {
                 visibility: _,
                 item_kind,

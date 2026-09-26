@@ -202,9 +202,9 @@ impl FlatItem {
 }
 
 /// `items` with every transparent-macro invocation replaced by its arms' items, recursively (a
-/// nested `cfg_if!` inside an arm is flattened too). The invocation itself is dropped: no
-/// capability observes `syn::Item::Macro`, so keeping it would only be a duplicate the arms
-/// already cover. Idempotent — a flattened list holds no transparent invocation left to expand.
+/// nested `cfg_if!` inside an arm is flattened too). A transparent invocation is replaced by its
+/// arms' items, which carry everything it declares; a non-transparent invocation is kept as an
+/// item. Idempotent — a flattened list holds no transparent invocation left to expand.
 ///
 /// Flattening is **shallow** with respect to module bodies: an inline `mod x { … }` inside an arm
 /// is returned as one item, and the arm tag does not propagate into its body (that body is

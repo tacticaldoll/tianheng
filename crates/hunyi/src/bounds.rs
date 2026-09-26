@@ -266,6 +266,30 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "unsafe_in_a_macro_body_is_a_stated_bound",
         ),
         BoundDecl::pinned(
+            BoundId::new("semantic-visibility-boundary/cfg-gated-items-are-observed-as-written-a-stated-bound"),
+            "a directly declared item whose cfg predicate is false on the host",
+            Extent::Reached(Reached::OverReacts {
+                because: "the AST reader observes the declaration as written without evaluating cfg, so a host-inactive item may react".into(),
+            }),
+            "cfg_is_observed_as_written",
+        ),
+        BoundDecl::pinned_by_many(
+            BoundId::new("semantic-visibility-boundary/direct-items-that-render-alike-share-one-identity-a-stated-bound"),
+            "two direct items of one module that render alike: a repeated macro path, several impl blocks \
+             whose self type and trait render alike, several extern blocks, or several unrenderable items",
+            Extent::Reached(Reached::AsIntended {
+                bounded: FactGranularity::Identity,
+                because: "identity names the declared item kind, module and rendered name, never scan position, \
+                          and an extern block renders no name, so its ABI is not part of it".into(),
+            }),
+            "repeated_macro_path_shares_one_identity",
+            [
+                "repeated_inherent_impl_shares_one_identity",
+                "repeated_extern_block_shares_one_identity",
+                "repeated_unrenderable_items_share_one_identity",
+            ],
+        ),
+        BoundDecl::pinned(
             BoundId::new(
                 "semantic-visibility-boundary/a-macro-generated-item-is-a-documented-bound",
             ),

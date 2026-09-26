@@ -31,6 +31,30 @@ them.
 
 ## [Unreleased]
 
+### Semantic
+
+- **BREAKING** — **渾儀 can hold a module to re-exports only: `ReexportOnlyBoundary`, carried in a new
+  `reexport_only` field of `SemanticBoundaries`.** `ReexportOnlyBoundary::in_crate(p).module(m)
+  .must_declare_only_reexports()` makes every direct item of `m` that is not a `use`, of any visibility or
+  use-tree form, one finding under `tianheng.rule/hunyi/reexport-only-module`: a function, type, constant,
+  trait, `impl`, `extern` block, `macro_rules!`, an item-position macro invocation, and an item it cannot
+  render. At `Shallow` depth a child `mod` is itself a finding; at `Subtree` depth it is a container and each
+  descended module is judged by the same rule. Items inside a transparent `cfg_if!` arm are observed; an item
+  inside a function body is not a direct item, and items produced only by a macro's expansion are not read.
+  Existing visibility-ceiling and `must_not_declare_pub` rule keys and identities are unchanged. The field is
+  what makes this breaking: a struct literal of `SemanticBoundaries` no longer compiles without it.
+
+  A finding's identity is its item kind, module-qualified rendered name, compilation unit and governing
+  package, never its position, so direct items of one module that render alike share one identity: two
+  invocations of one macro path, several `impl Foo` blocks, several unrenderable items, and every `extern`
+  block, whose ABI is not part of its rendering. A baseline accepting one such finding therefore also accepts
+  a second item rendering alike; this is a declared bound,
+  `semantic-visibility-boundary/direct-items-that-render-alike-share-one-identity-a-stated-bound`.
+
+### Migration
+
+- Code constructing `SemanticBoundaries` with a struct literal must add `reexport_only: vec![]` or use `..Default::default()`.
+
 ## [0.7.1] - 2026-09-27
 
 ### Static

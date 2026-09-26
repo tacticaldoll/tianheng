@@ -56,13 +56,13 @@ pub use louke::RuntimeObserver;
 
 pub use hunyi::{
     AsyncExposureBoundary, DynTraitBoundary, ForbiddenMarkerBoundary, ImplTraitBoundary,
-    SemanticBoundaries, SignatureBoundary, TraitImplBoundary, UnsafeBoundary, VisibilityBoundary,
-    VisibilityCeiling, check as check_semantic,
+    ReexportOnlyBoundary, SemanticBoundaries, SignatureBoundary, TraitImplBoundary, UnsafeBoundary,
+    VisibilityBoundary, VisibilityCeiling, check as check_semantic,
 };
 #[doc(hidden)]
 pub use hunyi::{
     check_all, check_async_exposure, check_dyn_trait, check_forbidden_marker, check_impl_trait,
-    check_trait_impl_locality, check_unsafe_confinement, check_visibility,
+    check_reexport_only, check_trait_impl_locality, check_unsafe_confinement, check_visibility,
 };
 pub use louke::{OriginEntry, Posture, RuntimeBoundary, Tracked, audit_probe_coverage};
 
@@ -141,6 +141,12 @@ impl Constitution {
     /// Add a 渾儀 visibility boundary (a module must not declare `pub` items).
     pub fn visibility_boundary(mut self, boundary: VisibilityBoundary) -> Self {
         self.semantic.visibility.push(boundary);
+        self
+    }
+
+    /// Add a 渾儀 re-export-only module boundary.
+    pub fn reexport_only_boundary(mut self, boundary: ReexportOnlyBoundary) -> Self {
+        self.semantic.reexport_only.push(boundary);
         self
     }
 
@@ -237,10 +243,10 @@ pub mod prelude {
         Constitution, CrateBoundary, Defence, Demonstrates, DependencyKind, DynTraitBoundary,
         Extent, FactGranularity, Finding, ForbiddenMarkerBoundary, GovernanceTest,
         ImplTraitBoundary, ModuleBoundary, ModuleRule, NoExistentialLeak, Observer, Outcome, Owner,
-        Polarity, Reached, Report, Rule, RuleKey, Run, RuntimeBoundary, RuntimeObserver,
-        SansIoPure, ScanDepth, SemanticObserver, Severity, SignatureBoundary, SourceKind,
-        StaticObserver, StructuredFactIdentity, Subject, TraitImplBoundary, UnsafeBoundary,
-        Violation, ViolationId, VisibilityBoundary, VisibilityCeiling, check, check_constitution,
-        run,
+        Polarity, Reached, ReexportOnlyBoundary, Report, Rule, RuleKey, Run, RuntimeBoundary,
+        RuntimeObserver, SansIoPure, ScanDepth, SemanticObserver, Severity, SignatureBoundary,
+        SourceKind, StaticObserver, StructuredFactIdentity, Subject, TraitImplBoundary,
+        UnsafeBoundary, Violation, ViolationId, VisibilityBoundary, VisibilityCeiling, check,
+        check_constitution, run,
     };
 }

@@ -1,8 +1,8 @@
 use hunyi::{
     ASYNC_EXPOSURE_RULE, AsyncExposureBoundary, DYN_TRAIT_RULE, DynTraitBoundary,
     FORBIDDEN_MARKER_RULE, ForbiddenMarkerBoundary, IMPL_TRAIT_RULE, ImplTraitBoundary,
-    SIGNATURE_RULE, SignatureBoundary, TRAIT_IMPL_RULE, TraitImplBoundary, UNSAFE_CONFINEMENT_RULE,
-    UnsafeBoundary, VisibilityBoundary,
+    REEXPORT_ONLY_RULE, ReexportOnlyBoundary, SIGNATURE_RULE, SignatureBoundary, TRAIT_IMPL_RULE,
+    TraitImplBoundary, UNSAFE_CONFINEMENT_RULE, UnsafeBoundary, VisibilityBoundary,
 };
 use louke::{RuntimeBoundary, runtime_seam_rule_line};
 
@@ -113,6 +113,26 @@ pub(in crate::runner) fn visibility_text(boundaries: &[VisibilityBoundary]) -> S
                 severity: b.severity().as_str(),
                 target: format!("module {} in {}", b.module(), b.crate_package()),
                 rule_line: b.ceiling().rule().to_string(),
+                reason: b.reason(),
+                anchor: b.anchor(),
+            })
+            .collect::<Vec<_>>(),
+    )
+}
+/// The text projection of re-export-only module boundaries.
+pub(in crate::runner) fn reexport_only_text(boundaries: &[ReexportOnlyBoundary]) -> String {
+    render_section(
+        "Re-export-only",
+        &boundaries
+            .iter()
+            .map(|b| ModuleBlockSpec {
+                severity: b.severity().as_str(),
+                target: format!("module {} in {}", b.module(), b.crate_package()),
+                rule_line: format!(
+                    "{} (scan_depth: {})",
+                    REEXPORT_ONLY_RULE,
+                    b.scan_depth().as_str()
+                ),
                 reason: b.reason(),
                 anchor: b.anchor(),
             })

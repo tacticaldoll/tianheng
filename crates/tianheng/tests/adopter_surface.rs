@@ -26,6 +26,7 @@ fn wildcard_prelude_is_the_external_adopter_contract() {
     assert_public_type::<SignatureBoundary>();
     assert_public_type::<TraitImplBoundary>();
     assert_public_type::<VisibilityBoundary>();
+    assert_public_type::<ReexportOnlyBoundary>();
     assert_public_type::<ForbiddenMarkerBoundary>();
     assert_public_type::<DynTraitBoundary>();
     assert_public_type::<ImplTraitBoundary>();
@@ -143,6 +144,10 @@ fn wildcard_prelude_is_the_external_adopter_contract() {
         .module("crate::internal")
         .max_visibility(VisibilityCeiling::Crate)
         .because("internal implementation stays crate-visible");
+    let reexport_only_boundary = ReexportOnlyBoundary::in_crate("consumer-core")
+        .module("crate::facade")
+        .must_declare_only_reexports()
+        .because("the facade carries only re-exports");
     let runtime_boundary = RuntimeBoundary::at("domain-entry")
         .only_origins(["consumer::adapter"])
         .because("only the declared adapter crosses the seam");
@@ -159,6 +164,7 @@ fn wildcard_prelude_is_the_external_adopter_contract() {
         .boundary(module_boundary)
         .signature_boundary(signature_boundary)
         .visibility_boundary(visibility_boundary)
+        .reexport_only_boundary(reexport_only_boundary)
         .runtime(runtime_boundary)
         .sans_io_pure(profile)
         .no_existential_leak(existential_profile);

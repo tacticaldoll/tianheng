@@ -52,6 +52,27 @@ pub(crate) fn resolve_module_items_with_files(
     Ok(items)
 }
 
+/// The governed module's **direct** items, each with the file that declares it: every branch's
+/// items after transparent `cfg_if!` invocations are replaced by their arms' items. Unlike
+/// [`resolve_module_items_with_files`], an `impl` inside a function body is not recovered, so an item
+/// nested in a function stays part of that function rather than becoming a direct item.
+pub(crate) fn resolve_module_direct_items_with_files(
+    src_dir: &Path,
+    root_file: &Path,
+    module: &str,
+    crate_package: &str,
+) -> Result<Vec<(syn::Item, PathBuf)>, String> {
+    let branches = resolve_module_branches(src_dir, root_file, module, crate_package)?;
+    Ok(branches
+        .into_iter()
+        .flat_map(|(items, file, ..)| {
+            flatten_transparent_macros(&items)
+                .into_iter()
+                .map(move |flat| (flat.item, file.clone()))
+        })
+        .collect())
+}
+
 /// Like [`resolve_module_items_with_files`], but retains each item's [`FlatItem`] tag (its own
 /// `cfg_if!` arm membership) instead of discarding it. A `#[cfg]`/`cfg_if!`-split at the MODULE
 /// level already gets its own branch index above; this is for the finer split that stays WITHIN

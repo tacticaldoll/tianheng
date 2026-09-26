@@ -6,6 +6,7 @@
 //! `tests/reaction.rs` asserts the reaction; the `demo` binary renders it. `crate::internal` adds a
 //! second 渾儀 depth — a **visibility ceiling** (`max_visibility`) — reacting to an over-`pub` item.
 pub mod api;
+pub mod facade;
 pub mod governance;
 pub mod infra;
 pub mod internal;
