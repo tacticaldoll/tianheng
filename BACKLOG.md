@@ -705,7 +705,10 @@ consumer for an undemonstrated deduplication.
   the joined-line entry fired and it was promoted; an action falling behind an advisory in the pin entry,
   the validator's payload, and the never-released-version sweep until the workspace version moves were
   unobserved; the per-entry record is in the squash `docs(backlog): record the pre-cut reading in its proper
-  carrier`.
+  carrier`. The 2026-09-27 reading covered `v0.7.0` through the squash `feat(guibiao): permit an inline call
+  only within one module`: no entry changed state, and the never-released-version sweep was re-run once the
+  workspace version moved; the per-entry record is in the squash that moved the workspace version and dated
+  the release section.
 
 - **A codename index for a defect lives in the half of the corpus `doc_provenance` declares out of scope,
   and the token that would find it is shared with a measurement that must stay.** *Class:* WATCH — the
