@@ -132,32 +132,55 @@ pub(crate) fn confine_external_crate_on_crate_error(crate_package: &str) -> Stri
     )
 }
 
-/// A `must_not_call_inline` boundary declares an empty confined prefix, which would match
-/// everything or nothing — a misdeclaration, never a silent no-op.
-pub(crate) fn inline_empty_prefix_error(crate_package: &str) -> String {
+/// A `confine_inline_call` boundary permits its prefix within `crate` (the crate root), whose subtree is the whole
+/// crate — the prefix would be permitted everywhere and the rule could never react.
+pub(crate) fn confine_inline_call_on_crate_error(crate_package: &str) -> String {
     format!(
-        "the `must_not_call_inline` rule needs a non-empty module-path prefix (e.g. `std::time`) \
+        "the `confine_inline_call` rule cannot permit a prefix only within `crate` (the crate root) of crate \
+         '{crate_package}': the root's subtree is the whole crate, so the prefix would be permitted everywhere and \
+         the rule could never react; confine it to a submodule (e.g. `crate::exec`) instead"
+    )
+}
+
+/// A `confine_inline_call` boundary is declared at `ScanDepth::Shallow`. The permitted region is judged at file-module
+/// grain, and a shallow region is the anchored module alone, so the permitted file's inline child modules — outside
+/// that region — could not be told apart from it; refusing is what keeps that from being a silent pass.
+pub(crate) fn confine_inline_call_shallow_error(crate_package: &str) -> String {
+    format!(
+        "the `confine_inline_call` rule of crate '{crate_package}' cannot be judged at `ScanDepth::Shallow`: the \
+         permitted region is compared at the grain of a file's module, and a shallow region is the anchored module \
+         alone, so a call in an inline child module of the permitted file would be read as permitted; declare it at \
+         the default subtree depth instead"
+    )
+}
+
+/// An inline confinement (`must_not_call_inline` or `confine_inline_call`, named by `rule`) declares an empty
+/// confined prefix, which would match everything or nothing — a misdeclaration, never a silent no-op.
+pub(crate) fn inline_empty_prefix_error(crate_package: &str, rule: &str) -> String {
+    format!(
+        "the `{rule}` rule needs a non-empty module-path prefix (e.g. `std::time`) \
          to confine, in crate '{crate_package}': an empty prefix cannot name a surface, so the \
          rule could never react meaningfully"
     )
 }
 
-/// A `must_not_call_inline` boundary declares `.ending_with([])` with an empty verb set, which
-/// would narrow the reaction to nothing — a silent no-op, resolved loudly (exit 2).
-pub(crate) fn inline_empty_verbs_error(crate_package: &str) -> String {
+/// An inline confinement (`must_not_call_inline` or `confine_inline_call`, named by `rule`) declares
+/// `.ending_with([])` with an empty verb set, which would narrow the reaction to nothing — a silent no-op, resolved
+/// loudly (exit 2).
+pub(crate) fn inline_empty_verbs_error(crate_package: &str, rule: &str) -> String {
     format!(
-        "a `must_not_call_inline` boundary in crate '{crate_package}' declares `.ending_with([])` \
+        "a `{rule}` boundary in crate '{crate_package}' declares `.ending_with([])` \
          with an empty verb set, which would react on nothing (a silent no-op); pass at least one \
          read verb (e.g. `[\"now\"]`) or drop the narrowing"
     )
 }
 
-/// A `must_not_call_inline` boundary declares both `.ending_with(…)` (narrow to read verbs) and
-/// `.strict_prefix_only()` (widen to all mentions) — a contradiction, resolved loudly (exit 2)
-/// rather than by a silent precedence choice.
-pub(crate) fn inline_narrow_and_strict_error(crate_package: &str) -> String {
+/// An inline confinement (`must_not_call_inline` or `confine_inline_call`, named by `rule`) declares both
+/// `.ending_with(…)` (narrow to read verbs) and `.strict_prefix_only()` (widen to all mentions) — a contradiction,
+/// resolved loudly (exit 2) rather than by a silent precedence choice.
+pub(crate) fn inline_narrow_and_strict_error(crate_package: &str, rule: &str) -> String {
     format!(
-        "a `must_not_call_inline` boundary in crate '{crate_package}' declares both `.ending_with(…)` \
+        "a `{rule}` boundary in crate '{crate_package}' declares both `.ending_with(…)` \
          and `.strict_prefix_only()`, which contradict (narrow to read verbs vs. widen to all \
          mentions); choose one"
     )

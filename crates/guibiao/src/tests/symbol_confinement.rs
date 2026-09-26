@@ -590,7 +590,10 @@ pub(super) fn inline_empty_prefix_is_a_constitution_error() {
             .must_not_call_inline("")
             .because("bad"),
     );
-    assert_eq!(result.unwrap_err(), inline_empty_prefix_error("x"));
+    assert_eq!(
+        result.unwrap_err(),
+        inline_empty_prefix_error("x", "must_not_call_inline")
+    );
 }
 
 #[test]
@@ -605,7 +608,10 @@ pub(super) fn inline_narrow_and_strict_is_a_constitution_error() {
             .strict_prefix_only()
             .because("contradiction"),
     );
-    assert_eq!(result.unwrap_err(), inline_narrow_and_strict_error("x"));
+    assert_eq!(
+        result.unwrap_err(),
+        inline_narrow_and_strict_error("x", "must_not_call_inline")
+    );
 }
 
 #[test]
@@ -962,7 +968,7 @@ pub(super) fn inline_strict_external_runs_the_exit_2_checks() {
     );
     assert_eq!(
         contradiction.unwrap_err(),
-        inline_narrow_and_strict_error("x")
+        inline_narrow_and_strict_error("x", "must_not_call_inline")
     );
     // Empty prefix → empty-prefix error.
     let (empty, _) = run_module_check_with_deps(
@@ -975,7 +981,10 @@ pub(super) fn inline_strict_external_runs_the_exit_2_checks() {
             .strict_external()
             .because("bad"),
     );
-    assert_eq!(empty.unwrap_err(), inline_empty_prefix_error("x"));
+    assert_eq!(
+        empty.unwrap_err(),
+        inline_empty_prefix_error("x", "must_not_call_inline")
+    );
 }
 
 #[test]
@@ -1398,7 +1407,10 @@ pub(super) fn inline_empty_verbs_is_a_constitution_error() {
             .ending_with(Vec::<String>::new())
             .because("bad"),
     );
-    assert_eq!(result.unwrap_err(), inline_empty_verbs_error("x"));
+    assert_eq!(
+        result.unwrap_err(),
+        inline_empty_verbs_error("x", "must_not_call_inline")
+    );
 }
 
 #[test]
