@@ -719,7 +719,7 @@ fn exit_arguments(text: &str) -> Result<Vec<String>, String> {
 /// ends inside, a here-document, a locale-translated string each leave the words after them in positions the
 /// lexer did not decide, so an `exit` there would pass unread.
 fn exit_sites(text: &str) -> Result<Vec<(usize, String)>, String> {
-    let words = support::shell::lex_placed(text).map_err(|(line, what)| {
+    let words = kanhe::shell::lex_placed(text).map_err(|(line, what)| {
         format!(
             "line {line} holds {what}, so where the words after it stand is not known and an `exit` among them \
              would pass unread"
@@ -751,7 +751,7 @@ fn exit_sites(text: &str) -> Result<Vec<(usize, String)>, String> {
 /// the one place it is a parameter. So every occurrence outside a parameter is refused, and a wrapper has no form
 /// of writing a library scalar left to find. The name is matched up to its end and not from its start, since
 /// `printf -vNAME` glues it to a flag; a longer name ending in it is refused too, which renaming answers.
-fn names_a_scalar(words: &[support::shell::Word], name: &str) -> bool {
+fn names_a_scalar(words: &[kanhe::shell::Word], name: &str) -> bool {
     let spells = |text: &str| {
         text.match_indices(name).any(|(at, _)| {
             let identifier = |c: char| c.is_ascii_alphanumeric() || c == '_';
@@ -764,11 +764,11 @@ fn names_a_scalar(words: &[support::shell::Word], name: &str) -> bool {
     words.iter().any(|word| {
         !word.operator
             && word.parts.iter().any(|part| match part {
-                support::shell::Part::Literal { text, .. }
-                | support::shell::Part::Unquoted(text)
-                | support::shell::Part::Arithmetic(text)
-                | support::shell::Part::AnsiC(text)
-                | support::shell::Part::Compound(text) => spells(text),
+                kanhe::shell::Part::Literal { text, .. }
+                | kanhe::shell::Part::Unquoted(text)
+                | kanhe::shell::Part::Arithmetic(text)
+                | kanhe::shell::Part::AnsiC(text)
+                | kanhe::shell::Part::Compound(text) => spells(text),
                 _ => false,
             })
     })
@@ -796,7 +796,7 @@ fn a_wrapper_naming_a_library_scalar_is_refused() {
         ("tell \"the XY class\"", false),
     ] {
         assert_eq!(
-            names_a_scalar(&support::shell::lex(text), "X"),
+            names_a_scalar(&kanhe::shell::lex(text), "X"),
             named,
             "whether `{text}` names X"
         );
@@ -809,7 +809,7 @@ fn a_wrapper_naming_a_library_scalar_is_refused() {
 /// Where a word stands is not asked, so an argument written `NAME=value` is counted as well. Counting one too
 /// many only refuses; where such an argument would stand in for the declaration it replaced, [`declared_value`]
 /// asks bash for the value, and bash holds none.
-fn plain_assignments(words: &[support::shell::Word], name: &str) -> Vec<String> {
+fn plain_assignments(words: &[kanhe::shell::Word], name: &str) -> Vec<String> {
     words
         .iter()
         .filter(|word| !word.operator && word.assigns() == Some(name))
@@ -829,7 +829,7 @@ fn plain_assignments(words: &[support::shell::Word], name: &str) -> Vec<String> 
 /// places assign the name, which bash cannot say after the fact; bash says whether the word it read is an
 /// assignment where it stands, which the words decide only by modelling where a command begins.
 fn declared_value(root: &Path, library: &str, name: &str) -> Result<String, String> {
-    let words = support::shell::lex_placed(&read(root, library)).map_err(|(line, what)| {
+    let words = kanhe::shell::lex_placed(&read(root, library)).map_err(|(line, what)| {
         format!("{library}:{line} holds {what}, so its assignments cannot all be read")
     })?;
     let declared = kanhe::selection::the_only(
@@ -872,7 +872,7 @@ fn an_assignment_that_is_not_an_assignment_word_is_not_read() {
     ];
     for (text, expected) in rows {
         assert_eq!(
-            plain_assignments(&support::shell::lex(text), "X"),
+            plain_assignments(&kanhe::shell::lex(text), "X"),
             expected
                 .iter()
                 .map(|value| value.to_string())
@@ -1270,7 +1270,7 @@ fn each_wrapper_uses_the_channel_the_gates_report_on() {
         // A wrapper reads the library's scalars and never names them: every form that assigns, declares or
         // unsets a name spells it as a word of its own, while reading it is `$NAME`, a parameter. So the question
         // is whether a wrapper writes the name at all rather than which of bash's assignment forms it used.
-        let words = support::shell::lex_placed(&text).unwrap_or_else(|(line, what)| {
+        let words = kanhe::shell::lex_placed(&text).unwrap_or_else(|(line, what)| {
             panic!("{wrapper}:{line} holds {what}, so its words cannot all be read")
         });
         let named_here: Vec<String> = DECLARED_EXITS
@@ -1420,55 +1420,125 @@ fn a_wrapper_exits_the_violation_class_only_for_a_gates_own_verdict() {
         "{library}:{site} exits the violation class without having read the gate's verdict:\n{window}"
     );
     for wrapper in WRAPPERS {
-        let source = Source::of(read(&root, wrapper));
-        let positioned = source.shell().positioned_lines();
-        let statements = kanhe::gate_identity::logical_lines(&positioned.join("\n"));
-        let calls: Vec<usize> = statements
-            .iter()
-            .enumerate()
-            .filter(|(_, (_, statement))| statement.contains("exit_for_the_gates_refusal"))
-            .map(|(index, _)| index)
-            .collect();
-        assert_eq!(
-            calls.len(),
-            1,
-            "{wrapper} routes a failing gate to `exit_for_the_gates_refusal` at {} statements; exactly one \
-             may, the one that runs its gate: {:?}",
+        let text = read(&root, wrapper);
+        let statements = kanhe::shell::statements(&text).unwrap_or_else(|(line, what)| {
+            panic!("{wrapper}:{line} holds {what}, so its statements cannot all be read")
+        });
+        gate_refusal_routing(&statements).unwrap_or_else(|why| panic!("{wrapper}: {why}"));
+    }
+}
+
+/// The one call routing a wrapper's failing gate to the library's refusal helper: a command at a statement's
+/// head, exactly once, the statement before it being the gate's invocation closed by `|| {`.
+///
+/// Read off the lexer's statements, so a statement ends where bash ends the command. A line ending in an
+/// escaped backslash ends there, and a join past it would fabricate the very `|| {` this check exists to
+/// require — the call then reads a channel the statement above it never guarded.
+fn gate_refusal_routing(statements: &[kanhe::shell::Statement]) -> Result<(), String> {
+    const CALL: &str = "exit_for_the_gates_refusal";
+    let calls: Vec<usize> = statements
+        .iter()
+        .enumerate()
+        .filter(|(_, statement)| {
+            let commands: BTreeSet<usize> = kanhe::shell::command_positions(&statement.words)
+                .into_iter()
+                .collect();
+            statement
+                .words
+                .iter()
+                .enumerate()
+                .any(|(at, word)| commands.contains(&at) && word.value == CALL)
+        })
+        .map(|(index, _)| index)
+        .collect();
+    let &[call] = calls.as_slice() else {
+        return Err(format!(
+            "routes a failing gate to `{CALL}` at {} statements; exactly one may, the one that runs its \
+             gate: {:?}",
             calls.len(),
             calls
                 .iter()
-                .map(|index| statements[*index].0)
+                .map(|index| statements[*index].line)
                 .collect::<Vec<_>>()
-        );
-        // The call is the body of the `|| {` that closes the gate's own invocation.
-        let call = calls[0];
-        let opener = call
-            .checked_sub(1)
-            .map(|index| statements[index].1.trim_end());
-        assert!(
-            opener.is_some_and(|opener| opener.ends_with("|| {") && opener.contains("-- --exact ")),
-            "{wrapper}:{} routes to the gate's refusal from outside the `|| {{` of the statement that runs its \
+        ));
+    };
+    let Some(opener) = call.checked_sub(1).map(|index| &statements[index]) else {
+        return Err(format!(
+            "calls `{CALL}` at line {} with no statement above it, so no gate's `|| {{` can hold the call",
+            statements[call].line
+        ));
+    };
+    // The call is the body of the `|| {` that closes the gate's own invocation: the statement above ends in
+    // the separator and the brace, and carries the `-- --exact` the gate is asked for by. The separator is
+    // two adjacent `|` words, as `is_or_separator` states.
+    let mut tail = opener.words.iter().rev();
+    let closes_the_gate = match (tail.next(), tail.next(), tail.next()) {
+        (Some(brace), Some(second), Some(first)) => {
+            !brace.operator
+                && brace.value == "{"
+                && brace.written == "{"
+                && second.operator
+                && second.value == "|"
+                && first.operator
+                && first.value == "|"
+                && first.start + 1 == second.start
+        }
+        _ => false,
+    };
+    let asks_for_the_gate = opener.words.windows(2).any(|pair| {
+        !pair[0].operator
+            && pair[0].value == "--"
+            && !pair[1].operator
+            && pair[1].value == "--exact"
+    });
+    if !(closes_the_gate && asks_for_the_gate) {
+        return Err(format!(
+            "line {} routes to the gate's refusal from outside the `|| {{` of the statement that runs its \
              gate, so it reads a channel nothing has written",
-            statements[call].0
-        );
+            statements[call].line
+        ));
     }
+    Ok(())
+}
+
+/// The join this reader no longer does. The gate's line ends in an escaped backslash, which bash reads as a
+/// literal backslash ending the command — measured, the `||` opening the next line is a syntax error there —
+/// so the block below guards nothing, and the routing must be refused rather than read as the gate's own.
+/// Under the retired join the two lines were one statement ending in `|| {`, and this passed.
+#[test]
+fn a_gate_statement_ended_by_an_escaped_backslash_routes_no_refusal_call() {
+    let fixture = concat!(
+        "gate_output=$(cargo test -q -p kanhe --test merge_message -- --exact the_gate 2>&1) \\\\\n",
+        "|| {\n",
+        "    exit_for_the_gates_refusal \"$gate_output\"\n",
+        "}\n",
+    );
+    let statements = kanhe::shell::statements(fixture).expect("the fixture is placed");
+    let why = gate_refusal_routing(&statements).expect_err(
+        "bash ends the gate's statement at the escaped backslash, so the `|| {` below it opens \
+                     another command — the call is nobody's guard",
+    );
+    assert!(
+        why.contains("outside the `|| {"),
+        "the refusal names the misrouting, not just that one was found: {why}"
+    );
 }
 
 /// The functions that stop a wrapper: `cannot_judge`, and every function whose body calls one, read from the
 /// scripts rather than listed, so a wrapper's own refusal helper is a stop by what it does.
 ///
 /// Each script is lexed whole, once, and only a word standing where a command's name does —
-/// [`support::shell::command_positions`] — is a call: a `cannot_judge` printed as an argument, quoted or not, calls
+/// [`kanhe::shell::command_positions`] — is a call: a `cannot_judge` printed as an argument, quoted or not, calls
 /// nothing, and one inside a command substitution ends that subshell rather than the wrapper. A body is the words
 /// between a `NAME ( ) {` and the `}` that closes it at depth, a brace counted only where bash reads it as the
 /// reserved word it is, in command position. A script the lexer cannot place is refused rather than read past.
 fn stops_of(scripts: &[&str]) -> BTreeSet<String> {
     let mut bodies: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for script in scripts {
-        let words = support::shell::lex_placed(script).unwrap_or_else(|(line, what)| {
+        let words = kanhe::shell::lex_placed(script).unwrap_or_else(|(line, what)| {
             panic!("a wrapper script holds {what} at line {line}, so which functions stop cannot be read")
         });
-        let commands: BTreeSet<usize> = support::shell::command_positions(&words)
+        let commands: BTreeSet<usize> = kanhe::shell::command_positions(&words)
             .into_iter()
             .collect();
         let brace = |at: usize, text: &str| commands.contains(&at) && words[at].value == text;
@@ -1537,9 +1607,10 @@ fn stops_of(scripts: &[&str]) -> BTreeSet<String> {
 /// argument, a condition — is not in this corpus; its failure is the ERR trap's.
 ///
 /// A failed acquisition is **refused** or **given a value**, never ignored: `|| verdict=""` supplies a
-/// fallback and is handled exactly as `|| cannot_judge` is. `|| true` is neither, and is not admitted. A refusal
-/// is `||` followed by a stop, and which functions stop is read from the scripts by [`stops_of`] rather than
-/// listed here.
+/// fallback and is handled exactly as `|| cannot_judge` is, and a `|| {` block guards only when its first
+/// command stops or supplies one — `|| { true; }` swallows the failure and is not admitted, exactly as
+/// `|| true` is not. Which functions stop is read from the scripts by [`stops_of`] rather than listed here,
+/// and the command an acquisition stands in is read from the lexer's words, so it ends where bash ends it.
 #[test]
 fn every_acquisition_is_guarded_so_the_tool_cannot_choose_the_class() {
     let Some(root) = workspace_root() else {
@@ -1553,62 +1624,193 @@ fn every_acquisition_is_guarded_so_the_tool_cannot_choose_the_class() {
     for wrapper in corpus {
         let text = read(&root, wrapper);
         let stops = stops_of(&[library.as_str(), text.as_str()]);
-        let mut unguarded = Vec::new();
-        let mut examined = 0usize;
-        let source = Source::of(text.clone());
-        // **One region, laid back out at its own positions.** The corpus came from `shell()` while the
-        // continuation walk read `text.lines()` — two scans of one file disagreeing about what counts as
-        // executed. A tail comment mentioning `cannot_judge` on an acquisition line would have marked it
-        // guarded, which is the region confusion `repository-checks` names a defect whether or not either
-        // scan currently admits a wrong answer. A dropped comment line becomes `""`, which ends no
-        // continuation, so the walk stops there and the acquisition reports unguarded — loud, and the safe
-        // direction for a wrapper standing in front of an irreversible act.
-        //
-        // Through `positioned_lines` rather than built here, and joined by `gate_identity::logical_lines`
-        // rather than by a second copy of the shell's continuation rule. Both halves were hand-rolled at the
-        // two sites that need them and both pairs disagreed: the layout half was unified first, and this —
-        // the join — kept a `trim_end().strip_suffix('\\')` that continues a line ending in
-        // backslash-then-whitespace. Measured, bash does not: `echo A \\ ` then `echo B` runs **two**
-        // commands. Over-joining here reports an unguarded acquisition as guarded, because the pulled-in text
-        // can carry the very token the guard is recognised by.
-        let lines = source.shell().positioned_lines();
-        for (number, statement) in kanhe::gate_identity::logical_lines(&lines.join("\n")) {
-            // An assignment whose value is a command substitution. Read on the whole statement, because the
-            // guard is part of it: both wrappers spread the gate acquisition across seven lines with its
-            // `|| {` on the last.
-            let Some((left, _)) = statement.split_once("=$(") else {
-                continue;
-            };
-            // The assigned name: the last whitespace-separated word before `=$(`, so `local x=$(…)` names
-            // `x` rather than `local x`. `rsplit` always yields at least one piece — measured, `""` and `" "`
-            // both give `Some("")` — so the fallback names no state any input can reach, and dressing it as
-            // `left.trim()` claimed otherwise while evaluating the trim twice.
-            let trimmed = left.trim();
-            let variable = trimmed
-                .rsplit_once(char::is_whitespace)
-                .map_or(trimmed, |(_, variable)| variable);
-            let guarded = stops
-                .iter()
-                .any(|stop| statement.contains(&format!("|| {stop}")))
-                || statement.contains("|| {")
-                || statement.contains(&format!("|| {variable}="));
-            examined += 1;
-            if !guarded {
-                unguarded.push(format!("{wrapper}:{number}"));
-            }
-        }
+        let words = kanhe::shell::lex_placed(&text).unwrap_or_else(|(line, what)| {
+            panic!("{wrapper}:{line} holds {what}, so its acquisitions cannot all be read")
+        });
+        let found = unguarded_acquisitions(&words, &stops);
         // **Per wrapper, before the verdict.** `unguarded.is_empty()` is satisfied by a corpus that collapsed
         // to nothing exactly as it is by one that is clean, and the two are opposite facts. Every sibling
         // direction here already guards its own corpus this way; this one asserted only the finding.
         assert!(
-            examined > 0,
+            found.examined > 0,
             "{wrapper}: no acquisition entered the corpus, so this direction would report clean over nothing \
              — a wrapper standing in front of an irreversible act must not be judged by an empty reading"
         );
         assert!(
-            unguarded.is_empty(),
-            "these acquisitions are unguarded, so a failing tool exits with its own status and its own stderr \
-             instead of one of this wrapper's two classes: {unguarded:?}"
+            found.unguarded.is_empty(),
+            "{wrapper}: these acquisitions are unguarded, so a failing tool exits with its own status and its \
+             own stderr instead of one of this wrapper's two classes: {:?}",
+            found.unguarded
+        );
+    }
+}
+
+/// What [`unguarded_acquisitions`] found in one script: how many acquisitions were examined, and the
+/// one-based lines of those no guard reaches.
+struct Acquisitions {
+    examined: usize,
+    unguarded: Vec<usize>,
+}
+
+/// Every acquisition among `words` — an assignment word carrying a command substitution — checked for its
+/// guard.
+///
+/// Read off the lexer's words rather than off joined text, so a command ends where bash ends it: a
+/// backslash-newline joins two lines and nothing else does — not an escaped backslash ending a line, not a
+/// backslash inside single quotes. A join over text pulled a guard token up from a line bash keeps apart,
+/// and reported the acquisition guarded on the strength of another command's words. The corpus is the
+/// assignment word itself, so `x="$(tool)"` counts exactly as `x=$(tool)` does, while a substitution
+/// standing in an argument is not an acquisition — its failure is the ERR trap's.
+fn unguarded_acquisitions(words: &[kanhe::shell::Word], stops: &BTreeSet<String>) -> Acquisitions {
+    let mut found = Acquisitions {
+        examined: 0,
+        unguarded: Vec::new(),
+    };
+    for (at, word) in words.iter().enumerate() {
+        let Some(variable) = word.assigns() else {
+            continue;
+        };
+        if !word
+            .parts
+            .iter()
+            .any(|part| matches!(part, kanhe::shell::Part::Substitution))
+        {
+            continue;
+        }
+        found.examined += 1;
+        // The first operator at the acquisition's own depth ends the command carrying it: the
+        // substitution's interior words sit deeper, and the command's own arguments are not operators.
+        let mut end = at + 1;
+        while let Some(next) = words.get(end) {
+            if next.depth == word.depth && next.operator {
+                break;
+            }
+            end += 1;
+        }
+        if !guard_after(words, end, word.depth, variable, stops) {
+            found.unguarded.push(word.line);
+        }
+    }
+    found
+}
+
+/// Whether `words[at]` opens an `||`: the lexer emits one word per metacharacter, so the list separator
+/// arrives as two adjacent `|` words — the same adjacency [`kanhe::shell::command_positions`] uses to read
+/// `>&` as one redirection.
+fn is_or_separator(words: &[kanhe::shell::Word], at: usize, depth: usize) -> bool {
+    let half = |index: usize| {
+        words
+            .get(index)
+            .is_some_and(|word| word.operator && word.depth == depth && word.value == "|")
+    };
+    half(at) && half(at + 1) && words[at].start + 1 == words[at + 1].start
+}
+
+/// Whether the operator ending an acquisition's command guards it: `||` followed by a stop as [`stops_of`]
+/// reads them, by a fallback assignment to the name being acquired, or by a block whose first command is one
+/// of those two. Newlines after the `||` or the brace continue the list, as bash continues it, and are
+/// stepped over.
+fn guard_after(
+    words: &[kanhe::shell::Word],
+    at: usize,
+    depth: usize,
+    variable: &str,
+    stops: &BTreeSet<String>,
+) -> bool {
+    if !is_or_separator(words, at, depth) {
+        return false;
+    }
+    // The next word at the list's own depth, over the newlines bash continues a `||` list or a brace group
+    // across.
+    let next_at = |mut at: usize| -> Option<usize> {
+        loop {
+            at += 1;
+            match words.get(at) {
+                Some(word) if word.operator && word.depth == depth && word.value == "\n" => {}
+                Some(_) => return Some(at),
+                None => return None,
+            }
+        }
+    };
+    let Some(first) = next_at(at + 1) else {
+        return false;
+    };
+    let word = &words[first];
+    if word.operator || word.depth != depth {
+        return false;
+    }
+    // `|| stop`, or `|| NAME=` supplying the acquired name's fallback.
+    if stops.contains(&word.value) || word.assigns() == Some(variable) {
+        return true;
+    }
+    // `|| { …`: the block's first command decides.
+    if word.value == "{" && word.written == "{" {
+        let Some(command) = next_at(first) else {
+            return false;
+        };
+        let first_command = &words[command];
+        return !first_command.operator
+            && first_command.depth == depth
+            && (first_command.assigns().is_some() || stops.contains(&first_command.value));
+    }
+    false
+}
+
+/// A line bash does not join guards nothing: the escaped backslash ends the acquisition's command, and the
+/// `|| cannot_judge` on the next line is another command — measured, a syntax error there. The retired join
+/// read the two as one statement and reported the acquisition guarded.
+#[test]
+fn an_acquisition_guarded_only_across_a_line_bash_does_not_join_is_unguarded() {
+    let stops = BTreeSet::from(["cannot_judge".to_string()]);
+    let words = kanhe::shell::lex_placed("title=$(gh pr view x) \\\\\n|| cannot_judge \"no\"\n")
+        .expect("the fixture is placed");
+    let found = unguarded_acquisitions(&words, &stops);
+    assert_eq!(found.examined, 1);
+    assert_eq!(
+        found.unguarded,
+        vec![1],
+        "bash ends the acquisition's command at the escaped backslash, so the guard on the next line guards \
+         nothing"
+    );
+    // The control: a real continuation keeps the guard in the acquisition's own command.
+    let words = kanhe::shell::lex_placed("title=$(gh pr view x) \\\n|| cannot_judge \"no\"\n")
+        .expect("the fixture is placed");
+    let found = unguarded_acquisitions(&words, &stops);
+    assert_eq!(found.examined, 1);
+    assert!(
+        found.unguarded.is_empty(),
+        "a backslash-newline joins, as bash joins, and the guard holds"
+    );
+}
+
+/// A block guard whose first command does not stop swallows the failure: `|| { true; }` runs `true` and the
+/// acquisition's failure ends nothing. Reading the opener alone admitted it.
+#[test]
+fn a_block_guard_whose_first_command_is_not_a_stop_is_unguarded() {
+    let stops = BTreeSet::from([
+        "cannot_judge".to_string(),
+        "exit_for_the_gates_refusal".to_string(),
+    ]);
+    let words =
+        kanhe::shell::lex_placed("x=$(tool) || { true; }\n").expect("the fixture is placed");
+    let found = unguarded_acquisitions(&words, &stops);
+    assert_eq!(found.examined, 1);
+    assert_eq!(
+        found.unguarded,
+        vec![1],
+        "the block opens and its first command returns, so the failure is ignored rather than refused"
+    );
+    // The controls: a block opening with a stop, and one opening with a fallback assignment, both guard.
+    for text in [
+        "x=$(tool) || { cannot_judge \"no\"; }\n",
+        "x=$(tool) || {\n    x=\"\"\n}\n",
+    ] {
+        let words = kanhe::shell::lex_placed(text).expect("the fixture is placed");
+        let found = unguarded_acquisitions(&words, &stops);
+        assert_eq!(found.examined, 1);
+        assert!(
+            found.unguarded.is_empty(),
+            "{text:?} guards the acquisition — its block's first command stops or supplies the value"
         );
     }
 }

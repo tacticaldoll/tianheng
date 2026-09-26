@@ -86,7 +86,9 @@ fn every_gate_a_wrapper_cites_is_a_test_that_exists() {
 
     let mut cited = Vec::new();
     for (script, text) in &sources {
-        cited.extend(citations(script, text));
+        cited.extend(citations(script, text).unwrap_or_else(|(line, what)| {
+            panic!("{script}:{line} holds {what}, so which gates it cites cannot be read")
+        }));
     }
     assert!(
         !cited.is_empty(),
