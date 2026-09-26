@@ -107,7 +107,7 @@ The runtime dimension ships into the user's production binary, so the probe hot 
 #### Scenario: The hot path adds no heavy dependency or lock
 
 - **WHEN** self-governance and dependency checks run against the runtime crate
-- **THEN** the crate depends only on `xuanji`, pulls no `syn`, and its origin lookup is a lock-free read of a non-SipHash `TypeId` registry
+- **THEN** the crate's default build depends only on `xuanji` — `xingbiao` is reached only through the CI-only `audit` feature — pulls no `syn`, and its origin lookup is a lock-free read of a non-SipHash `TypeId` registry
 
 ### Requirement: CI face — every declared seam is probed
 

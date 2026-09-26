@@ -472,20 +472,21 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "`BACKLOG.md` — *the shell's semantic delegation, held by construction*",
         ),
-        BoundDecl::unpinned(
+        BoundDecl::pinned(
             BoundId::new(
-                "observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound",
+                "observer-protocol/a-method-on-another-trait-named-observer-is-read-a-stated-bound",
             ),
-            "a whole-line signature copy — commented, in a string literal, or otherwise — with the definition moved out of the inspected source",
+            "a same-named method on an `impl` of another trait whose path ends in `Observer`, with the definition \
+             moved out of the inspected source",
             Extent::Reached(Reached::UnderReacts {
-                because: "the reader knows nothing of comments or literals, so one whole-line occurrence \
-                          anchors whatever follows it; what passes is a second hand-maintained path that \
-                          agrees today, since a divergent one is caught by observation-bound-model's \
-                          bijection over Observer::bounds — measured both ways"
+                because: "the reader takes the body only from an `impl` whose trait path ends in `Observer`, \
+                          matching that last segment rather than resolving which trait the path names; what \
+                          passes is a second hand-maintained path that agrees today, since a divergent one is \
+                          caught by observation-bound-model's bijection over Observer::bounds"
                     .into(),
                 owner: Owner::Engine,
             }),
-            "`BACKLOG.md` — *the bounds-method reader anchors on a whole-line occurrence that is not the definition*",
+            "the_reader_decides_every_shape_as_the_table_says",
         ),
         // --- observation-bound-register ---
         BoundDecl::unpinned(
@@ -1041,6 +1042,38 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                 owner: Owner::Engine,
             }),
             "a_construction_through_a_rename_or_inside_a_macro_is_read",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "repository-checks/an-assignment-that-is-not-an-assignment-word-is-not-read-a-stated-bound",
+            ),
+            "an assignment to a declared exit code or channel class that is not an assignment word — `read`, \
+             `printf -v`, arithmetic, `${NAME:=…}`",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the declaration check reads the assignment words a script spells, `NAME=value` and \
+                          `NAME+=value`, and bash's other assignment forms are an enumeration it stops short of; \
+                          once the library is loaded each name is `readonly`, so bash refuses a later \
+                          assignment in any form and the wrapper exits the unjudged class. Before it is loaded \
+                          a wrapper's own statements run, and the declaration check refuses a wrapper that \
+                          writes any of the names as a word, in whatever form"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "an_assignment_that_is_not_an_assignment_word_is_not_read",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "repository-checks/a-command-name-computed-when-the-line-runs-is-not-read-a-stated-bound",
+            ),
+            "an `exit` a wrapper runs through a command name its text does not spell — a variable, or a string \
+             another command runs: `eval`, `trap`, `bash -c`",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the exit-class check reads every word the text spells as `exit`, through every quoting \
+                          the shell removes, and a name that exists only when the line runs has no word to read"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "a_command_name_computed_when_the_line_runs_is_not_read",
         ),
         BoundDecl::unpinned(
             BoundId::new("repository-checks/a-block-comment-is-not-read-a-stated-bound"),

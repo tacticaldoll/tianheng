@@ -419,7 +419,10 @@ declared mutation. The population SHALL be named, because it is not the register
 *citations*, one per declaration, and blesses one test cited by two bounds in one capability, so an unqualified
 figure here would become the fifth answer that *A declared bound SHALL carry exactly one citation naming its
 defence* makes the register the arbiter of. Both sides of the remainder SHALL be counted over that same
-population; subtracting a record count from a name count made the disclosure read `-1`, measured. A gate that
+population; subtracting a record count from a name count made the disclosure read `-1`, measured. That
+population SHALL be the distinct tests a declared bound cites, which are the only ones a record may name, and a
+test cited only under ordinary scenarios SHALL be counted apart rather than folded in: no record can cover it,
+so folding it in reads a structural limit as work not yet done. A gate that
 reported only the mutations it ran would be a reaction reading as coverage, which is this requirement's own
 subject one level up.
 
@@ -457,6 +460,10 @@ is coverage, which grows one authored record at a time.
 - **WHEN** every declared mutation kills its citation
 - **THEN** the reaction still prints how many citations carry no mutation, so a clean result cannot be read as
   every pin having been exercised
+- **AND** it reads that remainder against the tests a declared bound cites, and counts a test cited only under
+  ordinary scenarios apart, because a record may name only the first and a figure folding in the second
+  reports as uncovered what no record can cover
+- **PINNED-BY** `pin_coverage_counts_ordinary_only_citations_apart`
 
 #### Scenario: The mutation set is empty
 
@@ -876,7 +883,8 @@ below.
 ### Requirement: The register reaction SHALL be a local gate CI runs identically
 
 The reaction SHALL be a script invoked from the workspace root, listed in `AGENTS.md`'s Definition of
-Done and run verbatim by CI, so `crates/kanhe/tests/dod_coherence.rs` binds the two. Its failure directions SHALL
+Done and run by CI, so `crates/kanhe/tests/dod_coherence.rs` binds the two as argv under the workflow's
+declared environment. Its failure directions SHALL
 each be proven by a companion test against fixtures built to trip exactly one condition — a gate over a
 coverage claim that has not been observed failing is a restatement of the register, not a defence of it.
 
@@ -929,7 +937,8 @@ ordinary exit-1 no-match result.
 #### Scenario: The local gate and CI cannot drift apart
 
 - **WHEN** the gate is added to the Definition of Done
-- **THEN** the identical command appears in CI, and `crates/kanhe/tests/dod_coherence.rs` fails if it does not
+- **THEN** the same command, compared as argv under the workflow's declared environment, appears in CI, and
+  `crates/kanhe/tests/dod_coherence.rs` fails if it does not
 
 #### Scenario: The reaction leaves the tree unchanged
 

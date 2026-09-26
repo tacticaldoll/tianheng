@@ -8,7 +8,7 @@ deliberately does not reach, and none of them is product.
 
 This capability replaces `gate-shape-contract`, which specified the pairing of a `scripts/check_*.sh` gate
 with a `scripts/test_*.sh` twin and the exit contract between them. That subject no longer exists —
-`git ls-files scripts/` names only wrappers, no gate — and its
+`git ls-files scripts/` names the wrappers and the shared library they source, no gate — and its
 check had reached the vacuity its own bounds warned about, enumerating **zero** gates, projecting
 `0 gates, 11 properties each`, and reporting clean over all of it.
 
@@ -317,10 +317,35 @@ when someone remembers is worse than one that costs — the cost is visible and 
 
 ### Requirement: Definition-of-Done coherence SHALL compare effective CI commands
 
-Every command in AGENTS.md's Definition of Done SHALL have an effective counterpart in CI. Commands expressed
-by `run:` SHALL be compared directly after the existing normalization. The repository's
-`EmbarkStudios/cargo-deny-action` step SHALL contribute `cargo deny <command>` from its declared `with.command`
-value. A DoD command SHALL NOT be exempted merely because CI normally expresses it through an action.
+Every command in AGENTS.md's Definition of Done SHALL have an effective counterpart in CI. A command SHALL be
+compared as argv, not as text: each step's `run:` script is lexed once, whole, by the same tokenizer that reads
+the Definition of Done line, and split into commands where bash splits them — at an unquoted newline, so a
+backslash-newline joins two lines only where bash joins them — expanding **only the environment the
+workflow declares** — the workflow's, its job's and its step's own, each overriding the one before. The reader
+SHALL NOT be taken to determine what a variable holds when the line runs: a value an earlier step writes to
+`$GITHUB_ENV`, or an action exports, is not observed, so what is compared is the argv the declared values give,
+not necessarily the argv the shell runs. A pin in one job is therefore no witness in another, a longer variable
+name is another variable, and an unquoted expansion to nothing removes its word as the shell does. Which leading
+words are assignments SHALL be decided from how each is written, before expansion, as bash's parser decides it:
+a word expanding to `NAME=value` is the command name, not an assignment, so it witnesses no Definition of Done
+line whose words are the same. A step or job carrying `if:` or `continue-on-error:` SHALL be no witness, and
+the Definition of Done SHALL be read from its own section only, ending at the next heading of its level. An
+`env:` value YAML reads as null SHALL be refused rather than expanded as its spelling. A CI line
+whose words are decided when it runs, or by expansion rules the tokenizer does not implement — a command
+substitution, an operator, a glob, a brace expansion, a tilde, a variable its scope does not define — SHALL be
+no witness, and SHALL make its whole script no witness: such a line can turn the lines after it into data — a
+here-document's body, a string left open — and no reading of one line on its own can see that. A script SHALL
+likewise be no witness when any of its lines is the shell's own act — a command word the shell owns, a builtin
+or a reserved word, or a line of assignments alone, an append (`NAME+=value`) included — since those decide what
+runs next or what a later line expands to, and an external program can do neither to the shell that runs it:
+`exit 0` before a command means the command is never reached, and `COLOR=never` before `"$COLOR"` means the
+declared value is not the one used. The declared set of such words SHALL be held against bash's own `compgen` in
+both directions. Each can only report a Definition of Done command missing; a Definition of Done line the
+tokenizer cannot read SHALL be refused. The repository's `EmbarkStudios/cargo-deny-action` step SHALL contribute
+`cargo deny <command> <command-arguments>` from its declared `with` inputs, and SHALL contribute nothing where it
+sets `arguments` or `manifest-path`: the action passes those before the command, so the step then runs another
+command than the one the Definition of Done spells. A DoD command SHALL NOT be exempted merely because CI
+normally expresses it through an action.
 
 The action projection is intentionally limited to the cargo-deny action whose command semantics this repository
 uses; the check SHALL NOT claim to interpret arbitrary GitHub Actions.
@@ -339,6 +364,93 @@ uses; the check SHALL NOT claim to interpret arbitrary GitHub Actions.
 - **THEN** the coherence check fails and names `cargo deny check` as missing from CI
 - **PINNED-BY** `a_missing_supply_chain_action_leaves_cargo_deny_missing`
 
+#### Scenario: An action input narrows the command
+
+- **WHEN** the DoD contains `cargo deny check` and the cargo-deny action's `with.command` is `check` beside a
+  `command-arguments`, `arguments` or `manifest-path` input
+- **THEN** the coherence check fails and names `cargo deny check` as missing from CI — `command-arguments:
+  advisories` runs the advisories check alone, and the other two change the flags or the manifest it runs over
+- **PINNED-BY** `an_action_input_narrowing_the_command_does_not_satisfy_check`
+
+#### Scenario: A pinned toolchain is read in the job that pins it
+
+- **WHEN** a job declares `MSRV: "1.85"` in its `env:` and a step in it runs `cargo "+$MSRV" test`
+- **THEN** the step is the Definition of Done's `cargo +1.85 test` line, and a pin at another value is not
+- **PINNED-BY** `a_job_env_pin_expands_into_the_run_lines_that_read_it`
+
+#### Scenario: A pin in one job is read in another
+
+- **WHEN** one job declares the pin and a different job's step reads `$MSRV`
+- **THEN** that step is no witness and the Definition of Done line is reported missing, because the variable is
+  not in force where it is read
+- **PINNED-BY** `a_pin_in_another_job_does_not_satisfy_the_literal`
+
+#### Scenario: A CI line's words are decided when it runs
+
+- **WHEN** the only CI line resembling a Definition of Done command carries a command substitution
+- **THEN** it is no witness and the command is reported missing, rather than matched on the words around it
+- **PINNED-BY** `a_line_decided_at_run_time_is_no_witness`
+
+#### Scenario: A command is spelled inside data
+
+- **WHEN** the only CI text spelling a Definition of Done command is a here-document's body, or a line inside a
+  string that spans lines
+- **THEN** the script is no witness and the command is reported missing, because the script carries a line the
+  tokenizer declines and is read whole or not at all
+- **PINNED-BY** `a_here_document_body_is_no_witness`
+
+#### Scenario: A command follows a line that ends the script
+
+- **WHEN** the only CI line spelling a Definition of Done command follows `exit 0` in the same script
+- **THEN** the script is no witness and the command is reported missing, because a line whose command word is
+  the shell's own can end the script before the command is reached
+- **PINNED-BY** `a_command_after_the_script_ends_is_no_witness`
+
+#### Scenario: A script reassigns a variable before reading it
+
+- **WHEN** a job declares `COLOR: always` and its script sets `COLOR=never` before running `"$COLOR"`
+- **THEN** the script is no witness, because the value the later line expands is not the declared one
+- **PINNED-BY** `a_script_reassigning_a_variable_is_no_witness`
+
+#### Scenario: The Definition of Done section ends at the next heading
+
+- **WHEN** AGENTS.md's Definition of Done section holds no fence, and the next section holds one
+- **THEN** the check refuses, reading no commands, rather than taking the next section's fence as the Definition
+  of Done
+- **PINNED-BY** `a_fence_after_the_next_heading_is_not_the_definition_of_done`
+
+#### Scenario: An env value is null
+
+- **WHEN** a workflow, job or step `env:` value is written as YAML's plain null — empty, `~` or `null` — or a
+  `with:` value is
+- **THEN** the `env:` value is refused, since it gives the name no value to expand, while a quoted `"null"` is
+  the text it spells and a `with:` value, handed to an action rather than expanded, is read
+- **PINNED-BY** `shapes_the_model_cannot_hold_are_refused`
+- **PINNED-BY** `a_quoted_null_env_value_is_its_text`
+- **PINNED-BY** `a_null_with_value_is_read`
+
+#### Scenario: A step's running is decided at run time
+
+- **WHEN** the only CI line spelling a Definition of Done command sits in a step or job carrying `if:` or
+  `continue-on-error:`
+- **THEN** it is no witness and the command is reported missing: `if:` may skip it, and `continue-on-error:` lets
+  it fail without failing the job, so neither says CI ran the command and agreed
+- **PINNED-BY** `a_step_gated_at_run_time_is_no_witness`
+
+#### Scenario: A line ends in an escaped backslash
+
+- **WHEN** a CI script line ends in `\\`, or a single-quoted string holds a backslash before a newline
+- **THEN** the line is its own command, as bash reads it: an escaped backslash is text and a backslash inside
+  single quotes joins nothing, so the next line is read as the command it is
+- **PINNED-BY** `a_script_is_read_whole_or_not_at_all`
+
+#### Scenario: A word expands to an assignment
+
+- **WHEN** a job declares `PREFIX` as `TIANHENG_WORKSPACE_TESTS=1` and its script runs `"$PREFIX" cargo test
+  --workspace`, against a Definition of Done line `TIANHENG_WORKSPACE_TESTS=1 cargo test --workspace`
+- **THEN** the line is reported missing, because bash runs a command named by `$PREFIX`'s value and never `cargo`
+- **PINNED-BY** `a_word_expanding_to_an_assignment_is_the_command_name`
+
 ### Requirement: A hand-maintained pin SHALL carry the window it is good for
 
 A pin this repository maintains by hand SHALL declare the window it is good for, and a reaction SHALL hold
@@ -351,27 +463,36 @@ so npm stops rather than warns — and what remains is bounded risk on a tree re
 interpreter **past the point its major is maintained** is the half with teeth, and nothing reacted to it: the
 only thing that would notice was someone remembering.
 
-**Adjacency is a convention rather than a requirement, and this says so because it read as one.** The
-sentence here was *the declaration SHALL sit beside the pin it bounds*, and nothing observed it: the reader
-takes the workflow's whole text and a day, and never computes a line index. Measured in the `0.5.0` window's
-static review — the declaration moved 92 lines from the pin and outside every job, and the reaction stayed
-green 3 of 3. Giving it a reaction would mean defining how near counts as *beside*, for a property whose whole
-value is that a reader meets the two together, so it stays where a branch name stays: a convention for humans
-and agents, stated as one rather than as law. What the reaction holds instead is that the major and the date
-are read together and compared with the pin — which is the half that can go wrong silently.
+**The declaration SHALL stand inside the step whose pin it bounds.** The pin is the `node-version` input of
+the one `actions/setup-node` step, read through the workflow's structure, and the declaration SHALL sit within
+that step's lines — from its first key to the line before the next step, or before whatever of its job's keys
+follows `steps` — and at the step's own depth or deeper, since YAML attaches a comment to nothing and a comment
+between the last step and a later job key is the job's. *Beside* is therefore decided by the structure rather
+than by a distance: a declaration outside every step, in a sibling step, beside a job key written after
+`steps`, or beside a `node-version` input of another action refuses, and so does a workflow with no
+`actions/setup-node` step, one with several, and one whose step pins no `node-version`. A comment is not part of
+YAML's structure, so the declaration itself is still read as text — and a line spelled as the declaration is
+one only where **blanking it leaves the parsed workflow unchanged**. Anywhere else it is part of a value — a
+literal or folded block, a quoted scalar spanning lines — and refuses, since folding joins a content line to its
+neighbour and a value's text no longer shows where its lines began.
 
-**The pin has three legs and the reaction SHALL read all three.** `node-version` in the workflow, the
-declaration beside it, and `engines.node` in the package manifest are one commitment written three times, and
-only two of them were held against each other. Widening `engines.node` to a range with no upper bound passes
-every other reaction while letting a local Definition of Done take a different major than CI — the
+**The pin has three legs and the reaction SHALL read all three.** The `actions/setup-node` step's
+`node-version`, the declaration beside it, and `engines.node` in the package manifest are one commitment written
+three times, and only two of them were held against each other. Widening `engines.node` to a range with no upper
+bound passes every other reaction while letting a local Definition of Done take a different major than CI — the
 local-versus-CI divergence the merge wrapper's CI read exists for. What the reaction SHALL hold is that the
 range admits **exactly** the pinned major: its lower bound names that major and its upper bound names the
-successor. A manifest declaring several ranges, or none, SHALL refuse.
+successor. The range SHALL be read as JSON — the `node` member of the manifest's top-level `engines` object, a
+string — rather than as any `"node"` line in the file, and a manifest declaring several ranges, none, a
+non-string one, or any key written twice in one object SHALL refuse.
 
 The declaration SHALL name the **major it speaks for** as well as the date, so a pin moved without it refuses
 rather than inheriting a window chosen for something else. The reaction SHALL refuse when no window is
 declared, when more than one is — a reader that takes one leaves the others binding nothing — when the major
-declared is not the major pinned, and when the date has been reached.
+declared is not the major pinned, and when the date has been reached. The major SHALL be a **number**, and the
+pin's major and the range's bounds SHALL be compared with it as numbers: a word agreeing with itself across the
+three legs is not a major they agree on. A major with no successor SHALL refuse, since no range can be bounded
+above it.
 
 **The declaration SHALL be a commitment of this repository rather than an assertion about the tool.** Nothing
 here can hold a vendor's release calendar: it is not in this tree, and every reaction runs offline. A claim
@@ -408,7 +529,7 @@ so the date a reader is refused on is the same date everywhere.
 
 - **WHEN** `engines.node` bounds a range that is not exactly the pinned major and its successor — no upper
   bound, an upper bound a major too high, a lower bound below the pin, a different major, an exact version,
-  none at all, or several
+  none at all, several, one that is not a string, or a `node` key outside `engines`
 - **THEN** the reaction refuses, naming the declared range and the pinned major, rather than holding two of
   the three legs against each other and resting the third on prose
 - **PINNED-BY** `the_engines_range_is_held_against_the_major_the_workflow_pins`
@@ -416,9 +537,17 @@ so the date a reader is refused on is the same date everywhere.
 #### Scenario: The window is absent, doubled, or unreadable
 
 - **WHEN** the workflow declares no window, declares more than one, or declares one whose fields are not a
-  major and a `YYYY-MM-DD` date
+  numeric major with a successor and a `YYYY-MM-DD` date
 - **THEN** the reaction refuses and says what to write, rather than passing over a declaration it could not
   read
+- **PINNED-BY** `the_window_reader_decides_every_shape_of_the_declaration`
+
+#### Scenario: The window or the pin stands where it does not take effect
+
+- **WHEN** the declaration is outside the `actions/setup-node` step, in a sibling step, beside a job key
+  written after `steps`, or beside another action's `node-version`; a line inside a literal or folded value is
+  spelled as the declaration; or the workflow has no such step, several, or one that pins nothing
+- **THEN** the reaction refuses, because the date then binds no pin
 - **PINNED-BY** `the_window_reader_decides_every_shape_of_the_declaration`
 
 ### Requirement: A figure a sweep cannot represent SHALL refuse
@@ -592,8 +721,10 @@ its class open is what a reaction is for.
 
 ### Requirement: A workflow SHALL declare its shell strictness once
 
-`.github/workflows/ci.yml` SHALL declare `defaults.run.shell` as a strict `bash`, and no step SHALL take that
-strictness back — neither by naming `bash` without the flags nor by restating `set -` inside a `run:` block.
+`.github/workflows/ci.yml` SHALL declare `defaults.run.shell` as a strict `bash`, and no job or step SHALL take
+that strictness back — neither by declaring a `shell:` other than the workflow's own, whatever it names, nor by
+restating `set -` inside a `run:` block. `sh`, `bash -e {0}` and a path to bash each run without `pipefail`, so
+the rule is the workflow's value rather than a list of what may not be named.
 Both wrappers in `scripts/` argue that a script choosing its exit class in one place beats every author
 choosing it again; a workflow whose steps each decide their own strictness is that defect one layer out.
 
@@ -610,7 +741,8 @@ about a license for a fact about an absent interpreter. Under `pipefail` the sam
 
 #### Scenario: A step takes the strictness back
 
-- **WHEN** a step declares `shell: bash` without the flags, or a `run:` block restates `set -e`
+- **WHEN** a job or step declares a `shell:` other than the workflow's own — `bash` without the flags, `sh`, or
+  any other — or a `run:` block restates `set -e`
 - **THEN** the reaction refuses, naming the line — the second spelling is the one that drifts
 - **PINNED-BY** `shell_strictness_is_declared_once_for_the_whole_workflow`
 
@@ -629,13 +761,21 @@ failure names the document, which is why nobody reads it as the pipeline's shape
 inside `<(…)`: a failure there arrives as an empty value, so the floor that catches it names the data for a
 fact about the tool — measured, exit 0 and array length 0.
 
-The corpus is every tracked text this repository runs shell in — the workflow and both wrappers — because the
-two places the class matters most stand in front of the irreversible acts.
+The corpus is every tracked text this repository runs shell in — the workflow, and every tracked file under
+`scripts/` through the one enumeration of them, so the shared library the wrappers source is read as they are —
+because the places the class matters most stand in front of the irreversible acts.
+
+**That corpus is read as text, not through the workflow model, and the choice is about its subject.** What it
+judges is shell, and the same reading covers both wrappers, which are shell files; narrowing the workflow's half
+to its `run:` bodies would give one rule two corpora of different kinds. The `set -` restatement the strictness
+requirement refuses is read the same way, for the same reason. Reading the workflow's whole text over-includes:
+a YAML value outside every `run:` block that is spelled as a pipeline is judged as one — measured, a job's
+`name:` ending in `| grep -q x` is refused at its line. That direction refuses rather than passes.
 
 #### Scenario: A pipeline stage exits before its producer finishes
 
 - **WHEN** any stage fed by a pipe stops early — `printf … | grep -q`, `… | head -n1`, or one standing
-  mid-pipeline, in the workflow or in either wrapper
+  mid-pipeline, in the workflow or in any tracked script, the shared library included
 - **THEN** the reaction refuses, naming the file, the line and the consumer — the value is read without a pipe
   instead, through a here-string or a glob become a value
 - **PINNED-BY** `no_step_reads_a_value_through_a_pipeline_that_stops_early`
@@ -957,9 +1097,43 @@ every statement to be guarded makes the obligation as large as the script. Two s
 hold it — first by tool name, then by command substitution — and a bare `cd` walked through both, because the
 axis was never which shape a statement has. A wrapper SHALL therefore install an `ERR` trap reporting the
 unjudged class, with `set -E` so it reaches failures inside functions, leaving exactly one statement able to
-exit `1`: the arm carrying the gate's verdict. Measured on bash 5: a bare failure traps, a `||`-guarded
-command does not, a failure in an `if`/`while`/`!`/`&&` condition does not, and an explicit `exit 1` is not
-intercepted.
+exit `1`: `exit_for_the_gates_refusal`, the library's arm carrying the gate's verdict. Measured on bash 5: a bare failure traps, a `||`-guarded
+command does not, a failure in an `if`/`while`/`!`/`&&` condition does not, and an `exit` a stop makes after
+recording its class passes the EXIT trap unchanged. An expansion error — an unset name under `set -u`, an assignment to a readonly name — ends the shell
+with status `1` without the ERR trap, so the library SHALL also install one EXIT trap that holds every nonzero
+status no stop chose to the unjudged class; each stop records the class it chose immediately before its `exit`.
+**A signal SHALL be the one stop outside both classes.** A shell running a wrapper in a loop stops the loop only
+when the wrapper ends by the signal — measured on bash 5.3 with SIGINT sent to the process group, a wrapper that
+trapped it and exited `2` let the loop run its next merge. So the library SHALL trap SIGINT, SIGTERM and SIGHUP,
+say whether the act had been started, and then end the wrapper by that signal; a signal arriving while the act
+runs SHALL be held until the act's account has read the outcome, so the operator is told what happened. This is
+a contract over signals the wrapper can trap: one ignored on entry to the shell that started it — SIGHUP under
+`nohup`, SIGINT in a background job started from a script — cannot be trapped, so it never reaches the wrapper
+and the run ends as it would have without it. The
+EXIT trap SHALL remove the verdict file it created, and a run leaving clean that cannot remove it SHALL exit the
+unjudged class saying the act completed; a run already leaving through a stop keeps its class and says the file
+is left.
+
+#### Scenario: An expansion error ends a wrapper
+
+- **WHEN** a wrapper, once the library is loaded, expands a name `set -u` finds unset
+- **THEN** it exits the unjudged class, whatever stream it was given, rather than the `1` bash ends with
+- **PINNED-BY** `no_closed_stream_moves_the_library_s_classes`
+
+#### Scenario: A signal ends a wrapper
+
+- **WHEN** SIGINT, SIGTERM or SIGHUP reaches a wrapper while its gate runs, or while its act runs
+- **THEN** it says the act had not been started, or lets the act's account report its outcome first, and then ends
+  by that signal, leaving no temporary file — so a shell loop running it stops rather than running the next act
+- **PINNED-BY** `a_signal_ends_the_wrapper_by_that_signal`
+
+#### Scenario: The verdict file cannot be removed
+
+- **WHEN** a run that completed its act cannot remove the verdict file it created, or a run already leaving
+  through a stop cannot
+- **THEN** the first exits the unjudged class, saying the act is done and the file is what is left; the second
+  keeps its stop's class and says the file is left
+- **PINNED-BY** `a_verdict_file_left_behind_is_the_unjudged_class`
 
 #### Scenario: An unguarded command fails
 
@@ -988,12 +1162,10 @@ that was judged. This classification SHALL be measured against the tool at a **n
 recorded beside the classification, since a tool's combination behaviour is not readable from its `--help`.
 
 Third: **does the argument perform a further act after the judged one?** The first two questions ask about the
-act itself; neither refuses an argument that leaves the judged act untouched and then does something else. The
-merge wrapper admitted `--delete-branch` on that gap for a window, sharing an arm with `--admin` and carrying no
-sentence of its own, while the criterion beside it admitted only arguments that change whether the merge
-proceeds. Deleting the head branch is a post-merge act with an effect no rerun undoes: a pull request stacked on
-that branch is auto-closed, and GitHub refuses to reopen it once the branch is gone and its head has moved —
-which this repository has already paid for. An argument whose effect outlives the act and which the wrapper
+act itself; neither refuses an argument that leaves the judged act untouched and then does something else, such
+as `--delete-branch`. Deleting the head branch is a post-merge act with an effect no rerun undoes: a pull request
+stacked on that branch is auto-closed, and GitHub refuses to reopen it once the branch is gone and its head has
+moved. An argument whose effect outlives the act and which the wrapper
 cannot undo SHALL be refused, and its refusal SHALL name the consequence rather than the rule, because a
 refusal an operator cannot act on is one they work around.
 
@@ -1186,7 +1358,44 @@ diagnostics they carry, but they SHALL decide nothing the default refusal would 
 
 A sanctioned wrapper SHALL exit `1` — the violation class — **only** where a gate ran and reported a
 disagreement. Every other stop SHALL exit `2`: a misconfigured invocation, an input the wrapper could not read,
-and a gate that did not run. The classification SHALL be chosen in one place per wrapper rather than at each site.
+and a gate that did not run.
+
+**The lifecycle the two wrappers share SHALL be written once, in a library they source.** The classification,
+the ERR trap, the verdict channel's scalars, the two guards over the gate's run, and the verdict file's
+lifecycle SHALL each have **one definition site**, `scripts/wrapper.sh` — not two copies that agree, since two
+copies agree only for as long as review keeps them agreeing, which is the drift a seam exists to end. What each
+wrapper keeps is what only it decides: its allowlist, its evidence, and its gate. The failing path of a
+gate's run is identical for both, so it is the library's too: each wrapper routes its gate's failure to
+`exit_for_the_gates_refusal` from the `|| {` of the statement that runs the gate, and that function exits the
+violation class only for a `Violation` the gate wrote on its channel. The library is sourced, never executed:
+it installs the wrappers' machinery into the caller and renders no verdict of its own, and a direction SHALL
+hold it to that by **running** it — run as a command, it stops with the plain-misuse code
+`kanhe::verdict_channel::LIBRARY_MISUSE` owns, in a message that says what to run instead. That code SHALL be
+neither class `kanhe::verdict_channel::wrapper_exit` returns, held beside the enumeration of `refusal::Kind`.
+
+**Every exit code SHALL be owned in Rust and read in the shell.** `kanhe::verdict_channel` owns the codes —
+`wrapper_exit` for the two classes, by an exhaustive match over `refusal::Kind`, and `LIBRARY_MISUSE` — and
+the library SHALL declare one `WRAPPER_EXIT_<NAME>` per code, each held equal to its owner by a repository
+check, which reads every assignment word the library's executed text spells for that name — `NAME=value` and
+`NAME+=value`, `local`, `declare`, `export` and `readonly` ones included — and refuses unless there is exactly
+one, and unless bash, once the library is sourced, holds that same value for the name — read from the probe's
+own output, with what the library prints while it is sourced discarded. Where a word stands is
+asked of bash rather than of the words, so an argument spelled `NAME=value` in the declaration's place is
+refused. An assignment in
+another form is declared as a bound below; a value it changes is caught only where a direction runs the wrapper
+down that path and asserts the class it exits with. Every word the library and the wrappers spell as `exit` — under any quoting the shell removes, and wherever
+it stands — SHALL be followed by one of those declarations, and each code SHALL be chosen at one site. Where a
+command begins is not asked: `exit` as another command's argument is held the same way, and is quoted into a
+longer word instead. A command name computed only when a line runs is the one form outside it, declared as a
+bound below; the one literal SHALL be each wrapper's bootstrap guard, which runs before the library
+is loaded and whose code the direction running it holds against `wrapper_exit`.
+
+**The `source` that loads the library is the one stop before that machinery exists, and it SHALL be the
+unjudged class in the wrapper's own voice.** A missing or unreadable library is an input the wrapper could
+not read, yet unguarded it exits with `source`'s own status — measured, `1`, the violation class — and bash's
+ERR trap does not fire for a failed `source` at all, which is why the guard SHALL print its refusal rather
+than trap. A direction SHALL hold the class and the message by running each wrapper from a tree the library
+is absent from.
 
 **A gate that did not run belongs to the unjudged class, however loudly its message says so.** The distinction is
 already typed where the judgement lives: `refusal::Kind` separates a source that disagrees from one that could
@@ -1199,9 +1408,14 @@ already refuses.
 the gate to report its class on; the gate SHALL write it at the moment it has a verdict and before it fails; and
 the wrapper SHALL read that file rather than searching the gate's output. An absent, empty or unrecognised value
 SHALL be the unjudged class, so a run that reached no verdict — a compile failure included — is unjudged by
-construction rather than by a default. The variable name and the class spelling SHALL each be defined once and
-compared against the wrappers by a repository check, and a direction SHALL hold that each gate reports before it
-fails — the scalars can agree while no gate ever writes, which leaves every failing gate reading as unjudged.
+construction rather than by a default. Each class spelling SHALL be defined once — in the shared library — and
+the variable name SHALL be spelled in each wrapper's own invocation of its gate, where a shell cannot take an
+environment-assignment prefix from a variable; both SHALL be compared against `kanhe::verdict_channel` by a
+repository check, and a direction
+SHALL hold that each gate reports before it fails — the scalars can agree while no gate ever writes, which
+leaves every failing gate reading as unjudged. A wrapper SHALL NOT declare either class scalar itself: the channel
+it opens for the gate is the half that cannot move, and a second declaration beside the library's is the
+two-places-that-must-agree shape this family deletes on sight.
 
 **A channel that was opened and cannot be written SHALL fail the gate loudly**, naming the path and the error.
 Absence is the unjudged class, and a discarded write outcome gives absence a second cause — a verdict the gate
@@ -1226,6 +1440,94 @@ judged.
 - **THEN** the wrapper still reads the unjudged class and exits `2` — the channel is absent either way, so the
   gate's own output is what distinguishes a verdict lost from a verdict never reached
 
+#### Scenario: The shared library run as a command
+
+- **WHEN** `scripts/wrapper.sh` is executed directly rather than sourced
+- **THEN** it stops with the misuse code `kanhe` owns, saying what to run instead; a count of its `exit` text
+  would pass while the guard's condition is false, so the file is **run** and the code compared with its owner
+- **PINNED-BY** `a_library_run_as_a_command_stops_without_reaching_a_wrapper_s_classes`
+
+#### Scenario: The misuse code collides with a class
+
+- **WHEN** `LIBRARY_MISUSE` equals a code `wrapper_exit` returns for some `refusal::Kind`
+- **THEN** the check fails naming the kind it would be read as
+- **PINNED-BY** `the_library_misuse_code_is_outside_every_wrapper_class`
+
+#### Scenario: An exit names a code nothing owns
+
+- **WHEN** the library or a wrapper exits with a numeral outside the bootstrap guard, a bare `exit`, or a
+  variable that is not a declared `WRAPPER_EXIT_<NAME>`
+- **THEN** the check fails naming the site, and a declared code chosen at a second site fails the same way
+- **PINNED-BY** `each_wrapper_chooses_its_exit_class_in_one_place`
+
+#### Scenario: An exit word is judged wherever it stands
+
+- **WHEN** a word whose value is `exit` stands anywhere in a wrapper's or the library's text — as a
+  command, in a one-line case arm, in a condition, in a pipeline, as another command's argument, inside a command
+  substitution wherever it stands (`"$(exit 3)"`, `` `exit 3` ``) — under any quoting the shell removes, ANSI-C
+  quoting and each of its escapes included (`$'exit'`, `$'\x65xit'`)
+- **THEN** it is judged by the word after it, and a bare `exit` by none. Words and operators are split where
+  bash's definition of a metacharacter splits them, so a parenthesis inside quotes (`"(exit"`) is the word's text
+  and a word whose value is longer than `exit` — a quoted message saying *and exit 0* — is not one. The text is
+  read whole rather than a line at a time, because a quote opened on one line closes on a later one, and a
+  backslash-newline joins two lines. The file is lexed as written, and the lexer drops a comment where bash opens
+  one, so no line-wise cut runs first to disagree with its quoting. A `${…}` ends where `bash(1)` ends it — at the
+  first brace not escaped, not quoted and not inside an embedded expansion — and a substitution inside it is text
+  the shell runs, read like any other. A backslash-newline is removed where it stands between or inside words and
+  inside double quotes, so a `#` after one opens a comment, and a `$` before one is unplaced; arithmetic, `$((…))`
+  or `((…))`, is read whole in its own alphabet, so its `<<` is a shift rather than a here-document
+- **PINNED-BY** `the_exit_reader_decides_every_shape_a_wrapper_line_takes`
+
+#### Scenario: The exit reader meets what it cannot place
+
+- **WHEN** a wrapper's or the library's text holds anything outside the forms the lexer places — a quote the text
+  ends inside, a here-document, a locale-translated `$"…"`, a `case` standing as a command inside `$(…)`, arithmetic
+  holding a command substitution or a character outside arithmetic's alphabet, a `((` whose first close is single,
+  or a `$` before a character it opens nothing from
+- **THEN** the check refuses the file naming the line, rather than reading on: the words after such a construct
+  stand where the lexer did not decide, so an `exit` among them would pass unread. The lexer places a declared set
+  of forms and leaves the rest unplaced, so a form it has not met falls on the refusing side
+- **PINNED-BY** `the_exit_reader_decides_every_shape_a_wrapper_line_takes`
+
+#### Scenario: A word spelled as a declaration is not one where it stands
+
+- **WHEN** the library's declaration of a name is replaced by an argument spelled the same way —
+  `printf '%s\n' NAME=1`
+- **THEN** the check fails saying that bash holds no value for the name once the library is sourced
+- **PINNED-BY** `a_word_spelled_as_a_declaration_is_one_only_where_bash_reads_it`
+
+#### Scenario: An assignment that is not an assignment word is not read — a stated bound
+
+- **WHEN** the library or a wrapper assigns a declared exit code or channel class in a form that is not an
+  assignment word — `read NAME`, `printf -v NAME`, `(( NAME = 3 ))`, `${NAME:=3}`
+- **THEN** the declaration check reports no offence for it. bash's assignment forms are the enumeration a reader
+  stops short of; what holds the value is bash, since each name is declared `readonly`
+- **PINNED-BY** `an_assignment_that_is_not_an_assignment_word_is_not_read`
+
+#### Scenario: A declared name is assigned again when the wrapper runs
+
+- **WHEN** a statement assigns a declared exit code or channel class after the library is loaded, in any form —
+  `NAME=3`, `NAME+=0`, `read NAME`, `printf -v NAME`, `(( NAME = 3 ))`, `declare`, `local`
+- **THEN** the wrapper exits the unjudged class. bash refuses an assignment to a readonly name: as an assignment
+  word, `read`, `printf -v` or `(( ))` it ends the shell with status `1` outside the ERR trap, which the library's
+  EXIT trap holds to the unjudged class; as `declare` or `local` the builtin fails, and the ERR trap stops there
+- **PINNED-BY** `a_declared_name_assigned_again_is_the_unjudged_class`
+
+#### Scenario: A command name computed when the line runs is not read — a stated bound
+
+- **WHEN** a wrapper or the library runs `exit` through a command name its text does not spell — `$stop 3` with
+  `stop=exit`, or a string another command parses again: `eval "exit 3"`, `trap 'exit 3' EXIT`, `bash -c 'exit 3'`
+- **THEN** the exit-class check reports no offence for it. The name exists only when the line runs, so there is no
+  word to read; every word the text spells as `exit` is read, which is the scenario above
+- **PINNED-BY** `a_command_name_computed_when_the_line_runs_is_not_read`
+
+#### Scenario: A wrapper whose library cannot be read
+
+- **WHEN** a sanctioned wrapper is run from a tree that has no `scripts/wrapper.sh`
+- **THEN** it exits the unjudged class naming the missing library in its own voice, before any evidence is
+  read or gate is run — an input it could not read, never the class that means a gate refused
+- **PINNED-BY** `a_wrapper_without_its_library_is_the_unjudged_class`
+
 Reading the class out of the gate's output was the first attempt and it was the wrong channel twice over. It put
 the delimiter in the shell and the variant name in Rust, so a check pinning the rendering's *arguments* stayed
 green while a changed format string made the pattern match nothing — every violation then reporting as unjudged,
@@ -1238,12 +1540,131 @@ disagreement — so a file the wrapper could not open was reported to the operat
 wrongly. Reading once and handing the gate the value also closes the window between the test and the use.
 
 **A wrapper SHALL leave no temporary file behind, on the path that completes the act as well as on the paths that
-do not.** Cleanup SHALL NOT rest on an EXIT trap alone: a trap does not run when `exec` replaces the shell image,
-so the one path that completes the act is the one path a trap never cleans. The trap SHALL remain, because it is
-what covers the failure paths, and `exec` SHALL remain, because the tool's exit status becoming the script's is
-deliberate — so the removal belongs immediately before the `exec`, where the file's purpose is spent. A direction
-holding this SHALL observe an isolated temporary directory as a whole rather than one known name, so a temporary
-file added later is covered without the direction being touched.
+do not.** A trap does not run when `exec` replaces the shell image, and no wrapper `exec`s its act, so the EXIT
+trap is the one removal and covers every path. A direction holding this SHALL observe an isolated temporary
+directory as a whole rather than one known name, so a temporary file added later is covered without the direction
+being touched.
+
+**Each wrapper SHALL perform its act through the library's one function, and decide the class from what it
+observes of the act, never from the tool's status.** A tool's status is the tool's class: `gh pr merge` exits `1`
+when it does not merge and `cargo publish` exits `1` on an argument it cannot parse, and `1` is the class reserved
+for a gate that ran and refused. So no wrapper SHALL `exec` its act, and an act that did not complete SHALL exit the
+unjudged class. That no wrapper `exec`s is observed by what an `exec` does rather than by reading for the word: an
+`exec`d act's own `1` reaches the caller and its EXIT trap never runs, and the directions below and the one holding
+*no temporary file behind* see both, in whatever command position the `exec` is written. A status is also not an
+observation of the far side — a client can exit non-zero after the server acted, when the response is what was
+lost — so a sentence saying an act did or did not happen SHALL rest on a reading of its outcome, and where no
+reading is available the wrapper SHALL say the outcome is unknown.
+
+The merge wrapper reads the pull request back after the act, on both paths, and **a merged pull request is not
+the act; the record it carries is.** One read as merged may have been merged before this call — by an earlier
+run, in the web UI, by another actor after the re-reads — so the wrapper SHALL read the squash commit's message
+and the head it merged and compare them with the subject, body and head the gate judged. The judged message is
+the subject alone where the body is empty — the release snapshot the gate admits — and otherwise the subject, a
+blank line and the body, since GitHub records an empty body with no separator. Read as merged with a
+record carrying all three, it SHALL exit clean and print the pull request and its squash commit, whoever's call
+produced it, and where gh had exited non-zero it SHALL say so beside the report; gh prints nothing on success when
+its output is not a terminal, which is why the report is the wrapper's. Read as merged with a record carrying
+anything else, it SHALL exit the unjudged class saying the merge is not the act the gate judged, and why. Read as
+not merged, whatever gh reported, it SHALL exit the unjudged class and say GitHub records no merge. Where the state
+cannot be read, it SHALL exit the unjudged class saying whether it merged is unknown, whatever gh reported: gh exits
+`0` for a merge queue's enqueue as well as for a merge. Read as merged with a record that cannot be read, it SHALL
+exit clean, saying the record is unknown, only if gh reported the merge, and otherwise exit the unjudged class
+saying whose merge it is is unknown. A commit SHALL be printed as one only where the reading has a commit ID's shape.
+
+The publish wrapper reads nothing back from the registry, so its account observes cargo's status and nothing
+else. Where cargo does not complete, it SHALL exit the unjudged class and say that which of the crates cargo named
+were published is unknown, since a workspace publish stops crate by crate; on success it SHALL add no sentence of
+its own, since any would claim a reading it never made.
+
+**No write SHALL choose a wrapper's class.** Every line a wrapper or its library prints goes through a writer that
+cannot fail, and each wrapper ignores SIGPIPE immediately after `set -Eeuo pipefail` — before its library is sourced, so the
+bootstrap guard and every argument refusal are covered — so a broken pipe is a failed write rather than a signal,
+and a caller that closed or abandoned a stream receives the same class as one that read it.
+
+#### Scenario: A publish completes
+
+- **WHEN** the source gate agrees and `cargo publish` completes
+- **THEN** the wrapper exits clean and prints no sentence of its own, since it read nothing back from the registry
+- **PINNED-BY** `a_completed_publish_adds_no_sentence_of_its_own`
+
+#### Scenario: A release snapshot's merge completes
+
+- **WHEN** the gate agrees to a `chore(release): X.Y.Z` message with an empty body, gh merges, and the record GitHub
+  holds is the subject alone
+- **THEN** the wrapper prints the pull request and its squash commit and exits clean
+- **PINNED-BY** `a_release_snapshot_s_empty_body_is_the_judged_act`
+
+#### Scenario: A merge completes
+
+- **WHEN** the gate agrees, gh merges, and the record GitHub holds carries the judged subject, body and head
+- **THEN** the wrapper prints the pull request and its squash commit and exits clean
+- **PINNED-BY** `a_completed_merge_names_the_squash_commit_it_recorded`
+
+#### Scenario: gh does not complete the merge
+
+- **WHEN** the gate agrees, gh exits `1`, and the pull request reads as open
+- **THEN** the wrapper exits the unjudged class saying GitHub records no merge, never gh's own `1`
+- **PINNED-BY** `a_merge_gh_does_not_complete_exits_the_unjudged_class`
+
+#### Scenario: gh reports the merge complete and the pull request reads as open
+
+- **WHEN** gh exits `0` and the pull request reads as open, as a merge queue's enqueue or a lagging read leaves it
+- **THEN** the wrapper exits the unjudged class, naming gh's report and saying GitHub records no merge
+- **PINNED-BY** `a_merge_gh_reports_complete_but_github_reads_open_records_no_merge`
+
+#### Scenario: gh reports a failure after the judged merge landed
+
+- **WHEN** gh exits `1` and the pull request reads as merged with a record carrying the judged act
+- **THEN** the wrapper exits clean, naming the squash commit and gh's failure beside it
+- **PINNED-BY** `a_merge_gh_reports_failed_but_github_reads_merged_is_a_completed_merge`
+
+#### Scenario: A merged pull request whose record is not the judged act
+
+- **WHEN** the pull request reads as merged and its squash commit carries another message, or merged another head
+- **THEN** the wrapper exits the unjudged class saying the merge is not the act the gate judged, and reports no merge
+  of its own
+- **PINNED-BY** `a_merged_pull_request_whose_record_is_not_the_judged_act_is_refused`
+
+#### Scenario: The outcome cannot be read
+
+- **WHEN** gh exits `0` or `1` and the pull request cannot be read back
+- **THEN** the wrapper exits the unjudged class saying whether it merged is unknown, never that it landed or that
+  nothing did
+- **PINNED-BY** `a_merge_whose_state_cannot_be_read_says_whether_it_merged_is_unknown`
+
+#### Scenario: gh reports a failure and the record cannot be read
+
+- **WHEN** gh exits `1`, the pull request reads as merged, and its squash commit cannot be read
+- **THEN** the wrapper exits the unjudged class saying whether that merge is the judged one is unknown
+- **PINNED-BY** `a_failed_merge_whose_record_cannot_be_read_is_not_claimed`
+
+#### Scenario: A completed merge's squash cannot be read back
+
+- **WHEN** gh merges, the pull request reads as merged, and its squash commit cannot be read back or the reading
+  carries something other than a commit ID
+- **THEN** the wrapper says the merge completed and that its record is unknown, and exits clean
+- **PINNED-BY** `a_merge_whose_squash_cannot_be_read_back_says_so`
+
+#### Scenario: cargo does not complete the publish
+
+- **WHEN** the source gate agrees and `cargo publish` exits `1`
+- **THEN** the wrapper exits the unjudged class and says which of the named crates were published is unknown
+- **PINNED-BY** `a_publish_cargo_does_not_complete_exits_the_unjudged_class`
+
+#### Scenario: A closed or broken stderr moves no class chosen before or by the library
+
+- **WHEN** the library's violation, unjudged and ERR-trap paths, the merge wrapper run with no arguments, the publish
+  wrapper refusing an argument, a wrapper whose library is absent, or the library run as a command writes to a
+  standard error that is closed or a broken pipe
+- **THEN** each exits the class it exits with the stream open
+- **PINNED-BY** `no_closed_stream_moves_the_library_s_classes`
+
+#### Scenario: A completed merge exits clean whatever became of its report's stream
+
+- **WHEN** a completed merge reports to a closed or a broken standard output
+- **THEN** the wrapper exits clean
+- **PINNED-BY** `no_closed_stream_moves_the_merge_s_class`
 
 A direction holding any of these SHALL NOT skip on the subject's own behaviour. A skip for an environment that
 cannot produce the condition SHALL be decided by a probe of the direction's own; deciding it from the wrapper's
@@ -1253,7 +1674,10 @@ could not fail.
 **Every acquisition SHALL be guarded.** An unguarded command substitution under `set -e` exits with the *tool's*
 status and only the tool's stderr, so the class reported is neither of the two the wrapper defines and the
 operator receives the tool's words for a fact about the wrapper. Measured: a failing commits read left the merge
-wrapper exiting `91` in silence.
+wrapper exiting `91` in silence. The corpus SHALL include the shared library, whose functions run inside each
+wrapper, so an acquisition written there chooses the class exactly as one written in a wrapper would. A guard is a
+stop: `cannot_judge`, or a function whose body calls one as a command at its own depth — a name printed as an
+argument, or called inside a command substitution, whose `exit` ends only that subshell, stops nothing.
 
 A direction holding any of these stops SHALL assert the **class**, not merely that the wrapper failed. Asserting
 non-zero cannot see `1` from `2`, which is how five could-not-read conditions were split across both classes while
@@ -1292,7 +1716,8 @@ every direction covering them passed.
 #### Scenario: The act completes
 
 - **WHEN** a wrapper reaches the irreversible command and it succeeds
-- **THEN** no temporary file it created remains, even though an EXIT trap would not have run
+- **THEN** no temporary file it created remains: the library's EXIT trap removes it, and it runs because no wrapper
+  `exec`s the act
 
 #### Scenario: An acquisition fails
 
@@ -1692,25 +2117,38 @@ require the run to report exactly one passing test, and SHALL surface what it sa
 A renamed or `#[ignore]`d test cannot report that it did not run, so a guard the disarming disables is not a
 guard.
 
-**The cited identity SHALL be pinned by a check.** For every tracked shell script, each `--exact <ident>`
+**The cited identity SHALL be pinned by a check.** For every tracked file under `scripts/`, each `--exact <ident>`
 SHALL be joined to the `--test <target>` of the same invocation, and that target SHALL register `<ident>`
 exactly once. A test identifier is a reference into this repository exactly as a path is, and the reference
 gate matches paths only.
 
-**Every tracked script SHALL carry at least one such citation, and that SHALL be held per script.** A script
-citing no gate renders its own verdict, which is the shape this capability's Purpose refuses and the shape its
-retired predecessor described in full: `check_*.sh` gates paired with `test_*.sh` twins over a shared shell
-library, 1562 lines of it — a figure measured when that shell was deleted and standing as a record of that
-moment, not a census: no reaction produces it, and the set it counted no longer exists. The direction that
-enumerates the scripts folded every citation into one list and
+**Every tracked script SHALL carry at least one such citation, and that SHALL be held per script — with one
+named exception.** A script citing no gate renders its own verdict, which is the shape this capability's
+Purpose refuses and the shape its retired predecessor described in full: `check_*.sh` gates paired with
+`test_*.sh` twins over a shared shell library, 1562 lines of it — a figure measured when that shell was
+deleted and standing as a record of that moment, not a census: no reaction produces it, and the set it
+counted no longer exists. The direction that enumerates the scripts folded every citation into one list and
 asserted that **list** was non-empty, so a script contributing nothing was invisible while any sibling
 contributed something — the whole way back was open, and the enumeration that would have seen it was already
 running.
 
+The exception is `scripts/wrapper.sh`, the shared library above: it carries no citation because it defers
+nothing — the wrappers that source it name their own gates. The exception is **held both ways**: a citation
+appearing inside the library is refused rather than skipped, and a second library is a change to this
+requirement rather than a row in a growing exclusion list.
+
+#### Scenario: A citation appearing in the shared library
+
+- **WHEN** the one exempt script carries an `--exact <ident>` citation
+- **THEN** the check fails naming it — the exemption covers a script that defers nothing, and a citation is
+  the exemption widened, which is the direction a one-way skip cannot see
+- **PINNED-BY** `the_shared_library_is_exempt_only_while_it_defers_nothing`
+
 **The consequence is stated rather than discovered: `scripts/` becomes a closed category.** A tracked script
-that is not a wrapper cannot be added there while this holds, which is what the capability already claims when
-it says `git ls-files scripts/` names only wrappers. Making that claim hold is the point; a convenience script
-belongs somewhere this requirement does not reach, or the requirement is amended deliberately.
+that is not a wrapper or the one named library cannot be added there while this holds, which is what the
+capability already claims when it says `git ls-files scripts/` names no gate. Making that claim hold is the
+point; a convenience script belongs somewhere this requirement does not reach, or the requirement is amended
+deliberately.
 
 **Both SHALL hold, and neither substitutes for the other.** Measured rather than reasoned: `--list` includes an
 `#[ignore]`d test, so the check cannot see a silenced gate, while `--exact` on one reports `0 passed; 1
@@ -1740,7 +2178,8 @@ before that.
 
 #### Scenario: A tracked script cites no gate at all
 
-- **WHEN** a tracked shell script carries no `--exact <ident>` citation anywhere, while its siblings do
+- **WHEN** a tracked file under `scripts/` other than the named shared library carries no `--exact <ident>`
+  citation anywhere, while its siblings do
 - **THEN** the check fails naming that script, because a script that defers its verdict to nothing is rendering
   one itself; the aggregate being non-empty says only that some script cites a gate, never that this one does
 
@@ -2209,6 +2648,30 @@ reading — and the worktree case's isolated value *is* the empty string, so a f
   repository's other reader of its own Rust already names, reached here by the same road
 - **PINNED-BY** `a_construction_through_a_rename_or_inside_a_macro_is_read`
 
+### Requirement: A `bash` a repository check runs SHALL be the builder's
+
+Every `bash` a repository check runs SHALL be constructed by `support::bash::bash`, which clears the environment
+and hands back only the host values it names — where programs are found, where a program keeps its state, and
+where it writes a temporary file — so a caller sets anything else by name. bash reads its environment at startup,
+a startup file named by `BASH_ENV` included, and a list of the variables that could move a run is bash's grammar
+answered one member at a time; the question the builder answers is what a run needs. The tracked Rust files
+constructing a `bash` SHALL be held to the builder's file alone, in both directions, by the reader that holds the
+`git` constructions.
+
+#### Scenario: A file constructs a `bash` without the builder
+
+- **WHEN** a tracked Rust file other than the builder constructs `Command::new("bash")`
+- **THEN** the check fails naming it, and a builder that moved fails the same way
+- **PINNED-BY** `every_bash_this_repository_constructs_is_the_builders`
+
+#### Scenario: The host's environment carries a variable bash reads
+
+- **WHEN** the builder's `bash` is run in a host environment carrying variables it does not name, `BASH_ENV`
+  among them
+- **THEN** none reaches the run: what the run exports is what bash exports under an empty environment, taken
+  from bash rather than listed, and the names the builder hands back
+- **PINNED-BY** `the_bash_builder_hands_on_only_what_it_names`
+
 ### Requirement: A comment paragraph SHALL NOT be written twice in a row
 
 No tracked Rust file SHALL carry a comment paragraph immediately followed by a copy of itself. The
@@ -2355,10 +2818,9 @@ The subject SHALL be the projection's tracked text rather than `constitution()` 
 law it is judging compares the law against itself and cannot fail.
 
 `.github/CODEOWNERS` states that the review requirement is the reaction and that a merge cannot relax the law
-without a human accepting it, then states that designation alone only auto-requests review. Measured, `main`
-carries `require_code_owner_reviews: false` and `required_approving_review_count: 0`; and enabling it would
-not close the gap, because a pull request's author cannot approve their own, so for a single-steward
-repository that rule cannot fire. Two crate boundaries reached the projection under a commit body stating the
+without a human accepting it, then states that designation alone only auto-requests review. Enabling the
+code-owner-review setting would not close the gap, because a pull request's author cannot approve their own,
+so for a single-steward repository that rule cannot fire whatever that setting is. Two crate boundaries reached the projection under a commit body stating the
 law itself did not change, and nothing refused them.
 
 #### Scenario: A boundary reaches the law without being named
@@ -2458,7 +2920,7 @@ what to do next does not, and buys the same thing.
 Removing it ends a class rather than closing an instance. The reader SHALL be kept as a **convenience** and
 stated as one: it decides **when** an operator learns a job may now skip, not **whether**, since a skipping
 job reports `SKIPPED` and the wrapper refuses regardless. Its remaining blind spots SHALL be
-recorded at that severity rather than as false negatives — **per mechanism, since the five keys reach the
+recorded at that severity rather than as false negatives — **per mechanism, since the keys reach the
 rollup by two of them**. A job key moves a check's conclusion, so the check appears as `SKIPPED` and the
 refusal happens whatever the reader did. A trigger filter stops the workflow running, so its checks are
 **absent** from the rollup; that refuses only while one workflow exists, because an empty rollup takes the
@@ -2472,64 +2934,46 @@ arises instead of after. **Every key SHALL be read at the position it can occupy
 `continue-on-error:` sit on a **job**: a `steps:` entry may carry `if:` or `continue-on-error:` without the
 job's own conclusion moving, so refusing those would refuse correct code. `paths:` and `paths-ignore:` are
 **trigger** conditions and sit under `on:`, quoted or not — YAML 1.1 reads a bare `on` as a boolean, so both
-spellings name the block.
+spellings name the block. What a trigger condition is SHALL be decided by the event rather than by a list of key
+names: a pull request's head gets this workflow's checks only from an event that runs it for a pull request —
+`pull_request` or `pull_request_target` — so every key under such an event is a filter, a workflow subscribing to
+neither is the widest filter of all, and `push:`'s filters move no pull request's checks.
 
-**Under `on:` includes the flow form**, where the whole block sits on the key's own line. Entering a block
-and reading it SHALL NOT be exclusive: a reader that sets its scope from a top-level key and then moves to the
-next line never examines the rest of that line, so `on: {push: {paths: ['src/**']}}` carries a real filter
-past a premise that reports itself intact. That direction is **open**, which is the one this requirement
-exists to close: the depth and scope defects above each refused too much rather than too little.
-
-**The rule is general and SHALL be applied at every level, which the first statement of it was not.** Saying
-it of the top-level key alone left the same open direction one level down — a block-form `on:` whose event is
-written in flow form, `push: {branches: [main], paths: […]}`, which is the more ordinary of the two spellings.
-The reaction SHALL therefore ask *what does this line open, and what does it still carry* through one
-implementation used wherever that question arises, rather than through a branch that happens to have been
-corrected.
-
-**A key SHALL be recognised in key position, not as a substring.** The reaction asked that question in three
-spellings, and the one that was not positional reacted to a trailing comment: `# no paths: filter here` named
-a filter that is a word in a sentence. Splitting a flow body on its separators puts every key at the start of
-its own segment, and a block-form line is the degenerate case of the same rule — so one implementation answers
-for both forms at both levels, which is what stops a fourth spelling appearing.
-
-**The job side SHALL NOT be given the same treatment**, and the asymmetry is a decision rather than an
-oversight. A flow-form `jobs: {alpha: {…}}` leaves no line ending in a colon at the name depth, so no job is
-found and the set equality reports them missing — measured, `missing ["examples"]`. Reading that line the same
-way would turn a loud failure into a quiet pass unless the flow body were parsed, which is a YAML parser
-rather than a line reader. Failing loudly on a shape this repository's workflow does not use is the better of
-the two.
+**The keys SHALL be read from the parsed workflow**, so which job a key belongs to, whether it sits on the job
+or on a step inside it, and whether it sits under `on:` are the grammar's answers rather than a line reader's.
+Block and flow form are one structure — `on: {push: {paths: ['src/**']}}`, `push: {branches: [main], paths:
+[…]}` under a block-form `on:`, and a job written as `alpha: {name: A, if: x}` carry their keys exactly as their
+block spellings do. A key named in a comment is not a key, because a comment is not part of the structure, and
+indentation is not a question the reader decides. A shape the parser's model cannot hold — an anchor, an alias,
+a merge key, a tag, a second document, a key written twice in one mapping, a `defaults` or `defaults.run` that
+is not a mapping — SHALL refuse rather than be read
+past, since a premise reporting itself intact over a value it never read is the open direction.
 
 Reading the trigger pair at any depth instead SHALL NOT be treated as harmless breadth. It was, justified as
 *those two keys have no other meaning anywhere in it* — a claim about one file's current content rather than
-about the keys, and the same kind of assumption the indentation rule had just been rewritten to remove.
-Measured: a step input named `paths`, the shape several published actions take, made the reaction refuse and
-tell a maintainer that a job can now legitimately skip, about an input that moves no job's conclusion. The
-reaction fails closed, so the cost is a false refusal rather than a merge — which is why it is scoped rather
-than deleted. It SHALL hold the job names it reads against a declared set **in both
-directions**, since a read that loses jobs otherwise satisfies *none of them carries a forbidden key* over
-whatever it happened to reach. A count of what was read is not sufficient: it catches a reader that found
-nothing and not one that found fewer.
+about the keys. Measured: a step input named `paths`, the shape several published actions take, made the
+reaction refuse and tell a maintainer that a job can now legitimately skip, about an input that moves no job's
+conclusion. The reaction fails closed, so the cost is a false refusal rather than a merge — which is why it is
+scoped rather than deleted. It SHALL hold the job names it reads against a declared set **in both directions**,
+since a read that loses jobs otherwise satisfies *none of them carries a forbidden key* over whatever it
+happened to reach. A count of what was read is not sufficient: it catches a reader that found nothing and not
+one that found fewer.
 
-**The block's indentation SHALL be read out of the document rather than assumed.** YAML fixes no width — only
-consistency within a mapping — so a job whose keys sit deeper than another document's is the same document,
-and a reader keyed to one width loses **keys** rather than names: the job is still found, the set equality
-still holds, and the forbidden key is never examined. That is the one loss the equality cannot catch, so it is
-removed rather than guarded. The reader SHALL be exercised by a fixture over the shapes the tracked workflow
-does not currently have, including the two that must **not** react — a `steps:` entry's own `if:`, and a
-sequence item written at a job key's depth.
+The reader SHALL be exercised by a fixture over the shapes the tracked workflow does not currently have,
+including the ones that must **not** react — a `steps:` entry's own `if:`, a step input named `paths`, and a
+key named in a comment.
 
 #### Scenario: A second workflow file appears
 
 - **WHEN** `.github/workflows/` holds more than one file
 - **THEN** the check fails, because a missed trigger filter stops costing a delay and starts costing a merge:
   a filtered-out workflow contributes nothing to a rollup the others make non-empty and green
-- **PINNED-BY** `a_missed_path_filter_costs_a_delay_only_while_one_workflow_exists`
+- **PINNED-BY** `a_missed_event_filter_costs_a_delay_only_while_one_workflow_exists`
 
 #### Scenario: A job acquires a key that lets it skip
 
-- **WHEN** a job in the workflow carries `if:`, `needs:` or `continue-on-error:`, or the workflow carries a
-  path filter
+- **WHEN** a job in the workflow carries `if:`, `needs:` or `continue-on-error:`, or the workflow's pull-request
+  event carries any filter — `paths`, `branches`, `types` or another — or it subscribes to no pull-request event
 - **THEN** the check fails naming the key and its line, so the decision is made deliberately rather than met
   at a merge — either `SKIPPED` moves back beside agreement with the measurement that earns it, or the key
   goes. The merge is refused either way; what this changes is when the operator finds out
@@ -2539,37 +2983,43 @@ sequence item written at a job key's depth.
 
 - **WHEN** a job's keys, or the job names themselves, sit at a depth other than the one the tracked workflow
   happens to use
-- **THEN** the reader still finds them, because it derives both depths from the document — a reader keyed to
-  one width loses keys without losing names, which the set equality cannot see
+- **THEN** the reader still finds them, because indentation is the parser's to decide — a reader keyed to one
+  width loses keys without losing names, which the set equality cannot see
 - **PINNED-BY** `the_workflow_reader_decides_every_shape_of_the_block`
 
 #### Scenario: A trigger block is written in flow form
 
 - **WHEN** the trigger block sits on its own key's line — `on: {push: {paths: […]}}` — with or without quotes
   on the key
-- **THEN** the filter is still found, because entering the block and reading it are the same line's work; and
-  a flow-form list carrying no filter still reacts to nothing
+- **THEN** the filter is still found, because flow and block form are one structure; and a flow-form list
+  carrying no filter still reacts to nothing
 - **PINNED-BY** `the_workflow_reader_decides_every_shape_of_the_block`
 
 #### Scenario: An event under a block-form trigger is written in flow form
 
 - **WHEN** `on:` opens a block and one of its events carries its filter inline — `push: {paths: […]}`
-- **THEN** the filter is found, by the same rule the top-level key uses, since the rule is about lines rather
-  than about one position in the file
+- **THEN** the filter is found, because every key under `on:` is read wherever it sits in that block
 - **PINNED-BY** `the_workflow_reader_decides_every_shape_of_the_block`
 
 #### Scenario: A key is named in a comment
 
 - **WHEN** a trailing comment on a trigger line names one of the keys in prose
-- **THEN** nothing reacts, because the key is recognised in key position rather than as a substring
+- **THEN** nothing reacts, because a comment is not part of the structure the keys are read from
 - **PINNED-BY** `the_workflow_reader_decides_every_shape_of_the_block`
 
 #### Scenario: A job body is written in flow form
 
 - **WHEN** a job is written as `alpha: {name: A, if: x}`
-- **THEN** no job is read and the set equality names it missing, rather than the key being read out of a body
-  the reader cannot parse — the loud failure is chosen over a quiet pass
+- **THEN** the job and its `if:` are read exactly as their block spelling would be, so the key is carried
 - **PINNED-BY** `the_workflow_reader_decides_every_shape_of_the_block`
+
+#### Scenario: The workflow holds a shape the model cannot hold
+
+- **WHEN** the workflow carries an anchor, an alias, a merge key, a tag, a second document, a key written twice
+  in one mapping, or a `jobs`, `steps`, `env` or `with` of a kind the schema does not admit
+- **THEN** reading it refuses and names what was met, rather than reading past it — and a name written once in
+  each of two jobs is two scopes, not a doubled key
+- **PINNED-BY** `shapes_the_model_cannot_hold_are_refused`
 
 #### Scenario: A key of one class appears where the other class lives
 

@@ -203,8 +203,12 @@ Counting occurrences does **not** subsume the mid-line mention, and the reaction
 conditions rather than either. A source that mentions the signature mid-line and never defines it has exactly
 one occurrence, so a count-only rule admits it, anchors in the prose, and returns the next function's body as
 this method's — measured. Each rule refuses something the other admits, and requiring both only ever declines
-more, which is this reader's declared error direction. What neither refuses is a **whole-line** copy inside a
-block comment, which is declared as a bound below rather than described as closed. And a **trailing comment** on the delegation SHALL be
+more, which is this reader's declared error direction. What neither refuses on its own is a **whole-line** copy
+that is not the definition, so the body SHALL be taken only from a function the parse of the file finds at the
+anchor, inside an `impl` whose trait path ends in `Observer`: a copy inside a comment or a string literal is no
+function, and a same-named method of any other `impl`, or a free function, is not the one the obligation is
+about, so each declines. The trait is matched by that last segment rather than resolved, which the bound below
+states. And a **trailing comment** on the delegation SHALL be
 prose, not a second list: the region discipline this family already holds says a comment is never executed text,
 and the reaction that judges a shell gate's own text strips one before comparing for exactly this reason.
 The reaction SHALL apply Rust line-comment semantics to the inspected body: a `//` line is prose, while a Rust
@@ -231,28 +235,27 @@ Where a dimension's equality is construction-held, the reaction SHALL still obse
 for that dimension **reacts at all**. Otherwise an arm that quietly went vacuous would leave the whole
 comparison resting on the dimensions that did not.
 
-#### Scenario: A whole-line occurrence that is not the definition anchors the read — a stated bound
+#### Scenario: A whole-line occurrence that is not the definition declines
 
 - **WHEN** the method's definition is absent from the inspected source — the impl having moved elsewhere — and a
-  whole-line copy of its signature remains anywhere in that file: inside a block comment, inside a string
-  literal, or in any other position the reader does not distinguish from executed text
-- **THEN** the reaction reads that copy's body and reports it as the method's. Both anchor conditions are
-  satisfied — one occurrence, at a line start — and the reader knows nothing of comments or literals, so the
-  class is "the unique whole-line occurrence is not the definition" rather than any one syntactic position.
+  whole-line copy of its signature remains in that file: inside a block comment, inside a string literal, on a
+  method of an unrelated or inherent `impl`, or as a free function
+- **THEN** the reader declines rather than reading that copy's body as the `Observer`'s. The anchor still lands
+  on the copy; the parse finds no function inside an `impl … Observer` starting there. The reaction enumerates
+  every shape it decides together with the decision, and the reader is run against that table
+- **PINNED-BY** `the_reader_decides_every_shape_as_the_table_says`
+
+#### Scenario: A method on another trait named Observer is read — a stated bound
+
+- **WHEN** the method's definition is absent from the inspected source and a method of the same signature
+  remains on an `impl` of another trait whose path ends in `Observer` — `impl other::Observer for Probe`
+- **THEN** the reaction reads that method's body and reports it as the protocol's. Which trait a path names is
+  name resolution — `use`s, renames, globs, local definitions — and the reader matches the last segment instead.
   What passes is a **second, hand-maintained path that agrees today**: a *divergent* list does not, because
   `observation-bound-model` reads every dimension's declarations through `Observer::bounds` and holds them in a
-  bijection with the specs, which fails on any difference of membership or content. Measured both ways. So the
-  residual is narrower than a divergent list slipping through, and wider than a comment.
-  **Not a defect unique to this reader.** `kanhe::region`'s own `Executed` abstraction declares the identical
-  residue for the same reason — a block comment and a string literal both need nested-span lexing to tell from
-  executed text, which this tree has defeated repeatedly and left declared rather than approximated. Closing
-  either needs the same instrument; closing one without the other would leave the class recorded twice under
-  two names for a reader to reconcile.
-  This bound SHALL be **shown rather than described**: the reaction enumerates every shape it decides together
-  with the decision, the reader is run against that table, and the rows where it reads a body that is not the
-  method's are this bound. A sentence here that the table contradicts fails, which is what the three repair
-  rounds preceding this scenario could not do
-- **UNPINNED** `BACKLOG.md` — *the bounds-method reader anchors on a whole-line occurrence that is not the definition*
+  bijection with the specs. The reaction's shape table carries the row, so the bound is shown rather than
+  described
+- **PINNED-BY** `the_reader_decides_every_shape_as_the_table_says`
 
 #### Scenario: The stated construction-held list is held against the composition path
 

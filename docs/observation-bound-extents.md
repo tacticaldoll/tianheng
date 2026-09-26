@@ -3,13 +3,14 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**57 of 106 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**60 of 109 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
 - `inline-symbol-path-confinement/a-path-taken-as-a-value-is-a-documented-bound-under-the-default` — owner: adopter
 - `inline-symbol-path-confinement/an-extern-crate-rename-is-a-stated-bound-under-strict-external` — owner: engine
 - `inline-symbol-path-confinement/the-fully-qualified-external-call-is-a-stated-bound-under-the-default` — owner: adopter
+- `module-boundary/an-example-test-bench-or-build-script-root-is-not-governed-a-stated-bound` — owner: engine
 - `observation-bound-register/what-code-executed-inside-the-checkout-does-outside-it-is-not-observed-a-stated-bound` — owner: engine
 - `observation-bound-register/whether-a-citation-carrying-no-declared-mutation-is-defended-is-not-observed-a-stated-bound` — owner: engine
 - `observation-bound-register/whether-a-citation-demonstrates-the-direction-its-bound-declares-a-stated-bound` — owner: engine
@@ -17,7 +18,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `observation-bound-register/whether-a-pin-gutted-but-not-committed-still-bites-is-not-observed-a-stated-bound` — owner: engine
 - `observation-bound-register/whether-a-record-perturbs-the-check-or-the-pin-s-own-assertions-is-not-observed-a-stated-bound` — owner: engine
 - `observation-bound-register/which-member-holds-a-check-is-a-judgement-a-stated-bound` — owner: engine
-- `observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound` — owner: engine
+- `observer-protocol/a-method-on-another-trait-named-observer-is-read-a-stated-bound` — owner: engine
 - `observer-protocol/what-a-subject-does-not-establish-a-stated-bound` — owner: engine
 - `observer-protocol/whether-an-observer-s-own-verdict-is-correct-is-not-observed-a-stated-bound` — owner: adopter
 - `observer-protocol/whether-the-shell-makes-an-independent-semantic-decision-is-not-observed-a-stated-bound` — owner: engine
@@ -35,6 +36,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `release-coherence/machinery-the-judged-repository-tracks-by-nothing-a-stated-bound` — owner: engine
 - `repository-checks/a-block-comment-is-not-read-a-stated-bound` — owner: engine
 - `repository-checks/a-census-written-outside-markdown-is-not-observed-a-stated-bound` — owner: engine
+- `repository-checks/a-command-name-computed-when-the-line-runs-is-not-read-a-stated-bound` — owner: engine
 - `repository-checks/a-construction-shape-the-register-s-reader-does-not-model-a-stated-bound` — owner: engine
 - `repository-checks/a-consumer-that-stops-early-is-neither-head-nor-grep-a-stated-bound` — owner: engine
 - `repository-checks/a-count-written-in-a-sentence-no-census-declares-a-stated-bound` — owner: engine
@@ -50,6 +52,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `repository-checks/a-refusal-constructed-outside-the-register-s-corpus-is-not-triaged-a-stated-bound` — owner: engine
 - `repository-checks/a-tool-configuration-set-in-the-environment-is-not-observed-a-stated-bound` — owner: engine
 - `repository-checks/a-whitespace-preceded-shell-marker-inside-quotes-is-cut-a-stated-bound` — owner: engine
+- `repository-checks/an-assignment-that-is-not-an-assignment-word-is-not-read-a-stated-bound` — owner: engine
 - `repository-checks/an-input-edited-inside-its-own-post-gate-re-read-a-stated-bound` — owner: engine
 - `repository-checks/files-no-capability-claims-a-stated-bound` — owner: engine
 - `repository-checks/the-consumer-stands-on-a-later-statement-a-stated-bound` — owner: engine
@@ -474,7 +477,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: refuses to judge
 - **pinned by**: `a_worktree_holding_an_undecodable_path_is_not_judged_clean_or_dirty`
 
-## under-reacts (57)
+## under-reacts (60)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -515,6 +518,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the default observes `use`-rooted paths, leaving the un-`use`d fully-qualified spelling to the adopter's stricter opt-in
 - **its defence must show**: does not react
 - **pinned by**: `inline_strict_external_absent_fully_qualified_call_is_a_bound`
+
+### `module-boundary/an-example-test-bench-or-build-script-root-is-not-governed-a-stated-bound`
+
+> an example, test, bench or build-script target's source
+
+- **because**: the governed corpus is a package's library-kind and `bin` roots, the code it ships; a target compiled beside those rather than into them is outside it
+- **its defence must show**: does not react
+- **pinned by**: `an_example_root_is_not_governed`
 
 ### `observation-bound-register/what-code-executed-inside-the-checkout-does-outside-it-is-not-observed-a-stated-bound`
 
@@ -572,13 +583,13 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *which governance member a check belongs to is unobserved*
 
-### `observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound`
+### `observer-protocol/a-method-on-another-trait-named-observer-is-read-a-stated-bound`
 
-> a whole-line signature copy — commented, in a string literal, or otherwise — with the definition moved out of the inspected source
+> a same-named method on an `impl` of another trait whose path ends in `Observer`, with the definition moved out of the inspected source
 
-- **because**: the reader knows nothing of comments or literals, so one whole-line occurrence anchors whatever follows it; what passes is a second hand-maintained path that agrees today, since a divergent one is caught by observation-bound-model's bijection over Observer::bounds — measured both ways
+- **because**: the reader takes the body only from an `impl` whose trait path ends in `Observer`, matching that last segment rather than resolving which trait the path names; what passes is a second hand-maintained path that agrees today, since a divergent one is caught by observation-bound-model's bijection over Observer::bounds
 - **its defence must show**: does not react
-- **unpinned**, tracked by: `BACKLOG.md` — *the bounds-method reader anchors on a whole-line occurrence that is not the definition*
+- **pinned by**: `the_reader_decides_every_shape_as_the_table_says`
 
 ### `observer-protocol/what-a-subject-does-not-establish-a-stated-bound`
 
@@ -716,6 +727,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_census_outside_markdown_is_a_stated_bound`
 
+### `repository-checks/a-command-name-computed-when-the-line-runs-is-not-read-a-stated-bound`
+
+> an `exit` a wrapper runs through a command name its text does not spell — a variable, or a string another command runs: `eval`, `trap`, `bash -c`
+
+- **because**: the exit-class check reads every word the text spells as `exit`, through every quoting the shell removes, and a name that exists only when the line runs has no word to read
+- **its defence must show**: does not react
+- **pinned by**: `a_command_name_computed_when_the_line_runs_is_not_read`
+
 ### `repository-checks/a-construction-shape-the-register-s-reader-does-not-model-a-stated-bound`
 
 > a bare reference to a registered or unregistered constructor's name, where whether it names the constructor taken by value or a local variable sharing its spelling is not decidable from syntax
@@ -836,6 +855,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: executed text is deleted, so a property about it is judged over less than the line carries — the direction the Core Contract forbids, and one a sentence in the classifier recorded as reaching the Rust region alone while both run the same rule
 - **its defence must show**: does not react
 - **pinned by**: `a_shell_marker_inside_quotes_is_cut_from_the_region`
+
+### `repository-checks/an-assignment-that-is-not-an-assignment-word-is-not-read-a-stated-bound`
+
+> an assignment to a declared exit code or channel class that is not an assignment word — `read`, `printf -v`, arithmetic, `${NAME:=…}`
+
+- **because**: the declaration check reads the assignment words a script spells, `NAME=value` and `NAME+=value`, and bash's other assignment forms are an enumeration it stops short of; once the library is loaded each name is `readonly`, so bash refuses a later assignment in any form and the wrapper exits the unjudged class. Before it is loaded a wrapper's own statements run, and the declaration check refuses a wrapper that writes any of the names as a word, in whatever form
+- **its defence must show**: does not react
+- **pinned by**: `an_assignment_that_is_not_an_assignment_word_is_not_read`
 
 ### `repository-checks/an-input-edited-inside-its-own-post-gate-re-read-a-stated-bound`
 

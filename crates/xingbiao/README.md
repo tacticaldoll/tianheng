@@ -18,8 +18,11 @@ It exposes:
 
 - `cargo_metadata` — run `cargo metadata --no-deps` and parse the JSON (workspace members only).
 - `find_package` — find a workspace member by package name.
-- `crate_root_file` — a crate's root source file (`lib`, else `proc-macro`, else `bin`), the
-  single resolution both dimensions share so they cannot disagree on which crates are judgeable.
+- `crate_roots` — every compiled crate root of one package (each library kind and each `bin`),
+  telling "no target reported" apart from "targets, none of them compiled": the per-package
+  resolution both dimensions share so they cannot disagree on which roots are judgeable.
+- `crate_root_file` — a package's single root source file (`lib`, else `proc-macro`, else `bin`),
+  which `member_src_dirs` reads to list the workspace's source directories.
 
 Consumed as a library within the Tianheng workspace; it is not a standalone tool.
 

@@ -10,8 +10,11 @@
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::process::ExitStatus;
+
+mod support;
+
+use support::fixture::{Scratch, read_if_present, write_executable};
 
 fn workspace_root() -> Option<PathBuf> {
     shengmo::workspace::locate(
@@ -25,27 +28,9 @@ struct Run {
     /// Anything the wrapper left in the isolated `TMPDIR` it was given.
     leftover: Vec<String>,
     status: ExitStatus,
+    stdout: String,
     stderr: String,
     cargo_log: String,
-}
-
-fn write_executable(path: &Path, text: &str) {
-    use std::os::unix::fs::PermissionsExt;
-
-    std::fs::write(path, text).expect("write controlled executable");
-    let mut permissions = std::fs::metadata(path)
-        .expect("read controlled executable metadata")
-        .permissions();
-    permissions.set_mode(0o755);
-    std::fs::set_permissions(path, permissions).expect("make controlled executable runnable");
-}
-
-fn read_if_present(path: &Path) -> std::io::Result<String> {
-    match std::fs::read_to_string(path) {
-        Ok(text) => Ok(text),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
-        Err(err) => Err(err),
-    }
 }
 
 /// Run the wrapper with `extra` appended, against a `cargo` that logs and never uploads.
@@ -58,89 +43,92 @@ fn run_wrapper(root: &Path, extra: &[&str]) -> Run {
 /// Separate because what the wrapper reads from its ENVIRONMENT is a different surface from what it reads from
 /// its arguments, and this repository declares a bound about exactly that difference.
 fn run_wrapper_with_env(root: &Path, extra: &[&str], env: &[(&str, &str)]) -> Run {
-    static NEXT: AtomicUsize = AtomicUsize::new(0);
-    let scratch = loop {
-        let candidate = std::env::temp_dir().join(format!(
-            "tianheng-publish-workflow-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        match xingbiao::claim_scratch(&candidate) {
-            Ok(()) => break candidate,
-            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(err) => panic!(
-                "cannot acquire controlled publish-workflow root {}: {err}",
-                candidate.display()
-            ),
-        }
-    };
-    let bin = scratch.join("bin");
-    std::fs::create_dir(&bin).expect("create controlled PATH");
-    // The wrapper's own `TMPDIR`, so what it leaves behind is observable and lands in the fixture rather than in
-    // the developer's `/tmp`.
-    let tmp = scratch.join("tmp");
-    std::fs::create_dir(&tmp).expect("create the wrapper's temporary directory");
+    let harness = support::fixture::Harness::claim("tianheng-publish-workflow");
+    let scratch = harness.path();
+    let bin = harness.bin();
+    let tmp = harness.tmp();
     let cargo_log = scratch.join("cargo.log");
 
     // The gate's own invocation must appear to pass, so that a refusal reaching this far is the argument's and
-    // not the gate's. The wrapper's `require_one_pass` reads the `test result: ok. 1 passed` line.
+    // not the gate's. The wrapper's `require_one_pass` reads the line `support::fixture::GATE_PASS_LINE` spells.
     write_executable(
         &bin.join("cargo"),
-        r##"#!/usr/bin/env bash
+        &[
+            r##"#!/usr/bin/env bash
 set -eu
 # ONE line per invocation, carrying the arguments AND the environment. Two lines let a direction match an
 # environment value against the wrong invocation: the gate's own `cargo test` runs first and inherits the same
 # environment, so a bare `contains` for the value passed while the publish had been scrubbed — measured, the
 # negative run for the environment bound did not fire until this became one line.
 printf '%s |env CARGO_BUILD_TARGET=[%s]\n' "$*" "${CARGO_BUILD_TARGET-}" >> "$FAKE_CARGO_LOG"
-# The gate reports on the channel whether it agrees or refuses, so a controlled gate that only prints
-# `1 passed` is a gate that ran and judged nothing — which is what the wrapper's success path now refuses.
-# `no-verdict` is the mode that keeps that state constructible.
-#
-# Only where the channel was opened: this executable also stands in for the tool the wrapper `exec`s, and the
-# wrapper hands the channel to the gate alone — so an unguarded write would both fail under `set -u` on that
-# second invocation and recreate the file the wrapper removed one statement earlier.
-if [[ ${FAKE_GATE_VERDICT-} != none && -n ${TIANHENG_GATE_VERDICT-} ]]; then
-    printf '%s' 'Clean' > "$TIANHENG_GATE_VERDICT"
+# A signal to the wrapper while the act runs, or while the gate does. The launcher wrote the wrapper's PID before
+# it `exec`d the wrapper, so the PID is the wrapper's whichever shell stands between it and this executable.
+if [[ $1 == publish && -n ${FAKE_SIGNAL_AT_ACT-} ]]; then
+    kill -"$FAKE_SIGNAL_AT_ACT" "$(< "$FAKE_WRAPPER_PID")"
+    sleep 0.2
+    if [[ -n ${FAKE_PUBLISH_EXIT-} ]]; then
+        exit "$FAKE_PUBLISH_EXIT"
+    fi
+    exit 0
 fi
-printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'
+if [[ $1 == test && -n ${FAKE_SIGNAL_AT_GATE-} ]]; then
+    kill -"$FAKE_SIGNAL_AT_GATE" "$(< "$FAKE_WRAPPER_PID")"
+    sleep 0.2
+fi
+# The wrapper's TMPDIR made unwritable once its verdict file is in it, so the EXIT trap cannot remove the file.
+if [[ $1 == test && -n ${FAKE_LOCK_TMPDIR-} ]]; then
+    chmod 500 "$TMPDIR"
+fi
 "##,
+            support::fixture::GATE_VERDICT_STUB,
+            r##"# The act's own failure, at the status cargo gives an argument it cannot parse — `1`, the violation class.
+if [[ $1 == publish && -n ${FAKE_PUBLISH_EXIT-} ]]; then
+    printf '%s\n' 'controlled publish failure' >&2
+    exit "$FAKE_PUBLISH_EXIT"
+fi
+"##,
+            &support::fixture::gate_pass_stub(),
+        ]
+        .concat(),
     );
 
-    let old_path = std::env::var_os("PATH").unwrap_or_default();
-    let path = format!("{}:{}", bin.display(), old_path.to_string_lossy());
-    let mut command = Command::new("bash");
+    let path = support::fixture::path_with(bin);
+    let mut command = support::bash::bash();
+    // Launched through a shell that records its PID and then `exec`s the wrapper, so the recorded PID is the
+    // wrapper's own and a stub can signal it without asking the host which process is its ancestor.
     command
+        .args([
+            "-c",
+            r#"printf '%s' "$$" > "$FAKE_WRAPPER_PID"; exec bash "$@""#,
+            "launcher",
+        ])
         .arg(root.join("scripts/publish.sh"))
         .args(extra)
+        .env("FAKE_WRAPPER_PID", scratch.join("wrapper.pid"))
         .env("PATH", path)
         .env("FAKE_CARGO_LOG", &cargo_log)
-        .env("TMPDIR", &tmp);
+        .env("TMPDIR", tmp);
     for (name, value) in env {
         command.env(name, value);
     }
     let output = command.output().expect("run controlled publish workflow");
+    // A run may have locked its TMPDIR; it is the fixture's to remove, whatever the run did to it.
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(tmp, std::fs::Permissions::from_mode(0o755))
+            .expect("make the wrapper's temporary directory writable again");
+    }
 
-    let run = Run {
-        leftover: std::fs::read_dir(&tmp)
-            .expect("read the wrapper's temporary directory")
-            .map(|entry| {
-                entry
-                    .expect("a temporary directory entry")
-                    .file_name()
-                    .to_string_lossy()
-                    .into_owned()
-            })
-            .collect(),
+    Run {
+        leftover: harness.leftover(),
         status: output.status,
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
         stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
         cargo_log: read_if_present(&cargo_log).expect("read controlled cargo log"),
-    };
-    let _ = std::fs::remove_dir_all(&scratch);
-    run
+    }
 }
 
-/// The line the wrapper's final `exec` produces, if it got there.
+/// The line the wrapper's act produces, if it got there.
 fn publish_invocation(cargo_log: &str) -> Option<&str> {
     cargo_log
         .lines()
@@ -531,8 +519,8 @@ fn a_tool_configuration_set_in_the_environment_is_a_stated_bound() {
 /// The wrapper leaves no temporary file behind, on the path that completes the act as well as on the paths that
 /// do not.
 ///
-/// The same defect as its sibling's, from the same line: cleanup left to an EXIT trap that `exec` never reaches,
-/// so the publishing path was the one path not cleaned. Asserted over the whole of an isolated `TMPDIR` rather
+/// The successful path is the one an EXIT trap misses when the act is `exec`d, which is why neither wrapper `exec`s:
+/// `perform_the_act` runs it, so the trap covers the publishing path as it covers every other. Asserted over the whole of an isolated `TMPDIR` rather
 /// than over one known name, so a temporary file added later is covered for free.
 #[test]
 fn no_temporary_file_survives_the_wrapper() {
@@ -547,7 +535,8 @@ fn no_temporary_file_survives_the_wrapper() {
     );
     assert!(
         completed.leftover.is_empty(),
-        "the path that completes the publish left {:?} behind — an `exec` never reaches an EXIT trap",
+        "the path that completes the publish left {:?} behind — the library's EXIT trap removes the verdict \
+         file on every path, and it runs because no wrapper `exec`s the act",
         completed.leftover
     );
 
@@ -647,40 +636,56 @@ fn the_arrival_matrix_covers_every_argument_the_parser_forwards() {
 /// tool name, then by command substitution. A bare `cd` walked through both, because the axis was never which
 /// shape a statement has. Under `set -e` **any** unguarded failure exits with the tool's status, so the set
 /// to enumerate is not the statements that must be guarded but the statements that may exit `1` — and there
-/// is one, the gate's own verdict arm.
+/// is one, the library's `exit_for_the_gates_refusal`, which carries the gate's own verdict.
 ///
 /// Held by planting a failure rather than by reading the script for `trap`: a text property would pass for a
 /// trap that never fires, and `set -E` — which is what makes it fire inside a function — is a second token a
 /// reader would have to remember to look for.
+///
+/// **The plant is in the wrapper, and the trap it measures moved to the library.** The wrapper sources the
+/// library through the tree's own root rather than its own directory, so the planted copy still runs under the
+/// real lifecycle — the arrangement the library exists to keep exact. A plant inside the library would instead
+/// measure every wrapper at once, which this direction does not ask.
 #[test]
 fn an_unguarded_failure_exits_the_unjudged_class() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let scratch =
-        std::env::temp_dir().join(format!("tianheng-publish-unguarded-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&scratch);
-    xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
+    let claimed = Scratch::claim("tianheng-publish-unguarded");
+    let scratch = claimed.path();
 
+    // The plant goes into a copy of the wrapper sitting at `scripts/` beneath a fake root, which is where
+    // the wrapper's own `source` resolves the library from — so what runs is the wrapper's text under the
+    // real lifecycle, the arrangement the library exists to keep exact.
     let script =
         std::fs::read_to_string(root.join("scripts/publish.sh")).expect("read the wrapper");
     // Before the gate and after the trap: a command that fails, guarded by nothing. `false` rather than a
     // failing tool, so the direction is about the wrapper's own contract and not about any tool's behaviour.
-    let planted = script.replacen("verdict_file=$(mktemp)", "false\nverdict_file=$(mktemp)", 1);
+    // The site is the call that creates the verdict file, which the extraction made the library's own name
+    // for the moment — planting beside it lands after the trap exactly as planting beside the `mktemp` did.
+    let planted = script.replacen("open_verdict_file", "false\nopen_verdict_file", 1);
     assert_ne!(
         planted, script,
         "the plant site moved; this direction is judging an unmodified script"
     );
-    let path = scratch.join("planted.sh");
+    std::fs::create_dir_all(scratch.join("scripts"))
+        .expect("create the fixture's scripts directory");
+    let path = scratch.join("scripts/publish.sh");
     std::fs::write(&path, &planted).expect("write the planted wrapper");
+    // The library beside it is a copy rather than a symlink or a reference: the planted wrapper must owe
+    // nothing to the tree it was read from, or the direction measures the tree and not the text.
+    std::fs::copy(
+        root.join(kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY),
+        scratch.join(kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY),
+    )
+    .expect("place the shared library beside the planted wrapper");
 
-    let output = Command::new("bash")
+    let output = support::bash::bash()
         .arg(&path)
         .arg("--dry-run")
-        .current_dir(&scratch)
+        .current_dir(scratch)
         .output()
         .expect("run the planted wrapper");
-    let _ = std::fs::remove_dir_all(&scratch);
 
     assert_eq!(
         output.status.code(),
@@ -724,6 +729,245 @@ fn a_gate_that_passes_without_judging_stops_before_the_publish() {
     assert!(
         run.stderr.contains("without reaching a verdict"),
         "the operator is told which of the two it met, got: {}",
+        run.stderr
+    );
+}
+
+/// A publish that completes adds no sentence of the wrapper's own: it read nothing back from the registry, so any
+/// sentence would claim a reading it never made.
+#[test]
+fn a_completed_publish_adds_no_sentence_of_its_own() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let completed = run_wrapper(&root, &[]);
+    assert!(
+        completed.status.success(),
+        "the controlled workflow must complete for this to be about the successful path:\n{}",
+        completed.stderr
+    );
+    let own: Vec<&str> = completed
+        .stdout
+        .lines()
+        .chain(completed.stderr.lines())
+        .filter(|line| line.starts_with("publish source:"))
+        .collect();
+    assert!(
+        own.is_empty(),
+        "a completed publish printed a sentence of the wrapper's own: {own:?}"
+    );
+}
+
+/// A signal ends the wrapper by that signal, after saying what it stopped before.
+///
+/// A shell running the wrapper in a loop stops the loop only when the wrapper ends by the signal — measured on bash
+/// 5.3, a wrapper that trapped SIGINT and exited `2` let the loop run its next iteration. So the wrapper reports and
+/// then re-raises; a signal arriving during the act is held until the act's account has read the outcome.
+///
+/// The contract holds of a signal that can reach the wrapper: one ignored on entry to this test's bash —
+/// SIGHUP under `nohup`, SIGINT in a background job started from a script — cannot be trapped at all, so it
+/// never arrives, and the run ending with the wrapper's real outcome would read as the wrapper's defect. The
+/// precondition is the host's, and the direction states it before the subject runs.
+#[test]
+fn a_signal_ends_the_wrapper_by_that_signal() {
+    use std::os::unix::process::ExitStatusExt;
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    if !support::fixture::require_signal_disposition(&["HUP", "INT", "TERM"]) {
+        return;
+    }
+    for (signal, number) in [("TERM", 15), ("HUP", 1), ("INT", 2)] {
+        for (at, says) in [
+            ("FAKE_SIGNAL_AT_ACT", "once the act had run"),
+            ("FAKE_SIGNAL_AT_GATE", "before the act was started"),
+        ] {
+            let run = run_wrapper_with_env(&root, &[], &[(at, signal)]);
+            assert_eq!(
+                run.status.signal(),
+                Some(number),
+                "SIG{signal} via {at} must end the wrapper by that signal, got {:?}: {}",
+                run.status,
+                run.stderr
+            );
+            assert!(
+                run.stderr
+                    .contains(&format!("stopped by SIG{signal} {says}")),
+                "SIG{signal} via {at} must say what it stopped before: {}",
+                run.stderr
+            );
+            assert!(
+                run.leftover.is_empty(),
+                "SIG{signal} via {at} left {:?} behind",
+                run.leftover
+            );
+        }
+    }
+    // Held during the act, the signal lets the act's account run first: a publish cargo did not complete is
+    // reported as the account reports it, then the wrapper ends by the signal.
+    let run = run_wrapper_with_env(
+        &root,
+        &[],
+        &[("FAKE_SIGNAL_AT_ACT", "TERM"), ("FAKE_PUBLISH_EXIT", "1")],
+    );
+    assert_eq!(run.status.signal(), Some(15), "{}", run.stderr);
+    assert!(
+        run.stderr
+            .contains("cargo publish exited 1 without completing"),
+        "the account's reading reaches the operator before the signal ends the run: {}",
+        run.stderr
+    );
+}
+
+/// A signal ignored on entry to the test's bash stops the direction above before the subject — the state
+/// arranged, not the host's.
+///
+/// The disposition cannot be set in-process (that takes `unsafe`, which these tests do not use), and a
+/// parallel run shares one environment, so the state is arranged in a child: this binary re-executed with
+/// `--exact` from a bash that ignores SIGHUP, the harness-boundary pattern `merge_message` uses, where the
+/// child is the one process an input can be arranged for. The marker is handed to the child by name for the
+/// refusing half and withheld for the skipping half, so both answers are exercised whatever this run itself
+/// inherited.
+#[test]
+fn a_signal_ignored_on_entry_stops_the_direction_before_the_subject() {
+    let Some(_root) = workspace_root() else {
+        return;
+    };
+    let this = std::env::current_exe().expect("this test binary names its own path");
+    let run_with_hup_ignored = |marker: bool| {
+        let mut child = support::bash::bash();
+        child
+            .args([
+                "-c",
+                r#"trap '' HUP; exec "$@""#,
+                "a parent ignoring SIGHUP",
+            ])
+            .arg(&this)
+            .args([
+                "--exact",
+                "a_signal_ends_the_wrapper_by_that_signal",
+                "--nocapture",
+            ]);
+        if marker {
+            child.env(shengmo::workspace::MARKER, "1");
+        }
+        child
+            .output()
+            .expect("the signal direction re-runs under a parent that ignores SIGHUP")
+    };
+
+    let refused = run_with_hup_ignored(true);
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(
+        !refused.status.success(),
+        "under {} the host state refuses rather than skips: {stderr}",
+        shengmo::workspace::MARKER
+    );
+    assert!(
+        stderr.contains("SIGHUP") && stderr.contains("ignored on entry"),
+        "the refusal names the signal and the host state: {stderr}"
+    );
+    assert!(
+        !stderr.contains("must end the wrapper by that signal"),
+        "the direction stopped before the subject, so no verdict about the wrapper was reported: {stderr}"
+    );
+
+    let skipped = run_with_hup_ignored(false);
+    let stderr = String::from_utf8_lossy(&skipped.stderr);
+    assert!(
+        skipped.status.success(),
+        "outside the marker the direction skips rather than fails: {stderr}"
+    );
+    assert!(
+        stderr.contains("SIGHUP") && stderr.contains("skipped"),
+        "and the skip is said aloud, naming the signal: {stderr}"
+    );
+}
+
+/// A verdict file the wrapper cannot remove on an otherwise completed run is a stop, and says the act completed.
+#[test]
+fn a_verdict_file_left_behind_is_the_unjudged_class() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper_with_env(&root, &[], &[("FAKE_LOCK_TMPDIR", "1")]);
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "a completed run that leaves its verdict file must exit the unjudged class, got {:?}: {}",
+        run.status,
+        run.stderr
+    );
+    assert!(
+        run.stderr
+            .contains("could not be removed — the act is done"),
+        "the stop must say the act completed and what is left: {}",
+        run.stderr
+    );
+    // A run already leaving through a stop keeps that stop's class and says the file is left.
+    let stopped = run_wrapper_with_env(
+        &root,
+        &[],
+        &[("FAKE_LOCK_TMPDIR", "1"), ("FAKE_PUBLISH_EXIT", "1")],
+    );
+    assert_eq!(stopped.status.code(), Some(2), "{}", stopped.stderr);
+    assert!(
+        stopped
+            .stderr
+            .contains("cargo publish exited 1 without completing")
+            && stopped.stderr.contains("could not be removed"),
+        "the first stop stays the one reported, and the file left is said: {}",
+        stopped.stderr
+    ); // A signal is a stop too: the run says what it stopped before, then that the file is left, and never that
+    // the act is done.
+    let signalled = run_wrapper_with_env(
+        &root,
+        &[],
+        &[("FAKE_LOCK_TMPDIR", "1"), ("FAKE_SIGNAL_AT_GATE", "TERM")],
+    );
+    {
+        use std::os::unix::process::ExitStatusExt;
+        assert_eq!(signalled.status.signal(), Some(15), "{}", signalled.stderr);
+    }
+    assert!(
+        signalled.stderr.contains("before the act was started")
+            && signalled.stderr.contains("could not be removed")
+            && !signalled.stderr.contains("the act is done"),
+        "a signalled run says the file is left and not that the act completed: {}",
+        signalled.stderr
+    );
+}
+
+/// A publish cargo does not complete is the unjudged class, never cargo's own status.
+///
+/// `cargo publish` exits `1` on an argument it cannot parse, and `1` is the class reserved for a gate that ran
+/// and refused — so a publish whose status passed through would report its own failure as a disagreement the
+/// gate never found. The operator is told which crates were published is unknown, because a workspace publish
+/// stops crate by crate and nothing here reads the registry back.
+#[test]
+fn a_publish_cargo_does_not_complete_exits_the_unjudged_class() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper_with_env(&root, &[], &[("FAKE_PUBLISH_EXIT", "1")]);
+    assert!(
+        publish_invocation(&run.cargo_log).is_some(),
+        "the publish must have been reached for this to be about the act: {}",
+        run.cargo_log
+    );
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "a publish cargo did not complete is not a gate that refused: {}",
+        run.stderr
+    );
+    assert!(
+        run.stderr
+            .contains("cargo publish exited 1 without completing")
+            && run
+                .stderr
+                .contains("which of the crates it named were published is unknown"),
+        "the operator is told the act failed and what it may have left, got: {}",
         run.stderr
     );
 }

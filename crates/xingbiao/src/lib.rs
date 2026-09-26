@@ -4,7 +4,7 @@
 //! the tabulated catalog every observation dimension references before it observes. Spawns
 //! `cargo` and parses its JSON (`serde_json` + std only, no `syn`).
 //!
-//! **The criterion, because this charter has widened twice and an enumeration of what it holds goes
+//! **The criterion, because this charter widens, and an enumeration of what it holds goes
 //! stale.** A fact belongs here when every dimension must agree on it *before* observing, and it is a
 //! fact about the tree rather than a reading of what the tree contains. Which packages exist and where
 //! their roots are; whether two paths are one file; whether a path is there at all, and whether being
@@ -22,6 +22,13 @@
 //! them) arrived after all three dimensions were measured collapsing *absent* into *unreadable* — each is
 //! one notch finer than the last, on the same
 //! question of what the tree holds.
+//!
+//! **Fixture infrastructure.** This widening is test-only: [`claim_scratch`] and `Unreadable`.
+//! Both are `#[doc(hidden)]` items that exist because integration and unit test trees across member
+//! crates cannot share a `cfg(test)` helper, yet must enforce identical policies (atomic temporary
+//! root reservation without adopting pre-existing symlinks, and permission-removal verification that
+//! restores on drop and asserts under `TIANHENG_WORKSPACE_TESTS`). They ship hidden in the published
+//! crate so all test suites agree on fixture safety and refusal semantics without hand-rolled copies.
 //!
 //! Sits beneath all three observation dimensions — static (圭表), semantic (渾儀) and runtime (漏刻,
 //! through its CI-only `audit` face) — preventing twin-drift in what they take the tree to be.
@@ -76,7 +83,7 @@ pub fn find_package<'a>(metadata: &'a Value, package: &str) -> Option<&'a Value>
 }
 
 /// Whether a `cargo metadata` target's `kind` array contains `wanted` — the one-target shape
-/// check shared by [`crate_root_file`] (picking one library/bin target) and [`crate_root_files`]
+/// check shared by [`crate_root_file`] (picking one library/bin target) and [`crate_roots`]
 /// (every library/bin target of one package), through which [`member_root_files`] reaches it for the
 /// whole workspace.
 fn target_has_kind(target: &Value, wanted: &str) -> bool {
@@ -85,18 +92,50 @@ fn target_has_kind(target: &Value, wanted: &str) -> bool {
         .is_some_and(|kinds| kinds.iter().any(|k| k.as_str() == Some(wanted)))
 }
 
-/// **Every** compiled crate root of ONE package — each library-kind target and each `bin` target, in
-/// Cargo's reported order, deduplicated.
+/// Which of a package's crate roots are compiled, told apart from the two ways there can be none.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CrateRoots {
+    /// The metadata reports no target — the shape synthetic metadata in a caller's own tests carries, for which a
+    /// caller reads the conventional source directory.
+    Unreported,
+    /// It reports targets, none a library kind or a binary — an example, a test, a bench or a build script alone —
+    /// so no compiled root reads the package's `src/`, and reading it would judge a directory nothing builds.
+    NoneCompiled,
+    /// At least one library-kind or binary root.
+    Compiled(CompiledRoots),
+}
+
+/// A package's library-kind and binary roots, in Cargo's reported order, each once, and at least one — by
+/// construction, since only [`crate_roots`] builds one, so an empty list cannot stand for either state that has
+/// none.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CompiledRoots(Vec<PathBuf>);
+
+impl CompiledRoots {
+    /// The roots, in Cargo's reported order.
+    pub fn as_slice(&self) -> &[PathBuf] {
+        &self.0
+    }
+}
+
+impl CrateRoots {
+    /// The compiled roots, and none for either state that has none.
+    pub fn compiled(&self) -> &[PathBuf] {
+        match self {
+            Self::Compiled(roots) => roots.as_slice(),
+            Self::Unreported | Self::NoneCompiled => &[],
+        }
+    }
+}
+
+/// What ONE package's metadata says about its compiled crate roots: **every** one — each library-kind target
+/// and each `bin` target, in Cargo's reported order, deduplicated.
 ///
 /// The per-package counterpart of [`member_root_files`] (which spans the workspace) and the plural of
 /// [`crate_root_file`] (which picks one). A package's roots are separate compilation units: they each
 /// denote the module path `crate` and neither's declarations belong in the other's module graph, so a
 /// dimension that governs a package governs each root as its own corpus. Returning them all is what lets
 /// a violation written in a `bin` beside a library be observed at all.
-///
-/// Empty when the metadata reports no target — the shape synthetic metadata in a caller's own tests
-/// carries. A caller SHALL treat that as "fall back to the conventional source directory", not as "this
-/// package has no source": dropping that fallback silently un-governs every such test fixture.
 ///
 /// The uniqueness is **total**, not adjacency-dependent, and that distinction is load-bearing here in a
 /// way it is not in [`member_root_files`] (which sorts first, so `Vec::dedup` is total for it by
@@ -105,18 +144,29 @@ fn target_has_kind(target: &Value, wanted: &str) -> bool {
 /// between them. `Vec::dedup` alone therefore left `[x, y, x]` intact, and the root was scanned once per
 /// report. Order is Cargo's own and is preserved, because a caller's sibling-root exclusion reads this
 /// slice positionally against the root it is currently walking.
-pub fn crate_root_files(package: &Value) -> Vec<PathBuf> {
+///
+/// A target Cargo reports always carries its `src_path`, so a library or binary target without one is metadata
+/// no Cargo wrote; it contributes no root, and where no other target does either the package reads as
+/// [`CrateRoots::NoneCompiled`] — no root path was resolved, whatever the kinds claimed.
+pub fn crate_roots(package: &Value) -> CrateRoots {
+    let targets = match package["targets"].as_array() {
+        Some(targets) if !targets.is_empty() => targets,
+        _ => return CrateRoots::Unreported,
+    };
     let mut seen = std::collections::HashSet::new();
-    package["targets"]
-        .as_array()
-        .into_iter()
-        .flatten()
+    let roots: Vec<PathBuf> = targets
+        .iter()
         .filter(|t| {
             LIBRARY_KINDS.iter().any(|k| target_has_kind(t, k)) || target_has_kind(t, "bin")
         })
         .filter_map(|t| t["src_path"].as_str().map(PathBuf::from))
         .filter(|root| seen.insert(root.clone()))
-        .collect()
+        .collect();
+    if roots.is_empty() {
+        CrateRoots::NoneCompiled
+    } else {
+        CrateRoots::Compiled(CompiledRoots(roots))
+    }
 }
 
 /// A path as a **canonical identity label**: `/` as its only component separator, and every byte the
@@ -304,13 +354,18 @@ pub fn member_src_dirs(metadata: &Value) -> Vec<PathBuf> {
 
 /// Every workspace member library, proc-macro, and binary crate-root source file reported by Cargo.
 ///
-/// Which target kinds have a governable crate root is [`crate_root_files`]'s filter; what is this
+/// Which target kinds have a governable crate root is [`crate_roots`]'s filter; what is this
 /// function's own is the scope — every package rather than one — and the ordering: it sorts and
 /// dedups across packages, so the corpus is deterministic whatever order Cargo lists members in.
 pub fn member_root_files(metadata: &Value) -> Vec<PathBuf> {
     let mut roots: Vec<PathBuf> = metadata["packages"]
         .as_array()
-        .map(|packages| packages.iter().flat_map(crate_root_files).collect())
+        .map(|packages| {
+            packages
+                .iter()
+                .flat_map(|package| crate_roots(package).compiled().to_vec())
+                .collect()
+        })
         .unwrap_or_default();
     roots.sort();
     roots.dedup();
@@ -441,4 +496,98 @@ pub fn is_directory(path: &Path) -> Result<bool, String> {
 #[doc(hidden)]
 pub fn claim_scratch(path: &Path) -> std::io::Result<()> {
     std::fs::create_dir(path)
+}
+
+/// A fixture's cleanup, settled inside a `Drop`: said on stderr while a failure is already unwinding, so the first
+/// failure stays the one reported, and a failure of its own otherwise, so a run that passed does not leave its
+/// fixture behind in silence.
+///
+/// **Fixture infrastructure, withheld from the API contract** for the reason [`claim_scratch`] gives: the guards
+/// that call it restore or remove something on drop and settle the result one way, and they live in test targets
+/// across crates.
+#[doc(hidden)]
+pub fn settle_cleanup(what: &str, path: &Path, result: std::io::Result<()>) {
+    if let Err(err) = result {
+        if std::thread::panicking() {
+            eprintln!("{what} '{}' failed during unwind: {err}", path.display());
+        } else {
+            panic!("{what} '{}' failed: {err}", path.display());
+        }
+    }
+}
+
+/// An RAII guard that restricts a file or directory to mode 000 during test execution
+/// and restores its original permissions on drop.
+///
+/// **Fixture infrastructure, deliberately withheld from the API contract.**
+/// Like [`claim_scratch`], it is `pub` because test targets across crates need it across crate
+/// boundaries, and `#[doc(hidden)]` because 星表's domain is declared workspace data.
+///
+/// Under a privileged user (such as root in a container), mode 000 does not restrict access.
+/// Outside `TIANHENG_WORKSPACE_TESTS`, it restores permissions and returns `None` so the calling
+/// test can skip gracefully. Inside `TIANHENG_WORKSPACE_TESTS`, a silent skip is forbidden and
+/// asserts.
+#[cfg(unix)]
+#[doc(hidden)]
+pub struct Unreadable<'a> {
+    path: &'a Path,
+    original: std::fs::Permissions,
+}
+
+#[cfg(unix)]
+impl<'a> Unreadable<'a> {
+    /// Restrict `path` to mode 000, returning `None` if mode 000 does not bite (e.g. running as root).
+    ///
+    /// Outside `TIANHENG_WORKSPACE_TESTS` that skip is allowed and said on stderr, so a run that did not judge an
+    /// unreadable input does not read as one that did.
+    pub fn try_new(path: &'a Path) -> Option<Self> {
+        use std::os::unix::fs::PermissionsExt;
+        let original = std::fs::metadata(path)
+            .unwrap_or_else(|err| {
+                panic!(
+                    "Unreadable: cannot read the permissions of '{}': {err}",
+                    path.display()
+                )
+            })
+            .permissions();
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o000)).unwrap_or_else(
+            |err| {
+                panic!(
+                    "Unreadable: cannot restrict '{}' to mode 000: {err}",
+                    path.display()
+                )
+            },
+        );
+        let accessible = if path.is_dir() {
+            std::fs::read_dir(path).is_ok()
+        } else {
+            std::fs::read(path).is_ok()
+        };
+        if accessible {
+            std::fs::set_permissions(path, original)
+                .expect("restore permissions when mode 000 did not bite");
+            assert!(
+                std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
+                "mode 000 did not restrict the path — running as root would make this direction vacuous"
+            );
+            eprintln!(
+                "Unreadable: mode 000 does not restrict '{}' for this process, so the direction using it is \
+                 skipped",
+                path.display()
+            );
+            return None;
+        }
+        Some(Self { path, original })
+    }
+}
+
+#[cfg(unix)]
+impl Drop for Unreadable<'_> {
+    fn drop(&mut self) {
+        settle_cleanup(
+            "Unreadable: restoring the permissions of",
+            self.path,
+            std::fs::set_permissions(self.path, self.original.clone()),
+        );
+    }
 }

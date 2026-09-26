@@ -114,7 +114,7 @@ by `tianheng check`.
 > constitution and expose your own binary, as above.
 
 Tianheng governs **itself** with its own reaction (`crates/shengmo/src/law.rs`):
-the core must not depend on the shell, `syn` is quarantined to `hunyi`, `xuanji` stays beneath
+the core must not depend on the shell, `hunyi` is the only packaged crate that depends on `syn` directly, `xuanji` stays beneath
 every dimension.
 
 ## License

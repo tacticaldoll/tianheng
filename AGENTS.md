@@ -289,6 +289,47 @@ ask when a new check is written or a review names a corpus defect — and where 
 the compiler enforces it afterwards rather than this paragraph. `BACKLOG.md` carries it as the un-reacted-SHALL
 class requires.
 
+**A claim about a state is bound to the event that changes it, and that binding is the one nothing supplies.**
+The branches above ask what carries a claim. This asks *when it stops being true*, which is a different
+question and the one this repository kept getting wrong: a hand-written sentence describing a current state
+— which versions shipped, what a repository setting answers, which documents are generated — is correct when
+written and silently wrong after the next release, the next settings change, the next generated document.
+Nothing goes red, because the event that falsified it is not in any check's corpus. A figure at least has
+*A census is produced, never typed* aimed at it; a state sentence has nothing.
+
+**The disposition is the branches above, asked again about the event rather than the carrier.** A second
+copy is not removable because it is a copy — it is removable when nothing downstream depends on it, which is
+branch one. Where something does, branch two already applies and the copy stays, held to its producer both
+ways. Measured while this paragraph was being written: `AGENTS.md`'s list of generated documents was read as
+a removable copy of `docs/projection-register.md` and deleted, and
+`every_generated_document_is_reachable_from_where_a_reader_is_sent` refused it — the register knowing a
+document exists is not the same as a reader being able to find it, so that list carries reachability, not a
+duplicate enumeration, and it was already held both ways. The rule here would have removed it; the reaction
+did not let it. Ask what already knows the answer — `git tag` and `CHANGELOG.md` know which versions shipped and what each one
+carried; a structural fact about how a tool behaves knows itself and does not need measuring at all. Where such an owner exists, the sentence
+states the property and names the owner. Where the state lives outside this repository, write the reason it
+holds rather than the value it currently has: *a pull request's author cannot approve their own, so a
+single-steward repository cannot satisfy that requirement whatever the setting says* survives every
+settings change, while `require_code_owner_reviews: false` was false of this repository for an entire
+release window and four documents repeated it.
+
+Measured 2026-09-21, by reading every hand-written state claim these shapes reach: the shipped-version list
+had gone two releases without its rename and its own heading still said *the open window*, and the
+repository-setting value stood in **four** places at once, all four wrong while `main` carried no protection
+object at all. Both dissolved into their owners. A third candidate did not, and that is the more useful half
+of the measurement — the reachability list above was read the same way and the reaction refused it, so the
+count of removable copies here is two of three considered.
+
+**Dissolving one carries the retirement sweep with it, and that half was skipped here.** Removing a
+restated claim retires the thing other prose points at, so *Retiring a capability requires the same sweep*
+applies unchanged: grep every tracked live document for what was removed before closing the change. Skipped
+here, it left this file describing the deleted list's duty in the present tense — in *A census is produced, never
+typed*, where a version-horizon paragraph was still *the one that assigns the release number* — found by review
+rather than by anything running. Seeds are what the removed thing was called and what it was said to
+do — a record carrier keeps its sentence, since a dated section is a measurement of its own moment. This has no reaction of its own, for the reason
+*Do not add a detector over prose* gives — deciding that a sentence describes a state is a judgement over prose — so it is a question
+asked when a sentence about *how things currently are* is written, and `BACKLOG.md` carries what it cannot.
+
 ## A reader reads its whole subject — four shapes, and only three close by construction
 
 The dominant defect class this repository ships, by count: a reader whose input is narrower than the thing it
@@ -359,9 +400,9 @@ or drop it: the claim almost never needs the number.
 This is not a style preference. Hand-written figures drifted **repeatedly in one release window, in every kind of
 place they can live**: a doc comment saying fifty-three declarations against a register holding fifty-four; a backlog entry citing
 fifty-five; a changelog sentence citing fifty-four with no time anchor; "eight files under `src/runner/`" in three
-files at once; "all five gate matrices" after a sixth gate arrived; and a version-horizon paragraph — the one that
-assigns the release number — whose measured commit count and "nothing else is packaged" claim the window itself
-falsified.
+files at once; "all five gate matrices" after a sixth gate arrived; and a version-horizon paragraph — then the
+place a release number was decided — whose measured commit count and "nothing else is packaged" claim the window
+itself falsified.
 
 **A figure inside a generated document is only safe if it is computed.** A literal in the template is the one place
 a projection cannot self-correct: the freshness check compares the generator's own text with itself, so
@@ -502,7 +543,8 @@ the next round finds the next sentence; change the shape and the class ends.
 prose rule has no backstop and then leaving it as prose is how the same rule keeps costing: the measurement is
 the expensive part and it is already done. Two rules in this repository were measured un-reacted in one window
 and only one of them was answered — `.github/CODEOWNERS`'s *a merge cannot relax the law without a human
-accepting it*, measured against `main`'s protection as `require_code_owner_reviews: false`. What got a reaction
+accepting it* — a requirement that cannot fire in a single-steward repository whatever `main`'s branch
+protection is set to, because GitHub does not let a pull request's author approve their own. What got a reaction
 there is its **naming** half: a structural amendment must now produce a second explicit artifact. The
 acceptance half is a judgement boundary, recorded as one, because a single-steward repository has no
 mechanical second party. The reason-perimeter falsifier, measured over four rounds and eight corrections, got
@@ -523,6 +565,14 @@ is a campaign to author mutations for the standing set — that was measured and
 against it: the citation set grows faster than mutations can be written, so the move that changes the
 trajectory is stopping the denominator rather than chasing the numerator.
 
+**The obligation is a declared bound's, and an ordinary scenario's pin states its reason by construction.** The
+mutation register keys a record on a bound id, so a `PINNED-BY` under an ordinary scenario cannot carry one, and
+`pin_bites` counts those citations apart on every clean run — which is where their growth is seen. Its evidence is
+the negative run the change records. So a change adding a bound's pin adds its record; a change adding an ordinary
+pin names its negative run, and nothing further is owed. No reaction holds the first half at the moment of the
+change: telling a pin a change just added from one it moved is a reading of the diff's intent, and the count
+`pin_bites` prints is the reaction there is.
+
 Measured, in the window that produced this rule: three consecutive repair rounds on one text reader, and across
 all three **not one finding was a new code defect**. Every one was a sentence describing what the reader does —
 "the line start refuses a mention", "the two cannot diverge", "three inputs decline", a declared bound's WHEN
@@ -540,6 +590,30 @@ Two moves end those two classes, and neither is a review:
   agree by construction, and a new case forces every consumer to answer it or the build fails. A doc comment
   enumerating the outcomes is then a census of a set the type already holds — see *A census is produced, never
   typed*.
+
+**When the code was wrong and each round finds the next member of one set, stop adding members.** A reader that
+decides its question by enumerating a grammar — separators, reserved words, spellings, quoting forms — answers
+wrongly one production at a time, and each repair adds the production the last review named. A second finding of
+that kind on the same reader is the signal: the set belongs to the shell or the compiler, not to the reader, so
+the next round finds the next member. Change the question instead, in one of three ways:
+
+- **Ask it in a form with a single syntactic answer.** *Does this stand where a command begins* needs the
+  grammar; *is this word `exit`* needs only quote removal, which is finite. A rule over what is done is stricter
+  than one over how it is written, so say what it refuses beyond the property and give that its one-step repair.
+- **Take the set from its producer, and hold the copy both ways.** Where a list must exist, compare it with the
+  producer's own definition — bash(1)'s metacharacters, `compgen`'s reserved words — so a member the reader
+  forgot fails rather than passes.
+- **Declare what stays undecidable as a bound, and pin it.** Which trait a path names is name resolution; a reader
+  that matches a path's last segment says so in a bound with a row showing the wrong read, rather than claiming
+  the class closed.
+
+Measured in the window rooted at the `v0.6.1` snapshot: the exit-class reader was repaired one production at a
+time across consecutive review rounds — a quoted case pattern, ANSI-C quoting, a numeric escape, a precommand's
+argument, an `if` condition — each round finding the one the last had not modelled. Rewritten to judge every word
+whose value is `exit`, with words split at bash's own metacharacters, it closed the class, and the rewrite
+surfaced a line-at-a-time read of a multi-line quote that no production-level repair had reached. This has no
+repository check: telling that a finding is the next member of a set its reader enumerates is a reading of what
+the finding means, so it is the question to ask when the second such finding arrives.
 
 **This rule has no repository check, and that is stated rather than left to be discovered.** Deciding that a comment
 describes something a run could falsify is a judgement over prose, which this repository has designed and
@@ -843,6 +917,19 @@ the honest word is *unobserved*. That is the whole of it; per-entry labels sorti
 witnessed were considered and declined, because a field on sixty entries is a form to maintain and these
 two sentences reach the same failure at the point where it actually happens.
 
+A reading's per-entry record lives in the squash commit that carries it, because a commit is a record and `BACKLOG.md` is a live document; `BACKLOG.md` takes only the entries whose state the reading changed and one sentence pointing to the record.
+
+**The same occasion runs the set-membership sweep.** A claim that a set this tree enumerates has *only* these
+members, *never* that one, or one *alone* is held by nothing, and a declared set would hold only the claims an
+author already doubted — `BACKLOG.md` accepts that as debt, under *a claim about this tree, written as prose, is
+held only where its author declared it*. So before the cut, absolute quantifiers standing near a named subject
+the tree enumerates — a crate, a dependency, a script, a gate — are swept over every tracked live document and
+over the window's added lines, and each hit is checked against whatever enumerates that set: the manifests,
+`cargo tree`, `git ls-files`. It starts from the subject, not from the meaning of a sentence, so it decides
+nothing and produces a review queue; the reading records the corpus and the pattern it used, as a trigger
+evaluation does. Nothing runs it, for the reason *Do not add a detector over prose* gives: which hits are claims
+about a set is a reading of what the sentence says.
+
 A branching pattern is not an observable architectural fact, so the drift law keeps it out of the
 constitution: it is a convention for humans and agents rather than a Tianheng boundary.
 
@@ -941,6 +1028,14 @@ TIANHENG_PIN_BITES=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test pin_b
                                            # would be the worse half of that trade
 TIANHENG_SPELLING_DIFFERENTIAL=1 cargo test -p tianheng --test attribute_spelling_differential   # the same trade, for
                                            # the same reason: it compiles one crate per generated spelling
+TIANHENG_WORKSPACE_TESTS=1 cargo +1.85 test --workspace --all-features   # the same trade again, for the MSRV. The
+                                           # name is the pinned toolchain: `ci.yml`'s `msrv` job pins it as its own
+                                           # `MSRV` and refuses if the declared `rust-version` has moved from that pin,
+                                           # and `dod_coherence` holds this line to the job's run lines, so the number
+                                           # lives in one place per side and this line is what a contributor runs with
+                                           # that toolchain installed. Env-shaped like its neighbours rather than gated
+                                           # by one; added because the same `if … && let …` compiled on the default
+                                           # toolchain, passed every line above, and failed CI's MSRV job, twice
 ```
 
 The self-governance dogfood gate (`crates/shengmo/tests/self_governance.rs`, which runs the product reaction under `cargo test`) and its projection

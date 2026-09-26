@@ -3,10 +3,14 @@
 //! The wrapper gathers evidence and orders external commands; the message verdict remains in
 //! `merge_message.rs`. These directions replace `gh` and `cargo`, so no network call or merge can occur.
 
+mod support;
+
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus};
+use std::process::ExitStatus;
 use std::sync::atomic::{AtomicUsize, Ordering};
+
+use support::fixture::{read_if_present, write_executable};
 
 fn workspace_root() -> Option<PathBuf> {
     shengmo::workspace::locate(
@@ -50,25 +54,6 @@ struct Run {
     commits: String,
 }
 
-fn write_executable(path: &Path, text: &str) {
-    use std::os::unix::fs::PermissionsExt;
-
-    std::fs::write(path, text).expect("write controlled executable");
-    let mut permissions = std::fs::metadata(path)
-        .expect("read controlled executable metadata")
-        .permissions();
-    permissions.set_mode(0o755);
-    std::fs::set_permissions(path, permissions).expect("make controlled executable runnable");
-}
-
-fn read_if_present(path: &Path) -> std::io::Result<String> {
-    match std::fs::read_to_string(path) {
-        Ok(text) => Ok(text),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
-        Err(err) => Err(err),
-    }
-}
-
 /// The wrapper run from the workspace it lives in, which is how every direction but two exercises it.
 fn run_wrapper(root: &Path, mode: &str, extra: &[&str]) -> Run {
     run_wrapper_in(root, mode, extra, None)
@@ -96,32 +81,36 @@ fn run_wrapper_with_ambient(
     cwd: Option<&Path>,
     ambient: &[(&str, &Path)],
 ) -> Run {
-    static NEXT: AtomicUsize = AtomicUsize::new(0);
-    let scratch = loop {
-        let candidate = std::env::temp_dir().join(format!(
-            "tianheng-merge-workflow-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        match xingbiao::claim_scratch(&candidate) {
-            Ok(()) => break candidate,
-            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(err) => {
-                assert_eq!(
-                    err.kind(),
-                    std::io::ErrorKind::AlreadyExists,
-                    "cannot acquire controlled merge-workflow root {}: {err}",
-                    candidate.display()
-                );
-            }
-        }
-    };
-    let bin = scratch.join("bin");
-    std::fs::create_dir(&bin).expect("create controlled PATH");
-    // The wrapper's own `TMPDIR`, so what it leaves behind is observable and lands in the fixture rather than in
-    // the developer's `/tmp`.
-    let tmp = scratch.join("tmp");
-    std::fs::create_dir(&tmp).expect("create the wrapper's temporary directory");
+    run_wrapper_over(root, mode, extra, cwd, ambient, Streams::Open)
+}
+
+/// What the wrapper's own output streams are when it runs.
+///
+/// A class that a closed terminal can move is the defect `no_closed_stream_moves_the_merge_s_class` holds, and
+/// a harness that always hands the wrapper a working pipe cannot construct it.
+#[derive(Clone, Copy, Debug)]
+enum Streams {
+    Open,
+    /// Standard output closed outright, so a write fails with `EBADF`.
+    ClosedStdout,
+    /// Standard output a pipe whose reader has gone, so a write meets `SIGPIPE` or `EPIPE`.
+    BrokenStdout,
+}
+
+fn run_wrapper_over(
+    root: &Path,
+    mode: &str,
+    extra: &[&str],
+    cwd: Option<&Path>,
+    ambient: &[(&str, &Path)],
+    streams: Streams,
+) -> Run {
+    // The `gh` stub filters its answers through `jq`.
+    support::fixture::require_host_tool("jq");
+    let harness = support::fixture::Harness::claim("tianheng-merge-workflow");
+    let scratch = harness.path();
+    let bin = harness.bin();
+    let tmp = harness.tmp();
 
     let gh_log = scratch.join("gh.log");
     let gh_body = scratch.join("gh.body");
@@ -132,6 +121,10 @@ fn run_wrapper_with_ambient(
     // would let the value travel through `argv` without ever exercising the newline the controlled `gh` has
     // to log safely, so every direction here would pass while the shape they all read stayed fragile.
     std::fs::write(&body, JUDGED_BODY).expect("write merge body");
+    if mode == "release-snapshot" {
+        // The one message the gate admits with an empty body: `chore(release): X.Y.Z`, `release/X.Y.Z` -> `main`.
+        std::fs::write(&body, "").expect("write the release snapshot's empty body");
+    }
     if mode == "unreadable-body" {
         use std::os::unix::fs::PermissionsExt;
         let mut permissions = std::fs::metadata(&body)
@@ -167,7 +160,11 @@ elif [[ $1 == pr && $2 == view && $* == *"--json headRefName"* ]]; then
     if [[ $FAKE_GH_MODE == head-branch-moved ]] && ((calls >= 2)); then
         printf '%s\n' 'renamed/after-the-gate'
     else
-        printf '%s\n' "${FAKE_GH_HEAD_BRANCH:-fix/some-repair}"
+        if [[ $FAKE_GH_MODE == release-snapshot ]]; then
+            printf '%s\n' 'release/0.0.0'
+        else
+            printf '%s\n' "${FAKE_GH_HEAD_BRANCH:-fix/some-repair}"
+        fi
     fi
 elif [[ $1 == pr && $2 == view && $* == *"--json baseRefName"* ]]; then
     if [[ $FAKE_GH_MODE == unreadable-base ]]; then
@@ -186,6 +183,8 @@ elif [[ $1 == pr && $2 == view && $* == *"--json baseRefName"* ]]; then
     printf '%s' "$calls" > "$FAKE_BASE_CALLS"
     if [[ $FAKE_GH_MODE == base-moved ]] && ((calls >= 2)); then
         printf '%s\n' 'main'
+    elif [[ $FAKE_GH_MODE == release-snapshot ]]; then
+        printf '%s\n' 'main'
     else
         printf '%s\n' "${FAKE_GH_BASE:-release/0.0.0}"
     fi
@@ -199,6 +198,8 @@ elif [[ $1 == pr && $2 == view && $* == *"--json title"* ]]; then
     printf '%s' "$calls" > "$FAKE_TITLE_CALLS"
     if [[ $FAKE_GH_MODE == title-moved ]] && ((calls >= 2)); then
         printf '%s\n' 'fix(kanhe): a title edited while the gate ran'
+    elif [[ $FAKE_GH_MODE == release-snapshot ]]; then
+        printf '%s\n' 'chore(release): 0.0.0'
     else
         printf '%s\n' 'fix(kanhe): harden workflow evidence'
     fi
@@ -256,6 +257,30 @@ elif [[ $1 == pr && $2 == view && $* == *"--json statusCheckRollup"* ]]; then
     *) body='{"statusCheckRollup":[{"conclusion":"SUCCESS","name":"Definition of Done"},{"conclusion":"SUCCESS","name":"Examples dogfood"}]}' ;;
     esac
     printf '%s' "$body" | jq -r "$filter"
+elif [[ $1 == pr && $2 == view && $* == *"--json state,mergeCommit,headRefOid"* ]]; then
+    # The pull request as GitHub reads it after the act, in the `<state>|<commit>|<head>` shape the wrapper's
+    # filter renders. The commit is an opaque token for the same reason the head is one.
+    case $FAKE_GH_MODE in
+    merged-unreadable | merge-lost-unreadable)
+        printf '%s\n' 'controlled read-back failure' >&2
+        exit 1
+        ;;
+    # A read that succeeds and carries no commit ID. What a client renders from a `null` does not matter — the
+    # wrapper must not print anything but a commit ID as one.
+    merged-null) printf '%s\n' 'MERGED|null|feedfacedeadbeefcafebabe0123456789abcdef' ;;
+    merge-refused | merge-queued) printf '%s\n' 'OPEN||feedfacedeadbeefcafebabe0123456789abcdef' ;;
+    merged-other-head) printf '%s\n' 'MERGED|0123456789abcdef0123456789abcdef01234567|abad1deaabad1deaabad1deaabad1deaabad1dea' ;;
+    *) printf '%s\n' 'MERGED|0123456789abcdef0123456789abcdef01234567|feedfacedeadbeefcafebabe0123456789abcdef' ;;
+    esac
+elif [[ $1 == api && $2 == repos/*/commits/0123456789abcdef0123456789abcdef01234567 ]]; then
+    # The squash commit's message: whatever the merge below recorded, read back the way GitHub would hand it.
+    case $FAKE_GH_MODE in
+    commit-unreadable | merge-lost-commit-unreadable)
+        printf '%s\n' 'controlled commit read failure' >&2
+        exit 1
+        ;;
+    esac
+    cat -- "$FAKE_GH_RECORD"
 elif [[ $1 == pr && $2 == view && $* == *"--json headRefOid"* ]]; then
     if [[ $FAKE_GH_MODE == unreadable-head ]]; then
         printf '%s\n' ''
@@ -276,7 +301,7 @@ elif [[ $1 == api ]]; then
     empty)
         :
         ;;
-    subjects | ambient-gh-repo | invalid-number | unreadable-head | unreadable-base | unreadable-head-branch | unreadable-body | body-moved | title-moved | base-moved | head-branch-moved | clean | no-verdict | ci-red | ci-red-status | ci-expected-status | ci-no-evidence | ci-pending | ci-unclaimed | empty-diff | unreadable-count)
+    subjects | ambient-gh-repo | invalid-number | unreadable-head | unreadable-base | unreadable-head-branch | unreadable-body | body-moved | title-moved | base-moved | head-branch-moved | clean | no-verdict | ci-red | ci-red-status | ci-expected-status | ci-no-evidence | ci-pending | ci-unclaimed | empty-diff | unreadable-count | merge-refused | merged-unreadable | merged-null | merge-lost | merge-lost-unreadable | merge-queued | merged-elsewhere | merged-other-head | commit-unreadable | merge-lost-commit-unreadable | release-snapshot)
         if [[ $* != *"--paginate"* ]]; then
             printf '%s\n' 'feat(x): live first subject'
         else
@@ -297,8 +322,13 @@ elif [[ $1 == pr && $2 == merge ]]; then
     # RECORDS, not which flag was spelled: asserting the flag name would pass for a wrapper spelling
     # `--body "$(cat "$body_file")"` at merge time, which re-reads the file and is the defect itself.
     merge_body=""
+    merge_subject=""
     while (($#)); do
         case $1 in
+        --subject)
+            merge_subject=${2-}
+            shift $(($# >= 2 ? 2 : 1))
+            ;;
         --body)
             merge_body=${2-}
             shift $(($# >= 2 ? 2 : 1))
@@ -313,6 +343,33 @@ elif [[ $1 == pr && $2 == merge ]]; then
         esac
     done
     printf '%s' "$merge_body" > "$FAKE_GH_BODY"
+    # gh exits 1 when it does not merge — a moved head under `--match-head-commit`, a pull request already merged
+    # — and equally when the merge landed and the response was lost, which the `merge-lost` modes stand for.
+    # What a merge RECORDS is its squash message, written where the commit read above finds it.
+    case $FAKE_GH_MODE in
+    merge-refused)
+        printf '%s\n' 'controlled merge refusal: head moved' >&2
+        exit 1
+        ;;
+    merged-elsewhere)
+        # Merged before this call, by someone else, with a message no gate judged.
+        printf '%s\n\n%s' 'chore(x): merged in the web UI' 'a body the gate never saw' > "$FAKE_GH_RECORD"
+        printf '%s\n' 'controlled merge refusal: pull request already merged' >&2
+        exit 1
+        ;;
+    merge-queued)
+        # Accepted and not merged: what a merge queue's enqueue reports.
+        ;;
+    *)
+        printf '%s\n\n%s' "$merge_subject" "$merge_body" > "$FAKE_GH_RECORD"
+        ;;
+    esac
+    case $FAKE_GH_MODE in
+    merge-lost | merge-lost-unreadable | merge-lost-commit-unreadable)
+        printf '%s\n' 'controlled response failure: connection reset' >&2
+        exit 1
+        ;;
+    esac
 else
     printf 'unexpected gh invocation: %s\n' "$*" >&2
     exit 97
@@ -321,7 +378,8 @@ fi
     );
     write_executable(
         &bin.join("cargo"),
-        r##"#!/usr/bin/env bash
+        &[
+            r##"#!/usr/bin/env bash
 set -eu
 printf '%s\n' "$*" >> "$FAKE_CARGO_LOG"
 printf '%s' "${TIANHENG_MERGE_COMMITS-}" > "$FAKE_COMMITS"
@@ -331,23 +389,26 @@ printf '%s' "${TIANHENG_MERGE_COMMITS-}" > "$FAKE_COMMITS"
 if [[ -n ${FAKE_BODY_REWRITE-} ]]; then
     printf '%s' "$FAKE_BODY_REWRITE_TEXT" > "$FAKE_BODY_REWRITE"
 fi
-# The gate reports on the channel whether it agrees or refuses, so a controlled gate that only prints
-# `1 passed` is a gate that ran and judged nothing — which is what the wrapper's success path now refuses.
-# `no-verdict` is the mode that keeps that state constructible.
-#
-# Only where the channel was opened: this executable also stands in for the tool the wrapper `exec`s, and the
-# wrapper hands the channel to the gate alone — so an unguarded write would both fail under `set -u` on that
-# second invocation and recreate the file the wrapper removed one statement earlier.
-if [[ ${FAKE_GATE_VERDICT-} != none && -n ${TIANHENG_GATE_VERDICT-} ]]; then
-    printf '%s' 'Clean' > "$TIANHENG_GATE_VERDICT"
-fi
-printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'
 "##,
+            support::fixture::GATE_VERDICT_STUB,
+            &support::fixture::gate_pass_stub(),
+        ]
+        .concat(),
     );
 
-    let old_path = std::env::var_os("PATH").unwrap_or_default();
-    let path = format!("{}:{}", bin.display(), old_path.to_string_lossy());
-    let mut command = Command::new("bash");
+    let path = support::fixture::path_with(bin);
+    let mut command = support::bash::bash();
+    // The launcher is a shell of its own, so the stream is taken away from the wrapper and from nothing else;
+    // the status reported is the wrapper's, read from `PIPESTATUS` where a pipe stands after it.
+    match streams {
+        Streams::Open => {}
+        Streams::ClosedStdout => {
+            command.args(["-c", support::streams::CLOSED, "launcher", "1"]);
+        }
+        Streams::BrokenStdout => {
+            command.args(["-c", support::streams::BROKEN, "launcher", "1"]);
+        }
+    }
     command
         .arg(root.join("scripts/merge-pr.sh"))
         .args(["42", "--body-file"])
@@ -357,12 +418,13 @@ printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 fil
         .env("FAKE_GH_MODE", mode)
         .env("FAKE_GH_LOG", &gh_log)
         .env("FAKE_GH_BODY", &gh_body)
+        .env("FAKE_GH_RECORD", scratch.join("gh.record"))
         .env("FAKE_CARGO_LOG", &cargo_log)
         .env("FAKE_COMMITS", &commits)
         .env("FAKE_TITLE_CALLS", scratch.join("title-calls"))
         .env("FAKE_BASE_CALLS", scratch.join("base-calls"))
         .env("FAKE_HEAD_BRANCH_CALLS", scratch.join("head-branch-calls"))
-        .env("TMPDIR", &tmp);
+        .env("TMPDIR", tmp);
     if let Some(cwd) = cwd {
         command.current_dir(cwd);
     }
@@ -382,17 +444,8 @@ printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 fil
     }
     let output = command.output().expect("run controlled merge workflow");
 
-    let run = Run {
-        leftover: std::fs::read_dir(&tmp)
-            .expect("read the wrapper's temporary directory")
-            .map(|entry| {
-                entry
-                    .expect("a temporary directory entry")
-                    .file_name()
-                    .to_string_lossy()
-                    .into_owned()
-            })
-            .collect(),
+    Run {
+        leftover: harness.leftover(),
         status: output.status,
         stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
         stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
@@ -401,9 +454,7 @@ printf '%s\n' 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 fil
             .expect("read the body the controlled merge would record"),
         cargo_log: read_if_present(&cargo_log).expect("read controlled cargo log"),
         commits: read_if_present(&commits).expect("read commits received by controlled gate"),
-    };
-    let _ = std::fs::remove_dir_all(&scratch);
-    run
+    }
 }
 
 /// A gate from one repository never judges another repository's pull request.
@@ -652,7 +703,7 @@ fn a_value_taking_flag_with_no_value_is_named_and_refused() {
         return;
     };
     for flag in ["--subject", "--body-file"] {
-        let output = Command::new("bash")
+        let output = support::bash::bash()
             .arg(root.join("scripts/merge-pr.sh"))
             .args(["42", flag])
             .output()
@@ -713,7 +764,7 @@ fn every_usage_refusal_carries_the_wrappers_own_diagnostic() {
     // empty one is something a person wrote rather than a side effect of touching something else, and
     // `clippy::const_is_empty` refuses the assertion as a constant expression besides.
     for (args, phrase) in shapes {
-        let output = Command::new("bash")
+        let output = support::bash::bash()
             .arg(root.join("scripts/merge-pr.sh"))
             .args(args)
             .output()
@@ -811,22 +862,43 @@ fn every_call_names_one_repository_and_another_one_is_refused() {
 
     // Refused before anything is read: a URL names a repository this wrapper does not read its evidence from.
     let url = run_wrapper(&root, "subjects", &[]);
-    let refused = std::process::Command::new("bash")
-        .arg(root.join("scripts/merge-pr.sh"))
-        .args(["https://github.com/other/thing/pull/42", "--body-file"])
-        .arg(root.join("README.md"))
-        .output()
-        .expect("run the wrapper with a cross-repository URL");
-    assert_eq!(
-        refused.status.code(),
-        Some(2),
-        "a pull-request URL must be refused as a usage error"
+    // Any selector holding `:` — a URL in either case, or another fork's `owner:branch` — names a repository.
+    // Refused before `gh` is reached, which a stub first on `PATH` holds: it leaves a mark if it runs.
+    let harness = support::fixture::Harness::claim("tianheng-selector-refusal");
+    let bin = harness.bin();
+    let mark = harness.path().join("reached");
+    support::fixture::write_executable(
+        &bin.join("gh"),
+        "#!/usr/bin/env bash\nprintf gh >> \"$FAKE_REACHED\"\nexit 99\n",
     );
-    let stderr = String::from_utf8_lossy(&refused.stderr);
-    assert!(
-        stderr.contains("merge message:") && stderr.contains("names its own repository"),
-        "the refusal must say why, got {stderr:?}"
-    );
+    for selector in [
+        "https://github.com/other/thing/pull/42",
+        "HTTPS://github.com/other/thing/pull/42",
+        "other:branch",
+    ] {
+        let refused = support::bash::bash()
+            .arg(root.join("scripts/merge-pr.sh"))
+            .args([selector, "--body-file"])
+            .arg(root.join("README.md"))
+            .env("PATH", support::fixture::path_with(bin))
+            .env("FAKE_REACHED", &mark)
+            .output()
+            .expect("run the wrapper with a cross-repository selector");
+        assert_eq!(
+            refused.status.code(),
+            Some(2),
+            "`{selector}` must be refused as a usage error"
+        );
+        let stderr = String::from_utf8_lossy(&refused.stderr);
+        assert!(
+            stderr.contains("merge message:") && stderr.contains("names its own repository"),
+            "the refusal of `{selector}` must say why, got {stderr:?}"
+        );
+        assert!(
+            !mark.exists(),
+            "`{selector}` reached `gh` before it was refused"
+        );
+    }
 
     // And on the accepted path, every invocation carries the one identity this checkout resolved.
     let invocations: Vec<&str> = url
@@ -1191,28 +1263,19 @@ fn an_unreadable_body_file_is_unjudgeable_rather_than_an_empty_body() {
 
 /// Whether a `0o000` file is unreadable to this process — root, and some filesystems, ignore the mode.
 ///
-/// Asked of a file this function makes and removes, so the answer cannot come from the subject under test.
+/// Asked of a file this function makes and removes, so the answer cannot come from the subject under test. The
+/// asking is [`xingbiao::Unreadable`]'s, so this direction's skip follows the workspace's one policy: outside
+/// `TIANHENG_WORKSPACE_TESTS` a mode that does not bite skips it, and inside, where a silent skip reads as
+/// coverage, it refuses. A probe that cannot be written refuses too, rather than reading as a mode that does not
+/// bite.
 fn mode_is_enforced() -> bool {
-    use std::os::unix::fs::PermissionsExt;
-
     let probe = std::env::temp_dir().join(format!(
         "tianheng-mode-probe-{}-{}",
         std::process::id(),
         MODE_PROBE.fetch_add(1, Ordering::Relaxed)
     ));
-    if std::fs::write(&probe, b"probe").is_err() {
-        return false;
-    }
-    let mut permissions = match std::fs::metadata(&probe) {
-        Ok(metadata) => metadata.permissions(),
-        Err(_) => return false,
-    };
-    permissions.set_mode(0o000);
-    if std::fs::set_permissions(&probe, permissions).is_err() {
-        let _ = std::fs::remove_file(&probe);
-        return false;
-    }
-    let enforced = std::fs::read_to_string(&probe).is_err();
+    std::fs::write(&probe, b"probe").expect("write this direction's own mode probe");
+    let enforced = xingbiao::Unreadable::try_new(&probe).is_some();
     let _ = std::fs::remove_file(&probe);
     enforced
 }
@@ -1222,10 +1285,10 @@ static MODE_PROBE: AtomicUsize = AtomicUsize::new(0);
 /// The wrapper leaves no temporary file behind, on the path that completes the act as well as on the paths that
 /// do not.
 ///
-/// **The successful path was the one not cleaned.** Cleanup was left to `trap 'rm -f …' EXIT`, and an EXIT trap
-/// does not run when `exec` replaces the shell image — measured, `bash -c 'trap "echo T" EXIT; exec true'` prints
-/// nothing while the same script without `exec` prints `T`. So the trap fired on every path where nothing
-/// happened and was skipped on the one path that merges: three successful runs left three empty files.
+/// **The successful path is the one a trap can miss.** An EXIT trap does not run when `exec` replaces the shell
+/// image — measured, `bash -c 'trap "echo T" EXIT; exec true'` prints nothing while the same script without `exec`
+/// prints `T` — so a wrapper that `exec`d its act would have to remove the file itself. No wrapper does:
+/// `perform_the_act` runs the act, so the trap covers the path that merges as it covers every other.
 ///
 /// Asserted over the whole of an isolated `TMPDIR` rather than over one known name, so a temporary file added
 /// later is covered without this direction being touched. Both halves, because removing the trap would satisfy
@@ -1243,7 +1306,7 @@ fn no_temporary_file_survives_the_wrapper() {
     );
     assert!(
         completed.leftover.is_empty(),
-        "the path that completes the merge left {:?} behind — an `exec` never reaches an EXIT trap",
+        "the path that completes the merge left {:?} behind",
         completed.leftover
     );
 
@@ -1725,26 +1788,22 @@ fn a_pull_request_no_workflow_has_claimed_stops_before_the_merge() {
 
 /// Every shape the reader has to decide, and the ones it must leave alone.
 ///
-/// **The direction reads one real file, so nothing exercised the shapes that file does not have.** Its
-/// documentation listed three ways a job could be lost and the repair closed two; the third — a job key at a
-/// depth the reader did not expect — stayed open because it loses a **key** rather than a **name**, so the set
-/// equality holds, nothing is carried, and the direction passes. A fixture is what asks the question the real
-/// file cannot.
+/// **The direction reads one real file, so nothing exercises the shapes that file does not have.** A shape
+/// that loses a **key** rather than a **name** leaves the set equality holding and nothing carried, so the
+/// direction passes over it; a fixture is what asks the question the real file cannot.
 ///
 /// The rows that must NOT react carry as much as the rows that must: a `steps:` entry may legitimately carry
-/// `if:` without the job's own conclusion moving, and a reader that refused it would refuse correct code —
-/// which is the narrowing the direction argues for and would silently lose if the depth rule were widened
-/// carelessly.
+/// `if:` without the job's own conclusion moving, and a reader that refused it would refuse correct code.
 #[test]
 fn the_workflow_reader_decides_every_shape_of_the_block() {
     let base = |keys: &str| {
         format!(
-            "name: ci\n\non:\n  push:\n    branches: [main]\n\njobs:\n  alpha:\n{keys}\n  beta:\n    name: B\n    runs-on: x\n"
+            "name: ci\n\non:\n  push:\n    branches: [main]\n  pull_request:\n\njobs:\n  alpha:\n{keys}\n  beta:\n    name: B\n    runs-on: x\n"
         )
     };
 
     // (label, document, jobs it must find, keys it must carry)
-    let rows: [(&str, String, usize, usize); 15] = [
+    let rows: [(&str, String, usize, usize); 20] = [
         ("clean", base("    name: A\n    runs-on: x\n"), 2, 0),
         (
             "if: at the file's own key depth",
@@ -1752,19 +1811,17 @@ fn the_workflow_reader_decides_every_shape_of_the_block() {
             2,
             1,
         ),
-        // The shape that shipped unread. Legal YAML — indentation only has to be consistent within one
-        // mapping — and the old reader found the job, held the equality, and examined no key.
+        // Legal YAML: indentation only has to be consistent within one mapping.
         (
             "if: at a deeper key depth the whole job uses",
             base("      name: A\n      if: x\n      runs-on: x\n"),
             2,
             1,
         ),
-        // A column-0 comment inside the block: a defect this reader once had, kept as a row so it cannot
-        // come back.
+        // A column-0 comment inside the block ends nothing.
         (
             "a column-0 comment does not end the block",
-            "name: ci\n\njobs:\n  alpha:\n    name: A\n# --- divider ---\n  beta:\n    name: B\n    if: x\n"
+            "name: ci\n\non: pull_request\n\njobs:\n  alpha:\n    name: A\n# --- divider ---\n  beta:\n    name: B\n    if: x\n"
                 .to_string(),
             2,
             1,
@@ -1783,18 +1840,50 @@ fn the_workflow_reader_decides_every_shape_of_the_block() {
             2,
             0,
         ),
-        // The same defect on the block's other axis, and the row this fixture lacked when it was written:
-        // the job **names** sit deeper than two. A reader assuming that width finds no job at all, and the
-        // set equality then reports every job missing rather than the key it never examined — loud, but for
-        // the wrong reason. Derived, it simply reads.
-        // A path filter is a trigger condition and belongs under `on:`, where it does move whether a job
-        // runs at all.
+        // A filter on the pull-request event is a trigger condition: it decides whether a pull request's head
+        // gets this workflow's checks at all. Every key GitHub admits there is such a filter.
         (
             "paths: under on: reacts",
-            "name: ci\n\non:\n  push:\n    paths:\n      - src/**\n\njobs:\n  alpha:\n    name: A\n"
+            "name: ci\n\non:\n  pull_request:\n    paths:\n      - src/**\n\njobs:\n  alpha:\n    name: A\n"
                 .to_string(),
             1,
             1,
+        ),
+        (
+            "branches: on the pull-request event reacts",
+            "name: ci\n\non:\n  pull_request:\n    branches: [main]\n\njobs:\n  alpha:\n    name: A\n"
+                .to_string(),
+            1,
+            1,
+        ),
+        (
+            "types: on the pull-request event reacts",
+            "name: ci\n\non:\n  pull_request:\n    types: [opened]\n\njobs:\n  alpha:\n    name: A\n"
+                .to_string(),
+            1,
+            1,
+        ),
+        // Must NOT react: a push filter decides which pushes run the workflow, and a pull request's checks
+        // come from its own event.
+        (
+            "a push filter moves no pull request's checks",
+            "name: ci\n\non:\n  push:\n    branches: [main]\n    paths: [src/**]\n  pull_request:\n\njobs:\n  alpha:\n    name: A\n"
+                .to_string(),
+            1,
+            0,
+        ),
+        // A workflow no pull request runs is the widest filter of all.
+        (
+            "no pull-request event reacts",
+            "name: ci\n\non: push\n\njobs:\n  alpha:\n    name: A\n".to_string(),
+            1,
+            1,
+        ),
+        (
+            "pull_request_target is a pull-request event",
+            "name: ci\n\non: pull_request_target\n\njobs:\n  alpha:\n    name: A\n".to_string(),
+            1,
+            0,
         ),
         // Must NOT react: `paths` is an ordinary input name for several published actions, and a step input
         // moves no job's conclusion. Reading the key at any depth refused this.
@@ -1808,7 +1897,7 @@ fn the_workflow_reader_decides_every_shape_of_the_block() {
         // exclusive, and this row is the one that fails **open** if they are treated as such.
         (
             "a flow-form trigger block carries its filter on the key's line",
-            "name: ci\n\non: {push: {branches: [main], paths: ['src/**']}}\n\njobs:\n  alpha:\n    name: A\n"
+            "name: ci\n\non: {pull_request: {paths: ['src/**']}}\n\njobs:\n  alpha:\n    name: A\n"
                 .to_string(),
             1,
             1,
@@ -1817,7 +1906,7 @@ fn the_workflow_reader_decides_every_shape_of_the_block() {
         // This is where the rule stated at depth 0 was not applied.
         (
             "a flow-form event under a block-form trigger carries its filter",
-            "name: ci\n\non:\n  push: {branches: [main], paths: ['src/**']}\n\njobs:\n  alpha:\n    name: A\n"
+            "name: ci\n\non:\n  pull_request: {paths: ['src/**']}\n\njobs:\n  alpha:\n    name: A\n"
                 .to_string(),
             1,
             1,
@@ -1826,7 +1915,7 @@ fn the_workflow_reader_decides_every_shape_of_the_block() {
         // non-positional `contains` this replaced reacted to it.
         (
             "a key named in a comment is not a key",
-            "name: ci\n\non: {push: {branches: [main]}} # no paths: filter here\n\njobs:\n  alpha:\n    name: A\n"
+            "name: ci\n\non: {push: {branches: [main]}, pull_request: {}} # no paths: filter here\n\njobs:\n  alpha:\n    name: A\n"
                 .to_string(),
             1,
             0,
@@ -1838,26 +1927,24 @@ fn the_workflow_reader_decides_every_shape_of_the_block() {
             1,
             0,
         ),
-        // The job side is not read on its own line **on purpose**: a flow-form job header ends in no colon
-        // at the name depth, so no job is found and the direction's set equality says so loudly. Pinned so
-        // the asymmetry is a decision on record rather than an omission someone later "fixes" into silence.
+        // A flow-form job body is the same mapping as a block-form one, so its job and its key are read.
         (
-            "a flow-form job body is lost rather than misread",
-            "name: ci\n\njobs:\n  alpha: {name: A, if: x}\n".to_string(),
-            0,
-            0,
+            "a flow-form job body is read as a job",
+            "name: ci\n\non: pull_request\n\njobs:\n  alpha: {name: A, if: x}\n".to_string(),
+            1,
+            1,
         ),
         // The quoted spelling names the same block: YAML 1.1 reads a bare `on` as a boolean.
         (
             "paths: under a quoted on: still reacts",
-            "name: ci\n\n\"on\":\n  push:\n    paths:\n      - src/**\n\njobs:\n  alpha:\n    name: A\n"
+            "name: ci\n\n\"on\":\n  pull_request:\n    paths:\n      - src/**\n\njobs:\n  alpha:\n    name: A\n"
                 .to_string(),
             1,
             1,
         ),
         (
             "the whole job block is indented deeper",
-            "name: ci\n\njobs:\n    alpha:\n      name: A\n      if: x\n    beta:\n      name: B\n"
+            "name: ci\n\non: pull_request\n\njobs:\n    alpha:\n      name: A\n      if: x\n    beta:\n      name: B\n"
                 .to_string(),
             2,
             1,
@@ -1884,151 +1971,76 @@ fn the_workflow_reader_decides_every_shape_of_the_block() {
 
 /// What a workflow's job block declares: the job names, and any key that lets a job skip.
 ///
-/// Split from the direction so a fixture can hand it shapes the real file does not currently have — which is
-/// the half the previous form lacked, and the reason it shipped blind to one of the three losses its own
-/// documentation listed.
+/// Split from the direction so a fixture can hand it shapes the real file does not currently have.
 ///
-/// **Depths are read out of the file, not assumed.** The first form matched a job name at two spaces and a
-/// job key at four. YAML fixes neither: indentation only has to be consistent within a mapping, so a job
-/// whose keys sit at six is the same document. Measured — `pyyaml` parses it, and with `if:` among those
-/// six-space keys the old reader found the job, held the set equality, examined no key, and passed. Binding
-/// the width to a declared literal would have made that fail loudly, which is better than passing; deriving
-/// it makes the question not arise, and it removes a literal rather than adding one.
-///
-/// So: the job-name depth is whatever the first structural line under `jobs:` sits at, and each job's key
-/// depth is whatever its own first deeper non-sequence line sits at. A `-` opens a sequence item, so a
-/// `steps:` entry written at the key's own depth is not read as a key — which is what keeps the step-level
-/// narrowing the direction argues for.
+/// **Read from the workflow's structure.** Which job a key belongs to, and whether it sits on the job or on a
+/// step inside it, is the grammar's answer: a job's own keys are the keys of its mapping, a step's `if:` is a
+/// key of a step, and a trigger filter is any key under an event that runs the workflow for a pull request. Indentation width, a comment between
+/// jobs, a quoted `"on"`, a flow-form body and a flow-form trigger are therefore not shapes this has to
+/// decide — the parser has, and a shape it cannot hold is refused rather than read past.
 struct WorkflowShape {
     jobs: BTreeSet<String>,
     carried: Vec<String>,
 }
 
-/// What a line opens, and what it still carries.
-///
-/// **One decision in one place.** A line that opens a block may also carry that block's content, and a reader
-/// treating the two as exclusive loses whatever sits after the colon. That rule was applied at the top level
-/// and not one level down, so a block-form `on:` whose event was written in flow form —
-/// `push: {branches: [main], paths: ['src/**']}`, ordinary YAML style — carried its filter past the reader.
-/// The key is decoded rather than prefix-matched, so `once:` is not `on:`.
-fn opens(line: &str) -> (&str, &str) {
-    let (key, rest) = line.split_once(':').unwrap_or((line, ""));
-    (key.trim().trim_matches(['"', '\'']), rest)
-}
-
-/// Whether `text` carries `key` **in key position** — the reader's one positional match.
-///
-/// **Three spellings of one question is what let a non-positional one in.** The reader asked it with
-/// `starts_with` twice and `contains` once, and the `contains` form reacted to a trailing comment:
-/// `on: {push: {branches: [main]}} # no paths: filter` named a filter that is a word in a sentence. Splitting
-/// on the flow separators puts every key at the start of its own segment, so a mention anywhere else is not
-/// one — which is the same distinction the attribution marks in `merge_message_gate` draw between a line that
-/// carries a trailer and a sentence that names it.
-///
-/// A block-form line is the degenerate case of the same rule: `paths:` alone splits to one segment that is
-/// itself. So one function answers for both forms, at both levels.
-fn carries(text: &str, key: &str) -> bool {
-    text.split(['{', ','])
-        .any(|segment| segment.trim_start().starts_with(key))
-}
-
 fn workflow_shape(text: &str) -> WorkflowShape {
-    // Two key classes, each read at the position it can occupy. A path filter is a **trigger** condition
-    // and lives under `on:`; the other three sit on a job. Reading the pair at any depth instead was
-    // justified as *those two keys have no other meaning anywhere in it* — a claim about this file's current
-    // content rather than about the keys, and the same kind of assumption this reader removed for both
-    // indentation widths. Measured: a step input named `paths` — the shape `dorny/paths-filter` and
-    // `tj-actions/changed-files` take — made the direction refuse, telling a maintainer that a job can now
-    // legitimately skip about an input that moves no job's conclusion.
+    // Two key classes, each read at the position it can occupy. A **trigger** condition is any key under an
+    // event that runs this workflow for a pull request — every key GitHub admits there filters which heads it
+    // runs on — and a workflow subscribing to no such event never runs for one; `push:`'s filters move no pull
+    // request's checks. The other three keys sit on a job. A step input named `paths` — the shape
+    // `dorny/paths-filter` and `tj-actions/changed-files` take — moves no job's conclusion, and neither does
+    // a step's own `if:`.
     //
     // **They also reach the rollup by two mechanisms, so a miss costs two different things.** A job key moves
     // a *check's conclusion*: the job runs, reports `SKIPPED`, and the silent arm refuses — missing one costs
     // a delay. A trigger filter stops the workflow *running at all*, so its checks are **absent** from the
     // rollup rather than skipped, and what happens then depends on whether anything else claimed the head.
-    // [`a_missed_path_filter_costs_a_delay_only_while_one_workflow_exists`] holds the condition that keeps
+    // [`a_missed_event_filter_costs_a_delay_only_while_one_workflow_exists`] holds the condition that keeps
     // the second cost equal to the first.
-    const ON_THE_JOB: [&str; 3] = ["if:", "needs:", "continue-on-error:"];
-    const ON_THE_WORKFLOW: [&str; 2] = ["paths:", "paths-ignore:"];
+    const ON_THE_JOB: [&str; 3] = ["if", "needs", "continue-on-error"];
+    const PULL_REQUEST_EVENTS: [&str; 2] = ["pull_request", "pull_request_target"];
 
-    let mut jobs = BTreeSet::new();
+    let workflow = support::workflow::parse(text).unwrap_or_else(|why| {
+        panic!("the workflow cannot be read, so which of its jobs can skip is not known: {why}")
+    });
     let mut carried = Vec::new();
-    let mut in_jobs = false;
-    let mut in_on = false;
-    let mut job_name_depth: Option<usize> = None;
-    let mut key_depth: Option<usize> = None;
-    let mut in_job = false;
-
-    for (index, line) in text.lines().enumerate() {
-        let trimmed = line.trim_start();
-        // A blank line and a comment end nothing — only a real top-level key does.
-        if trimmed.is_empty() || trimmed.starts_with('#') {
-            continue;
-        }
-        let depth = line.len() - trimmed.len();
-
-        if depth == 0 {
-            // YAML 1.1 reads a bare `on` as a boolean, so a workflow may quote the key; both spellings name
-            // the same block. Taken off the key rather than matched as a prefix, so `once:` is not `on:`.
-            let (top, rest) = opens(line);
-            in_jobs = top == "jobs";
-            in_on = top == "on";
-            in_job = false;
-            // **Entering a block and reading it are not exclusive.** This branch used to set the flag and
-            // `continue`, so the rest of its own line was seen by no reader — and YAML's flow form puts the
-            // whole block there: `on: {push: {paths: ['src/**']}}` carries a real path filter that the
-            // premise then reported intact. That direction is **open**, which is the one this machinery
-            // exists to close.
-            //
-            // The job side is deliberately not given the same treatment, because it already fails the other
-            // way: a flow-form `jobs: {alpha: {…}}` leaves no line ending in a colon at the name depth, so
-            // the set equality reports the jobs missing. Measured — `missing ["examples"]`. Reading it here
-            // would turn a loud failure into a quiet pass unless the flow body were parsed, which is a YAML
-            // parser rather than a line reader.
-            if in_on {
-                if let Some(key) = ON_THE_WORKFLOW.iter().find(|key| carries(rest, key)) {
-                    carried.push(format!("  ci.yml:{}: {key}", index + 1));
+    let runs_for_a_pull_request = |event: &str| PULL_REQUEST_EVENTS.contains(&event);
+    let subscribed = match &workflow.on {
+        Some(support::workflow::Node::Mapping { entries, .. }) => {
+            let events: Vec<_> = entries
+                .iter()
+                .filter(|entry| runs_for_a_pull_request(&entry.key))
+                .collect();
+            for event in &events {
+                for (key, line) in event.value.keys_below() {
+                    carried.push(format!("  ci.yml:{line}: {}.{key}:", event.key));
                 }
             }
-            job_name_depth = None;
-            continue;
+            !events.is_empty()
         }
-        if in_on {
-            // The same rule as the depth-0 branch, which is the point: an event may be written in flow form
-            // under a block-form `on:`, and `carries` reads a block-form line as the degenerate case.
-            if let Some(key) = ON_THE_WORKFLOW.iter().find(|key| carries(trimmed, key)) {
-                carried.push(format!("  ci.yml:{}: {key}", index + 1));
+        Some(support::workflow::Node::Sequence { items, .. }) => items.iter().any(|item| {
+            matches!(item, support::workflow::Node::Scalar { value, .. } if runs_for_a_pull_request(value))
+        }),
+        Some(support::workflow::Node::Scalar { value, .. }) => runs_for_a_pull_request(value),
+        None => false,
+    };
+    if !subscribed {
+        let line = workflow
+            .on
+            .as_ref()
+            .map_or(1, support::workflow::Node::line);
+        carried.push(format!(
+            "  ci.yml:{line}: on: subscribes to no pull-request event, so no pull request's head gets its checks"
+        ));
+    }
+    for job in &workflow.jobs {
+        for (key, line) in &job.keys {
+            if ON_THE_JOB.contains(&key.as_str()) {
+                carried.push(format!("  ci.yml:{line}: {key}:"));
             }
-            continue;
-        }
-        if !in_jobs {
-            continue;
-        }
-
-        let sequence = trimmed.starts_with('-');
-        let names_depth = *job_name_depth.get_or_insert(depth);
-
-        if depth == names_depth && !sequence && trimmed.ends_with(':') {
-            jobs.insert(trimmed.trim_end_matches(':').to_string());
-            key_depth = None;
-            in_job = true;
-            continue;
-        }
-        if !in_job || depth <= names_depth || sequence {
-            continue;
-        }
-        let keys_depth = *key_depth.get_or_insert(depth);
-        if depth != keys_depth {
-            continue;
-        }
-        // Two statements rather than a `let` chain: chained `let` in an `if` condition is stable well past
-        // this workspace's declared `rust-version`, and the local Definition of Done compiles on whatever
-        // toolchain is installed. This is the shape `require_ci_green`'s own header records riding nineteen
-        // merges green here and red in CI.
-        if let Some(key) = ON_THE_JOB.iter().find(|key| trimmed.starts_with(**key)) {
-            carried.push(format!("  ci.yml:{}: {key}", index + 1));
         }
     }
-
+    let jobs = workflow.jobs.iter().map(|job| job.id.clone()).collect();
     WorkflowShape { jobs, carried }
 }
 
@@ -2051,9 +2063,9 @@ const JOBS: [&str; 8] = [
 
 /// The trigger keys' severity rests on this directory holding one file, so that is held rather than assumed.
 ///
-/// **Five keys, two mechanisms, and they were priced as one.** `if:`, `needs:` and `continue-on-error:` move
-/// a *check's conclusion*: the job runs, reports `SKIPPED`, appears in the rollup, and
-/// `require_ci_green`'s silent arm refuses. A workflow-level `paths:` filter does something else — the
+/// **Two kinds of key, two mechanisms, and they were priced as one.** `if:`, `needs:` and `continue-on-error:`
+/// move a *check's conclusion*: the job runs, reports `SKIPPED`, appears in the rollup, and
+/// `require_ci_green`'s silent arm refuses. A filter on the pull-request event does something else — the
 /// workflow **never triggers**, so its checks are absent from the rollup rather than reported skipped.
 ///
 /// Today that still refuses, and by an accident of arithmetic: `ci.yml` is the only file here, so a
@@ -2067,7 +2079,7 @@ const JOBS: [&str; 8] = [
 /// repository removes on sight; it is held here instead. A second workflow is legitimate work — this fails
 /// so that the trigger pair's cost is re-priced when it happens, not discovered afterwards.
 #[test]
-fn a_missed_path_filter_costs_a_delay_only_while_one_workflow_exists() {
+fn a_missed_event_filter_costs_a_delay_only_while_one_workflow_exists() {
     let Some(root) = workspace_root() else {
         return;
     };
@@ -2114,41 +2126,35 @@ fn a_missed_path_filter_costs_a_delay_only_while_one_workflow_exists() {
 /// it did not run. Nothing reaches a merge either way. What this buys is that the local Definition of Done
 /// says so first, with the key and its line, instead of the round trip through CI.
 ///
-/// **Which is why its remaining blind spots are not false negatives — for three of the five keys
-/// unconditionally, and for two of them on a condition that is held.** `if:`, `needs:` and
-/// `continue-on-error:` move a check's conclusion, so a job carrying one appears in the rollup as `SKIPPED`
-/// whatever this reader does. `paths:` and `paths-ignore:` stop the workflow triggering, so its checks are
+/// **Which is why its remaining blind spots are not false negatives — for the job keys unconditionally, and
+/// for the trigger filters on a condition that is held.** `if:`, `needs:` and `continue-on-error:` move a
+/// check's conclusion, so a job carrying one appears in the rollup as `SKIPPED` whatever this reader does. A
+/// filter on the pull-request event stops the workflow triggering, so its checks are
 /// **absent**; that still refuses only while `ci.yml` is the sole workflow, because an empty rollup takes the
 /// *no workflow has claimed this head* arm.
 ///
-/// Stating it once for all five would have rested a claim about the wrapper on the number of files in a
-/// directory. [`a_missed_path_filter_costs_a_delay_only_while_one_workflow_exists`] holds that count instead,
+/// Stating it once for all of them would have rested a claim about the wrapper on the number of files in a
+/// directory. [`a_missed_event_filter_costs_a_delay_only_while_one_workflow_exists`] holds that count instead,
 /// so a second workflow re-opens the question where it is priced rather than after.
 ///
 /// Seven review rounds found five positions in the reader below, two of them failing open — and against the
 /// old framing each was a hole in something load-bearing. Against this one, a miss costs a few minutes, and
-/// the reader is kept rather than deleted because a few minutes is worth fifteen fixture rows already
-/// written.
+/// the reader is kept rather than deleted because a few minutes is worth the fixture rows already written.
 ///
 /// **Job level, not the whole file, and the difference is not tidiness.** A `steps:` entry may carry `if:` or
 /// `continue-on-error:` without the job's own conclusion moving: the step is skipped and the job still reports
 /// success, so the rollup this wrapper reads is unaffected and refusing it would refuse correct code. What
-/// moves a job to `SKIPPED` is a key on the job itself, or a workflow-level path filter — so those are what
-/// this reads.
+/// moves a job to `SKIPPED` is a key on the job itself, or a filter on the pull-request event — so those are
+/// what this reads.
 ///
 /// **The names are held against [`JOBS`] both ways**, which is the form `AGENTS.md` prescribes for a claim
 /// something downstream filters on — *the literal is not a weakening here; it is what gives the enumerator
 /// something to disagree with*. The first form asserted only that the reader had found *some* job, which
 /// catches a read that found nothing and cannot catch one that found **fewer**.
 ///
-/// **Three ways this reader could lose a job were named, two were closed, and the third took another round.**
-/// The latch (a column-0 comment ending the block) and the equality landed together; the two indentation
-/// assumptions did not, and one of them — a job key at a depth other than the assumed four — loses a **key**
-/// rather than a **name**, so the equality holds, nothing is carried, and the direction passes. Measured, on
-/// a document `pyyaml` accepts: with `if:` among a job's six-space keys the reader found the job, held the
-/// equality, examined no key, and reported the premise intact. Both assumptions are now derived from the
-/// document instead — see [`workflow_shape`] — which removes a literal rather than adding one, and
-/// [`the_workflow_reader_decides_every_shape_of_the_block`] holds each shape including the two that must not
+/// **A loss of a key rather than a name passes the equality**, so which job and key belong where is read
+/// from the parsed workflow — see [`workflow_shape`] — and
+/// [`the_workflow_reader_decides_every_shape_of_the_block`] holds each shape, including the ones that must not
 /// react.
 ///
 /// What the equality is for is what remains after that: a loss nobody has thought of yet. It names which jobs
@@ -2330,7 +2336,7 @@ fn a_flag_shaped_value_is_refused_in_every_value_position() {
     };
     for arm in ["--subject", "--body-file"] {
         for value in ["--admin", "--repo", "--delete-branch", "-t"] {
-            let output = Command::new("bash")
+            let output = support::bash::bash()
                 .arg(root.join("scripts/merge-pr.sh"))
                 .args(["42", arm, value])
                 .output()
@@ -2354,13 +2360,27 @@ fn a_flag_shaped_value_is_refused_in_every_value_position() {
 ///
 /// **The corpus is a parameter, and it used to be one file.** The reaction was written for `ci.yml` and the
 /// two places the class matters most were left out: both wrappers front an irreversible act and both ran
-/// `printf '%s' "$output" | grep -qE …` under `set -Eeuo pipefail`. `scripts/` is where `gate_exit_classes`
-/// already keeps its own wrapper corpus, so this is a list rather than new machinery.
-const RUNS_SHELL_UNDER_PIPEFAIL: [&str; 3] = [
-    ".github/workflows/ci.yml",
-    "scripts/merge-pr.sh",
-    "scripts/publish.sh",
-];
+/// `printf '%s' "$output" | grep -qE …` under `set -Eeuo pipefail`.
+///
+/// **The scripts come from the one enumeration of them, not from a list.** A list naming the two wrappers
+/// left out the library they source, which runs under the same `set -Eeuo pipefail` the moment it is loaded;
+/// [`kanhe::gate_identity::tracked_scripts`] is what a direction that must see every script reads, and it
+/// refuses an empty listing, so a corpus that lost its scripts cannot report clean over none.
+///
+/// Each file is read as text rather than through `support::workflow`, because what these scans judge is
+/// shell; `repository-checks` states that choice and the over-inclusion it costs.
+fn pipefail_corpus(root: &Path) -> Vec<(String, String)> {
+    const WORKFLOW: &str = ".github/workflows/ci.yml";
+    let workflow = std::fs::read_to_string(root.join(WORKFLOW)).unwrap_or_else(|error| {
+        panic!("read {WORKFLOW} — the pipelines this holds are written in it: {error}")
+    });
+    let mut corpus = vec![(WORKFLOW.to_string(), workflow)];
+    corpus.extend(
+        kanhe::gate_identity::tracked_scripts(root)
+            .unwrap_or_else(|error| panic!("the scripts this holds cannot be enumerated: {error}")),
+    );
+    corpus
+}
 
 /// Whether a pipeline stage stops before its producer finishes, and under what name.
 ///
@@ -2433,13 +2453,7 @@ fn no_step_reads_a_value_through_a_pipeline_that_stops_early() {
         return;
     };
     let mut standing = Vec::new();
-    let mut read = 0usize;
-    for name in RUNS_SHELL_UNDER_PIPEFAIL {
-        let path = root.join(name);
-        let text = std::fs::read_to_string(&path).unwrap_or_else(|error| {
-            panic!("read {name} — the pipelines this holds are written in it: {error}")
-        });
-        read += 1;
+    for (name, text) in pipefail_corpus(&root) {
         for (number, line) in text.lines().enumerate() {
             let trimmed = line.trim();
             // Comments are excluded by position: the paragraphs recording this measurement name the very
@@ -2459,11 +2473,6 @@ fn no_step_reads_a_value_through_a_pipeline_that_stops_early() {
             }
         }
     }
-    assert_eq!(
-        read,
-        RUNS_SHELL_UNDER_PIPEFAIL.len(),
-        "every file in the corpus must be read, or this reports clean over the ones it never opened"
-    );
     assert!(
         standing.is_empty(),
         "these pipelines fail for their own shape rather than for what they read:\n{}",
@@ -2488,12 +2497,7 @@ fn no_step_reads_a_value_through_a_process_substitution() {
         return;
     };
     let mut standing = Vec::new();
-    let mut read = 0usize;
-    for name in RUNS_SHELL_UNDER_PIPEFAIL {
-        let path = root.join(name);
-        let text =
-            std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("read {name}: {error}"));
-        read += 1;
+    for (name, text) in pipefail_corpus(&root) {
         for (number, line) in text.lines().enumerate() {
             let trimmed = line.trim();
             // By position, as its siblings do: the paragraphs recording this write the shape they forbid.
@@ -2511,11 +2515,6 @@ fn no_step_reads_a_value_through_a_process_substitution() {
             }
         }
     }
-    assert_eq!(
-        read,
-        RUNS_SHELL_UNDER_PIPEFAIL.len(),
-        "every file in the corpus must be read, or this reports clean over the ones it never opened"
-    );
     assert!(
         standing.is_empty(),
         "these derivations stand where their status cannot be seen:\n{}",
@@ -2533,11 +2532,12 @@ fn no_step_reads_a_value_through_a_process_substitution() {
 /// argue that a script choosing its exit class in one place beats every author choosing it again; a workflow
 /// whose steps each decide their own strictness is that same defect one layer out.
 ///
-/// `defaults.run.shell` makes it one decision. This holds the decision rather than the habit: a step-level
-/// `shell:` naming `bash` without the flags takes the strictness back, and a `set -` line inside a `run:`
-/// block puts the decision in two places again — the shape where one of them drifts.
+/// `defaults.run.shell` makes it one decision. This holds the decision rather than the habit: a job- or
+/// step-level `shell:` other than the workflow's own takes the strictness back — whatever it names, since `sh`,
+/// `bash -e {0}` and a path to bash each run without `pipefail` — and a `set -` line inside a `run:` block puts
+/// the decision in two places again, the shape where one of them drifts.
 ///
-/// The corpus is the one file [`a_missed_path_filter_costs_a_delay_only_while_one_workflow_exists`] holds this
+/// The corpus is the one file [`a_missed_event_filter_costs_a_delay_only_while_one_workflow_exists`] holds this
 /// directory to. Comment lines are excluded by position: the paragraph in `ci.yml` that records this
 /// measurement writes the flags it forbids, so a reader matching the bare string would refuse its own reason.
 #[test]
@@ -2549,30 +2549,42 @@ fn shell_strictness_is_declared_once_for_the_whole_workflow() {
     let text = std::fs::read_to_string(&path)
         .expect("read .github/workflows/ci.yml — the strictness this holds is declared in it");
 
-    const STRICT_SHELL: &str = "shell: bash -euo pipefail {0}";
+    // Where the shell is declared is structure, and read from it: the workflow's `defaults.run.shell`, and
+    // any job's or step's own. What a `run:` body says about strictness is shell, and read as text below.
+    const STRICT_SHELL: &str = "bash -euo pipefail {0}";
+    let workflow = support::workflow::parse(&text).unwrap_or_else(|why| {
+        panic!("the workflow cannot be read, so where its shell is declared is not known: {why}")
+    });
     assert!(
-        text.contains(&format!("defaults:\n  run:\n    {STRICT_SHELL}\n")),
-        "{} declares no workflow-level `defaults: run: {STRICT_SHELL}`, so every `run:` step decides \
+        workflow
+            .defaults_shell
+            .as_ref()
+            .is_some_and(|shell| shell.value == STRICT_SHELL),
+        "{} declares no workflow-level `defaults: run: shell: {STRICT_SHELL}`, so every `run:` step decides \
          its own strictness and a pipeline's status is whatever its last stage returns",
         path.display()
     );
+    let declared = workflow.jobs.iter().flat_map(|job| {
+        job.defaults_shell
+            .iter()
+            .chain(job.steps.iter().filter_map(|step| step.shell.as_ref()))
+    });
 
     let mut lax = Vec::new();
+    for shell in declared {
+        if shell.value != STRICT_SHELL {
+            lax.push(format!(
+                "  {}:{}: `shell: {}` is not the workflow's `{STRICT_SHELL}`, so this run decides its own \
+                 strictness — remove the override, and the workflow's shell runs it",
+                path.display(),
+                shell.line,
+                shell.value
+            ));
+        }
+    }
     for (number, line) in text.lines().enumerate() {
         let trimmed = line.trim();
         if trimmed.starts_with('#') {
-            continue;
-        }
-        if let Some(shell) = trimmed.strip_prefix("shell:") {
-            let shell = shell.trim();
-            if shell.starts_with("bash") && !shell.contains("-euo pipefail") {
-                lax.push(format!(
-                    "  {}:{}: `shell: {shell}` names bash without `-euo pipefail`, taking back the \
-                     strictness the workflow declares",
-                    path.display(),
-                    number + 1
-                ));
-            }
             continue;
         }
         if trimmed.starts_with("set -") && trimmed.contains('e') {
@@ -2657,4 +2669,271 @@ fn what_ci_said_is_read_last_before_the_merge() {
         merge_at.saturating_sub(rollup[0] + 1),
         run.gh_log
     );
+}
+
+/// A completed merge says what it recorded: the pull request and the squash commit it became.
+///
+/// A silent exit 0 is indistinguishable, to the operator, from a wrapper that stopped before the act for a reason
+/// it did not print — so every merge was confirmed by reading GitHub afterwards.
+#[test]
+fn a_completed_merge_names_the_squash_commit_it_recorded() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "subjects", &[]);
+    assert_eq!(run.status.code(), Some(0), "{}{}", run.stdout, run.stderr);
+    assert!(
+        run.stdout
+            .contains("merged pull request 42 as 0123456789abcdef0123456789abcdef01234567"),
+        "the merge must name the squash commit it recorded, got stdout {:?}",
+        run.stdout
+    );
+}
+
+/// A release snapshot's merge, whose judged body is empty, is the judged act when GitHub records its subject alone.
+///
+/// The gate admits one message with an empty body, and GitHub records it as the subject with no separator: at
+/// `v0.6.0` and `v0.6.1`, `git log -1 --format=%B <tag>` is the subject followed by `\n\n` and `\n` respectively,
+/// which command substitution reads back as the subject alone. A comparison that appends `\n\n` to every subject
+/// refuses that record as not the judged act, after the one merge onto `main` a release makes.
+#[test]
+fn a_release_snapshot_s_empty_body_is_the_judged_act() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "release-snapshot", &[]);
+    assert_eq!(
+        run.status.code(),
+        Some(0),
+        "a release snapshot merged as judged must exit clean: {}{}",
+        run.stdout,
+        run.stderr
+    );
+    assert!(
+        run.stdout
+            .contains("merged pull request 42 as 0123456789abcdef0123456789abcdef01234567"),
+        "the release merge must name the squash commit it recorded, got stdout {:?}",
+        run.stdout
+    );
+}
+
+/// A merge gh does not complete, and GitHub reads as still open, is the unjudged class — never gh's own `1`.
+///
+/// Its sibling with gh at `0` is `a_merge_gh_reports_complete_but_github_reads_open_records_no_merge`.
+///
+/// gh exits `1` when it does not merge, and `1` is the class reserved for a gate that ran and refused — so a
+/// wrapper handing over its process to gh reported a moved head as a disagreement the gate never found. That no
+/// merge was recorded is said because the read-back observed it, not because gh's status implied it.
+#[test]
+fn a_merge_gh_does_not_complete_exits_the_unjudged_class() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "merge-refused", &[]);
+    assert_eq!(
+        run.status.code(),
+        Some(2),
+        "a merge gh did not complete is not a gate that refused: {}{}",
+        run.stdout,
+        run.stderr
+    );
+    assert!(
+        run.stderr
+            .contains("GitHub reads it as OPEN, so it records no merge"),
+        "the operator is told what GitHub reads after the failed act, got {:?}",
+        run.stderr
+    );
+}
+
+/// A merge gh reports as failed but GitHub reads as merged is a completed merge, and is reported as one.
+///
+/// A client can exit non-zero after the server acted, when the response is what was lost. Deciding from gh's
+/// status told the operator an irreversible act had not happened when it had. Clean only because the record
+/// GitHub holds carries the judged message — `a_merged_pull_request_whose_record_is_not_the_judged_act_is_refused`
+/// is the same reading with a record that does not.
+#[test]
+fn a_merge_gh_reports_failed_but_github_reads_merged_is_a_completed_merge() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "merge-lost", &[]);
+    assert_eq!(run.status.code(), Some(0), "{}{}", run.stdout, run.stderr);
+    assert!(
+        run.stdout
+            .contains("merged pull request 42 as 0123456789abcdef0123456789abcdef01234567")
+            && run
+                .stderr
+                .contains("the merge GitHub records is the one the gate judged"),
+        "the merge that landed is named, and gh's failure beside it, got stdout {:?} stderr {:?}",
+        run.stdout,
+        run.stderr
+    );
+}
+
+/// A merge whose state cannot be read back says that whether it merged is unknown, whatever gh reported.
+///
+/// gh at `0` is not a reading of the merge: a merge queue's enqueue exits `0` with the pull request still open,
+/// which is the shape `a_merge_gh_reports_complete_but_github_reads_open_records_no_merge` reads. With the
+/// state unreadable the two are indistinguishable, so neither answer is given.
+#[test]
+fn a_merge_whose_state_cannot_be_read_says_whether_it_merged_is_unknown() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    for mode in ["merged-unreadable", "merge-lost-unreadable"] {
+        let run = run_wrapper(&root, mode, &[]);
+        assert_eq!(
+            run.status.code(),
+            Some(2),
+            "{mode}: {}{}",
+            run.stdout,
+            run.stderr
+        );
+        assert!(
+            run.stderr.contains("whether it merged is unknown")
+                && !run.stderr.contains("records no merge")
+                && !run.stdout.contains("merged pull request"),
+            "{mode}: the operator is told the outcome is unknown, never that it landed or that nothing did, got \
+             stdout {:?} stderr {:?}",
+            run.stdout,
+            run.stderr
+        );
+    }
+}
+
+/// A merge GitHub reads as merged, whose squash cannot be read back, is a completed merge that says which part is
+/// unknown.
+#[test]
+fn a_merge_whose_squash_cannot_be_read_back_says_so() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    for mode in ["merged-null", "commit-unreadable"] {
+        let run = run_wrapper(&root, mode, &[]);
+        assert_eq!(
+            run.status.code(),
+            Some(0),
+            "{mode}: {}{}",
+            run.stdout,
+            run.stderr
+        );
+        assert!(
+            run.stdout.contains("merged pull request 42")
+                && run.stdout.contains("could not be read back")
+                && !run.stdout.contains("as 0123456789abcdef")
+                && !run.stdout.contains("as null"),
+            "{mode}: the operator is told the merge completed and which half is unknown, got {:?}",
+            run.stdout
+        );
+    }
+}
+
+/// A merged pull request whose record is not the judged act is refused, whatever gh's status.
+///
+/// A pull request read as merged may have been merged before this call — by an earlier run, in the web UI, by
+/// another actor after the re-reads — and gh then fails while the read-back says merged. Taking MERGED as this
+/// act reported a squash whose message no gate judged as the one this run recorded. Two records that are not the
+/// act: another message, and the judged message at another head.
+#[test]
+fn a_merged_pull_request_whose_record_is_not_the_judged_act_is_refused() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    for (mode, differs) in [
+        (
+            "merged-elsewhere",
+            "its message is not the subject and body the gate judged",
+        ),
+        (
+            "merged-other-head",
+            "not the head feedfacedeadbeefcafebabe0123456789abcdef",
+        ),
+    ] {
+        let run = run_wrapper(&root, mode, &[]);
+        assert_eq!(
+            run.status.code(),
+            Some(2),
+            "{mode}: {}{}",
+            run.stdout,
+            run.stderr
+        );
+        assert!(
+            run.stderr
+                .contains("but that merge is not the act the gate judged")
+                && run.stderr.contains(differs),
+            "{mode}: the operator is told the recorded merge is not this act, and why, got {:?}",
+            run.stderr
+        );
+        assert!(
+            !run.stdout.contains("merged pull request"),
+            "{mode}: a merge that is not the judged act is never reported as this run's, got {:?}",
+            run.stdout
+        );
+    }
+}
+
+/// A merge gh reports complete while GitHub reads the pull request as open records no merge, and says so.
+///
+/// The shape a merge queue's enqueue produces, and a read-back that lags the merge: gh at `0` and a reading
+/// that disagrees, which is unjudged rather than either answer.
+#[test]
+fn a_merge_gh_reports_complete_but_github_reads_open_records_no_merge() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "merge-queued", &[]);
+    assert_eq!(run.status.code(), Some(2), "{}{}", run.stdout, run.stderr);
+    assert!(
+        run.stderr
+            .contains("gh reported the merge of pull request 42 complete")
+            && run
+                .stderr
+                .contains("GitHub reads it as OPEN, so it records no merge"),
+        "the operator is told gh's report and the reading that disagrees with it, got {:?}",
+        run.stderr
+    );
+}
+
+/// A merge gh reports as failed, read as merged with a squash commit that cannot be read, is unknown rather than
+/// assumed to be the judged act.
+#[test]
+fn a_failed_merge_whose_record_cannot_be_read_is_not_claimed() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let run = run_wrapper(&root, "merge-lost-commit-unreadable", &[]);
+    assert_eq!(run.status.code(), Some(2), "{}{}", run.stdout, run.stderr);
+    assert!(
+        run.stderr
+            .contains("whether that merge is the one the gate judged is unknown"),
+        "the operator is told whose merge it is is unknown, got {:?}",
+        run.stderr
+    );
+}
+
+/// A completed merge exits clean whatever became of the stream its report was written to.
+///
+/// The report is written after the act, and a write that fails under `set -e` would reach the ERR trap and exit
+/// the unjudged class — calling the merge just made a run that reached no verdict — or, into a broken pipe, end the
+/// shell with `SIGPIPE`'s `141`, which is neither class.
+#[test]
+fn no_closed_stream_moves_the_merge_s_class() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    for streams in [Streams::ClosedStdout, Streams::BrokenStdout] {
+        let run = run_wrapper_over(&root, "subjects", &[], None, &[], streams);
+        assert_eq!(
+            run.status.code(),
+            Some(0),
+            "{streams:?}: a completed merge must exit clean, got {:?}: {}",
+            run.status,
+            run.stderr
+        );
+        assert!(
+            run.gh_log.contains("pr merge"),
+            "{streams:?}: the merge must have been reached for the class to be the act's: {}",
+            run.stderr
+        );
+    }
 }

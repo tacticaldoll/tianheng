@@ -192,9 +192,10 @@ shared violation identity `(target, rule_key, fact)` (the finding **seam-qualifi
 `{rendered shape} exposed by {seam}`, per the scenarios above); and the violation report
 identifies the governed anchor, the rule (`must not expose dyn`), the offending finding (the
 exposed trait-object, named where resolvable), and the boundary's reason. The AST observation SHALL
-remain in `hunyi` — the only **packaged** crate that depends on `syn` — and findings SHALL render
-via the existing hand-rolled path/type stringification, never `quote`/`syn`'s `printing`
-feature, so the `hunyi` dependency allowlist (`{serde_json, syn, xuanji}`) is untouched.
+remain in `hunyi` — the only **packaged** crate that depends on `syn` directly — and findings SHALL render
+via the existing hand-rolled path/type stringification, never through `quote`/`syn`'s token printing: the
+string is baseline identity, so its form is this crate's to keep stable rather than a printer's. `hunyi`'s
+dependency allowlist is untouched — no `quote` edge is added.
 
 #### Scenario: An unresolvable anchor is a constitution error
 

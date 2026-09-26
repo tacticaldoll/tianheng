@@ -21,56 +21,56 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 
 ### `xuanji` (crate)
 
-> 璇璣 is the dimension-agnostic reaction model: it must not depend on any workspace member; serde_json only
+> 璇璣 is the dimension-agnostic reaction model: its direct normal edges reach only serde_json
 
 - **rule**: restrict dependencies to (only: serde_json)
 - **kind**: crate · **severity**: enforce
 
 ### `xingbiao` (crate)
 
-> 星表 is the shared metadata substrate: it depends on no workspace member at all; serde_json only
+> 星表 is the shared metadata substrate: its direct normal edges reach only serde_json
 
 - **rule**: restrict dependencies to (only: serde_json)
 - **kind**: crate · **severity**: enforce
 
 ### `guibiao` (crate)
 
-> the 圭表 static core stays dependency-light: serde_json, xuanji (reaction model), and xingbiao (metadata substrate) only. functional core ⊥ imperative shell: 圭表 must not depend on the 天衡 shell. 三儀 ⊥ 三儀: it names no sibling dimension
+> the 圭表 static core stays dependency-light: its direct normal edges reach only serde_json, xuanji (reaction model), and xingbiao (metadata substrate). functional core ⊥ imperative shell: none reaches the 天衡 shell. 三儀 ⊥ 三儀: none names a sibling dimension
 
 - **rule**: restrict dependencies to (only: serde_json, xuanji, xingbiao)
 - **kind**: crate · **severity**: enforce
 
 ### `hunyi` (crate)
 
-> 渾儀 is the semantic AST dimension: it depends on 璇璣, 星表, serde_json and syn only. 三儀 ⊥ 三儀: it names no sibling dimension and never the 天衡 shell (functional dimension ⊥ imperative shell)
+> 渾儀 is the semantic AST dimension: its direct normal edges reach only 璇璣, 星表, serde_json and syn. 三儀 ⊥ 三儀: none names a sibling dimension or the 天衡 shell (functional dimension ⊥ imperative shell)
 
 - **rule**: restrict dependencies to (only: xuanji, xingbiao, serde_json, syn)
 - **kind**: crate · **severity**: enforce
 
 ### `louke` (crate)
 
-> 漏刻 is the runtime dimension: it depends on 璇璣 and 星表 only. 三儀 ⊥ 三儀: naming no sibling dimension and never the 天衡 shell
+> 漏刻 is the runtime dimension: its direct normal edges reach only 璇璣 and 星表. 三儀 ⊥ 三儀: none names a sibling dimension or the 天衡 shell
 
 - **rule**: restrict dependencies to (only: xuanji, xingbiao)
 - **kind**: crate · **severity**: enforce
 
 ### `tianheng` (crate)
 
-> the 天衡 shell's direct normal edges end at the observation dimensions and at projection serialization, never at the lower reaction model or metadata substrate
+> the 天衡 shell's direct normal edges reach only the observation dimensions and projection serialization, never the lower reaction model or metadata substrate
 
 - **rule**: restrict dependencies to (only: guibiao, hunyi, louke, serde_json)
 - **kind**: crate · **severity**: enforce
 
 ### `shengmo` (crate)
 
-> 繩墨 depends on 天衡 and serde_json only: no edge to 圭表, 渾儀, 漏刻 or 璇璣 can exist
+> 繩墨's direct normal edges reach only 天衡 and serde_json: none reaches 圭表, 渾儀, 漏刻 or 璇璣
 
 - **rule**: restrict dependencies to (only: tianheng, serde_json)
 - **kind**: crate · **severity**: enforce
 
 ### `kanhe` (crate)
 
-> 勘合 depends on 繩墨, 天衡, serde_json and toml_edit only: no edge to 圭表, 渾儀, 漏刻 or 璇璣 can exist
+> 勘合's direct normal edges reach only 繩墨, 天衡, serde_json and toml_edit: none reaches 圭表, 渾儀, 漏刻 or 璇璣
 
 - **rule**: restrict dependencies to (only: shengmo, tianheng, serde_json, toml_edit)
 - **kind**: crate · **severity**: enforce

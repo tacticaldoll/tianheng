@@ -1,7 +1,9 @@
 //! The failure matrix for [`crate::verdict_channel`]: what each verdict reaches, and what it fails.
 
 use kanhe::refusal::{Kind, Refusal};
-use kanhe::verdict_channel::{CLEAN, Verdict, reached, refuses, rendered};
+use kanhe::verdict_channel::{
+    CLEAN, LIBRARY_MISUSE, Verdict, reached, refuses, rendered, wrapper_exit,
+};
 
 /// A real violation, from a judgement that produces one.
 ///
@@ -127,4 +129,36 @@ fn the_clean_rendering_is_no_refusal_class() {
             "the clean rendering must differ from every refusal class, or a wrapper reads agreement as one"
         );
     }
+}
+
+/// The code the shared library answers when executed is neither class a wrapper exits, and the two classes
+/// are neither clean nor each other.
+///
+/// Enumerated the way [`the_clean_rendering_is_no_refusal_class`] enumerates: the `match` stops the build when
+/// `Kind` grows, and the array is three lines from it. What this holds is the arithmetic the library's guard
+/// relies on — a misuse that answered `1` would read as a gate that refused, and one that answered `2` as a
+/// wrapper that could not judge.
+#[test]
+fn the_library_misuse_code_is_outside_every_wrapper_class() {
+    let classes = [Kind::Violation, Kind::CannotJudge];
+    for class in classes {
+        match class {
+            Kind::Violation | Kind::CannotJudge => {}
+        }
+        assert_ne!(
+            wrapper_exit(class),
+            0,
+            "a refusal must not exit clean: {class:?}"
+        );
+        assert_ne!(
+            wrapper_exit(class),
+            LIBRARY_MISUSE,
+            "the library's misuse code must not be a wrapper class, or running it reads as {class:?}"
+        );
+    }
+    assert_ne!(
+        wrapper_exit(Kind::Violation),
+        wrapper_exit(Kind::CannotJudge),
+        "a disagreement and a could-not-read must leave by different codes, or the operator cannot tell them apart"
+    );
 }

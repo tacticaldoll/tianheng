@@ -22,6 +22,12 @@ pub struct TempFixture {
 impl TempFixture {
     /// Write a fixture crate named `name` with `lib.rs` set to `body`.
     pub fn new(name: &str, body: &str) -> Self {
+        Self::with_manifest_extra(name, "", body)
+    }
+
+    /// The same fixture carrying extra manifest lines (an autotargets switch, a target table), for
+    /// a package shape the plain form cannot express.
+    pub fn with_manifest_extra(name: &str, manifest_extra: &str, body: &str) -> Self {
         let dir = std::env::temp_dir().join(format!(
             "tianheng-conformance-{name}-{}",
             std::process::id()
@@ -33,12 +39,22 @@ impl TempFixture {
         let manifest = dir.join("Cargo.toml");
         std::fs::write(
             &manifest,
-            format!("[package]\nname = \"{name}\"\nversion = \"0.0.0\"\nedition = \"2021\"\n"),
+            format!(
+                "[package]\nname = \"{name}\"\nversion = \"0.0.0\"\nedition = \"2021\"\n{manifest_extra}"
+            ),
         )
         .expect("write Cargo.toml");
         let lib = src.join("lib.rs");
         std::fs::write(&lib, body).expect("write lib.rs");
         Self { dir, manifest, lib }
+    }
+
+    /// Write an additional file into the fixture, relative to its root, creating parent directories.
+    pub fn write(&self, rel: &str, contents: &str) {
+        let path = self.dir.join(rel);
+        std::fs::create_dir_all(path.parent().expect("file has a parent"))
+            .expect("create parent dirs");
+        std::fs::write(path, contents).expect("write fixture file");
     }
 
     pub fn manifest(&self) -> &Path {
@@ -60,28 +76,48 @@ impl Drop for TempFixture {
 /// shape every `*_conformance.rs` suite checks 圭表 against, differing only in which module is
 /// anchored and which reason each suite states for its own fixture.
 pub fn guibiao_exit(package: &str, manifest: &Path, module: &str, reason: &str) -> u8 {
+    guibiao_outcome(package, manifest, module, reason).exit_code()
+}
+
+/// The full static result when a conformance direction needs the refusal cause, not only its exit.
+pub fn guibiao_outcome(
+    package: &str,
+    manifest: &Path,
+    module: &str,
+    reason: &str,
+) -> guibiao::Outcome {
     let constitution = guibiao::Constitution::new(package).boundary(
         guibiao::ModuleBoundary::in_crate(package)
             .module(module)
             .must_not_import("crate::forbidden")
             .because(reason),
     );
-    guibiao::check(&constitution, manifest).exit_code()
+    guibiao::check(&constitution, manifest)
 }
 
 /// 渾儀's exit code for a `must_not_expose("crate::forbidden::Thing")` boundary on `module` — the
 /// semantic-dimension twin of [`guibiao_exit`] above.
 pub fn hunyi_exit(package: &str, manifest: &Path, module: &str, reason: &str) -> u8 {
+    hunyi_outcome(package, manifest, module, reason).exit_code()
+}
+
+/// The full semantic result when a conformance direction needs the refusal cause.
+pub fn hunyi_outcome(package: &str, manifest: &Path, module: &str, reason: &str) -> hunyi::Outcome {
     let boundary = hunyi::SignatureBoundary::in_crate(package)
         .module(module)
         .must_not_expose("crate::forbidden::Thing")
         .because(reason);
-    hunyi::check(&[boundary], manifest).exit_code()
+    hunyi::check(&[boundary], manifest)
 }
 
 /// 漏刻's exit code for an `only_origins(["o"])` boundary at `seam`, audited over `root` — the
 /// runtime-dimension twin of [`guibiao_exit`]/[`hunyi_exit`] above.
 pub fn louke_exit(root: &Path, seam: &'static str, reason: &str) -> u8 {
+    louke_outcome(root, seam, reason).exit_code()
+}
+
+/// The full runtime-audit result when a conformance direction needs the refusal cause.
+pub fn louke_outcome(root: &Path, seam: &'static str, reason: &str) -> louke::Outcome {
     let boundary = louke::RuntimeBoundary::at(seam)
         .only_origins(["o"])
         .because(reason);
@@ -89,5 +125,5 @@ pub fn louke_exit(root: &Path, seam: &'static str, reason: &str) -> u8 {
     // be the fixture's own checkout-equivalent: the directory holding the scanned root, which is
     // what a real caller's `workspace_root` is relative to its members.
     let anchor = root.parent().unwrap_or(root);
-    louke::audit_probe_coverage(&[boundary], &[root.to_path_buf()], anchor).exit_code()
+    louke::audit_probe_coverage(&[boundary], &[root.to_path_buf()], anchor)
 }

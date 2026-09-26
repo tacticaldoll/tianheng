@@ -5,10 +5,9 @@
 //! without a human accepting it*. Its last paragraph then says what that is worth: designation alone only
 //! auto-requests review, and making review required needs branch protection the admin has to enable.
 //!
-//! **Measured, it is not enabled**: `main`'s protection answers `require_code_owner_reviews: false` and
-//! `required_approving_review_count: 0`. And enabling it would not close this, because GitHub does not let a
-//! pull request's author approve their own — so for a repository whose steward and author are one person the
-//! rule cannot fire at all. A prose prescription with no backstop is the shape this repository's own reason
+//! **Enabling it would not close this**, because GitHub does not let a pull request's author approve their
+//! own — so for a repository whose steward and author are one person the rule cannot fire whatever that
+//! setting is, and the protection's current value decides nothing here. A prose prescription with no backstop is the shape this repository's own reason
 //! rule forbids everywhere else, and here it sat on the law itself.
 //!
 //! **What it cost.** Two crate boundaries reached `AGENTS.self-law.md` under a commit body reading *the law
@@ -62,7 +61,7 @@ struct Boundary {
 const DECLARED: [Boundary; 13] = [
     Boundary {
         heading: "`xuanji` (crate)",
-        reason: "璇璣 is the dimension-agnostic reaction model: it must not depend on any workspace member; serde_json only",
+        reason: "璇璣 is the dimension-agnostic reaction model: its direct normal edges reach only serde_json",
         fields: &[
             "- **rule**: restrict dependencies to (only: serde_json)",
             "- **kind**: crate · **severity**: enforce",
@@ -70,7 +69,7 @@ const DECLARED: [Boundary; 13] = [
     },
     Boundary {
         heading: "`xingbiao` (crate)",
-        reason: "星表 is the shared metadata substrate: it depends on no workspace member at all; serde_json only",
+        reason: "星表 is the shared metadata substrate: its direct normal edges reach only serde_json",
         fields: &[
             "- **rule**: restrict dependencies to (only: serde_json)",
             "- **kind**: crate · **severity**: enforce",
@@ -78,7 +77,7 @@ const DECLARED: [Boundary; 13] = [
     },
     Boundary {
         heading: "`guibiao` (crate)",
-        reason: "the 圭表 static core stays dependency-light: serde_json, xuanji (reaction model), and xingbiao (metadata substrate) only. functional core ⊥ imperative shell: 圭表 must not depend on the 天衡 shell. 三儀 ⊥ 三儀: it names no sibling dimension",
+        reason: "the 圭表 static core stays dependency-light: its direct normal edges reach only serde_json, xuanji (reaction model), and xingbiao (metadata substrate). functional core ⊥ imperative shell: none reaches the 天衡 shell. 三儀 ⊥ 三儀: none names a sibling dimension",
         fields: &[
             "- **rule**: restrict dependencies to (only: serde_json, xuanji, xingbiao)",
             "- **kind**: crate · **severity**: enforce",
@@ -86,7 +85,7 @@ const DECLARED: [Boundary; 13] = [
     },
     Boundary {
         heading: "`hunyi` (crate)",
-        reason: "渾儀 is the semantic AST dimension: it depends on 璇璣, 星表, serde_json and syn only. 三儀 ⊥ 三儀: it names no sibling dimension and never the 天衡 shell (functional dimension ⊥ imperative shell)",
+        reason: "渾儀 is the semantic AST dimension: its direct normal edges reach only 璇璣, 星表, serde_json and syn. 三儀 ⊥ 三儀: none names a sibling dimension or the 天衡 shell (functional dimension ⊥ imperative shell)",
         fields: &[
             "- **rule**: restrict dependencies to (only: xuanji, xingbiao, serde_json, syn)",
             "- **kind**: crate · **severity**: enforce",
@@ -94,7 +93,7 @@ const DECLARED: [Boundary; 13] = [
     },
     Boundary {
         heading: "`louke` (crate)",
-        reason: "漏刻 is the runtime dimension: it depends on 璇璣 and 星表 only. 三儀 ⊥ 三儀: naming no sibling dimension and never the 天衡 shell",
+        reason: "漏刻 is the runtime dimension: its direct normal edges reach only 璇璣 and 星表. 三儀 ⊥ 三儀: none names a sibling dimension or the 天衡 shell",
         fields: &[
             "- **rule**: restrict dependencies to (only: xuanji, xingbiao)",
             "- **kind**: crate · **severity**: enforce",
@@ -102,7 +101,7 @@ const DECLARED: [Boundary; 13] = [
     },
     Boundary {
         heading: "`tianheng` (crate)",
-        reason: "the 天衡 shell's direct normal edges end at the observation dimensions and at projection serialization, never at the lower reaction model or metadata substrate",
+        reason: "the 天衡 shell's direct normal edges reach only the observation dimensions and projection serialization, never the lower reaction model or metadata substrate",
         fields: &[
             "- **rule**: restrict dependencies to (only: guibiao, hunyi, louke, serde_json)",
             "- **kind**: crate · **severity**: enforce",
@@ -110,7 +109,7 @@ const DECLARED: [Boundary; 13] = [
     },
     Boundary {
         heading: "`shengmo` (crate)",
-        reason: "繩墨 depends on 天衡 and serde_json only: no edge to 圭表, 渾儀, 漏刻 or 璇璣 can exist",
+        reason: "繩墨's direct normal edges reach only 天衡 and serde_json: none reaches 圭表, 渾儀, 漏刻 or 璇璣",
         fields: &[
             "- **rule**: restrict dependencies to (only: tianheng, serde_json)",
             "- **kind**: crate · **severity**: enforce",
@@ -118,7 +117,7 @@ const DECLARED: [Boundary; 13] = [
     },
     Boundary {
         heading: "`kanhe` (crate)",
-        reason: "勘合 depends on 繩墨, 天衡, serde_json and toml_edit only: no edge to 圭表, 渾儀, 漏刻 or 璇璣 can exist",
+        reason: "勘合's direct normal edges reach only 繩墨, 天衡, serde_json and toml_edit: none reaches 圭表, 渾儀, 漏刻 or 璇璣",
         fields: &[
             "- **rule**: restrict dependencies to (only: shengmo, tianheng, serde_json, toml_edit)",
             "- **kind**: crate · **severity**: enforce",

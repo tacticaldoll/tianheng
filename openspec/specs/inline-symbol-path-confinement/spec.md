@@ -208,8 +208,7 @@ non-observation **under the default**, resolved as external and observed **only*
 `.strict_external()` (see "Strict-external observation of fully-qualified external calls"); (6) a
 forbidden path taken as a **value** (fn-item / closure) rather than called — covered only under
 `.strict_prefix_only()`; and (7) the module scanner's **inherited file-scope bounds** —
-`#[cfg]`-gated code (observed as written, cfg-blind) and the lib+bin conventional-path
-conflation — **except**
+`#[cfg]`-gated code (observed as written, cfg-blind) — **except**
 macro-invocation bodies, which this rule overrides by scanning them (per "Macro bodies are
 conservatively scanned"). Even under `.strict_external()`, the following SHALL remain stated
 bounds, never a silent claim of coverage: an `extern crate dep as alias;` rename (the use-map

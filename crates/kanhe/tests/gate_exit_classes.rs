@@ -2,8 +2,9 @@
 //!
 //! Two facts live in two languages here. `refusal::Kind` types the distinction a gate draws — a source that
 //! **disagrees** against one that **could not be read** — and a shell wrapper turns a gate's failure into a
-//! process exit class. The wrappers read the class out of the gate's own output, which means a Rust enum's
-//! rendering and a `grep` pattern in a script must agree. Two places that must agree is the shape this
+//! process exit class. The gate writes its class to a verdict file the wrapper names, the shared library reads
+//! it back, and the wrapper exits with a code `kanhe::verdict_channel` owns — so a Rust enum's rendering, a
+//! Rust code table and the library's declarations must agree. Two places that must agree is the shape this
 //! repository has spent a window replacing, so it is checked rather than commented.
 //!
 //! **What went wrong without it.** Five could-not-read conditions in `scripts/merge-pr.sh` were split across
@@ -12,7 +13,9 @@
 //! gate calls unjudgeable. No direction could have caught it: the ones covering those sites asserted only that
 //! the wrapper failed, which cannot see `1` from `2`.
 
-use std::collections::BTreeSet;
+mod support;
+
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use kanhe::refusal::Kind;
@@ -55,7 +58,11 @@ const WRAPPERS: [&str; 2] = ["scripts/merge-pr.sh", "scripts/publish.sh"];
 ///
 /// The purpose beside each path is prose with no producer: a reader's aid for whoever adds the next one,
 /// not a fact this direction holds. What it holds is membership.
-const TARGETS_SPAWNING_A_PROCESS: [(&str, &str); 29] = [
+const TARGETS_SPAWNING_A_PROCESS: [(&str, &str); 30] = [
+    (
+        "crates/kanhe/tests/workflow_model.rs",
+        "bash: `compgen`, to hold the declared shell-own words against the shell that owns them",
+    ),
     (
         "crates/kanhe/tests/bound_register.rs",
         "git: enumerates, and builds a scratch repository's tree",
@@ -73,7 +80,7 @@ const TARGETS_SPAWNING_A_PROCESS: [(&str, &str); 29] = [
     (
         "crates/kanhe/tests/gate_exit_classes.rs",
         "git: two enumerations — the test targets this direction reads, and the tracked scripts the \
-         wrapper direction beside it reads",
+         wrapper direction beside it reads; bash, to ask which function holds the violation exit",
     ),
     (
         "crates/kanhe/tests/hermetic_invocations.rs",
@@ -123,7 +130,8 @@ const TARGETS_SPAWNING_A_PROCESS: [(&str, &str); 29] = [
     ),
     (
         "crates/kanhe/tests/publish_workflow.rs",
-        "bash, to run the publish wrapper",
+        "bash, to run the publish wrapper; this test binary itself, to re-run the signal direction under a \
+         parent that ignores a signal",
     ),
     (
         "crates/kanhe/tests/reference_integrity.rs",
@@ -204,11 +212,16 @@ fn no_test_target_spawns_a_process_unnamed() {
         // (measured: every file reaching this module also runs something through it).
         //
         // `hermetic(` stays beside it because an imported `hermetic` is spelled bare, with no module
-        // qualifier to match.
+        // qualifier to match. `bash::` is the same case as `hermetic_git::`: the one `bash` the checks run is
+        // built in `support::bash`, and a target reaches it as `support::bash::…` or, having imported the
+        // module, as `bash::…` — both carry the module's name before `::`, which is what is matched. A rename
+        // of the module on import, `use support::bash as sh`, is not read here: no target writes one, and the
+        // builder is what constructs a `bash`, held by `hermetic_invocations`' reader, which binds renames.
         if executed.lines().any(|line| {
             opens(line, "Command::new(")
                 || opens(line, "hermetic_git::")
                 || opens(line, "hermetic(")
+                || opens(line, "bash::")
         }) {
             reaching.insert(path.clone());
         }
@@ -443,6 +456,779 @@ fn read(root: &Path, path: &str) -> String {
     })
 }
 
+/// Every `exit` in the wrappers and their library names a code `kanhe::verdict_channel` owns, and each code is
+/// chosen at **one** site.
+///
+/// An `exit` statement IS the choice of class, so reading every one decides the property. Every exit is one of
+/// two shapes: `exit "$WRAPPER_EXIT_<NAME>"` for a declared code, or the literal `2` inside a wrapper's bootstrap
+/// guard — the `if ! source … fi` block, the one stop that runs before the library that declares the codes is
+/// loaded. Anything else — a numeral elsewhere, a bare `exit`, another variable — is refused, which is what a
+/// count of the two literals could not do: `exit "$ANY"` and `exit 3` were invisible to it.
+///
+/// **Found as a word, wherever it stands.** Every word whose value is `exit` — what quote removal leaves of it,
+/// under any quoting the shell removes — is held to those two shapes, in a command's position or not. Deciding
+/// *where a command begins* needs the shell's grammar: separators, reserved words, precommand words, case
+/// patterns. A reader modelling that answered wrongly one production at a time, and a missing production is an
+/// exit that passes; a word needs only quote removal, which is finite and done. So `printf eval exit 3` is
+/// refused as well — `exit` as another command's argument is held to the same form, and the repair is to quote
+/// it into a longer word, as a refusal message already is. `EXIT_SHAPES` is the whole of it, run.
+///
+/// **What this does not reach**: a class chosen by an unguarded command's own status, which the ERR trap and
+/// `every_acquisition_is_guarded_so_the_tool_cannot_choose_the_class` close; a refusal spelled `return`
+/// inside a function whose caller then exits, which has no instance and would need block structure to see;
+/// and a command name the text does not spell — a variable, or a string another command runs — which is the
+/// stated bound [`a_command_name_computed_when_the_line_runs_is_not_read`] pins.
+#[test]
+fn each_wrapper_chooses_its_exit_class_in_one_place() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let library = kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY;
+    let mut files: Vec<&str> = WRAPPERS.to_vec();
+    files.push(library);
+    for script in files {
+        let text = read(&root, script);
+        let source = Source::of(text.clone());
+        let lines: Vec<(usize, String)> = source
+            .shell()
+            .numbered_lines()
+            .map(|(number, line)| (number, line.to_string()))
+            .collect();
+        let bootstrap = bootstrap_region(&lines);
+        let mut chosen: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+        let mut refused = Vec::new();
+        let sites = exit_sites(&text).unwrap_or_else(|why| panic!("{script}: {why}"));
+        for (number, argument) in sites {
+            let named = argument
+                .strip_prefix("\"$WRAPPER_EXIT_")
+                .and_then(|rest| rest.strip_suffix('"'))
+                .filter(|name| DECLARED_EXITS.iter().any(|(declared, _)| declared == name));
+            match named {
+                Some(name) => chosen.entry(name.to_string()).or_default().push(number),
+                None if argument == "2" && bootstrap.contains(&number) => {
+                    chosen
+                        .entry("bootstrap".to_string())
+                        .or_default()
+                        .push(number);
+                }
+                None => refused.push(format!("  {script}:{number}: exit {argument}")),
+            }
+        }
+        assert!(
+            refused.is_empty(),
+            "{script} exits through a code no declaration owns — every exit names `$WRAPPER_EXIT_<NAME>`, \
+             and the literal `2` belongs only to a wrapper's bootstrap guard:\n{}",
+            refused.join("\n")
+        );
+        let expected: Vec<&str> = if script == library {
+            // Each code once: the misuse guard, `cannot_judge`, and `exit_for_the_gates_refusal`.
+            DECLARED_EXITS.iter().map(|(name, _)| *name).collect()
+        } else {
+            // A wrapper chooses nothing after its `source`: every stop delegates to the library.
+            vec!["bootstrap"]
+        };
+        let mut found: Vec<&str> = chosen.keys().map(String::as_str).collect();
+        found.sort_unstable();
+        let mut wanted = expected.clone();
+        wanted.sort_unstable();
+        assert_eq!(
+            found, wanted,
+            "{script} chooses these codes {chosen:?}; it should choose exactly {expected:?}"
+        );
+        for (name, sites) in &chosen {
+            assert_eq!(
+                sites.len(),
+                1,
+                "{script} chooses `{name}` at {} sites {sites:?}; one site is the classification chosen once, \
+                 and a second is it chosen twice",
+                sites.len()
+            );
+        }
+    }
+}
+
+/// The exit codes the library declares, each with the value `kanhe::verdict_channel` owns for it.
+const DECLARED_EXITS: [(&str, u8); 3] = [
+    (
+        "VIOLATION",
+        kanhe::verdict_channel::wrapper_exit(Kind::Violation),
+    ),
+    (
+        "UNJUDGED",
+        kanhe::verdict_channel::wrapper_exit(Kind::CannotJudge),
+    ),
+    ("MISUSE", kanhe::verdict_channel::LIBRARY_MISUSE),
+];
+
+/// What [`exit_arguments`] reads from each shape a wrapper line can take, the shapes it declines included.
+///
+/// The table is the description of the reader: a row cannot drift from the code, because it runs. No row asks
+/// where a command begins, because the reader does not: an `exit` word in a case arm, a condition, a pipeline
+/// or another command's arguments reads the same way.
+const EXIT_SHAPES: &[(&str, &[&str])] = &[
+    ("exit 2", &["2"]),
+    ("exit 2 extra", &["2 extra"]),
+    (
+        "    exit \"$WRAPPER_EXIT_UNJUDGED\"",
+        &["\"$WRAPPER_EXIT_UNJUDGED\""],
+    ),
+    ("command || exit 1", &["1"]),
+    ("then exit 1; fi", &["1"]),
+    ("exit 1;", &["1"]),
+    // A bare exit, its terminator on the word or standing after it, reads with no argument.
+    ("{ exit; }", &[""]),
+    ("exit ;;", &[""]),
+    ("(exit 3)", &["3"]),
+    ("( exit 3 )", &["3"]),
+    ("*) exit 3 ;;", &["3"]),
+    ("\"(odd)\") exit 3 ;;", &["3"]),
+    ("if exit 3; then :; fi", &["3"]),
+    ("true | exit 3", &["3"]),
+    ("time -p exit 3", &["3"]),
+    ("printf eval exit 3", &["3"]),
+    ("for exit in a; do :; done", &["in a"]),
+    // Every quoting the shell removes spells `exit`, ANSI-C quoting and each of its escapes included.
+    ("\"exit\" 3", &["3"]),
+    ("e\\xit 3", &["3"]),
+    ("x) $'exit' 3 ;;", &["3"]),
+    ("$'\\x65xit' 3", &["3"]),
+    ("$'\\145xit' 3", &["3"]),
+    ("$'\\u0065xit' 3", &["3"]),
+    ("$'e\\x78it' 3", &["3"]),
+    // A word whose value is longer than `exit` is not one: a message's prose, one quoted word.
+    ("tell \"reach gh, and exit 0 having merged nothing\"", &[]),
+    ("judged+=$'\\n\\n'$body", &[]),
+    ("printf '%s' $(date +%s) exit_code", &[]),
+    // Quotes and continuations span lines, so the text is read whole: a message's later line is still inside
+    // its quote, a backslash-newline joins `exit` to its argument, and a newline ends a bare `exit`.
+    (
+        "refuse \"$1\" \"it would\nreach gh, and exit 0 having merged nothing\"",
+        &[],
+    ),
+    ("exit \\\n    3", &["3"]),
+    ("exit\ncargo test", &[""]),
+    // A command substitution's contents are text the shell runs, wherever the substitution stands.
+    ("printf '%s' \"$(exit 3)\"", &["3"]),
+    ("status=$(exit 3)", &["3"]),
+    ("echo `exit 3`", &["3"]),
+    ("printf '%s' \"`exit 3`\"", &["3"]),
+    ("printf '%s' \"$(exit)\"", &[""]),
+    // A substitution is part of the word it stands in, so text beside it joins that word.
+    ("printf '%s' $(printf x)exit 3", &[]),
+    ("printf '%s' exit$(printf x) 3", &[]),
+    ("printf '%s' `printf x`exit 3", &[]),
+    // A parenthesis inside quotes is the word's text, not the shell's operator.
+    ("printf \"(exit\" 3", &[]),
+    ("exit \"$(printf 3)\"", &["\"$(printf 3)\""]),
+    // A here-string is a word, read like any other; a `${…}` ends where bash ends it, past a quoted brace.
+    ("grep -q x <<< \"$out\"; exit 3", &["3"]),
+    ("printf '%s' \"${x:-'}'}\"; exit 3", &["3"]),
+    ("printf '%s' ${x:-'}'}; exit 3", &["3"]),
+    ("printf '%s' ${x:-$(exit 4)}", &["4"]),
+    // A backslash-newline is removed before a word begins, so a `#` after one opens a comment, as bash reads it.
+    ("true \\\n#exit 3", &[]),
+    // Arithmetic runs no command: its `<<` is a shift, and an `exit` after it is read.
+    ("x=$((1 << 2)); exit 3", &["3"]),
+    ("(( x <<= 1 )); exit 3", &["3"]),
+    // Arithmetic nested in arithmetic is arithmetic, and `case` as an argument is a word.
+    ("x=$(( $((1)) + 1 )); exit 3", &["3"]),
+    ("x=$(printf '%s' case); exit 3", &["3"]),
+    // A command name computed when the line runs is not the line's to read: the declared bound below.
+    ("$stop 3", &[]),
+];
+
+#[test]
+fn the_exit_reader_decides_every_shape_a_wrapper_line_takes() {
+    for (line, expected) in EXIT_SHAPES {
+        assert_eq!(
+            exit_arguments(line),
+            Ok(expected
+                .iter()
+                .map(|argument| argument.to_string())
+                .collect::<Vec<_>>()),
+            "the exit reader misreads `{line}`"
+        );
+    }
+    // What the lexer cannot place is refused rather than read past: the words after it stand where it did not
+    // decide, so an `exit` among them would pass.
+    for line in [
+        "printf '%s' 'open\nexit 3",
+        "cat <<EOF\nexit 3\nEOF",
+        "cat <<-EOF\n\texit 3\nEOF",
+        "$\"exit\" 7",
+        // Measured on bash 5.3: `v="$(case a in a) exit 4;; esac)"` runs the exit, and a `case` pattern's `)`
+        // stands where the substitution's close would.
+        "v=\"$(case a in a) exit 4;; esac)\"",
+        "x=${y:-$\"exit\"}",
+        "x=$(( $(exit 3) ))",
+        // Measured on bash 5.3: `((exit 6) ) # ))` exits 6 — a `((` whose first close is single is nested
+        // subshells — and `"$\<newline>(exit 5)"` runs the substitution the continuation joins.
+        "((exit 6) ) # ))",
+        "(( a[\"))\"] = 1 )); exit 3 # \"",
+        "v=\"$\\\n(exit 5)\"",
+    ] {
+        assert!(
+            exit_arguments(line).is_err(),
+            "`{line}` holds what the lexer cannot place, and must be refused rather than read: {:?}",
+            exit_arguments(line)
+        );
+    }
+}
+
+/// A command name the shell computes when the line runs is not read — a stated bound, shown rather than described.
+///
+/// `$stop 3` runs `exit 3` where `stop=exit`, and `eval "exit 3"`, `trap 'exit 3' EXIT` and `bash -c 'exit 3'` run it
+/// from a string another command parses again: each is decided by a
+/// value the line does not spell, so a reader of words has nothing to read them from. Every word the line does
+/// spell as `exit` is read, [`EXIT_SHAPES`] says so, and this is what is left.
+#[test]
+fn a_command_name_computed_when_the_line_runs_is_not_read() {
+    for line in [
+        "$stop 3",
+        "\"$stop\" 3",
+        "eval \"exit 3\"",
+        "eval \"$stop 3\"",
+        "trap 'exit 3' EXIT",
+        "bash -c 'exit 3'",
+    ] {
+        assert_eq!(
+            exit_arguments(line),
+            Ok(Vec::<String>::new()),
+            "`{line}` names its command at run time, and the declared bound says it is not read"
+        );
+    }
+}
+
+/// The argument of every `exit` word in `text`, as written — empty for a bare `exit` — or why it was not read.
+fn exit_arguments(text: &str) -> Result<Vec<String>, String> {
+    Ok(exit_sites(text)?
+        .into_iter()
+        .map(|(_, argument)| argument)
+        .collect())
+}
+
+/// Every `exit` word in `text`, with the line it stands on and its argument as written.
+///
+/// **Over the whole text, not a line at a time**, because a quote the shell opens on one line closes on a later
+/// one: `merge-pr.sh` writes refusal messages across lines, and a line reader saw a message's *and exit 0* on
+/// a continuation line as standing outside every quote. The argument is the next word, unless an operator — a
+/// separator, a redirection, a newline — ends the command first.
+///
+/// **The file as written, lexed once.** The lexer reads a comment where bash opens one, so no line-wise cut runs
+/// first to disagree with its quoting. And **what it cannot place is a refusal, not a skip**: a quote the text
+/// ends inside, a here-document, a locale-translated string each leave the words after them in positions the
+/// lexer did not decide, so an `exit` there would pass unread.
+fn exit_sites(text: &str) -> Result<Vec<(usize, String)>, String> {
+    let words = support::shell::lex_placed(text).map_err(|(line, what)| {
+        format!(
+            "line {line} holds {what}, so where the words after it stand is not known and an `exit` among them \
+             would pass unread"
+        )
+    })?;
+    let mut sites = Vec::new();
+    for (index, word) in words.iter().enumerate() {
+        if word.operator || word.value != "exit" {
+            continue;
+        }
+        // Every argument up to the operator that ends the command, so `exit 2 extra` — which bash answers with
+        // *too many arguments* and status `1` — is not read as the declared shape it begins with.
+        let argument: Vec<&str> = words[index + 1..]
+            .iter()
+            .take_while(|next| !next.operator)
+            .filter(|next| next.depth == word.depth)
+            .map(|next| next.written.as_str())
+            .collect();
+        sites.push((word.line, argument.join(" ")));
+    }
+    Ok(sites)
+}
+
+/// Whether any of `words` spells `name` other than as the parameter `$NAME` — anywhere in its text, quoted or not,
+/// glued to a flag or inside arithmetic, as a whole identifier.
+///
+/// **The question is where the name is written, not which form writes it.** An assignment word, `read -r "X"`,
+/// `printf -vX`, `unset 'X'`, `(( X = 3 ))` and `declare -n r=X` each spell the name in text, while reading it is
+/// the one place it is a parameter. So every occurrence outside a parameter is refused, and a wrapper has no form
+/// of writing a library scalar left to find. The name is matched up to its end and not from its start, since
+/// `printf -vNAME` glues it to a flag; a longer name ending in it is refused too, which renaming answers.
+fn names_a_scalar(words: &[support::shell::Word], name: &str) -> bool {
+    let spells = |text: &str| {
+        text.match_indices(name).any(|(at, _)| {
+            let identifier = |c: char| c.is_ascii_alphanumeric() || c == '_';
+            !text[at + name.len()..]
+                .chars()
+                .next()
+                .is_some_and(identifier)
+        })
+    };
+    words.iter().any(|word| {
+        !word.operator
+            && word.parts.iter().any(|part| match part {
+                support::shell::Part::Literal { text, .. }
+                | support::shell::Part::Unquoted(text)
+                | support::shell::Part::Arithmetic(text)
+                | support::shell::Part::AnsiC(text)
+                | support::shell::Part::Compound(text) => spells(text),
+                _ => false,
+            })
+    })
+}
+
+/// A wrapper names a library scalar in any form that writes it, and reading one is not naming it.
+#[test]
+fn a_wrapper_naming_a_library_scalar_is_refused() {
+    for (text, named) in [
+        ("X=1", true),
+        ("X+=0", true),
+        ("read -r X <<< 1", true),
+        ("printf -v X 1", true),
+        ("readonly X", true),
+        ("unset X", true),
+        ("(( X = 3 ))", true),
+        ("printf -vX 3", true),
+        ("read -r \"X\"", true),
+        ("unset 'X'", true),
+        ("declare -n r=X", true),
+        ("exit \"$X\"", false),
+        ("printf '%s' \"${X}\"", false),
+        ("XY=1", false),
+        ("AX=1", true),
+        ("tell \"the XY class\"", false),
+    ] {
+        assert_eq!(
+            names_a_scalar(&support::shell::lex(text), "X"),
+            named,
+            "whether `{text}` names X"
+        );
+    }
+}
+
+/// The value of every assignment word among `words` that assigns `name` — `NAME=value` or `NAME+=value`, by the
+/// one reading of an assignment word the workflow's command reader uses too.
+///
+/// Where a word stands is not asked, so an argument written `NAME=value` is counted as well. Counting one too
+/// many only refuses; where such an argument would stand in for the declaration it replaced, [`declared_value`]
+/// asks bash for the value, and bash holds none.
+fn plain_assignments(words: &[support::shell::Word], name: &str) -> Vec<String> {
+    words
+        .iter()
+        .filter(|word| !word.operator && word.assigns() == Some(name))
+        .filter_map(|word| {
+            word.value
+                .split_once('=')
+                .map(|(_, value)| value.to_string())
+        })
+        .collect()
+}
+
+/// The one value `library` declares for `name`: exactly one assignment word for it in the file, and the same
+/// value in bash once the library is sourced. The file is lexed as written, so its comments are the lexer's to
+/// drop, and a construct the lexer cannot place is a refusal rather than a skip.
+///
+/// **The two halves answer different questions, and each covers the other's gap.** The words say how many
+/// places assign the name, which bash cannot say after the fact; bash says whether the word it read is an
+/// assignment where it stands, which the words decide only by modelling where a command begins.
+fn declared_value(root: &Path, library: &str, name: &str) -> Result<String, String> {
+    let words = support::shell::lex_placed(&read(root, library)).map_err(|(line, what)| {
+        format!("{library}:{line} holds {what}, so its assignments cannot all be read")
+    })?;
+    let declared = kanhe::selection::the_only(
+        &format!("assignment of `{name}` in {library}"),
+        plain_assignments(&words, name),
+    )
+    .map_err(|refusal| refusal.message)?;
+    match value_as_bash_holds_it(root, library, name) {
+        Some(held) if held == declared => Ok(declared),
+        Some(held) => Err(format!(
+            "{library} spells `{name}={declared}`, and bash holds `{held}` for it once the library is sourced"
+        )),
+        None => Err(format!(
+            "{library} spells `{name}={declared}`, and bash holds no value for it once the library is sourced — \
+             the word is not an assignment where it stands"
+        )),
+    }
+}
+
+/// An assignment that is not an assignment word is not read — a stated bound, shown rather than described.
+///
+/// An assignment word, `NAME=value` or `NAME+=value`, is read wherever it stands, `local`, `declare`, `export` and
+/// `readonly` ones included. bash also assigns through builtins and expansions — `read`, `printf -v`, `let`,
+/// `(( ))`, `${NAME:=…}` and more — and a reader listing those is the enumeration `AGENTS.md`'s *A repair loop is
+/// a diagnosis* says to stop. What holds a changed value is bash: the library declares each name `readonly`, so an
+/// assignment to it in any form ends the wrapper, and the library's EXIT trap reports that as the unjudged class —
+/// `a_declared_name_assigned_again_is_the_unjudged_class` runs each form.
+#[test]
+fn an_assignment_that_is_not_an_assignment_word_is_not_read() {
+    let rows: [(&str, &[&str]); 8] = [
+        ("X=1", &["1"]),
+        ("local X=1", &["1"]),
+        ("declare -r X=1", &["1"]),
+        ("X+=0", &["0"]),
+        // The bound: each assigns X, and none is an assignment word.
+        ("read X <<< 3", &[]),
+        ("printf -v X 3", &[]),
+        ("(( X = 3 ))", &[]),
+        (": \"${X:=3}\"", &[]),
+    ];
+    for (text, expected) in rows {
+        assert_eq!(
+            plain_assignments(&support::shell::lex(text), "X"),
+            expected
+                .iter()
+                .map(|value| value.to_string())
+                .collect::<Vec<_>>(),
+            "the plain assignments of X in `{text}`"
+        );
+    }
+}
+
+/// bash run on `library` sourced and then `probe`, with the library as `$1` and `name` as `$2` — as positional
+/// parameters, never spliced into the `-c` text, so a path is one word whatever it holds.
+///
+/// The library is handed over joined to `root`, so it always carries a slash: `source` searches `PATH` for a
+/// name without one before the working directory, and would read a host file of that name in the fixture's
+/// place.
+///
+/// **The probe's standard output is the only one read.** What the library prints while it is sourced goes to
+/// `/dev/null`, so a library printing text shaped like the probe's answer cannot stand in for it.
+///
+/// Run through [`support::bash::bash`], so no ambient startup file runs before the library does. Sourcing runs
+/// the library's statements outside every function, so a run that did not complete means one of them ended it.
+fn after_sourcing(root: &Path, library: &str, probe: &str, name: &str) -> String {
+    let output = support::bash::bash()
+        .current_dir(root)
+        .args([
+            "-c",
+            &format!(r#"source "$1" >/dev/null && {probe}"#),
+            "probe",
+        ])
+        .arg(root.join(library))
+        .arg(name)
+        .output()
+        .unwrap_or_else(|error| {
+            panic!("bash could not be run to read {library}'s `{name}`: {error}")
+        });
+    assert!(
+        output.status.success(),
+        "sourcing {library} did not complete ({}), so what it holds for `{name}` is not known: {}. Where a \
+         statement outside every function ended it, an `exit` there stands outside every function by construction",
+        output.status,
+        String::from_utf8_lossy(&output.stderr).trim()
+    );
+    String::from_utf8_lossy(&output.stdout).into_owned()
+}
+
+/// The body bash holds for function `name` once `library` is sourced, as `declare -f` prints it.
+fn body_as_bash_holds_it(root: &Path, library: &str, name: &str) -> String {
+    let body = after_sourcing(root, library, r#"declare -f "$2""#, name);
+    assert!(
+        !body.trim().is_empty(),
+        "bash holds no function `{name}` after sourcing {library}, so where its exits stand is not known"
+    );
+    body
+}
+
+/// The value bash holds for variable `name` once `library` is sourced, or `None` where it holds none.
+fn value_as_bash_holds_it(root: &Path, library: &str, name: &str) -> Option<String> {
+    after_sourcing(
+        root,
+        library,
+        r#"if [[ -v $2 ]]; then printf 'set:%s' "${!2}"; fi"#,
+        name,
+    )
+    .strip_prefix("set:")
+    .map(str::to_string)
+}
+
+/// A word spelled as a declaration is one only where bash reads it as one.
+///
+/// The words alone count an argument written `NAME=value` as an assignment, so with the declaration removed and
+/// `printf '%s\n' NAME=1` in its place there is still exactly one. bash, sourcing the library, holds no value for
+/// the name, and that is what refuses it — including where the library itself prints what the probe would.
+#[test]
+fn a_word_spelled_as_a_declaration_is_one_only_where_bash_reads_it() {
+    let scratch = support::fixture::Scratch::claim("tianheng-declared-value");
+    for (text, expected) in [
+        ("X=1\n", Ok("1".to_string())),
+        (
+            "printf '%s\\n' X=1\n",
+            Err("lib.sh spells `X=1`, and bash holds no value for it once the library is sourced — the word is not \
+                 an assignment where it stands"
+                .to_string()),
+        ),
+        (
+            "printf 'set:1'\n: X=1\n",
+            Err("lib.sh spells `X=1`, and bash holds no value for it once the library is sourced — the word is not \
+                 an assignment where it stands"
+                .to_string()),
+        ),
+        (
+            "X=1\nX=2\n",
+            Err("expected exactly one assignment of `X` in lib.sh".to_string()),
+        ),
+    ] {
+        std::fs::write(scratch.path().join("lib.sh"), text).expect("write the library");
+        let found = declared_value(scratch.path(), "lib.sh", "X");
+        match (&found, &expected) {
+            (Ok(value), Ok(wanted)) => assert_eq!(value, wanted, "`{text}`"),
+            (Err(why), Err(wanted)) => assert!(why.starts_with(wanted.as_str()), "`{text}`: {why}"),
+            _ => panic!("`{text}`: {found:?}, expected {expected:?}"),
+        }
+    }
+}
+
+/// A closed or broken stream moves no class the library chooses, nor any a wrapper chooses before its trap.
+///
+/// Measured on bash 5.2 before every write went through `tell` and `say`: with standard error closed,
+/// `cannot_judge` exited `1` — its `printf` failed, the ERR trap re-entered it, and the second failure left
+/// through errexit with printf's own status. So every unjudged stop of both wrappers read, to a caller whose
+/// stderr was gone, as a gate that ran and refused. And with SIGPIPE ignored only by the trap installer, a usage
+/// error into a broken stderr exited `141`, which is neither class.
+///
+/// Two halves, each over both streams' failures. The library's three class-choosing paths, sourced as a wrapper
+/// sources it: the violation, the unjudged stop, and the ERR trap. And the stops that run before any trap is
+/// installed: a wrapper refusing its arguments, a wrapper whose library is absent, and the library run as a
+/// command — each the first thing its script writes.
+#[test]
+fn no_closed_stream_moves_the_library_s_classes() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let library = root.join(kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY);
+    let scratch_root = support::fixture::Scratch::claim("tianheng-closed-stream");
+    let scratch = scratch_root.path();
+    // Every stop here comes before the act, so `gh` and `cargo` are never this run's to reach. Each is a stub that
+    // leaves a mark, found first on `PATH`: a stop that did reach one runs no host tool, and says so below.
+    let bin = scratch.join("bin");
+    std::fs::create_dir(&bin).expect("create the closed-stream stub PATH");
+    let reached = scratch.join("reached");
+    // The mark's path reaches the stub through its environment, as the wrapper harnesses hand theirs, so a path
+    // holding a quote cannot make the stub a syntax error that exits without leaving one.
+    for tool in ["gh", "cargo"] {
+        support::fixture::write_executable(
+            &bin.join(tool),
+            &format!("#!/usr/bin/env bash\nprintf '%s\\n' {tool} >> \"$FAKE_REACHED\"\nexit 99\n"),
+        );
+    }
+    let path = support::fixture::path_with(&bin);
+    let verdict = scratch.join("verdict");
+    std::fs::write(&verdict, verdict_channel::rendered(Kind::Violation))
+        .expect("write the gate's verdict for the violation path");
+    // A tree holding the wrappers and not their library: the bootstrap guard's one reachable state.
+    let bare = scratch.join("bare");
+    std::fs::create_dir_all(bare.join("scripts")).expect("create the library-less tree");
+    for wrapper in WRAPPERS {
+        std::fs::copy(root.join(wrapper), bare.join(wrapper))
+            .expect("copy a wrapper into the library-less tree");
+    }
+
+    let unjudged = i32::from(verdict_channel::wrapper_exit(Kind::CannotJudge));
+    let probe = |statement: &str| -> Vec<String> {
+        vec![
+            "-c".to_string(),
+            format!(
+                r#"set -Eeuo pipefail; trap '' PIPE; WRAPPER_SUBJECT=probe; source "$1"; install_exit_class_trap; verdict_file=$2; {statement}"#
+            ),
+            // `$0` is the probe's own name: were it the library's path, the library's misuse guard would read the
+            // probe as the library run as a command.
+            "probe".to_string(),
+            library.display().to_string(),
+            verdict.display().to_string(),
+        ]
+    };
+    let mut cases: Vec<(String, Vec<String>, i32)> = vec![
+        (
+            "exit_for_the_gates_refusal".to_string(),
+            probe("exit_for_the_gates_refusal out"),
+            i32::from(verdict_channel::wrapper_exit(Kind::Violation)),
+        ),
+        (
+            "cannot_judge".to_string(),
+            probe("cannot_judge out"),
+            unjudged,
+        ),
+        ("the ERR trap".to_string(), probe("false"), unjudged),
+        // An expansion error ends bash without the ERR trap, with status 1; the EXIT trap holds it.
+        (
+            "an expansion error".to_string(),
+            probe(r#"printf '%s' "${wrapper_typo}""#),
+            unjudged,
+        ),
+        (
+            "the library run as a command".to_string(),
+            vec![library.display().to_string()],
+            i32::from(verdict_channel::LIBRARY_MISUSE),
+        ),
+    ];
+    for wrapper in WRAPPERS {
+        cases.push((
+            format!("{wrapper} without its library"),
+            vec![bare.join(wrapper).display().to_string()],
+            unjudged,
+        ));
+    }
+    cases.push((
+        "scripts/merge-pr.sh with no arguments".to_string(),
+        vec![root.join("scripts/merge-pr.sh").display().to_string()],
+        unjudged,
+    ));
+    cases.push((
+        "scripts/publish.sh refusing an argument".to_string(),
+        vec![
+            root.join("scripts/publish.sh").display().to_string(),
+            "--allow-dirty".to_string(),
+        ],
+        unjudged,
+    ));
+
+    for (name, arguments, expected) in &cases {
+        let open = support::bash::bash()
+            .args(arguments)
+            .env("PATH", &path)
+            .env("FAKE_REACHED", &reached)
+            .output()
+            .expect("run the stop with its streams open");
+        assert_eq!(
+            open.status.code(),
+            Some(*expected),
+            "{name} with its streams open is the baseline, and it does not exit its class: {}",
+            String::from_utf8_lossy(&open.stderr)
+        );
+        for (stream, launcher) in [
+            (
+                "closed",
+                vec!["-c", support::streams::CLOSED, "launcher", "2"],
+            ),
+            (
+                "broken",
+                vec!["-c", support::streams::BROKEN, "launcher", "2"],
+            ),
+        ] {
+            let output = support::bash::bash()
+                .args(&launcher)
+                .args(arguments)
+                .env("PATH", &path)
+                .env("FAKE_REACHED", &reached)
+                .output()
+                .expect("run the stop with its stderr taken away");
+            assert_eq!(
+                output.status.code(),
+                Some(*expected),
+                "{name} with stderr {stream} exits {:?}, where it exits {expected} with the stream open",
+                output.status
+            );
+        }
+    }
+    let reached_tools = support::fixture::read_if_present(&reached).expect("read the stub marks");
+    assert!(
+        reached_tools.is_empty(),
+        "a stop meant to come before the act reached a tool it runs:\n{reached_tools}"
+    );
+}
+
+/// How a wrapper's bootstrap guard opens: the one `source` of the library it guards.
+const BOOTSTRAP_SOURCE: &str = "if ! source ";
+
+/// The lines of a wrapper's bootstrap guard: from `if ! source` to the `fi` that closes it.
+fn bootstrap_region(lines: &[(usize, String)]) -> BTreeSet<usize> {
+    let mut region = BTreeSet::new();
+    let mut inside = false;
+    for (number, line) in lines {
+        let trimmed = line.trim();
+        if trimmed.starts_with(BOOTSTRAP_SOURCE) {
+            inside = true;
+        }
+        if inside {
+            region.insert(*number);
+            if trimmed == "fi" {
+                inside = false;
+            }
+        }
+    }
+    region
+}
+
+/// A wrapper whose library cannot be read is the **unjudged** class, in its own voice.
+///
+/// The one acquisition the shared machinery cannot guard is the one that loads it, and a `source` failing
+/// under `set -e` exits with `source`'s own status — `1`, the class reserved for a gate that ran and
+/// refused. Measured before the guard existed: both wrappers exited 1. And measured against bash itself
+/// while repairing it: the ERR trap does not fire for a failed `source`, which is why the guard speaks
+/// rather than trapping. Held by **running** each wrapper from a fixture tree that has no library — the
+/// class and the message are both asserted, because an exit-2 silence is bash's line alone, and that is a
+/// diagnosis of the wrong thing in this wrapper's own contract.
+#[test]
+fn a_wrapper_without_its_library_is_the_unjudged_class() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    for (wrapper, invocation) in [
+        ("scripts/merge-pr.sh", vec!["42", "--body-file", "body.md"]),
+        ("scripts/publish.sh", vec!["--dry-run"]),
+    ] {
+        let claimed = support::fixture::Scratch::claim("tianheng-missing-library");
+        let scratch = claimed.path();
+        std::fs::create_dir_all(scratch.join("scripts"))
+            .expect("create the fixture's scripts directory");
+        std::fs::copy(root.join(wrapper), scratch.join(wrapper)).expect("copy the wrapper");
+        // The library is the thing this direction removes — nothing else is planted, so the refusal is
+        // measured against the wrapper's own text rather than a rewrite of it.
+        let output = support::bash::bash()
+            .arg(scratch.join(wrapper))
+            .args(&invocation)
+            .current_dir(scratch)
+            .output()
+            .expect("run the wrapper without its library");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(
+            output.status.code(),
+            Some(i32::from(verdict_channel::wrapper_exit(Kind::CannotJudge))),
+            "{wrapper} without its library is an input it could not read, not a gate that ran and refused: \
+             {stderr}"
+        );
+        assert!(
+            stderr.contains("cannot read the shared wrapper library"),
+            "{wrapper} must say which of its own two facts failed — the library is missing — rather than \
+             leaving bash's line alone to name it: {stderr}"
+        );
+    }
+}
+
+/// The library run as a command stops without reaching either class a wrapper reserves.
+///
+/// The guard exists so nobody executes the library by mistake; what makes it a guard rather than a sentence
+/// is that the file is **run** and its outcome asserted — a count of its `exit` text beside it passes while
+/// the guard's condition is false and the file runs to its definitions. Asserted on both halves of *stops
+/// without reaching a wrapper's classes*: the exit code, and the message that says what was run instead.
+#[test]
+fn a_library_run_as_a_command_stops_without_reaching_a_wrapper_s_classes() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let library = kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY;
+    let output = support::bash::bash()
+        .arg(root.join(library))
+        .output()
+        .expect("run the shared library directly");
+    assert!(
+        !output.status.success(),
+        "{library} run as a command succeeded, so its execution guard is not stopping it"
+    );
+    // The code `kanhe` owns for this answer, which `the_library_misuse_code_is_outside_every_wrapper_class`
+    // holds apart from both wrapper classes — so asserting equality here is what keeps the guard outside them,
+    // where asserting only *not 1 and not 2* let the declared code move unobserved.
+    assert_eq!(
+        output.status.code(),
+        Some(i32::from(verdict_channel::LIBRARY_MISUSE)),
+        "{library} run as a command must answer the misuse code `kanhe::verdict_channel` owns"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("not a wrapper itself"),
+        "{library} run as a command must say what to run instead, got: {stderr}"
+    );
+}
+
 /// Both scalars the wrappers use for the verdict channel are the ones `kanhe::verdict_channel` defines.
 ///
 /// **The pin this replaces held the argument list and not the rendering.** The wrappers used to grep the gate's
@@ -455,74 +1241,20 @@ fn read(root: &Path, path: &str) -> String {
 ///
 /// A channel has no delimiter to forget. Two scalars travel: the variable name and the class spelling, and both
 /// are compared here against the module the gates call.
-/// A wrapper chooses its exit class in **one place**, which is a count rather than a reading.
 ///
-/// `repository-checks` requires the classification to be chosen once per wrapper rather than at each site, and
-/// nothing held it: the class constants and `require_one_pass` were compared across both wrappers, so the
-/// **identities** could not drift while the **sites** could. `scripts/merge-pr.sh` grew four of them — the
-/// positional selector, the URL refusal, `require_value` and the body-file guard — two of which predated the
-/// helper they should have called, and a review found them by reading the two wrappers side by side.
-///
-/// **An `exit` statement IS the choice**, so counting them decides the property that reading them used to.
-/// Exactly two may say `exit 2`: the one class helper every refusal delegates to, and the gate's own verdict
-/// arm, which must distinguish a gate that refused from a run that reached no verdict. Exactly one may say
-/// `exit 1`, and it is that same arm — the sole site this repository's contract permits the violation class.
-///
-/// Executed text, because both wrappers' comments now discuss `exit 2` in prose, and a check that read the
-/// whole file would count the sentence describing the rule as an instance of breaking it.
-///
-/// **What this does not reach**, stated rather than left to be discovered: a refusal spelled `return` inside a
-/// function whose caller then exits, and a class chosen by an unguarded command's own status. The second is
-/// what the ERR trap and `every_acquisition_is_guarded_so_the_tool_cannot_choose_the_class` below already
-/// close; the first has no instance in either wrapper and would need block structure to see.
-#[test]
-fn each_wrapper_chooses_its_exit_class_in_one_place() {
-    let Some(root) = workspace_root() else {
-        return;
-    };
-    for wrapper in WRAPPERS {
-        let text = read(&root, wrapper);
-        let source = Source::of(text);
-        let executed = source.shell();
-        let mut sites: Vec<(usize, &str)> = Vec::new();
-        for (number, line) in executed.numbered_lines() {
-            let trimmed = line.trim();
-            if trimmed == "exit 1" || trimmed == "exit 2" {
-                sites.push((number, trimmed));
-            }
-        }
-        let shown = || {
-            sites
-                .iter()
-                .map(|(n, l)| format!("  {wrapper}:{n}: {l}"))
-                .collect::<Vec<_>>()
-                .join("\n")
-        };
-        let unjudged = sites.iter().filter(|(_, l)| *l == "exit 2").count();
-        let violation = sites.iter().filter(|(_, l)| *l == "exit 1").count();
-        assert_eq!(
-            unjudged,
-            2,
-            "{wrapper} chooses the unjudged class at {unjudged} sites; exactly two may — the one class helper \
-             every refusal delegates to, and the gate's own verdict arm. Route the extras through that helper \
-             rather than spelling `printf … >&2; exit 2` again:\n{}",
-            shown()
-        );
-        assert_eq!(
-            violation,
-            1,
-            "{wrapper} chooses the violation class at {violation} sites; exactly one may, and it is the gate's \
-             own verdict arm — every other stop is a fact this wrapper could not judge:\n{}",
-            shown()
-        );
-    }
-}
-
+/// **The exit codes are held the same way.** The library declares one `WRAPPER_EXIT_<NAME>` per code and each
+/// is compared with the value `kanhe::verdict_channel` owns for it, so a number is spelled in Rust and read in
+/// the shell rather than typed in both.
 #[test]
 fn each_wrapper_uses_the_channel_the_gates_report_on() {
     let Some(root) = workspace_root() else {
         return;
     };
+    // The scalars are declared once, in the library the wrappers source — the extraction this file records
+    // — so a wrapper *carrying* one would be the definition site doubled. The comparison below therefore
+    // reads the library for the declaration and each wrapper for the one half that cannot move: the channel
+    // must still be opened for the gate from the wrapper's own invocation, because a shell cannot inherit a
+    // name into an environment-assignment prefix.
     for wrapper in WRAPPERS {
         let text = read(&root, wrapper);
         // **Only the scalar a wrapper actually READS is declared.** `GATE_VERDICT_ENV` was declared beside
@@ -535,32 +1267,61 @@ fn each_wrapper_uses_the_channel_the_gates_report_on() {
         // gate produces; the clean class decides whether a *passing* run judged anything at all. The second
         // was missing while the gate wrote nothing on its clean arm, and a run that returned without judging
         // was indistinguishable from one that agreed.
-        for (name, expected) in [
-            (
-                "GATE_VIOLATION_CLASS",
-                verdict_channel::rendered(Kind::Violation),
-            ),
-            ("GATE_CLEAN_CLASS", verdict_channel::CLEAN.to_string()),
-        ] {
-            let declared = text
-                .lines()
-                .find_map(|line| line.trim().strip_prefix(&format!("{name}=")))
-                .unwrap_or_else(|| {
-                    panic!(
-                        "{wrapper} declares no `{name}`, so the class it reads off the channel rests on \
-                         nothing this check can compare"
-                    )
-                });
-            assert_eq!(
-                declared, expected,
-                "{wrapper} uses `{declared}` for {name} while `kanhe::verdict_channel` defines `{expected}`"
-            );
-        }
+        // A wrapper reads the library's scalars and never names them: every form that assigns, declares or
+        // unsets a name spells it as a word of its own, while reading it is `$NAME`, a parameter. So the question
+        // is whether a wrapper writes the name at all rather than which of bash's assignment forms it used.
+        let words = support::shell::lex_placed(&text).unwrap_or_else(|(line, what)| {
+            panic!("{wrapper}:{line} holds {what}, so its words cannot all be read")
+        });
+        let named_here: Vec<String> = DECLARED_EXITS
+            .iter()
+            .map(|(name, _)| format!("WRAPPER_EXIT_{name}"))
+            .chain(["GATE_VIOLATION_CLASS", "GATE_CLEAN_CLASS"].map(String::from))
+            .filter(|name| names_a_scalar(&words, name))
+            .collect();
+        assert!(
+            named_here.is_empty(),
+            "{wrapper} names {named_here:?} as a word of its own, and the library owns every exit code and \
+             channel class — a wrapper assigning, declaring or unsetting one moves a value typed in one place"
+        );
         // The variable must actually be handed to the gate, not merely declared. Declared and unused would make
         // the file absent for every run, so every violation would report as unjudged.
         assert!(
             text.contains(&format!("{}=$verdict_file", verdict_channel::ENV)),
             "{wrapper} declares the channel and never opens it for the gate, so no verdict could ever arrive"
+        );
+    }
+    // Every assignment word the library's executed text spells for `name` — `NAME+=value` and `local`, `declare`,
+    // `export` and `readonly` ones included, since each is a word of its own — exactly one of them, and the value
+    // bash holds once the library is sourced. An assignment that is not an assignment word is the stated bound
+    // `plain_assignments` shows.
+    let declaration = |name: &str| {
+        declared_value(&root, kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY, name)
+            .unwrap_or_else(|why| panic!("{why}"))
+    };
+    for (name, expected) in [
+        (
+            "GATE_VIOLATION_CLASS",
+            verdict_channel::rendered(Kind::Violation),
+        ),
+        ("GATE_CLEAN_CLASS", verdict_channel::CLEAN.to_string()),
+    ] {
+        let declared = declaration(name);
+        assert_eq!(
+            declared,
+            expected,
+            "{} uses `{declared}` for {name} while `kanhe::verdict_channel` defines `{expected}`",
+            kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY
+        );
+    }
+    for (name, expected) in DECLARED_EXITS {
+        let variable = format!("WRAPPER_EXIT_{name}");
+        let declared = declaration(&variable);
+        assert_eq!(
+            declared,
+            expected.to_string(),
+            "{} declares `{variable}={declared}` while `kanhe::verdict_channel` owns `{expected}` for it",
+            kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY
         );
     }
 }
@@ -601,63 +1362,163 @@ fn each_gate_leaves_through_the_verdict_channel() {
 
 /// Only the gate's own verdict may exit the violation class.
 ///
-/// The rule this file exists to hold, read off the scripts: `1` is reachable exactly where a gate ran and
-/// reported a disagreement. Every other stop — a misconfigured invocation, an input that could not be read, a
-/// gate that did not run — is the unjudged class. Counted rather than described, because the split that
-/// prompted this was five sites spelled out one at a time.
+/// `1` is reachable exactly where a gate ran and reported a disagreement. The violation exit is written once,
+/// in the library's `exit_for_the_gates_refusal`, directly behind a comparison with the class the gate wrote on
+/// its channel — so a wrapper cannot reach it on a fact the gate did not report. What is left for each wrapper
+/// is to route its gate's failure there: exactly one call, in the statement that runs the gate by `--exact`.
+/// A call anywhere else would read a channel no gate has written, and leave as the unjudged class.
 #[test]
 fn a_wrapper_exits_the_violation_class_only_for_a_gates_own_verdict() {
     let Some(root) = workspace_root() else {
         return;
     };
+    let library = kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY;
+    let text = read(&root, library);
+    let source = Source::of(text.clone());
+    let lines: Vec<(usize, String)> = source
+        .shell()
+        .numbered_lines()
+        .map(|(number, line)| (number, line.to_string()))
+        .collect();
+    const VIOLATION: &str = "\"$WRAPPER_EXIT_VIOLATION\"";
+    let sites: Vec<usize> = exit_sites(&text)
+        .unwrap_or_else(|why| panic!("{library}: {why}"))
+        .into_iter()
+        .filter(|(_, argument)| argument == VIOLATION)
+        .map(|(number, _)| number)
+        .collect();
+    assert_eq!(
+        sites.len(),
+        1,
+        "{library} exits the violation class at {sites:?}; exactly one site may, behind the gate's own verdict"
+    );
+    let site = sites[0];
+    // **Which function holds it is bash's answer, not a reading of braces.** A brace is syntax only where the
+    // shell parses it as one — unquoted, in a command's position — which is the grammar this file stopped
+    // modelling for `exit`. So the body is asked of bash: the library is sourced, which runs only its
+    // declarations and a guard that does not fire when sourced, and `declare -f` prints the function as bash
+    // parsed it. The one site in the file being the one site in that body is the site being inside it.
+    let body = body_as_bash_holds_it(&root, library, "exit_for_the_gates_refusal");
+    let inside = exit_sites(&body)
+        .unwrap_or_else(|why| panic!("the body bash holds for `exit_for_the_gates_refusal`: {why}"))
+        .into_iter()
+        .filter(|(_, argument)| argument == VIOLATION)
+        .count();
+    assert_eq!(
+        inside, 1,
+        "{library}:{site} exits the violation class outside the one function that reads the gate's verdict — \
+         the body bash holds for `exit_for_the_gates_refusal` carries {inside} such exits:\n{body}"
+    );
+    let window: String = lines
+        .iter()
+        .filter(|(number, _)| *number < site && *number + 6 > site)
+        .map(|(_, text)| text.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        window.contains("GATE_VIOLATION_CLASS"),
+        "{library}:{site} exits the violation class without having read the gate's verdict:\n{window}"
+    );
     for wrapper in WRAPPERS {
-        let text = read(&root, wrapper);
-        // Matched as a STATEMENT, not as a whole line. Requiring the trimmed line to equal `exit 1` missed
-        // `… || exit 1`, `exit 1;` and `[[ … ]] && exit 1` — measured, adding `if [[ ! -f $x ]]; then exit 1; fi`
-        // left the count at one and the new site escaped both this and the window check below. Tightening the
-        // detector while the requirement says *any* violation-class exit is the false negative this file is for.
-        // ONE region, read once and shared by the scan and the window below. Two scans re-deciding it is the
-        // shape `kanhe::region` was written to end, and it had already cost this file a disagreement: the scan
-        // excluded comments while the `positioned_lines` window did not.
-        let source = Source::of(text.clone());
-        let executed = source.shell();
-        let sites: Vec<(usize, String)> = executed
-            .numbered_lines()
-            .filter(|(_, line)| {
-                line.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
-                    .zip(
-                        line.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
-                            .skip(1),
-                    )
-                    .any(|(a, b)| a == "exit" && b == "1")
-            })
-            .map(|(number, line)| (number, line.to_string()))
+        let source = Source::of(read(&root, wrapper));
+        let positioned = source.shell().positioned_lines();
+        let statements = kanhe::gate_identity::logical_lines(&positioned.join("\n"));
+        let calls: Vec<usize> = statements
+            .iter()
+            .enumerate()
+            .filter(|(_, (_, statement))| statement.contains("exit_for_the_gates_refusal"))
+            .map(|(index, _)| index)
             .collect();
         assert_eq!(
-            sites.len(),
+            calls.len(),
             1,
-            "{wrapper} exits the violation class at {} site(s); only a gate's own verdict may, and every \
-             could-not-read stop belongs to the unjudged class: {:?}",
-            sites.len(),
-            sites.iter().map(|(line, _)| line).collect::<Vec<_>>()
-        );
-        // EVERY site must sit inside the branch that read the gate's verdict, not merely somewhere after it.
-        // Checking `sites[0]` alone was a second way for a new site to escape: the count would have to fail
-        // first, and it did not.
-        for (line, _) in &sites {
-            // From the SAME region as the scan above, so the two cannot disagree about what counts. A comment
-            // naming the class within five lines of a misplaced exit used to satisfy this.
-            let window: String = executed
-                .numbered_lines()
-                .filter(|(number, _)| *number < *line && *number + 6 > *line)
-                .map(|(_, text)| text)
+            "{wrapper} routes a failing gate to `exit_for_the_gates_refusal` at {} statements; exactly one \
+             may, the one that runs its gate: {:?}",
+            calls.len(),
+            calls
+                .iter()
+                .map(|index| statements[*index].0)
                 .collect::<Vec<_>>()
-                .join("\n");
-            assert!(
-                window.contains("GATE_VIOLATION_CLASS"),
-                "{wrapper}:{line} exits the violation class without having read the gate's verdict, so it \
-                 reports a disagreement no judgement formed:\n{window}"
-            );
+        );
+        // The call is the body of the `|| {` that closes the gate's own invocation.
+        let call = calls[0];
+        let opener = call
+            .checked_sub(1)
+            .map(|index| statements[index].1.trim_end());
+        assert!(
+            opener.is_some_and(|opener| opener.ends_with("|| {") && opener.contains("-- --exact ")),
+            "{wrapper}:{} routes to the gate's refusal from outside the `|| {{` of the statement that runs its \
+             gate, so it reads a channel nothing has written",
+            statements[call].0
+        );
+    }
+}
+
+/// The functions that stop a wrapper: `cannot_judge`, and every function whose body calls one, read from the
+/// scripts rather than listed, so a wrapper's own refusal helper is a stop by what it does.
+///
+/// Each script is lexed whole, once, and only a word standing where a command's name does —
+/// [`support::shell::command_positions`] — is a call: a `cannot_judge` printed as an argument, quoted or not, calls
+/// nothing, and one inside a command substitution ends that subshell rather than the wrapper. A body is the words
+/// between a `NAME ( ) {` and the `}` that closes it at depth, a brace counted only where bash reads it as the
+/// reserved word it is, in command position. A script the lexer cannot place is refused rather than read past.
+fn stops_of(scripts: &[&str]) -> BTreeSet<String> {
+    let mut bodies: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for script in scripts {
+        let words = support::shell::lex_placed(script).unwrap_or_else(|(line, what)| {
+            panic!("a wrapper script holds {what} at line {line}, so which functions stop cannot be read")
+        });
+        let commands: BTreeSet<usize> = support::shell::command_positions(&words)
+            .into_iter()
+            .collect();
+        let brace = |at: usize, text: &str| commands.contains(&at) && words[at].value == text;
+        let mut index = 0;
+        while index < words.len() {
+            let opens = commands.contains(&index)
+                && words
+                    .get(index + 1)
+                    .is_some_and(|w| w.operator && w.value == "(")
+                && words
+                    .get(index + 2)
+                    .is_some_and(|w| w.operator && w.value == ")");
+            let mut at = index + 3;
+            while opens && words.get(at).is_some_and(|w| w.operator && w.value == "\n") {
+                at += 1;
+            }
+            if !opens || at >= words.len() || !brace(at, "{") {
+                index += 1;
+                continue;
+            }
+            let body = bodies.entry(words[index].value.clone()).or_default();
+            let mut depth = 1usize;
+            at += 1;
+            while at < words.len() {
+                if brace(at, "{") {
+                    depth += 1;
+                } else if brace(at, "}") {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                } else if commands.contains(&at) && words[at].depth == words[index].depth {
+                    // A call inside a command substitution runs in a subshell, and its `exit` ends only that.
+                    body.push(words[at].value.clone());
+                }
+                at += 1;
+            }
+            index = at + 1;
+        }
+    }
+    let mut stops = BTreeSet::from(["cannot_judge".to_string()]);
+    loop {
+        let before = stops.len();
+        for (name, words) in &bodies {
+            if words.iter().any(|word| stops.contains(word)) {
+                stops.insert(name.clone());
+            }
+        }
+        if stops.len() == before {
+            return stops;
         }
     }
 }
@@ -669,25 +1530,29 @@ fn a_wrapper_exits_the_violation_class_only_for_a_gates_own_verdict() {
 /// the two it defines, carrying the tool's words for a fact about the wrapper. Four acquisitions were unguarded,
 /// and the direction covering one of them passed because it asserted only that the wrapper failed.
 ///
-/// **The corpus is every command substitution, and names no tool.** It used to be the acquisitions invoking
-/// `gh` or `cargo` — a list of the tools someone had thought of, with a helper beside it for reading past an
-/// environment prefix to find the tool's name. `repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)`, the
-/// first statement of *both* wrappers and the one that locates the gate, invoked neither and so was never
-/// examined. It was unguarded, and measured, a failed `cd` under `set -e` exits **1** — the class that means a
-/// gate ran and refused, reported by a wrapper whose gate had not been found. A sweep that exists to stop a
-/// tool choosing the class was letting one choose it, and the wrong class at that. A command substitution is
-/// the shape that carries the defect; what it invokes is no part of the property, so the tool test and its
-/// helper are gone rather than extended.
+/// **The corpus is every assignment from a command substitution, `NAME=$(…)`, and names no tool.** What a
+/// substitution invokes is no part of the property: `repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)`
+/// invokes no tool, and measured, a failed `cd` there under `set -e` exits **1** — the class that means a gate
+/// ran and refused, reported by a wrapper whose gate had not been found. A substitution standing elsewhere — an
+/// argument, a condition — is not in this corpus; its failure is the ERR trap's.
 ///
 /// A failed acquisition is **refused** or **given a value**, never ignored: `|| verdict=""` supplies a
-/// fallback and is handled exactly as `|| cannot_judge` is. `|| true` is neither, and is not admitted.
+/// fallback and is handled exactly as `|| cannot_judge` is. `|| true` is neither, and is not admitted. A refusal
+/// is `||` followed by a stop, and which functions stop is read from the scripts by [`stops_of`] rather than
+/// listed here.
 #[test]
 fn every_acquisition_is_guarded_so_the_tool_cannot_choose_the_class() {
     let Some(root) = workspace_root() else {
         return;
     };
-    for wrapper in WRAPPERS {
+    // The library too: its functions run inside each wrapper, so an unguarded acquisition there chooses the
+    // class exactly as one written in a wrapper would.
+    let mut corpus: Vec<&str> = WRAPPERS.to_vec();
+    corpus.push(kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY);
+    let library = read(&root, kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY);
+    for wrapper in corpus {
         let text = read(&root, wrapper);
+        let stops = stops_of(&[library.as_str(), text.as_str()]);
         let mut unguarded = Vec::new();
         let mut examined = 0usize;
         let source = Source::of(text.clone());
@@ -722,7 +1587,9 @@ fn every_acquisition_is_guarded_so_the_tool_cannot_choose_the_class() {
             let variable = trimmed
                 .rsplit_once(char::is_whitespace)
                 .map_or(trimmed, |(_, variable)| variable);
-            let guarded = statement.contains("cannot_judge")
+            let guarded = stops
+                .iter()
+                .any(|stop| statement.contains(&format!("|| {stop}")))
                 || statement.contains("|| {")
                 || statement.contains(&format!("|| {variable}="));
             examined += 1;
@@ -746,46 +1613,54 @@ fn every_acquisition_is_guarded_so_the_tool_cannot_choose_the_class() {
     }
 }
 
-/// Every tracked wrapper that runs a gate is named by [`WRAPPERS`].
+/// Every tracked script is named by [`WRAPPERS`] or is the shared library, and every wrapper loads it.
 ///
 /// Without this the array is a second list beside the tree: a new wrapper would front a gate with its exit
 /// classes compared to nothing, while every direction above kept passing over the two it does name.
+///
+/// **The members come from the enumeration the citation check reads**, every tracked file under `scripts/`,
+/// rather than from a rule of this direction's own. Finding wrappers by their sourcing line cannot find the
+/// wrapper that matters most — one that never loaded the library — so loading the library is asserted of each
+/// member rather than used to find them, and the array is held to the set both ways.
 #[test]
 fn every_gate_running_wrapper_is_named() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let tracked = kanhe::hermetic_git::tracked_paths(&root, &["scripts"]).unwrap_or_else(|failure| {
-        panic!(
-            "`git ls-files scripts` did not answer ({failure:?}), and a failed enumeration is not a \
-             repository with no wrappers"
-        )
-    });
+    let library = kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY;
+    let scripts =
+        kanhe::gate_identity::tracked_scripts(&root).unwrap_or_else(|why| panic!("{why}"));
     assert!(
-        !tracked.is_empty(),
-        "no tracked script was enumerated, so this direction would hold over nothing"
+        scripts.iter().any(|(path, _)| path == library),
+        "{library} is not tracked, so every wrapper sourcing it loads nothing"
     );
-    let fronting: Vec<&String> = tracked
+    let members: BTreeSet<&str> = scripts
         .iter()
-        .filter(|path| path.ends_with(".sh"))
-        .filter(|path| read(&root, path).contains("require_one_pass"))
+        .map(|(path, _)| path.as_str())
+        .filter(|path| *path != library)
         .collect();
-    let unnamed: Vec<&&String> = fronting
-        .iter()
-        .filter(|path| !WRAPPERS.contains(&path.as_str()))
-        .collect();
-    assert!(
-        unnamed.is_empty(),
-        "these wrappers sequence a gate and are not named by `WRAPPERS`, so their exit classes are compared to \
-         nothing: {unnamed:?}"
-    );
+    let named: BTreeSet<&str> = WRAPPERS.iter().copied().collect();
     assert_eq!(
-        fronting.len(),
-        WRAPPERS.len(),
-        "`WRAPPERS` names {} script(s) while {} tracked script(s) sequence a gate",
-        WRAPPERS.len(),
-        fronting.len()
+        members,
+        named,
+        "`WRAPPERS` and the tracked scripts disagree — tracked and unnamed, so their exit classes are compared \
+         to nothing: {:?}; named and untracked: {:?}",
+        members.difference(&named).collect::<Vec<_>>(),
+        named.difference(&members).collect::<Vec<_>>()
     );
+    let sourcing = format!("/{library}");
+    for (path, text) in scripts.iter().filter(|(path, _)| path != library) {
+        let loads = Source::of(text.clone()).shell().lines().any(|line| {
+            let line = line.trim_start();
+            (line.starts_with("source ") || line.starts_with(BOOTSTRAP_SOURCE))
+                && line.contains(&sourcing)
+        });
+        assert!(
+            loads,
+            "{path} is a tracked script and does not load {library}, so the exit codes, the trap and the \
+             verdict read every direction here holds it to are not the ones it runs under"
+        );
+    }
 }
 
 /// Both wrappers refuse a **flag-shaped value**, and every arm that takes one is held to it.
@@ -867,10 +1742,194 @@ fn each_wrapper_refuses_a_flag_shaped_value_in_every_value_position() {
             .take_while(|line| *line != "}")
             .collect();
         assert!(
-            body.iter().any(|line| line.contains("== -*")),
-            "{wrapper}'s `{guard}` is handed a value and never judges its shape: a refused argument does \
-             not become admitted by sitting in a value position, and an admitted one does not reach the \
-             tool by being read as text. Its sibling wrapper refuses `-`-leading values; this one must too"
+            body.iter()
+                .any(|line| line.contains(r#"$(value_refusal "$@")"#)),
+            "{wrapper}'s `{guard}` is handed a value and does not hand it to the library's `value_refusal`, \
+             the one rule both wrappers judge a value by: a refused argument does not become admitted by \
+             sitting in a value position, and an admitted one does not reach the tool by being read as text"
         );
     }
+    // The rule itself, read once from the library both guards delegate to.
+    let library = Source::of(read(&root, kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY));
+    let executed: Vec<String> = library
+        .shell()
+        .lines()
+        .map(|line| line.trim().to_string())
+        .collect();
+    let start = executed
+        .iter()
+        .position(|line| line == "value_refusal() {")
+        .expect("the library defines `value_refusal`");
+    assert!(
+        executed[start + 1..]
+            .iter()
+            .take_while(|line| *line != "}")
+            .any(|line| line.contains("== -*")),
+        "the library's `value_refusal` never judges a value's shape, so neither wrapper does"
+    );
+}
+
+/// A site's line is the one a reader of the file finds it on, after an ANSI-C escape that consumes a newline.
+///
+/// `$'a\` followed by a newline continues the quote on the next line, so the `exit` below stands on line 3; a
+/// reader that advanced past the escape without counting it reported line 2.
+#[test]
+fn a_site_after_an_ansi_c_escaped_newline_reports_its_own_line() {
+    assert_eq!(
+        exit_sites("x=$'a\\\nb'\nexit 3\n"),
+        Ok(vec![(3, "3".to_string())]),
+        "the exit after an ANSI-C escaped newline stands on line 3"
+    );
+}
+
+/// The library and the function reach bash as arguments, never as shell text.
+///
+/// A path holding a space, spliced into the `-c` string, splits into two words and names a file that does not
+/// exist; passed as a positional parameter it is one word, whatever it holds.
+#[test]
+fn a_library_path_holding_a_space_is_one_argument() {
+    let scratch = support::fixture::Scratch::claim("tianheng-bash-body");
+    let dir = scratch.path().join("a b");
+    std::fs::create_dir(&dir).expect("create a directory whose name holds a space");
+    std::fs::write(dir.join("lib.sh"), "stop() {\n    exit 7\n}\n").expect("write the library");
+    let body = body_as_bash_holds_it(scratch.path(), "a b/lib.sh", "stop");
+    assert!(
+        body.contains("exit 7"),
+        "the body bash holds for `stop`, read through a path with a space: {body}"
+    );
+}
+
+/// A scratch root that cannot be removed fails the run that dropped it, rather than being left behind unsaid.
+#[test]
+fn a_scratch_root_that_cannot_be_removed_is_a_failure() {
+    let scratch = support::fixture::Scratch::claim("tianheng-unremovable");
+    let held = scratch.path().join("held");
+    std::fs::create_dir(&held).expect("create a directory inside the scratch root");
+    std::fs::write(held.join("file"), "x").expect("write a file the removal must reach");
+    let Some(guard) = xingbiao::Unreadable::try_new(&held) else {
+        return;
+    };
+    let root = scratch.path().to_path_buf();
+    let dropped = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drop(scratch)));
+    drop(guard);
+    std::fs::remove_dir_all(&root).expect("remove the scratch root once it is readable again");
+    let message = dropped
+        .expect_err("dropping a scratch root that cannot be removed passed in silence")
+        .downcast::<String>()
+        .map(|message| *message)
+        .unwrap_or_default();
+    assert!(
+        message.starts_with("Scratch: removing"),
+        "the failure names what it could not remove: {message}"
+    );
+}
+
+/// A library named without a slash is the fixture's file, never one `source` finds on `PATH`.
+///
+/// The fixture is named `bash`, which is on `PATH` wherever this runs, so a name handed to `source` as written
+/// reads the host's executable instead.
+#[test]
+fn a_library_named_without_a_slash_is_the_fixture_s_file() {
+    let scratch = support::fixture::Scratch::claim("tianheng-slashless-library");
+    std::fs::write(scratch.path().join("bash"), "X=1\n").expect("write the library");
+    assert_eq!(
+        value_as_bash_holds_it(scratch.path(), "bash", "X"),
+        Some("1".to_string()),
+        "the value bash holds after sourcing the fixture named `bash`"
+    );
+}
+
+/// A declared name assigned again when a wrapper runs ends it in the unjudged class, in every form bash assigns by.
+///
+/// The static declaration check reads assignment words only; this is what holds the rest. The library declares
+/// each name `readonly` and bash refuses the assignment: most forms end the shell with status `1` outside the ERR
+/// trap, which the library's EXIT trap holds to the unjudged class, and `declare` and `local` fail as builtins
+/// through the ERR trap. The class is the unjudged one either way.
+#[test]
+fn a_declared_name_assigned_again_is_the_unjudged_class() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let library = root.join(kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY);
+    let unjudged = i32::from(verdict_channel::wrapper_exit(Kind::CannotJudge));
+    // The gate's channel carries a violation, so the refusal after the assignment exits by the declared values:
+    // a moved one is seen in the status rather than hidden behind a channel that carries nothing.
+    let scratch = support::fixture::Scratch::claim("tianheng-reassigned-name");
+    let verdict = scratch.path().join("verdict");
+    std::fs::write(&verdict, verdict_channel::rendered(Kind::Violation))
+        .expect("write the gate's verdict");
+    for form in [
+        "WRAPPER_EXIT_VIOLATION=3",
+        "WRAPPER_EXIT_UNJUDGED+=0",
+        "read GATE_CLEAN_CLASS <<< Violation",
+        "printf -v WRAPPER_EXIT_UNJUDGED 1",
+        "(( WRAPPER_EXIT_VIOLATION = 2 ))",
+        "declare GATE_VIOLATION_CLASS=Clean",
+        "f() { local WRAPPER_EXIT_UNJUDGED=1; }; f",
+    ] {
+        let output = support::bash::bash()
+            .args([
+                "-c",
+                &format!(
+                    r#"set -Eeuo pipefail; trap '' PIPE; WRAPPER_SUBJECT=probe; source "$1"; install_exit_class_trap; verdict_file=$2; {form}; exit_for_the_gates_refusal out"#
+                ),
+                "probe",
+            ])
+            .arg(&library)
+            .arg(&verdict)
+            .output()
+            .expect("run the library with a declared name assigned again");
+        assert_eq!(
+            output.status.code(),
+            Some(unjudged),
+            "`{form}` after the library is loaded: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
+
+/// Which functions stop is read from the lexed words: a one-line function is a function, and a quoted brace in a
+/// message closes nothing.
+#[test]
+fn the_stops_are_the_functions_reaching_cannot_judge() {
+    // `fake` prints the name as an argument, quoted and not, and `brace` prints a lone `{` and `}` as arguments.
+    let script = "f() {\n    tell \"}\"\n    cannot_judge x\n}\ng() { f; }\nh() { :; }\n\
+                  fake() { printf '%s' 'cannot_judge'; printf '%s' cannot_judge; }\n\
+                  brace() { printf '%s\\n' { \"$1\"; }\nlater() { cannot_judge y; }\n\
+                  after_sub() { printf '%s' \"$(date)\" cannot_judge; }\n\
+                  after_tick() { echo `date` cannot_judge; }\n\
+                  redirect() { printf x >&2 cannot_judge; }\n\
+                  test_expr() { [[ a && cannot_judge ]]; }\n\
+                  inner() { x=$(cannot_judge z); }\n";
+    assert_eq!(
+        stops_of(&[script]),
+        BTreeSet::from(["cannot_judge", "f", "g", "later"].map(String::from)),
+        "the stops of {script:?}"
+    );
+}
+
+/// The pass line a controlled gate prints is one the wrappers' `require_one_pass` accepts, asked of the
+/// library's own function rather than of a copy of its pattern.
+#[test]
+fn the_controlled_gate_s_pass_line_is_the_one_the_wrappers_require() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let library = root.join(kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY);
+    let output = support::bash::bash()
+        .args([
+            "-c",
+            r#"set -Eeuo pipefail; WRAPPER_SUBJECT=probe; source "$1"; require_one_pass "$2""#,
+            "probe",
+        ])
+        .arg(&library)
+        .arg(support::fixture::GATE_PASS_LINE)
+        .output()
+        .expect("run the library's require_one_pass");
+    assert!(
+        output.status.success(),
+        "`require_one_pass` refuses the line the controlled gates print, so every wrapper direction would stop \
+         at the gate for a reason the fixture made: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }

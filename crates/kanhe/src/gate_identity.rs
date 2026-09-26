@@ -5,8 +5,66 @@
 //! by holding the identifier to the target it is cited against — a test identifier is a reference into this
 //! repository exactly as a path is, and the reference gate matches paths only.
 
+use std::path::Path;
+
 use crate::refusal::{Refusal, cannot_judge_at, violation_at};
 use crate::region::Source;
+
+/// The directory every tracked file of which is a wrapper or the shared library — a category closed by
+/// location, which is why nothing filters it by extension.
+pub const SCRIPTS_DIRECTORY: &str = "scripts/";
+
+/// Every tracked file under [`SCRIPTS_DIRECTORY`], with its text: what a direction that must see every script
+/// reads, and what a list naming scripts is held against.
+///
+/// **No extension filter.** The citation check and the wrapper inventory each filtered the listing to `.sh`,
+/// so an extensionless script was invisible to both at once while the requirement says what `git ls-files
+/// scripts/` names. And they enumerated separately, so the inventory could find wrappers by one rule — a
+/// sourcing line — while the citation check found scripts by another, and a script citing a gate without
+/// loading the library was a member of the second set and not the first.
+///
+/// # Errors
+///
+/// A listing git did not answer, an empty one, or a tracked file that cannot be read — each described,
+/// because every one of them returns what a repository holding no scripts would, and reporting that as clean
+/// is the vacuity direction.
+pub fn tracked_scripts(repo: &Path) -> Result<Vec<(String, String)>, String> {
+    let listing = tracked_script_paths(repo)?;
+    if listing.is_empty() {
+        return Err(format!(
+            "no tracked file under {SCRIPTS_DIRECTORY}, so a direction over the scripts would hold over nothing"
+        ));
+    }
+    listing
+        .into_iter()
+        .map(|path| {
+            let text = std::fs::read_to_string(repo.join(&path))
+                .map_err(|err| format!("cannot read tracked {path}: {err}"))?;
+            Ok((path, text))
+        })
+        .collect()
+}
+
+/// Every tracked path under `scripts/`: the one enumeration of that set, which [`tracked_scripts`] reads and the
+/// release-coherence gate's machinery set is drawn from.
+///
+/// Empty is an answer here: a tree may hold no scripts, and whether that is a vacuity is the caller's to say.
+///
+/// # Errors
+///
+/// A listing git did not answer.
+pub fn tracked_script_paths(repo: &Path) -> Result<Vec<String>, String> {
+    crate::hermetic_git::tracked_paths(repo, &[SCRIPTS_DIRECTORY]).map_err(|failure| {
+        format!("`git ls-files {SCRIPTS_DIRECTORY}` did not answer: {failure:?}")
+    })
+}
+
+/// The one tracked script under `scripts/` that is not a wrapper: the shared library the wrappers source.
+///
+/// Declared once and named wherever a direction over the scripts would otherwise read it as a third wrapper —
+/// a citation it cannot carry, an exit-class site it must not be counted against. One name, not a pattern:
+/// a second library is a change to the requirement, not a row in a growing list.
+pub const WRAPPERS_SHARED_LIBRARY: &str = "scripts/wrapper.sh";
 
 /// One `--exact` citation found in a script: the identifier, and the invocation it belongs to.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,6 +92,11 @@ pub struct Citation {
 /// the space rather than the newline. That sweep decides whether every acquisition in the two
 /// irreversible-act wrappers is guarded, and its failure direction is *reports guarded when it is not*: text
 /// pulled in from a following line can carry the very token the guard is recognised by.
+///
+/// **It reads no quotes, so it joins two lines bash does not**: one ending in an escaped backslash, and one
+/// ending in a backslash inside single quotes. A reader that needs bash's own split lexes the script whole
+/// instead, as the workflow's command reader does; the readers left on this one search a joined statement for a
+/// token, and `BACKLOG.md` carries what an over-joined line costs them.
 pub fn logical_lines(script: &str) -> Vec<(usize, String)> {
     let mut joined = Vec::new();
     let mut current = String::new();
@@ -198,22 +261,46 @@ pub fn offences(
 /// the requirement rather than one this check could not read. An empty corpus is the different fact, and it is
 /// the caller's to refuse — a set that never arrived is not a set in which every member cites a gate.
 ///
+/// **One named script is not a wrapper and carries no citation: the shared library.** `scripts/wrapper.sh`
+/// holds the lifecycle both wrappers are built on — the class helper, the ERR trap, the verdict channel, the
+/// two guards over the gate's run — and renders no verdict of its own, so the citation stays with the
+/// wrappers that source it. The exception is held **both ways**, because a one-way skip is how a named
+/// exemption silently widens: a citation appearing inside the library is refused rather than skipped, and a
+/// second library is a change to the requirement rather than a row in a growing exclusion list — the shape
+/// `repository-checks` names when it says a refusal an operator cannot act on is one they work around.
+///
 /// What this buys is the **shape**: a script deferring to nothing cannot exist. It is not a proof that a script
 /// which does defer does nothing else afterwards, and it does not try to be — deciding that from source text is
 /// the judgement over prose this repository has designed, measured three times and rejected.
 pub fn uncited_scripts<'a>(scripts: impl IntoIterator<Item = (&'a str, &'a str)>) -> Vec<Refusal> {
     scripts
         .into_iter()
-        .filter(|(path, text)| citations(path, text).is_empty())
-        .map(|(path, _)| {
-            violation_at(
-                "repository-checks#wrapper-cites-no-gate",
-                format!(
-                "{path}: names no gate by `--exact`, so it renders its own verdict rather than deferring to a \
-                 Rust check. Every tracked script here is a wrapper: it gathers evidence and orders the act, \
-                 and the judgement lives in `crates/kanhe`. A script that is not a wrapper belongs outside \
-                 `scripts/`, or this requirement is amended deliberately"
-            ))
+        .filter_map(|(path, text)| {
+            let cites = !citations(path, text).is_empty();
+            if path == WRAPPERS_SHARED_LIBRARY {
+                return cites.then(|| {
+                    violation_at(
+                        "repository-checks#the-shared-library-names-a-gate",
+                        format!(
+                            "{path}: carries a gate citation, and it is the shared library the wrappers \
+                             source — a citation here belongs to a wrapper, and adding one is a change to \
+                             the requirement, not content the exemption covers"
+                        ),
+                    )
+                });
+            }
+            (!cites).then(|| {
+                violation_at(
+                    "repository-checks#wrapper-cites-no-gate",
+                    format!(
+                        "{path}: names no gate by `--exact`, so it renders its own verdict rather than \
+                         deferring to a Rust check. Every tracked script here is a wrapper: it gathers \
+                         evidence and orders the act, and the judgement lives in `crates/kanhe`. A script \
+                         that is not a wrapper belongs outside `scripts/`, or this requirement is amended \
+                         deliberately"
+                    ),
+                )
+            })
         })
         .collect()
 }

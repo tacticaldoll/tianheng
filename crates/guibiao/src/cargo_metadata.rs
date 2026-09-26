@@ -4,8 +4,7 @@ use serde_json::Value;
 use crate::module_scan::package_name_to_import_ident;
 
 pub(crate) use xingbiao::{
-    cargo_metadata, compilation_unit_label, crate_root_file, crate_root_files, find_package,
-    member_src_dirs,
+    cargo_metadata, compilation_unit_label, crate_roots, find_package, member_src_dirs,
 };
 
 /// The membership set, or why it could not be read.

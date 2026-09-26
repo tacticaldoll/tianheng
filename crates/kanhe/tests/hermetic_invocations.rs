@@ -1,5 +1,6 @@
 //! Repository check: a `git` this repository constructs itself is the builder's, or it is declared — and a
-//! declared site's isolation is proven by a run.
+//! declared site's isolation is proven by a run. A `bash` the repository checks run is held the same way, to
+//! `support::bash`, through the same reader.
 //!
 //! `kanhe::hermetic_git::hermetic` decides what a `git` behind a verdict may inherit — the configuration
 //! files, the `GIT_CONFIG_*` channels, and `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE`, which move **which
@@ -22,6 +23,8 @@
 //! program passed as a value, a name bound outside the file, a construction inside a comment or a string
 //! literal are each a declared bound with a pinning direction, carried in
 //! `docs/observation-bounds.md` rather than in this header.
+
+mod support;
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -106,6 +109,8 @@ fn string_of(expression: &syn::Expr) -> Option<String> {
 /// them is an offset from something else.
 #[derive(Default)]
 struct Constructions {
+    /// The program a construction names — `git`, `bash`.
+    program: &'static str,
     found: bool,
     /// A macro body neither grammar parsed, naming something bound to `Command`.
     undecided: bool,
@@ -263,7 +268,7 @@ impl<'ast> syn::visit::Visit<'ast> for Constructions {
                 && segments[segments.len() - 1] == "new";
             if names_command
                 && node.args.len() == 1
-                && string_of(&node.args[0]).as_deref() == Some("git")
+                && string_of(&node.args[0]).as_deref() == Some(self.program)
             {
                 self.found = true;
             }
@@ -282,10 +287,19 @@ fn workspace_root() -> Option<PathBuf> {
 
 /// Whether `text` constructs a `git`, or says it could not decide.
 fn constructs_git(text: &str) -> Reading {
+    constructs(text, "git")
+}
+
+/// Whether `text` constructs `program`, or says it could not decide — one reader for every program a builder
+/// owns, so a spelling closed for one is closed for each.
+fn constructs(text: &str, program: &'static str) -> Reading {
     let Ok(parsed) = syn::parse_file(text) else {
         return Reading::Undecidable;
     };
-    let mut constructions = Constructions::default();
+    let mut constructions = Constructions {
+        program,
+        ..Constructions::default()
+    };
     constructions.bind_aliases(&parsed);
     syn::visit::Visit::visit_file(&mut constructions, &parsed);
     if constructions.found {
@@ -302,13 +316,9 @@ fn reads(text: &str) -> bool {
     matches!(constructs_git(text), Reading::Constructs)
 }
 
-#[test]
-fn every_git_this_repository_constructs_is_the_builders_or_is_declared() {
-    let Some(root) = workspace_root() else {
-        return;
-    };
-
-    let tracked = kanhe::hermetic_git::tracked_paths(&root, &["*.rs"]).expect(
+/// The tracked Rust files constructing `program`, every one read and decided.
+fn files_constructing(root: &std::path::Path, program: &'static str) -> BTreeSet<String> {
+    let tracked = kanhe::hermetic_git::tracked_paths(root, &["*.rs"]).expect(
         "the tracked Rust is enumerable; a failed enumeration is not a repository with no sources",
     );
     let mut constructing = BTreeSet::new();
@@ -322,7 +332,7 @@ fn every_git_this_repository_constructs_is_the_builders_or_is_declared() {
             )
         });
         examined += 1;
-        match constructs_git(&text) {
+        match constructs(&text, program) {
             Reading::Constructs => {
                 constructing.insert(path.clone());
             }
@@ -339,19 +349,96 @@ fn every_git_this_repository_constructs_is_the_builders_or_is_declared() {
     // it never read.
     assert!(
         undecidable.is_empty(),
-        "tracked Rust this reader could not decide, so whether it constructs a `git` was never \
+        "tracked Rust this reader could not decide, so whether it constructs a `{program}` was never \
          answered:\n  {}",
         undecidable.join("\n  ")
     );
+    constructing
+}
 
+#[test]
+fn every_git_this_repository_constructs_is_the_builders_or_is_declared() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
     let declared: BTreeSet<String> = CONSTRUCTS_GIT_ITSELF
         .iter()
         .map(|(path, _, _)| (*path).to_string())
         .collect();
     assert_eq!(
-        declared, constructing,
+        declared,
+        files_constructing(&root, "git"),
         "the files constructing a `git` differ from the set named here. A site that gains one must be \
-         named with why; a name that outlives its site must go. {examined} tracked Rust file(s) were read"
+         named with why; a name that outlives its site must go"
+    );
+}
+
+/// The one file that constructs a `bash`: the builder the repository checks run it through.
+const CONSTRUCTS_BASH_ITSELF: [&str; 1] = ["crates/kanhe/tests/support/bash.rs"];
+
+/// Every `bash` a repository check runs is the builder's, so none inherits what the host's environment holds.
+///
+/// Each site used to decide for itself what its `bash` inherited, and only one removed a startup file. Held
+/// both ways, as the `git` set is: a site that constructs one fails here, and so does a builder that moved.
+#[test]
+fn every_bash_this_repository_constructs_is_the_builders() {
+    let Some(root) = workspace_root() else {
+        return;
+    };
+    let declared: BTreeSet<String> = CONSTRUCTS_BASH_ITSELF
+        .iter()
+        .map(|path| (*path).to_string())
+        .collect();
+    assert_eq!(
+        declared,
+        files_constructing(&root, "bash"),
+        "the files constructing a `bash` differ from the builder; run it through `support::bash::bash`"
+    );
+}
+
+/// The builder's `bash` holds what it names and what bash exports of its own accord, and nothing the host holds.
+///
+/// bash's own exports are taken from bash, run with an empty environment, rather than listed here. A run is
+/// the evidence: whatever the host's environment carries — `BASH_ENV` and all — none of it reaches the run.
+#[test]
+fn the_bash_builder_hands_on_only_what_it_names() {
+    let exported = |command: &mut std::process::Command| -> BTreeSet<String> {
+        let output = command
+            .args(["-c", "compgen -e"])
+            .output()
+            .expect("bash runs");
+        assert!(
+            output.status.success(),
+            "compgen -e answered {:?}",
+            output.status
+        );
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(str::to_string)
+            .collect()
+    };
+    let own = exported(&mut support::bash::bash_with_no_environment());
+    let seen = exported(&mut support::bash::bash());
+    // A host with nothing to withhold would make the comparison below agree over nothing.
+    let withheld: Vec<std::ffi::OsString> = std::env::vars_os()
+        .map(|(name, _)| name)
+        .filter(|name| {
+            name.to_str()
+                .is_none_or(|name| !support::bash::INHERITED.contains(&name))
+        })
+        .collect();
+    assert!(
+        !withheld.is_empty(),
+        "the host's environment holds only what the builder hands on, so whether it withholds anything was \
+         not measured"
+    );
+    let foreign: Vec<&String> = seen
+        .difference(&own)
+        .filter(|name| !support::bash::INHERITED.contains(&name.as_str()))
+        .collect();
+    assert!(
+        foreign.is_empty(),
+        "the builder's bash inherited what it does not name: {foreign:?}"
     );
 }
 

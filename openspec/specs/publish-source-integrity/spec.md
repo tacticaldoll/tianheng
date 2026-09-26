@@ -193,8 +193,8 @@ derived id, per `observation-bound-model`.
   `--match-head-commit` to pin what was judged, which is what closes the equivalent window for the commit
   set on the merge path. What narrows it is `cargo publish`'s own refusal of a dirty worktree, which is a
   weaker property than the gate's — a tree amended and committed is clean again and packages a different
-  commit under the same tag. The wrapper `cd`s once and `exec`s, so the window is two statements wide rather
-  than a whole `cargo test`, and narrowing is all it can do
+  commit under the same tag. The wrapper `cd`s once and then runs `cargo publish`, with nothing between the
+  two that reads or waits, so the window is two statements wide rather than a whole `cargo test`, and narrowing is all it can do
 - **UNPINNED** `BACKLOG.md` — *the window the publish wrapper can only narrow*
 
 #### Scenario: Whether the tag's signer is authorized is not observed — a stated bound

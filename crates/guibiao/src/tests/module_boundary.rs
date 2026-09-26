@@ -7,18 +7,11 @@ use super::helpers::*;
 #[cfg(unix)]
 #[test]
 pub(super) fn unreadable_governed_file_is_a_scan_error() {
-    use std::os::unix::fs::PermissionsExt;
-
     let ws = TempWorkspace::new("unreadable");
     let file = ws.write("lib.rs", "use crate::forbidden::Thing;\n");
-    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o000))
-        .expect("drop read permission");
-
-    // Self-calibrating root guard: if mode 0 is still readable, permissions do
-    // not bite here, so the premise cannot hold — skip rather than false-pass.
-    if std::fs::read_to_string(&file).is_ok() {
+    let Some(_unreadable) = xingbiao::Unreadable::try_new(&file) else {
         return;
-    }
+    };
 
     let metadata = ws.metadata("x");
     let boundary = ModuleBoundary::in_crate("x")
@@ -28,8 +21,6 @@ pub(super) fn unreadable_governed_file_is_a_scan_error() {
 
     let mut violations = Vec::new();
     let result = check_module_boundary(&metadata, &boundary, &mut violations);
-
-    let _ = std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o644));
 
     assert!(
         result.is_err(),
@@ -44,21 +35,13 @@ pub(super) fn unreadable_governed_file_is_a_scan_error() {
 #[cfg(unix)]
 #[test]
 pub(super) fn unreadable_governed_directory_is_a_scan_error() {
-    use std::os::unix::fs::PermissionsExt;
-
     let ws = TempWorkspace::new("unreadable-dir");
     ws.write("lib.rs", "// nothing\n");
     ws.write("sub/inner.rs", "use crate::forbidden::Thing;\n");
     let sub = ws.src().join("sub");
-    std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o000))
-        .expect("drop dir read/exec permission");
-
-    // Self-calibrating root guard: if the directory is still traversable, the
-    // premise cannot hold — skip rather than false-pass.
-    if std::fs::read_dir(&sub).is_ok() {
-        let _ = std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o755));
+    let Some(_unreadable) = xingbiao::Unreadable::try_new(&sub) else {
         return;
-    }
+    };
 
     let metadata = ws.metadata("x");
     let boundary = ModuleBoundary::in_crate("x")
@@ -68,8 +51,6 @@ pub(super) fn unreadable_governed_directory_is_a_scan_error() {
 
     let mut violations = Vec::new();
     let result = check_module_boundary(&metadata, &boundary, &mut violations);
-
-    let _ = std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o755));
 
     assert!(
         result.is_err(),
@@ -249,7 +230,13 @@ pub(super) fn an_inline_module_target_is_a_self_describing_constitution_error() 
     // inline target reports the inline cause, never the unknown-module message.
     assert_eq!(
         inline_err,
-        inline_module_target_error("crate::kernel", "app", "kernel")
+        inline_module_target_error(
+            "crate::kernel",
+            "app",
+            "kernel",
+            Some("lib.rs"),
+            "kernel.rs"
+        )
     );
     assert_ne!(inline_err, unknown_module_error("crate::kernel", "app"));
 
@@ -261,6 +248,44 @@ pub(super) fn an_inline_module_target_is_a_self_describing_constitution_error() 
     let typo_err = check_module_boundary(&metadata, &typo, &mut violations)
         .expect_err("an unknown module is a constitution error");
     assert_eq!(typo_err, unknown_module_error("crate::ghost", "app"));
+}
+
+/// Metadata reporting NO target falls back to the conventional source directory — the
+/// `Unreported` shape synthetic metadata in a caller's own tests carries, which `module-boundary`
+/// declares load-bearing. An inline target refused on that path has no root file, so the refusal
+/// names NO compilation unit and suggests the conventional `src/<leaf>.rs`. Asserted against the
+/// wording itself, not the constructor, so a qualifier added to the unit-less arm fails here.
+#[test]
+pub(super) fn an_inline_target_with_no_reported_target_names_no_compilation_unit() {
+    let ws = TempWorkspace::new("inline-notarget");
+    ws.write("lib.rs", "pub mod kernel { use crate::secret::Thing; }\n");
+    // No `targets` field at all: the no-target fallback, reachable only through synthetic metadata.
+    let metadata = serde_json::json!({
+        "packages": [{
+            "name": "x",
+            "manifest_path": ws.dir().join("Cargo.toml").to_string_lossy(),
+        }],
+    });
+
+    let boundary = ModuleBoundary::in_crate("x")
+        .module("crate::kernel")
+        .must_not_import("crate::secret")
+        .because("the kernel must not import a secret");
+    let mut violations = Vec::new();
+    let err = check_module_boundary(&metadata, &boundary, &mut violations)
+        .expect_err("an inline target on the no-target fallback is still the inline refusal");
+    assert!(
+        err.contains("declared inline"),
+        "expected the inline-target refusal, got: {err}"
+    );
+    assert!(
+        err.contains("`src/kernel.rs`"),
+        "the suggested extraction path resolves from the conventional source directory: {err}"
+    );
+    assert!(
+        !err.contains("compilation unit"),
+        "no target was reported, so there is no compilation unit to name: {err}"
+    );
 }
 
 /// The inline-target constitution error must hold **even when a same-named conventional orphan
@@ -289,7 +314,7 @@ pub(super) fn an_inline_target_with_a_same_named_orphan_file_is_still_a_constitu
     );
     assert_eq!(
         err,
-        inline_module_target_error("crate::kernel", "x", "kernel")
+        inline_module_target_error("crate::kernel", "x", "kernel", Some("lib.rs"), "kernel.rs")
     );
 }
 
@@ -362,35 +387,6 @@ pub(super) fn a_cfg_dual_declared_module_keeps_governing_its_conventional_file()
     assert!(
         !violations.is_empty(),
         "the conventional file must still be observed — the cfg-blind bound is unchanged"
-    );
-}
-
-/// Stated bound (not a fix): a package that builds a lib AND a bin observes its whole `src/`
-/// under one conventional-path tree, so both roots resolve to `crate` and there are no
-/// per-target module graphs. A submodule declared inline in one root and file-backed in the
-/// other governs the file-backed one; the inline body's imports are NOT observed. Closing it
-/// needs per-target graphs (distinguishing the lib crate's `crate::shared` from the bin's) —
-/// beyond the conventional-path scanner. Recorded here and in `module-boundary`, never a silent
-/// claim of cleanliness.
-#[test]
-pub(super) fn a_cross_root_same_named_submodule_is_a_documented_bound() {
-    let (result, violations) = run_module_check(
-        "cross-root-submodule",
-        &[
-            ("lib.rs", "pub mod shared { use crate::forbidden::X; }\n"),
-            ("main.rs", "pub mod shared;\nfn main() {}\n"),
-            ("shared.rs", "// clean — the bin root's shared module\n"),
-        ],
-        ModuleBoundary::in_crate("x")
-            .module("crate::shared")
-            .must_not_import("crate::forbidden")
-            .because("shared must not import forbidden"),
-    );
-    result.expect("a file-backed shared (via the bin root) is a valid target");
-    assert!(
-        violations.is_empty(),
-        "documented lib+bin bound: the lib root's inline `mod shared` body is not observed \
-             (shared.rs is governed instead) — recorded, not silently claimed clean: {violations:?}"
     );
 }
 
@@ -709,7 +705,7 @@ pub(super) fn an_inline_arm_paired_with_a_tolerated_away_plain_arm_still_reports
     );
     assert_eq!(
         err,
-        inline_module_target_error("crate::engine", "x", "engine")
+        inline_module_target_error("crate::engine", "x", "engine", Some("lib.rs"), "engine.rs")
     );
 }
 
@@ -854,21 +850,28 @@ pub(super) fn a_module_violation_carries_its_offending_file() {
     );
 }
 
+/// One module backed by two files in one root — the per-platform shim, whose arms are both observed
+/// because the scan is cfg-blind — with the same forbidden import in each collapses to exactly one
+/// violation: the file is attached after collapsing by identity, never a de-dup key, and the one that
+/// survives carries a file.
 #[test]
 pub(super) fn a_module_backed_by_two_files_yields_one_violation_with_a_file() {
-    // `crate` is backed by both lib.rs and main.rs (a lib+bin package); the same forbidden
-    // import in each must still collapse to exactly one violation (the file is attached
-    // after collapsing by identity, never a de-dup key), and that one carries a file.
     let (result, violations) = run_module_check(
         "module-two-files",
         &[
-            ("lib.rs", "use crate::forbidden::Thing;\n"),
-            ("main.rs", "use crate::forbidden::Thing;\nfn main() {}\n"),
+            (
+                "lib.rs",
+                "pub mod forbidden;\n#[cfg(unix)]\n#[path = \"imp_unix.rs\"]\npub mod imp;\n\
+                 #[cfg(not(unix))]\n#[path = \"imp_other.rs\"]\npub mod imp;\n",
+            ),
+            ("forbidden.rs", "pub struct Thing;\n"),
+            ("imp_unix.rs", "use crate::forbidden::Thing;\n"),
+            ("imp_other.rs", "use crate::forbidden::Thing;\n"),
         ],
         ModuleBoundary::in_crate("x")
-            .module("crate")
+            .module("crate::imp")
             .must_not_import("crate::forbidden")
-            .because("crate must not import forbidden"),
+            .because("imp must not import forbidden"),
     );
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(

@@ -19,12 +19,29 @@
 # Definition of Done and the superset CI runs. So this holds what the merge is about to record AND that the
 # suite agreed about it.
 #
-# This sentence said both were a human's call until 2026-08-21, and `require_ci_green` had landed 204 commits
-# earlier. A premise its own new code had falsified, left standing where an operator reads it first — and the
-# `--admin` arm below was reasoned from it, which is how a stale premise spreads rather than merely sits.
-#
 # A merge made in the GitHub web UI reaches no wrapper at all; that is a declared bound, not an oversight.
 set -Eeuo pipefail
+# The stream policy, before anything can write: `scripts/wrapper.sh`'s paragraph on `tell` says why it is here.
+trap '' PIPE
+
+WRAPPER_SUBJECT='merge message'
+# The lifecycle this wrapper is built on: the two exit classes and the one helper that chooses them, the
+# ERR trap, the verdict file's lifecycle, and the two guards over the gate's run. It lived twice and the
+# copies agreed by maintenance; it is written once now, and what stays below is what only this wrapper
+# decides — the allowlist, the evidence, the gate, and the merge. Resolved through the tree the wrapper names,
+# so a copy of this file planted outside the tree — a direction's fixture — answers *library not found*
+# rather than judging under no lifecycle.
+#
+# **The one acquisition the shared machinery cannot guard is the one that loads it.** `cannot_judge` is the
+# library's, so a `source` that fails has nowhere to delegate to, and unguarded under `set -e` it exits with
+# `source`'s own status — `1`, the class that means a gate ran and refused. Measured on bash 5: the ERR trap
+# does not fire for a failed `source` (it does for a bare failing command), so the guard prints the refusal
+# itself rather than trapping. `a_wrapper_without_its_library_is_the_unjudged_class` holds the class by
+# running this wrapper with the library removed.
+if ! source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)/scripts/wrapper.sh"; then
+    printf '%s: cannot read the shared wrapper library, so the gate it must install before `gh pr merge` cannot be located — which is not the same fact as a gate that ran and refused\n' "$WRAPPER_SUBJECT" >&2 || :
+    exit 2
+fi
 
 # **Ambient repository selectors are cleared before anything reads a repository.**
 #
@@ -53,40 +70,8 @@ set -Eeuo pipefail
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GH_REPO
 
 usage() {
-    printf 'usage: %s <pr-number> --body-file <path> [--subject <text>] [gh args…]\n' "${0##*/}" >&2
-    printf '  The subject defaults to the pull request title, which is what the rule requires anyway.\n' >&2
-}
-
-# --- the two exit classes, chosen in one place ------------------------------------------------------------
-#
-# `2` is everything this wrapper could not judge: a misconfigured invocation, and an input it could not read.
-# `1` is a gate that ran and refused. The contract is this repository's own — `crates/shengmo/src/law.rs`:
-# *0 clean, 1 violation, 2 constitution/usage error* — and its sibling `scripts/publish.sh` states the rule for
-# arguments already.
-#
-# **Five could-not-read conditions were split across both classes with no rule.** An unresolvable repository
-# exited 2 while an unreadable body file, an unreadable head, an unresolvable pull-request number and an
-# unreadable commit set exited 1. Two of those facts are ones the gate this wrapper fronts types the other way:
-# `merge_message_gate::judge` returns cannot-judge for an unavailable title and for unavailable commit subjects,
-# because "which is not the same fact as a subject that disagrees". So the wrapper reported as a disagreement
-# what its own gate calls unjudgeable — telling an operator, in the words of the sibling publish gate, "to go
-# looking for a disagreement that does not exist".
-#
-cannot_judge() {
-    printf 'merge message: %s\n' "$1" >&2
-    exit 2
-}
-
-# The refusal idiom, delegating the class to the function above rather than choosing it again.
-#
-# **Converging the `case` arms onto this helper left four sites behind, and two of them predated it.** The
-# positional selector and the body-file guard exited through a bare `usage; exit 2` carrying none of the
-# prefix above; the URL refusal hand-copied that function's body because both helpers were defined below it;
-# and `require_value` re-spelled it fifty-nine lines after it. Every stop now delegates, and what decides that
-# is `each_wrapper_chooses_its_exit_class_in_one_place` rather than the next reader — a helper's existence was
-# never the property, since three of those four sites were written with it in scope.
-refuse() {
-    cannot_judge "refusing \`$1\`: $2"
+    tell "usage: ${0##*/} <pr-number> --body-file <path> [--subject <text>] [gh args…]" \
+        '  The subject defaults to the pull request title, which is what the rule requires anyway.'
 }
 
 # A misconfigured invocation: the same class, plus the usage line, since what the operator needs here is the
@@ -106,39 +91,24 @@ fi
 if [[ $pr == -* ]]; then
     usage_error "the first argument is the pull request, not a flag; \`$pr\` reads as one"
 fi
-# A URL names its own repository, and this wrapper reads its evidence from several places. `gh pr view` and
-# `gh pr merge` would follow the URL while the live-commits endpoint is built from a repository reference of its
-# own — so a cross-repository URL has the gate judge one pull request and the merge record another, which is the
-# same hole a `--repo` flag opened and this positional selector reopens. A number or a branch name names no
-# repository and resolves against the one being pinned below, so both stay accepted.
-if [[ $pr == http://* || $pr == https://* ]]; then
+# A URL names its own repository, and `gh pr view` and `gh pr merge` would follow it, while this wrapper resolves
+# one `repository` and names it on every call it makes. A number or a branch name names no repository and
+# resolves against that one, so both stay accepted.
+#
+# **Decided by what a selector here can be, not by the spellings of what it must not be.** A number holds no `:`,
+# and git refuses `:` in any ref name, so a selector holding one names neither — every URL scheme in any case, and
+# `gh`'s `owner:branch` head of another repository's fork, are refused by that one fact.
+if [[ $pr == *:* ]]; then
     refuse "$pr" \
-        "a pull-request URL names its own repository, while this wrapper reads the live commit set from the \
-repository it is run in. Pass the number, or run it from a checkout of that repository"
+        "a selector holding \`:\` — a pull-request URL, or another repository's \`owner:branch\` — names its own \
+repository, while this wrapper reads the live commit set from the repository it is run in. Pass the number, or \
+run it from a checkout of that repository"
 fi
 shift
 
-# **The class a wrapper exits is now decided by construction, not by a sweep that must be exhaustive.**
-#
-# Under `set -e` any unguarded failure exits with the TOOL's status, and this repository reserves `1` for a
-# gate that ran and refused. Two sweeps were widened to catch that — first by tool name, then by command
-# substitution — and a bare `cd` walked through both, because the axis was never *which shape the statement
-# has*: it is *any statement whose failure can choose the class*. That is every command, which is why
-# enumerating them is the wrong instrument. Enumerating what may exit `1` is the right one, and there is
-# exactly one such statement: the gate's own verdict arm.
-#
-# Measured on bash 5.x rather than reasoned about. A bare failure traps and exits 2, including a failed `cd`.
-# A `||`-guarded command does not trap, so every existing guard still decides its own outcome. A failure in a
-# condition — `if`, `while`, `!`, `&&` — does not trap, so the `grep -q` that checks the gate ran is
-# unaffected. An explicit `exit 1` is not intercepted, so the gate's verdict still reaches the caller. `set -E`
-# is required and is not optional: without it a failure inside a function exits 1 and the trap never sees it.
-trap 'cannot_judge "an unguarded command failed, so this wrapper stopped without reaching a verdict — which is not the same fact as a gate that ran and refused"' ERR
-
-# This wrapper's own root, from which the gate is run — acquired after `cannot_judge` rather than at the top
-# of the file, because it is an acquisition like any other and must report the class that function defines.
-# Unguarded it was the one statement `set -e` answered for: a failed `cd` exits 1, so a wrapper that never
-# found its gate would have reported the class that means the gate ran and refused.
-repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd) || cannot_judge \
+# This wrapper's own root, from which the gate is run. The helper in the shared library owns the
+# acquisition and its guard; the message this wrapper adds is only what its own act would lose without it.
+repo=$(wrapper_own_root) || cannot_judge \
     "cannot resolve this wrapper's own root from ${BASH_SOURCE[0]}, so the gate it must run before reaching \
 \`gh pr merge\` cannot be located — which is not the same fact as a gate that ran and refused"
 
@@ -167,33 +137,16 @@ fi
 subject=""
 body_file=""
 passthrough=()
-# A value-taking flag given no value is an OBSERVABLE misconfiguration, so it fails loud. Before this it failed
-# silent: `shift 2` with one argument left returns non-zero, `set -e` took that as the exit, and the wrapper
-# stopped with no output at all — while every other refusal below prints `merge message: …`. Reproduced by
-# running the wrapper with `--subject` last: empty output, exit 1. Validating before shifting is what keeps the
-# arithmetic from becoming the diagnostic.
-# A value-taking flag's value, checked for both ways it can be wrong: absent, and flag-shaped.
-#
-# **A value position is not a place a refused argument may sit, and this arm was missing while its sibling
-# argued the point at length.** `scripts/publish.sh` refuses a value beginning with `-` and says why —
-# measured on cargo 1.96.0, `--package --no-verify` packages WITHOUT verifying. The same door stood open here
-# and had a different consequence: `--subject --admin` made the subject the literal string `--admin`, so the
-# operator's flag never reached `gh` while the gate reported a subject disagreeing with the title. It fails
-# closed and diagnoses the wrong thing, which is the class both wrappers spend paragraphs closing.
-#
-# Checked by SHAPE rather than against the refusal list, for the reason the sibling records: the list is not
-# the property. What is true here is this wrapper's own — it does not accept a value beginning with `-`, and
-# it does not read `gh`'s handling of a flag-shaped value, which differs by flag and by version.
+# The ERR trap is installed BEFORE the parser, so an unguarded failure inside it — a `shift 2` with one argument
+# left, which `value_refusal` checks for first — is read as the cannot-judge it is rather than as the class a
+# gate's refusal owns. The bootstrap guard above speaks for the one statement it covers, because an ERR trap
+# does not fire for a failed `source`; this one covers everything after.
+install_exit_class_trap
+# A value-taking flag's value is checked by the shared library's `value_refusal`, before the shift, and refused
+# here with the usage line, since what the operator needs is the shape of the call.
 require_value() {
-    if (($1 < 2)); then
-        usage_error "refusing \`$2\` with no value: this wrapper reads every value as the argument after its \
-flag, so pass it that way or drop the flag"
-    fi
-    if [[ $3 == -* ]]; then
-        usage_error "refusing \`$2\`: its value is \`$3\`, and this wrapper does not accept a value \
-beginning with \`-\`. A refused argument does not become admitted by sitting in a value position, and an \
-admitted one does not reach \`gh\` by being read as text. Pass a value, or drop the flag"
-    fi
+    local why
+    why=$(value_refusal "$@") || usage_error "$why"
 }
 
 while (($#)); do
@@ -210,54 +163,39 @@ while (($#)); do
         ;;
     # --- What may reach `gh pr merge`, and nothing else -------------------------------------------------
     #
-    # This was a DENYLIST and it leaked three times: a `--repo` flag, a positional pull-request URL, and every
-    # SHORT spelling of the flags the long-form arms named. `gh` accepts `-t` for `--subject` and `-F` for
+    # A list of what to forbid leaks through spellings: `gh` accepts `-t` for `--subject` and `-F` for
     # `--body-file`, this wrapper splices the passthrough AFTER its own flags, and `gh` takes the LAST
     # occurrence of a repeated flag — measured on gh 2.95.0, where `--body-file A -F B` and `-F A --body-file B`
-    # both read B. So one unlisted spelling replaced the very message the gate had just approved.
+    # both read B. So one unlisted spelling would replace the very message the gate had just approved. This
+    # enumerates what may pass, so a flag the wrapper does not know — including one a future `gh` adds — is
+    # refused by default, which is the property a denylist cannot have.
     #
-    # Enumerating what to forbid is the shape that failed. This enumerates what may pass, so a flag the wrapper
-    # does not know — including one a future `gh` adds — is refused by default, which is the property a
-    # denylist cannot have. This family already argues it in its own law: an allowlist is always stricter than
-    # a denylist.
-    #
-    # Classified against `gh pr merge --help` on gh 2.95.0 by TWO questions. First: does it move what the gate
-    # judged? Second: does gh honour it as this wrapper composes the invocation — beside the `--squash`,
-    # `--subject` and `--body-file` written below? The second question was missing, and the sibling
-    # publish wrapper paid for it: it admitted `--package` beside an unconditional `--workspace`, which cargo
-    # silently maps to *all packages*. Here the same question refuses `--auto` and `--disable-auto`: one defers
-    # the merge past the evidence the gate read, the other is not a merge at all.
+    # Classified against `gh pr merge --help` on gh 2.95.0 by the questions `repository-checks` states for every
+    # wrapper in front of an irreversible act: what the argument moves, whether the tool honours it as the
+    # wrapper composes the invocation, and whether it performs a further act. The composition question refuses
+    # `--auto` and `--disable-auto` here: one defers the merge past the evidence the gate read, the other is not
+    # a merge at all.
     #
     # Forwarded are the flags that change whether the merge may proceed, never what it would record, and never
     # WHEN it happens relative to the evidence.
     #
-    # ONE spelling each, values as separate arguments. Parsing gh's glued and equals forms is what let the
-    # short forms through; refusing those costs an argument's worth of typing and removes the parsing question.
+    # ONE spelling each, values as separate arguments. Parsing gh's glued and equals forms would admit the short
+    # forms back; refusing those costs an argument's worth of typing and removes the parsing question.
     # `--admin` is admitted for what it still does: bypass required **reviews**. In a single-steward
     # repository a pull request's author cannot approve their own, so `require_code_owner_reviews` cannot be
     # satisfied by the person merging — which `PROJECT.md` records as a judgement boundary rather than a
     # mechanism. That is a real and remaining use.
     #
-    # **What it no longer does is bypass CI, and the arm used to be reasoned from that.** It said this was
-    # consistent with *whether CI is green stays a human's call*; `require_ci_green` refuses a red or
-    # unfinished rollup, so passing `--admin` to force a red merge through this path does not work and is
-    # not meant to. Use the web UI for that, and meet no gate at all — which is the declared bound the
-    # header names, not a loophole this arm opens.
+    # **It does not bypass CI through this path.** `require_ci_green` is the last guard before the act and
+    # refuses a red or unfinished rollup whatever flags are forwarded, so `--admin` cannot force a red merge
+    # through this wrapper and is not meant to. Use the web UI for that, and meet no gate at all — which is
+    # the declared bound the header names, not a loophole this arm opens. The residual between that read and
+    # the act is the declared post-gate bound rather than this arm.
     #
-    # **That sentence used to say `before gh is reached` and rest the whole claim on it, which is a claim
-    # about an ordering rather than about the flag.** It was true of the read and not of the merge: the
-    # rollup was read among the guards above the post-gate block, so a required check re-run on the same
-    # head could turn it red with every later guard still passing. The read is the last guard now, which is
-    # what makes the sentence about the flag again — and the residual is the declared post-gate bound rather
-    # than this arm.
-    #
-    # **Where the flag reaches at all is measured rather than assumed, because a review read it as a
-    # privilege escalation.** Asked of this repository on 2026-09-08: the development base every squash
-    # lands on answers `404 Branch not protected`, so there are no required checks there to bypass; and the
-    # release base is protected with seven required checks and `enforce_admins` **enabled**, so GitHub
-    # refuses an administrator's bypass of them. The flag reaches required reviews, which is the arm above,
-    # and reaches no check on either base. That is a fact about this repository's settings rather than about
-    # `gh`, so it is stated with its date and re-asked rather than trusted.
+    # **What else the flag reaches is the base branch's protection setting, which this wrapper does not read.**
+    # Whether an administrator may bypass a required check there is a repository setting that moves without
+    # this file, so it is not stated here as a value: the property this wrapper holds is that the rollup is
+    # read and refused on its own, before `gh` is reached, whatever that setting answers.
     #
     # It is the only flag admitted here, and the criterion above is why. `--delete-branch` shared this arm
     # with no sentence of its own: it changes neither whether the merge proceeds, nor what it records, nor
@@ -293,8 +231,8 @@ gate judges that squash's message"
         refuse "$1" \
             "it is not part of the merge, it is an act **after** it — and the one with an \
 effect no rerun undoes. Deleting a branch another pull request targets auto-closes that pull request, and \
-GitHub refuses to reopen it once the branch is gone and the head has moved; this repository has paid for that \
-already. Every other admitted argument changes whether the merge proceeds; none changes what happens \
+GitHub refuses to reopen it once the branch is gone and the head has moved. Every other admitted argument \
+changes whether the merge proceeds; none changes what happens \
 afterwards, which is the criterion this allowlist states. Delete the branch yourself once you can see nothing \
 was stacked on it"
         ;;
@@ -341,11 +279,11 @@ if [[ ! -f $body_file ]]; then
 fi
 # Read ONCE, here, guarded — and hand the value to the gate rather than the path.
 #
-# `-f` says a regular file is there; it does not say this process may read it. The read used to happen inside the
-# gate's own invocation as `TIANHENG_MERGE_BODY=$(cat -- "$body_file")`, unguarded: measured, an unreadable file
-# left that variable EMPTY and the gate then judged an empty body, which it refuses as a violation — *the squash
-# body is empty*. So a file this wrapper could not read was reported to the operator as a body they had written
-# wrongly. Reading once also closes the window between the check and the use, in which the file could have gone.
+# `-f` says a regular file is there; it does not say this process may read it. Read unguarded inside the gate's
+# own invocation as `TIANHENG_MERGE_BODY=$(cat -- "$body_file")`, measured, an unreadable file leaves that
+# variable EMPTY and the gate judges an empty body, which it refuses as a violation — *the squash body is empty* —
+# so a file this wrapper could not read would reach the operator as a body they had written wrongly. Reading once
+# also closes the window between the check and the use, in which the file could have gone.
 body=$(cat -- "$body_file") || cannot_judge \
     "cannot read the body file $body_file, so whether this body is the record the merge should carry cannot be \
 decided — which is not the same fact as a body that disagrees"
@@ -415,44 +353,6 @@ if [[ ! $head =~ ^[0-9a-f]{7,40}$ ]]; then
     cannot_judge "cannot read the pull request's head commit, so the merge could not be pinned to the head \
 this gate read its evidence from — and an unpinned merge may record a body that no longer matches the commits"
 fi
-
-# The gate. A failure aborts before the merge, which is the point: the record below cannot be amended.
-
-# The channel the gate reports its refusal class on, and the class that means a disagreement.
-#
-# Both are held against `kanhe::verdict_channel` by `crates/kanhe/tests/gate_exit_classes.rs`, so neither the
-# variable name nor the class spelling can drift from the gate's side.
-#
-# **This replaced grepping the gate's output.** Searching stdout for `(Violation)` put the parentheses in this
-# script and the variant name in Rust — two owners for one token — and measured, changing the gate's format
-# string left every direction green while this pattern matched nothing, so every violation would have reported as
-# unjudged. It also searched a stream carrying arbitrary tooling output, where a class could be read from text no
-# judgement wrote. A file the gate writes only when it has a verdict makes *absent* mean unjudged by
-# construction.
-GATE_VIOLATION_CLASS=Violation
-# The class a gate reports when it JUDGED AND AGREED, and the guard that requires it on the success path.
-#
-# **`require_one_pass` answers a different question and cannot cover this one.** It asks *did the selected
-# test pass* — which a harness that returned without judging satisfies, and one did: a subject supplied as
-# bytes the gate could not read took an arm that printed "not judged" and returned, so `1 passed` was true
-# and nothing had been judged. The two guards catch different states and both stay: `require_one_pass` sees a
-# renamed test (nothing ran), this sees a test that ran, passed, and reached no verdict.
-#
-# The gate now writes the channel on its clean arm too, so *absent on success* means unjudged by
-# construction rather than by a wrapper remembering to check. Held against `kanhe::verdict_channel::CLEAN` by
-# `crates/kanhe/tests/gate_exit_classes.rs`, so neither spelling can drift from the gate's side.
-GATE_CLEAN_CLASS=Clean
-
-require_a_verdict() {
-    local reached=""
-    if [[ -f $verdict_file ]]; then
-        reached=$(cat -- "$verdict_file") || reached=""
-    fi
-    if [[ $reached != "$GATE_CLEAN_CLASS" ]]; then
-        cannot_judge \
-            "the gate ran and passed without reaching a verdict — the channel carries ${reached:-nothing}, and a run that judged nothing is not a run that agreed. This is the class a passing test cannot distinguish on its own, which is why it is read rather than inferred"
-    fi
-}
 
 # The other suite: what CI said about this pull request's head.
 #
@@ -535,12 +435,10 @@ same fact as a suite that agreed"
         # merges past whatever it would have said. That holds whatever the workflow looks like, which is why
         # neither this arm nor its refusal says anything about the workflow's shape.
         #
-        # **The refusal used to.** It told the operator that no job in this repository's workflow carries
-        # `if:`, `needs:`, `paths:` or `continue-on-error:`, so a skip could only mean interference. True when
-        # written, and a sentence that goes stale the moment someone adds one — at which point the wrapper is
-        # telling an operator something false about the tree they are standing in. A diagnostic states what to
-        # do about the state it met; a claim about the world needs something holding it, and this one bought
-        # nothing the classification did not already have.
+        # **Nor does the refusal describe the workflow.** A sentence saying no job carries `if:`, `needs:`,
+        # `paths:` or `continue-on-error:` goes stale the moment someone adds one, and the wrapper would then tell
+        # an operator something false about the tree they are standing in. A diagnostic states what to do about
+        # the state it met; a claim about the world needs something holding it.
         #
         # Their own arm rather than the unfinished one, because the operator action differs: an unfinished
         # check is waited for, and a skipped one is investigated. When a job legitimately may skip — a
@@ -592,7 +490,7 @@ require_changed_files() {
         || cannot_judge \
             "cannot read how many files this pull request changes, which is not the same fact as a pull \
 request that changes some"
-    if [[ ! $changed =~ ^[0-9]+$ ]]; then
+    if [[ ! $changed =~ ^(0|[1-9][0-9]*)$ ]]; then
         cannot_judge \
             "the changed-file count read as \`${changed}\`, which is not a number — a count this wrapper \
 cannot read is not a count of zero"
@@ -604,35 +502,7 @@ not in it. Check that the branch you pushed is the branch holding the commits"
     fi
 }
 
-verdict_file=$(mktemp) || cannot_judge \
-    "cannot open a file for the gate to report its refusal class on, so a failing gate could not be told from \
-an input it could not read"
-trap 'rm -f "$verdict_file"' EXIT
-
-# `libtest` exits 0 when `--exact` selects no test — measured, an unknown name reports `0 passed` and exits 0,
-# and an `#[ignore]`d one reports `0 passed; 1 ignored` and exits 0 too. So the exit status answers *did the
-# selected tests pass* while the question here is *did the gate judge this act*, and those differ exactly when
-# a rename has quietly happened. Require the run to say it judged one thing.
-#
-# Asserted here rather than inside the gate: a renamed or silenced test cannot report that it did not run.
-#
-# A gate that did not run is a cannot-judge, so this exits 2. It reads as the sharpest case of the class: the
-# message says *the gate did not run* in so many words, and reporting that as a violation names a disagreement
-# no judgement ever formed.
-require_one_pass() {
-    local output=$1
-    # A here-string, not a pipe. `grep -q` exits at its first match, and under `set -o pipefail` the
-    # `printf` upstream takes SIGPIPE and that becomes the pipeline's status — so this would report *the
-    # gate did not run* for a closed pipe, immediately before an irreversible act. Measured: with the token
-    # at the end of a 405 KB stream, which is where a `cargo test` summary sits, 0 of 8 runs returned
-    # non-zero; with the same token near the start, 8 of 8 did. Both wrappers were holding by where the
-    # token happened to sit, which nothing declares and nothing keeps true.
-    if ! grep -qE 'test result: ok\. 1 passed' <<< "$output"; then
-        printf '%s\n' "$output" >&2
-        cannot_judge \
-            "the gate did not run — its invocation selected no passing test, so the name in this script no longer names one. libtest exits 0 for a filter that matches nothing, which is why this is checked rather than trusted"
-    fi
-}
+open_verdict_file
 
 # The pull request's own LIVE commit subjects, so the gate can ask whether this body *is* their concatenation
 # rather than whether it looks like one. Local remote-tracking refs can lag the pull request or carry no fork
@@ -648,6 +518,7 @@ if [[ -z ${commits//[[:space:]]/} ]]; then
         "cannot read any commit subjects from pull request $pr_number; an empty live set is not evidence about its body"
 fi
 
+# The gate. A failure aborts before the merge, which is the point: the record below cannot be amended.
 gate_output=$(TIANHENG_GATE_VERDICT=$verdict_file \
     TIANHENG_MERGE_SUBJECT=$subject \
     TIANHENG_MERGE_TITLE=$title \
@@ -657,17 +528,7 @@ gate_output=$(TIANHENG_GATE_VERDICT=$verdict_file \
     TIANHENG_MERGE_HEAD=$head_branch \
     cargo test --manifest-path "$repo/Cargo.toml" -p kanhe --test merge_message \
     -- --exact the_squash_message_is_the_pull_request_it_records 2>&1) || {
-    printf '%s\n' "$gate_output" >&2
-    # The class the gate reported, on the channel it was given. Absent, empty or anything else is a run that
-    # reached no verdict — a compile error included — and that is not a disagreement.
-    verdict=""
-    if [[ -f $verdict_file ]]; then
-        verdict=$(cat -- "$verdict_file") || verdict=""
-    fi
-    if [[ $verdict == "$GATE_VIOLATION_CLASS" ]]; then
-        exit 1
-    fi
-    exit 2
+    exit_for_the_gates_refusal "$gate_output"
 }
 require_one_pass "$gate_output"
 require_a_verdict
@@ -701,12 +562,11 @@ require_changed_files
 title_now=$(gh pr view "$pr_number" --repo "$repository" --json title --jq .title) || cannot_judge \
     "cannot re-read pull request $pr_number's title after the gate, so whether the subject the gate approved \
 is still that title cannot be decided — which is not the same fact as a subject that disagrees"
-# **A moved title is a cannot-judge, not a disagreement**, and the exit-class check refused the first draft
-# of this guard for saying otherwise. The gate did not find the subject wrong: it found it right, against a
-# title that no longer exists, so what this wrapper has is a verdict about a vanished input. That is the
-# class `merge_message_gate::judge` already gives an unavailable title — "which is not the same fact as a
-# subject that disagrees" — and the construction that reserves `1` for the gate's own verdict arm is what
-# caught the misfiling.
+# **A moved title is a cannot-judge, not a disagreement.** The gate did not find the subject wrong: it found
+# it right, against a title that no longer exists, so what this wrapper has is a verdict about a vanished
+# input. That is the class `merge_message_gate::judge` already gives an unavailable title — "which is not the
+# same fact as a subject that disagrees" — and the construction that reserves `1` for the gate's own verdict
+# arm is what holds it there.
 if [[ $title_now != "$title" ]]; then
     cannot_judge "the pull request's title changed while the gate ran. It judged \"$title\", the title is \
 now \"$title_now\", so the verdict in hand is about a title that no longer exists rather than about a \
@@ -740,14 +600,11 @@ this merge will not have — and the one message exception names both endpoints.
 will judge the head branch that exists now"
 fi
 
-# **What CI said is the fourth judged relation, and it was read where the first three were captured.** It
-# sat with `require_a_verdict` and `require_changed_files`, before these re-reads — and nothing downstream
-# reads its value, so that read recorded nothing and existed only to refuse. A rollup is not a value being
-# recorded: it is one end of *every check agrees*, and the other end is the moment the merge happens. Read
-# early, a required check re-run on the SAME head between the two turns the rollup red while every guard
-# after it still passes — `--match-head-commit` pins the object and the object did not move, and the three
-# branch names above did not move either. Sorted by this wrapper's own criterion, it was filed on the wrong
-# side, which is the third time that sorting has been got wrong here.
+# **What CI said is the fourth judged relation, and it is read last.** Nothing downstream reads its value, so
+# the read exists only to refuse. A rollup is not a value being recorded: it is one end of *every check
+# agrees*, and the other end is the moment the merge happens. Read early, a required check re-run on the SAME
+# head between the two turns the rollup red while every guard after it still passes — `--match-head-commit`
+# pins the object and the object did not move, and the three branch names above did not move either.
 #
 # It is read last rather than twice. The title keeps its early capture because `subject` defaults to it, so
 # there is a value to record; a rollup has none, so a second read would be a second call buying no property
@@ -759,14 +616,6 @@ fi
 # a client rather than of any one input. The window is now the four API calls this block makes rather than
 # those plus a whole `cargo test`.
 require_ci_green
-
-# Removed here, not left to the trap. An EXIT trap does not run when `exec` replaces the shell image —
-# measured, `bash -c 'trap "echo T" EXIT; exec true'` prints nothing while the same script without `exec` prints
-# `T`. So the trap fired on every path where nothing happened and was skipped on the one path that completes the
-# act: three successful runs left three empty files in `$TMPDIR`, measured against an isolated one. The trap
-# stays, because it is what covers the failure paths; `exec` stays, because the tool's exit status becoming this
-# script's is deliberate.
-rm -f "$verdict_file"
 
 # The body travels as the VALUE the gate judged, never as the path it was read from.
 #
@@ -784,15 +633,105 @@ rm -f "$verdict_file"
 # `passthrough` can never carry one: gh takes the last spelling of a repeated flag, and this argument is spliced
 # before it. That safety belongs to the allowlist rather than to the order these are written in.
 #
-# `--body` over a wrapper-owned temporary file, which would close the same race: such a file must outlive the
-# `exec` for gh to read it, so it could not be removed beforehand and no EXIT trap survives an `exec` — which is
-# the leak closed by removing the file just before the `exec`, reintroduced to fix a different defect. A
-# value in `argv` has an `ARG_MAX` ceiling a path does not, and that ceiling fails loud with `E2BIG` before the merge rather than
-# recording something wrong.
+# `--body` rather than a wrapper-owned temporary file, which would close the same race: a value needs no file to
+# outlive anything, and it has an `ARG_MAX` ceiling a path does not — a ceiling that fails loud with `E2BIG`
+# before the merge rather than recording something wrong.
 #
 # `passthrough` may be empty, and `"${empty[@]}"` under `set -u` is an unbound variable before bash 4.4 —
-# where this wrapper would abort through the ERR trap reporting "an unguarded command failed", a sentence
+# where it ends bash without the ERR trap and this wrapper would stop as a status no stop chose, a sentence
 # about the wrong cause, on the invocation with no passthrough flags that is the ordinary one. The `+` form
 # is used rather than a version check, so no minimum has to be declared anywhere and kept in step.
-exec gh pr merge "$pr_number" --repo "$repository" --squash --subject "$subject" --body "$body" \
+#
+# What the merge recorded, decided from what GitHub holds after the act, never from gh's status.
+#
+# gh prints nothing on success when its output is not a terminal, so without this a completed merge was a silent
+# exit 0 every operator confirmed by reading GitHub afterwards. And gh's status is not an observation of the far
+# side: it exits `1` when it does not merge — a head that moved under `--match-head-commit`, a pull request
+# already merged or closed — and equally when the merge landed and the response was what was lost.
+#
+# **A merged pull request is not this act; the record it carries is.** A pull request read as merged may have
+# been merged by an earlier run, in the web UI, or by another actor between the re-reads above and the call —
+# so the squash commit's message and the head it merged are read back and compared with the subject, body and
+# head the gate judged. Only a record carrying all three is the judged act, whoever's call produced it; one
+# carrying anything else is refused as not this act, which is what a re-run after an unknown outcome needs told
+# apart.
+#
+# The comparison is exact, which rests on GitHub recording `--subject` and `--body` as given. Measured
+# 2026-09-24 over the 40 squash commits then merged through this wrapper onto the release branch rooted at the
+# `v0.6.1` snapshot: no appended trailer and no `(#N)`, and `gh api …/commits/<sha> --jq .commit.message` byte-identical to `git log -1
+# --format=%B` for the same commit. A record GitHub did rewrite would be refused here as not the judged message,
+# which is true of it.
+#
+# **An empty body is recorded as the subject alone.** The gate admits one — the release snapshot, by
+# `merge_message_gate`'s release exception — and GitHub writes no separator after it: at `v0.6.0` and `v0.6.1`,
+# `git log -1 --format=%B <tag>` is the subject followed by `\n\n` and `\n`, which command substitution reads
+# back as the subject. So the judged message is the subject where the body is empty and the subject, a blank
+# line and the body otherwise; appending the separator unconditionally refused a release merge as not its own
+# act. The exception's owner is the gate and this comparison restates it, so a second exception there needs a
+# second arm here — `BACKLOG.md` carries that as a watch rather than a reaction.
+#
+# **Trailing newlines are compared on neither side, deliberately.** The body the gate judged and the one `--body`
+# carries were both read by command substitution, which strips them, and the record is read back the same way.
+# GitHub's own trailing bytes are not stable for one shape: at `v0.6.0` the raw commit message ends in a newline
+# and at `v0.6.1` it does not, both release snapshots with an empty body — so comparing them would refuse a
+# record that carries exactly the judged message.
+#
+# Each sentence below says only what its reading, or the reading's absence, establishes:
+#
+#   state unreadable       → unknown, whatever gh reported: a queued merge also exits 0 with nothing merged
+#   read, not MERGED       → GitHub records no merge, whatever gh reported
+#   MERGED, record unread  → clean if gh reported the merge, since it made it; unknown whose merge it is if not
+#   MERGED, record differs → a merge that is not the act the gate judged
+#   MERGED, record matches → the judged act, named with its squash commit
+account_for_the_merge() {
+    local status=$1 reading state="" commit="" merged_head="" recorded="" differs="" judged=$subject
+    local gh_said="gh reported the merge of pull request $pr_number complete"
+    if ((status != 0)); then
+        gh_said="gh exited $status from the merge of pull request $pr_number"
+    fi
+    # `|`-joined, because `read` collapses a run of whitespace separators and a missing commit would shift the
+    # head into its field.
+    reading=$(gh pr view "$pr_number" --repo "$repository" --json state,mergeCommit,headRefOid \
+        --jq '[.state, (.mergeCommit.oid // ""), .headRefOid] | join("|")') || reading=""
+    IFS='|' read -r state commit merged_head <<< "$reading" || :
+    if [[ -z $state ]]; then
+        cannot_judge "$gh_said, and its state could not be read back, so whether it merged is unknown — check it \
+on GitHub before running this again. The gate had agreed; this is not a message that disagrees"
+    fi
+    if [[ $state != MERGED ]]; then
+        cannot_judge "$gh_said, and GitHub reads it as $state, so it records no merge, although the gate had \
+agreed — gh's own message, if any, is above. That is not the same fact as a message that disagrees"
+    fi
+    if [[ $commit =~ ^[0-9a-f]{40}$ ]]; then
+        recorded=$(gh api "repos/$repository/commits/$commit" --jq .commit.message) || recorded=""
+    fi
+    if [[ -z $recorded ]]; then
+        if ((status == 0)); then
+            say "merged pull request $pr_number; its squash commit could not be read back — check it on GitHub"
+            return
+        fi
+        cannot_judge "$gh_said, and GitHub reads it as merged, but its squash commit could not be read back, so \
+whether that merge is the one the gate judged is unknown — check it on GitHub before running this again"
+    fi
+    if [[ -n $body ]]; then
+        judged+=$'\n\n'$body
+    fi
+    if [[ $recorded != "$judged" ]]; then
+        differs="its message is not the subject and body the gate judged"
+    elif [[ $merged_head != "$head" ]]; then
+        differs="it merged head ${merged_head:-unknown}, not the head $head the gate judged"
+    fi
+    if [[ -n $differs ]]; then
+        cannot_judge "pull request $pr_number is merged as $commit, but that merge is not the act the gate judged: \
+$differs. $gh_said — check the pull request on GitHub, since a squash commit cannot be amended without \
+decoupling it from the pull request's record"
+    fi
+    say "merged pull request $pr_number as $commit, carrying the message the gate judged"
+    if ((status != 0)); then
+        tell "$WRAPPER_SUBJECT: $gh_said, but the merge GitHub records is the one the gate judged"
+    fi
+}
+
+perform_the_act account_for_the_merge \
+    gh pr merge "$pr_number" --repo "$repository" --squash --subject "$subject" --body "$body" \
     --match-head-commit "$head" ${passthrough[@]+"${passthrough[@]}"}

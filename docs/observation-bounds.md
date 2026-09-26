@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**28 of 106 declared bounds have no pinning test.** That figure is the register's
+**27 of 109 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -121,6 +121,14 @@ fallback used where no manifest exists, which the register spec describes.
 
 - **pinned by**: `inline_strict_external_absent_fully_qualified_call_is_a_bound`
 
+## module-boundary
+
+### `module-boundary/an-example-test-bench-or-build-script-root-is-not-governed-a-stated-bound`
+
+> the system reports no violation for it: the governed corpus is the library-kind and `bin` roots, the code the package ships, and those targets are compiled beside it rather than into it
+
+- **pinned by**: `an_example_root_is_not_governed`
+
 ## observation-bound-model
 
 ### `observation-bound-model/whether-a-declaration-s-stated-cause-is-the-real-cause-is-not-observed-a-stated-bound`
@@ -193,11 +201,11 @@ fallback used where no manifest exists, which the register spec describes.
 
 - **unpinned**, tracked by: `BACKLOG.md` — *the shell's semantic delegation, held by construction*
 
-### `observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound`
+### `observer-protocol/a-method-on-another-trait-named-observer-is-read-a-stated-bound`
 
-> the reaction reads that copy's body and reports it as the method's. Both anchor conditions are satisfied — one occurrence, at a line start — and the reader knows nothing of comments or literals, so the class is "the unique whole-line occurrence is not the definition" rather than any one syntactic position. What passes is a **second, hand-maintained path that agrees today**: a *divergent* list does not, because `observation-bound-model` reads every dimension's declarations through `Observer::bounds` and holds them in a bijection with the specs, which fails on any difference of membership or content. Measured both ways. So the residual is narrower than a divergent list slipping through, and wider than a comment. **Not a defect unique to this reader.** `kanhe::region`'s own `Executed` abstraction declares the identical residue for the same reason — a block comment and a string literal both need nested-span lexing to tell from executed text, which this tree has defeated repeatedly and left declared rather than approximated. Closing either needs the same instrument; closing one without the other would leave the class recorded twice under two names for a reader to reconcile. This bound SHALL be **shown rather than described**: the reaction enumerates every shape it decides together with the decision, the reader is run against that table, and the rows where it reads a body that is not the method's are this bound. A sentence here that the table contradicts fails, which is what the three repair rounds preceding this scenario could not do
+> the reaction reads that method's body and reports it as the protocol's. Which trait a path names is name resolution — `use`s, renames, globs, local definitions — and the reader matches the last segment instead. What passes is a **second, hand-maintained path that agrees today**: a *divergent* list does not, because `observation-bound-model` reads every dimension's declarations through `Observer::bounds` and holds them in a bijection with the specs. The reaction's shape table carries the row, so the bound is shown rather than described
 
-- **unpinned**, tracked by: `BACKLOG.md` — *the bounds-method reader anchors on a whole-line occurrence that is not the definition*
+- **pinned by**: `the_reader_decides_every_shape_as_the_table_says`
 
 ### `observer-protocol/a-trait-object-on-a-wrapped-signature-s-continuation-line-is-not-seen-a-stated-bound`
 
@@ -241,7 +249,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `publish-source-integrity/the-tree-changing-after-the-gate-passed-is-not-observed-a-stated-bound`
 
-> nothing reacts. The gate is one process and the act is another, and the wrapper holds no handle that ties them: `cargo publish` takes no argument naming the commit it must package, so there is no `--match-head-commit` to pin what was judged, which is what closes the equivalent window for the commit set on the merge path. What narrows it is `cargo publish`'s own refusal of a dirty worktree, which is a weaker property than the gate's — a tree amended and committed is clean again and packages a different commit under the same tag. The wrapper `cd`s once and `exec`s, so the window is two statements wide rather than a whole `cargo test`, and narrowing is all it can do
+> nothing reacts. The gate is one process and the act is another, and the wrapper holds no handle that ties them: `cargo publish` takes no argument naming the commit it must package, so there is no `--match-head-commit` to pin what was judged, which is what closes the equivalent window for the commit set on the merge path. What narrows it is `cargo publish`'s own refusal of a dirty worktree, which is a weaker property than the gate's — a tree amended and committed is clean again and packages a different commit under the same tag. The wrapper `cd`s once and then runs `cargo publish`, with nothing between the two that reads or waits, so the window is two statements wide rather than a whole `cargo test`, and narrowing is all it can do
 
 - **unpinned**, tracked by: `BACKLOG.md` — *the window the publish wrapper can only narrow*
 
@@ -406,6 +414,18 @@ fallback used where no manifest exists, which the register spec describes.
 > the wrapper refuses it, and nothing will admit it short of a per-arm rule. A leading digit means a job count for one arm and nothing for `--package` or `--registry`, so admitting it means the shape question is asked differently per arm — which is the arrangement one shape check exists to replace, and the arrangement whose per-arm reasoning the refusal wording above was just corrected for repeating. The engine owns the narrowing: the caller passes the count instead, one arithmetic step
 
 - **pinned by**: `a_refused_flag_cannot_sit_in_an_admitted_arguments_value_position`
+
+### `repository-checks/an-assignment-that-is-not-an-assignment-word-is-not-read-a-stated-bound`
+
+> the declaration check reports no offence for it. bash's assignment forms are the enumeration a reader stops short of; what holds the value is bash, since each name is declared `readonly`
+
+- **pinned by**: `an_assignment_that_is_not_an_assignment_word_is_not_read`
+
+### `repository-checks/a-command-name-computed-when-the-line-runs-is-not-read-a-stated-bound`
+
+> the exit-class check reports no offence for it. The name exists only when the line runs, so there is no word to read; every word the text spells as `exit` is read, which is the scenario above
+
+- **pinned by**: `a_command_name_computed_when_the_line_runs_is_not_read`
 
 ### `repository-checks/files-no-capability-claims-a-stated-bound`
 
