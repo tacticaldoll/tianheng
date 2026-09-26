@@ -1427,8 +1427,12 @@ consumer for an undemonstrated deduplication.
   behind the gate's command substitution — a second fixture taking a host tool it did not declare, found by
   review. That dependency is gone by construction: the harness launches the wrapper through a shell that records
   its PID and `exec`s it, and the stub signals that PID. `jq` is declared: `fixture::require_host_tool` stops the
-  merge directions before the subject, naming the tool, where it is absent. What stays watched is a third stub
-  taking an undeclared tool, which the same helper answers.
+  merge directions before the subject, naming the tool, where it is absent. The disposition sibling of an
+  undeclared tool — a host state a direction depends on and never stated — is repaired the same way:
+  `fixture::require_signal_disposition` stops the publish signal direction before the subject, naming the
+  signal, where one the wrapper must end by is ignored on entry to the test's bash (SIGHUP under `nohup`,
+  SIGINT in a background job started from a script). What stays watched is a third stub taking an undeclared
+  tool, which the same helper answers.
 
   *Trigger measured, not waited for — in the 0.5.0 window, and it has not fired.* The decidable half of it is
   enumerable: a stub is executed only where a test puts its directory on `PATH`, and exactly **two** test

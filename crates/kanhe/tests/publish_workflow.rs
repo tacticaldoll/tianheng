@@ -763,12 +763,20 @@ fn a_completed_publish_adds_no_sentence_of_its_own() {
 /// A shell running the wrapper in a loop stops the loop only when the wrapper ends by the signal — measured on bash
 /// 5.3, a wrapper that trapped SIGINT and exited `2` let the loop run its next iteration. So the wrapper reports and
 /// then re-raises; a signal arriving during the act is held until the act's account has read the outcome.
+///
+/// The contract holds of a signal that can reach the wrapper: one ignored on entry to this test's bash —
+/// SIGHUP under `nohup`, SIGINT in a background job started from a script — cannot be trapped at all, so it
+/// never arrives, and the run ending with the wrapper's real outcome would read as the wrapper's defect. The
+/// precondition is the host's, and the direction states it before the subject runs.
 #[test]
 fn a_signal_ends_the_wrapper_by_that_signal() {
     use std::os::unix::process::ExitStatusExt;
     let Some(root) = workspace_root() else {
         return;
     };
+    if !support::fixture::require_signal_disposition(&["HUP", "INT", "TERM"]) {
+        return;
+    }
     for (signal, number) in [("TERM", 15), ("HUP", 1), ("INT", 2)] {
         for (at, says) in [
             ("FAKE_SIGNAL_AT_ACT", "once the act had run"),
@@ -808,6 +816,71 @@ fn a_signal_ends_the_wrapper_by_that_signal() {
             .contains("cargo publish exited 1 without completing"),
         "the account's reading reaches the operator before the signal ends the run: {}",
         run.stderr
+    );
+}
+
+/// A signal ignored on entry to the test's bash stops the direction above before the subject — the state
+/// arranged, not the host's.
+///
+/// The disposition cannot be set in-process (that takes `unsafe`, which these tests do not use), and a
+/// parallel run shares one environment, so the state is arranged in a child: this binary re-executed with
+/// `--exact` from a bash that ignores SIGHUP, the harness-boundary pattern `merge_message` uses, where the
+/// child is the one process an input can be arranged for. The marker is handed to the child by name for the
+/// refusing half and withheld for the skipping half, so both answers are exercised whatever this run itself
+/// inherited.
+#[test]
+fn a_signal_ignored_on_entry_stops_the_direction_before_the_subject() {
+    let Some(_root) = workspace_root() else {
+        return;
+    };
+    let this = std::env::current_exe().expect("this test binary names its own path");
+    let run_with_hup_ignored = |marker: bool| {
+        let mut child = support::bash::bash();
+        child
+            .args([
+                "-c",
+                r#"trap '' HUP; exec "$@""#,
+                "a parent ignoring SIGHUP",
+            ])
+            .arg(&this)
+            .args([
+                "--exact",
+                "a_signal_ends_the_wrapper_by_that_signal",
+                "--nocapture",
+            ]);
+        if marker {
+            child.env(shengmo::workspace::MARKER, "1");
+        }
+        child
+            .output()
+            .expect("the signal direction re-runs under a parent that ignores SIGHUP")
+    };
+
+    let refused = run_with_hup_ignored(true);
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(
+        !refused.status.success(),
+        "under {} the host state refuses rather than skips: {stderr}",
+        shengmo::workspace::MARKER
+    );
+    assert!(
+        stderr.contains("SIGHUP") && stderr.contains("ignored on entry"),
+        "the refusal names the signal and the host state: {stderr}"
+    );
+    assert!(
+        !stderr.contains("must end the wrapper by that signal"),
+        "the direction stopped before the subject, so no verdict about the wrapper was reported: {stderr}"
+    );
+
+    let skipped = run_with_hup_ignored(false);
+    let stderr = String::from_utf8_lossy(&skipped.stderr);
+    assert!(
+        skipped.status.success(),
+        "outside the marker the direction skips rather than fails: {stderr}"
+    );
+    assert!(
+        stderr.contains("SIGHUP") && stderr.contains("skipped"),
+        "and the skip is said aloud, naming the signal: {stderr}"
     );
 }
 

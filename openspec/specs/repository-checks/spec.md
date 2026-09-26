@@ -1106,7 +1106,10 @@ status no stop chose to the unjudged class; each stop records the class it chose
 when the wrapper ends by the signal — measured on bash 5.3 with SIGINT sent to the process group, a wrapper that
 trapped it and exited `2` let the loop run its next merge. So the library SHALL trap SIGINT, SIGTERM and SIGHUP,
 say whether the act had been started, and then end the wrapper by that signal; a signal arriving while the act
-runs SHALL be held until the act's account has read the outcome, so the operator is told what happened. The
+runs SHALL be held until the act's account has read the outcome, so the operator is told what happened. This is
+a contract over signals the wrapper can trap: one ignored on entry to the shell that started it — SIGHUP under
+`nohup`, SIGINT in a background job started from a script — cannot be trapped, so it never reaches the wrapper
+and the run ends as it would have without it. The
 EXIT trap SHALL remove the verdict file it created, and a run leaving clean that cannot remove it SHALL exit the
 unjudged class saying the act completed; a run already leaving through a stop keeps its class and says the file
 is left.

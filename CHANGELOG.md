@@ -117,7 +117,10 @@ them.
   `RESERVED_WORDS` from `compgen -k`, so a function printing `cannot_judge` is not one, and a wrapper naming a
   library scalar in any form — `read`, `printf -v`, `readonly`, `unset` — is refused. The publish fixture signals
   the wrapper by the PID its launcher recorded rather than asking `ps`, and the merge fixture states that its
-  stub needs `jq` before it runs.
+  stub needs `jq` before it runs. The signal direction states its precondition before the subject runs: a signal
+  ignored on entry to the test's bash — SIGHUP under `nohup`, SIGINT in a background job started from a script —
+  cannot be trapped, so it never reaches the wrapper, and the direction refuses, or outside the workspace marker
+  skips saying so, rather than read the host's state as the wrapper's defect.
 
 - **What the reviews found and no reaction can hold is closed in prose where it is decided.** `AGENTS.md` states
   that an ordinary scenario's pin has its reason by construction — the mutation register keys on bound ids —
