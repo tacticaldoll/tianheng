@@ -31,6 +31,8 @@ them.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-09-27
+
 ### Static
 
 - **圭表 can permit an inline call only within one module: `confine_inline_call(prefix)`.**
@@ -3841,7 +3843,8 @@ them.
   96 tarballs then on the books, and the six new ones were audited on 2026-08-28, so the sentence says which
   audit covered what instead of letting one date stand for both.
 
-[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/tacticaldoll/tianheng/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/tacticaldoll/tianheng/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/tacticaldoll/tianheng/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/tacticaldoll/tianheng/releases/tag/v0.6.0
