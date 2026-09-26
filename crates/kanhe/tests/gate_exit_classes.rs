@@ -130,7 +130,8 @@ const TARGETS_SPAWNING_A_PROCESS: [(&str, &str); 30] = [
     ),
     (
         "crates/kanhe/tests/publish_workflow.rs",
-        "bash, to run the publish wrapper",
+        "bash, to run the publish wrapper; this test binary itself, to re-run the signal direction under a \
+         parent that ignores a signal",
     ),
     (
         "crates/kanhe/tests/reference_integrity.rs",

@@ -119,6 +119,64 @@ pub fn require_host_tool(tool: &str) {
     );
 }
 
+/// Stop before the subject when a signal a direction must deliver is ignored on entry to this test's bash.
+///
+/// A signal ignored on entry to bash cannot be trapped — measured on bash 5.3.9, `trap '' HUP` in a parent
+/// leaves a child's `trap '…' HUP` unset and the signal undeliverable to it — so a wrapper whose shell
+/// inherited the ignore never receives it: under `nohup` (SIGHUP), or in a background job started from a
+/// script (SIGINT), the wrapper ends the run with its real outcome and the direction reads the host's state
+/// as the wrapper's defect. The probe is the same bash the harness spawns, asked through
+/// [`crate::support::bash::bash`] before the subject runs, so the answer comes from the same inheritance
+/// chain: `trap -p` prints a `trap -- '' SIG…` line for each signal ignored on entry, and nothing for one
+/// that is not.
+///
+/// The shape is [`require_host_tool`]'s — stop before the subject, naming what the host lacks — and the skip
+/// policy is `xingbiao::Unreadable::try_new`'s: under `TIANHENG_WORKSPACE_TESTS` the state refuses, since
+/// there a silent skip reads as coverage; outside it the direction skips and says so on stderr, which is
+/// what the `false` answer hands the caller, so a run that judged nothing does not read as one that did.
+pub fn require_signal_disposition(signals: &[&str]) -> bool {
+    let report = crate::support::bash::bash()
+        .args(["-c", r#"trap -p "$@""#, "signal-disposition probe"])
+        .args(signals)
+        .output()
+        .expect("bash runs");
+    let report = String::from_utf8_lossy(&report.stdout);
+    let mut ignored: Vec<String> = Vec::new();
+    for line in report.lines() {
+        // The one line a fresh bash can print for an asked-about signal: `trap -- '' SIGHUP`, what an
+        // ignore inherited on entry prints as. A trap with a body cannot survive into a fresh process and
+        // the builder clears the environment, so no startup file installs one — an answer in any other
+        // shape is refused rather than read as *nothing is ignored*.
+        let name = line.strip_prefix("trap -- '' SIG").unwrap_or_else(|| {
+            panic!(
+                "cannot read what bash ignores on entry: `trap -p` answered {line:?}, which is neither \
+                 silence nor the `trap -- '' SIG…` an inherited ignore prints"
+            )
+        });
+        assert!(
+            signals.contains(&name),
+            "bash reports SIG{name} ignored on entry, which the probe was not asked about"
+        );
+        ignored.push(format!("SIG{name}"));
+    }
+    if ignored.is_empty() {
+        return true;
+    }
+    let state = format!(
+        "{} cannot reach a wrapper: ignored on entry to this test's bash, as under `nohup` or SIGINT in a \
+         background job started from a script, and a signal ignored on entry cannot be trapped, so the \
+         wrapper would end the run with its real outcome and the host's state would read as the wrapper's \
+         defect",
+        ignored.join(" and ")
+    );
+    assert!(
+        !shengmo::workspace::marker_set(),
+        "{state} — run the suite from a shell that does not ignore it"
+    );
+    eprintln!("{state} — the direction that needs it is skipped");
+    false
+}
+
 /// Write `text` to `path` and make it executable.
 pub fn write_executable(path: &Path, text: &str) {
     use std::os::unix::fs::PermissionsExt;

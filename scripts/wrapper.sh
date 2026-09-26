@@ -151,13 +151,16 @@ refuse() {
 # gate's verdict still reaches the caller. `set -E` is required and is not optional: without it a failure
 # inside a function exits 1 and the trap never sees it.
 #
-# **A signal is the one stop outside both classes, and it ends the wrapper by that signal.** A shell running this
-# wrapper in a loop decides whether to stop the loop from how the wrapper ended: measured on bash 5.3, with SIGINT
-# sent to the process group, a wrapper that trapped it and exited `2` let the loop run its next iteration — the
-# next merge — while one that re-raised the signal on itself stopped the loop. So the handler says what it stopped
-# before, then resets the signal and sends it to itself. A signal delivered while a child runs is handled once the
-# child returns; one arriving during the act is held until the act's account has read the outcome, so the
-# operator is told what happened rather than that it is unknown.
+# **A signal is the one stop outside both classes, and it ends the wrapper by that signal — one the wrapper
+# can trap.** A shell running this wrapper in a loop decides whether to stop the loop from how the wrapper
+# ended: measured on bash 5.3, with SIGINT sent to the process group, a wrapper that trapped it and exited `2`
+# let the loop run its next iteration — the next merge — while one that re-raised the signal on itself stopped
+# the loop. So the handler says what it stopped before, then resets the signal and sends it to itself. A
+# signal delivered while a child runs is handled once the child returns; one arriving during the act is held
+# until the act's account has read the outcome, so the operator is told what happened rather than that it is
+# unknown. A signal ignored on entry to the shell that started the wrapper — SIGHUP under `nohup`, SIGINT in a
+# background job started from a script — cannot be trapped at all, so it never reaches the wrapper and the run
+# ends as it would have without it.
 install_exit_class_trap() {
     trap 'cannot_judge "an unguarded command failed, so this wrapper stopped without reaching a verdict — which is not the same fact as a gate that ran and refused"' ERR
     trap wrapper_on_exit EXIT
