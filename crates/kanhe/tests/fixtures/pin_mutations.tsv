@@ -50,3 +50,4 @@ cfg_is_observed_as_written	crates/hunyi/src/reexport_only.rs	for item in items {
 repeated_macro_path_shares_one_identity	crates/hunyi/src/reexport_only.rs	sort_attributed_facts(&mut findings)?;	findings.sort_by(|a, b| a.0.cmp(&b.0));
 repeated_inherent_impl_shares_one_identity	crates/hunyi/src/reexport_only.rs	None => owner,	None => format!("{owner} {{{}}}", i.items.len()),
 repeated_extern_block_shares_one_identity	crates/hunyi/src/reexport_only.rs	syn::Item::ForeignMod(_) => ("extern block".into(), "".into()),	syn::Item::ForeignMod(i) => ("extern block".into(), i.abi.name.as_ref().map(|n| n.value()).unwrap_or_default()),
+repeated_unrenderable_items_share_one_identity	crates/hunyi/src/reexport_only.rs	syn::Item::Verbatim(_) => ("verbatim".into(), "<unrenderable>".into()),	syn::Item::Verbatim(t) => ("verbatim".into(), format!("<unrenderable> {t}")),

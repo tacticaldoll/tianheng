@@ -140,11 +140,12 @@ A `ReexportOnlyBoundary` SHALL govern a resolved module whose direct items are `
 
 #### Scenario: Direct items that render alike share one identity — a stated bound
 
-- **WHEN** one module declares two item-position invocations of the same macro path, two `impl Foo` blocks, or an `extern "C"` and an `extern "system"` block
+- **WHEN** one module declares two item-position invocations of the same macro path, two `impl Foo` blocks, an `extern "C"` and an `extern "system"` block, or two unrenderable items such as `pub macro a() {}` and `pub macro b() {}`
 - **THEN** each pair produces one structured finding, because identity is item kind, module and rendered name rather than scan position, and an extern block renders no name
 - **PINNED-BY** `repeated_macro_path_shares_one_identity`
 - **PINNED-BY** `repeated_inherent_impl_shares_one_identity`
 - **PINNED-BY** `repeated_extern_block_shares_one_identity`
+- **PINNED-BY** `repeated_unrenderable_items_share_one_identity`
 
 ### Requirement: Bare-pub item observation
 

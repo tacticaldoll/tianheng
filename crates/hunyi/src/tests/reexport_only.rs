@@ -194,8 +194,6 @@ fn repeated_macro_path_shares_one_identity() {
     assert_eq!(facts[0].0.to_string(), "macro m!");
 }
 
-/// Through the findings path, over a real source syn yields as `Item::Verbatim`: a declarative
-/// macro 2.0 has no `syn::Item` variant of its own.
 #[test]
 fn repeated_inherent_impl_shares_one_identity() {
     assert_eq!(
@@ -219,6 +217,17 @@ fn repeated_extern_block_shares_one_identity() {
 }
 
 #[test]
+fn repeated_unrenderable_items_share_one_identity() {
+    assert_eq!(
+        findings(
+            "reexport-repeat-unrenderable",
+            "pub macro a() {}\npub macro b() {}\n"
+        ),
+        ["verbatim <unrenderable>"]
+    );
+}
+
+#[test]
 fn finding_names_the_offending_source_file() {
     let tree = TempSrcTree::new("reexport-source-file");
     tree.write("lib.rs", "pub use contract::*;\npub mod child;\n");
@@ -236,6 +245,8 @@ fn finding_names_the_offending_source_file() {
     assert!(file.ends_with("child.rs"), "{file}");
 }
 
+/// Through the findings path, over a real source syn yields as `Item::Verbatim`: a declarative
+/// macro 2.0 has no `syn::Item` variant of its own.
 #[test]
 fn unrenderable_item_is_a_finding() {
     assert_eq!(

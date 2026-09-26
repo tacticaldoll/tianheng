@@ -124,6 +124,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **pinned by**: `repeated_macro_path_shares_one_identity`
 - **pinned by**: `repeated_inherent_impl_shares_one_identity`
 - **pinned by**: `repeated_extern_block_shares_one_identity`
+- **pinned by**: `repeated_unrenderable_items_share_one_identity`
 
 ## declines to refuse (1)
 

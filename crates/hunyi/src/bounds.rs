@@ -286,6 +286,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             [
                 "repeated_inherent_impl_shares_one_identity",
                 "repeated_extern_block_shares_one_identity",
+                "repeated_unrenderable_items_share_one_identity",
             ],
         ),
         BoundDecl::pinned(
