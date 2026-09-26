@@ -696,14 +696,16 @@ consumer for an undemonstrated deduplication.
   Earlier per-entry verdicts remain available for comparing a new reading with an earlier one: the
   2026-09-08 and 2026-09-20 records are in `BACKLOG.md` at `v0.6.0` and `v0.6.1`, respectively; the
   2026-09-24 record is in the squash `docs(backlog): re-read three entries whose premises the tree has moved
-  past` on `release/0.7.0`. *Promotion trigger:* a reading finds a trigger fired that an earlier reading
+  past`. *Promotion trigger:* a reading finds a trigger fired that an earlier reading
   recorded as not fired. *Version class:* patch; this file ships in no crate. *Authority:* `AGENTS.md`'s
   *`BACKLOG.md`'s promotion triggers are read against the window before the cut*.
 
-  The 2026-09-26 reading covered `v0.6.1` through the release branch's tip: the third-reader trigger in
+  The 2026-09-26 reading covered `v0.6.1` through the squash `test(kanhe): the publish signal direction
+  states its host precondition`: the third-reader trigger in
   the joined-line entry fired and it was promoted; an action falling behind an advisory in the pin entry,
   the validator's payload, and the never-released-version sweep until the workspace version moves were
-  unobserved; the per-entry record is in this change's squash commit.
+  unobserved; the per-entry record is in the squash `docs(backlog): record the pre-cut reading in its proper
+  carrier`.
 
 - **A codename index for a defect lives in the half of the corpus `doc_provenance` declares out of scope,
   and the token that would find it is shared with a measurement that must stay.** *Class:* WATCH — the
@@ -903,8 +905,7 @@ consumer for an undemonstrated deduplication.
   passes. *Promotion trigger:* fired — the third reader of joined statements exists. *Version class:* patch;
   `kanhe` is `publish = false`. *Authority:* `repository-checks`.
 
-  **Shape.** Split all three readers through the lexer. The steward chose to take this repair after the
-  0.7.0 cut.
+  **Shape.** Split all three readers through the lexer.
 
 - **The ambient-ignore guard reads files where its property belongs to call sites, and says something false
   when one file holds both kinds.** *Class:* READY-PATCH — measured, and the correction touches no published
