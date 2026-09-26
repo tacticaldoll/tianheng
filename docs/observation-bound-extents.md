@@ -115,13 +115,15 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: collapses granularity
 - **pinned by**: `an_unrenderable_sub_node_is_a_stated_rendering_bound`
 
-### `semantic-visibility-boundary/repeated-macro-invocations-share-one-identity-a-stated-bound`
+### `semantic-visibility-boundary/direct-items-that-render-alike-share-one-identity-a-stated-bound`
 
-> two item macro invocations with the same path in one module
+> two direct items of one module that render alike: a repeated macro path, several impl blocks whose self type and trait render alike, several extern blocks, or several unrenderable items
 
-- **because**: identity names the declared item kind, module and macro path, not invocation position
+- **because**: identity names the declared item kind, module and rendered name, never scan position, and an extern block renders no name, so its ABI is not part of it
 - **its defence must show**: collapses granularity
 - **pinned by**: `repeated_macro_path_shares_one_identity`
+- **pinned by**: `repeated_inherent_impl_shares_one_identity`
+- **pinned by**: `repeated_extern_block_shares_one_identity`
 
 ## declines to refuse (1)
 

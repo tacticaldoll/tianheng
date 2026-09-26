@@ -194,13 +194,53 @@ fn repeated_macro_path_shares_one_identity() {
     assert_eq!(facts[0].0.to_string(), "macro m!");
 }
 
+/// Through the findings path, over a real source syn yields as `Item::Verbatim`: a declarative
+/// macro 2.0 has no `syn::Item` variant of its own.
+#[test]
+fn repeated_inherent_impl_shares_one_identity() {
+    assert_eq!(
+        findings(
+            "reexport-repeat-impl",
+            "impl Foo {}\nimpl Foo { fn more() {} }\n"
+        ),
+        ["impl Foo"]
+    );
+}
+
+#[test]
+fn repeated_extern_block_shares_one_identity() {
+    assert_eq!(
+        findings(
+            "reexport-repeat-extern",
+            "extern \"C\" { fn a(); }\nextern \"system\" { fn b(); }\n"
+        ),
+        ["extern block"]
+    );
+}
+
+#[test]
+fn finding_names_the_offending_source_file() {
+    let tree = TempSrcTree::new("reexport-source-file");
+    tree.write("lib.rs", "pub use contract::*;\npub mod child;\n");
+    tree.write("child.rs", "pub fn helper() {}\n");
+    let boundary = ReexportOnlyBoundary::in_crate("x")
+        .module("crate")
+        .must_declare_only_reexports()
+        .depth(ScanDepth::Subtree)
+        .because("only re-exports");
+    let mut violations = Vec::new();
+    check_reexport_only_boundary(&tree.metadata(), &boundary, &mut violations).unwrap();
+    assert_eq!(violations.len(), 1);
+    assert_eq!(violations[0].finding.as_str(), "fn helper");
+    let file = violations[0].file.as_deref().unwrap();
+    assert!(file.ends_with("child.rs"), "{file}");
+}
+
 #[test]
 fn unrenderable_item_is_a_finding() {
-    let (kind, name) =
-        crate::reexport_only::describe_item(&syn::Item::Verbatim(Default::default()));
     assert_eq!(
-        (kind.as_str(), name.as_str()),
-        ("verbatim", "<unrenderable>")
+        findings("unrenderable", "pub macro m() {}"),
+        ["verbatim <unrenderable>"]
     );
 }
 

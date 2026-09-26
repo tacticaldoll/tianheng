@@ -273,14 +273,20 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "cfg_is_observed_as_written",
         ),
-        BoundDecl::pinned(
-            BoundId::new("semantic-visibility-boundary/repeated-macro-invocations-share-one-identity-a-stated-bound"),
-            "two item macro invocations with the same path in one module",
+        BoundDecl::pinned_by_many(
+            BoundId::new("semantic-visibility-boundary/direct-items-that-render-alike-share-one-identity-a-stated-bound"),
+            "two direct items of one module that render alike: a repeated macro path, several impl blocks \
+             whose self type and trait render alike, several extern blocks, or several unrenderable items",
             Extent::Reached(Reached::AsIntended {
                 bounded: FactGranularity::Identity,
-                because: "identity names the declared item kind, module and macro path, not invocation position".into(),
+                because: "identity names the declared item kind, module and rendered name, never scan position, \
+                          and an extern block renders no name, so its ABI is not part of it".into(),
             }),
             "repeated_macro_path_shares_one_identity",
+            [
+                "repeated_inherent_impl_shares_one_identity",
+                "repeated_extern_block_shares_one_identity",
+            ],
         ),
         BoundDecl::pinned(
             BoundId::new(

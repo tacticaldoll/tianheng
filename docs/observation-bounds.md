@@ -755,11 +755,13 @@ fallback used where no manifest exists, which the register spec describes.
 
 - **pinned by**: `cfg_is_observed_as_written`
 
-### `semantic-visibility-boundary/repeated-macro-invocations-share-one-identity-a-stated-bound`
+### `semantic-visibility-boundary/direct-items-that-render-alike-share-one-identity-a-stated-bound`
 
-> they produce one structured finding; identity is bounded to item kind, module, and name rather than invocation position
+> each pair produces one structured finding, because identity is item kind, module and rendered name rather than scan position, and an extern block renders no name
 
 - **pinned by**: `repeated_macro_path_shares_one_identity`
+- **pinned by**: `repeated_inherent_impl_shares_one_identity`
+- **pinned by**: `repeated_extern_block_shares_one_identity`
 
 ### `semantic-visibility-boundary/a-macro-generated-item-is-a-documented-bound`
 

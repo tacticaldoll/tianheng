@@ -45,7 +45,7 @@ For each boundary, the system SHALL resolve the named governed module to a real 
 
 ### Requirement: Re-export-only module boundary
 
-A `ReexportOnlyBoundary` SHALL govern a resolved module whose direct items are `use` declarations, regardless of their visibility or use-tree form. At `Shallow` depth, every other direct item, including a child `mod`, SHALL produce one `declared-item-kind` finding under `tianheng.rule/hunyi/reexport-only-module`. At `Subtree` depth, child `mod` declarations are containers and every descended module is judged by the same direct-item rule. Each finding SHALL use `DenyBreach`, the offending source file, and a structured identity carrying item kind, module-qualified item name, compilation unit, and governing package. A duplicate macro invocation path in one module shares one identity. An unrenderable item SHALL still react. An unresolved module anchor SHALL be a constitution error. Existing visibility-ceiling and `must_not_declare_pub` rules and identities SHALL remain unchanged.
+A `ReexportOnlyBoundary` SHALL govern a resolved module whose direct items are `use` declarations, regardless of their visibility or use-tree form. At `Shallow` depth, every other direct item, including a child `mod`, SHALL produce one `declared-item-kind` finding under `tianheng.rule/hunyi/reexport-only-module`. At `Subtree` depth, child `mod` declarations are containers and every descended module is judged by the same direct-item rule. A direct item is one the module declares at item position, after a transparent `cfg_if!` invocation is replaced by its arms; an item inside a function body belongs to that function and is not a direct item of the module. An item-position macro invocation is itself a direct item and reacts, while items produced only by its expansion remain outside this observer's AST reach (bound: `semantic-visibility-boundary/a-macro-generated-item-is-a-documented-bound`). Each finding SHALL use `DenyBreach`, SHALL name the source file that declares the offending item, and SHALL carry a structured identity of item kind, module-qualified item name, compilation unit, and governing package. Direct items of one module whose kind and rendered name coincide share one identity; scan position is never part of it. An unrenderable item SHALL still react. An unresolved module anchor SHALL be a constitution error. Existing visibility-ceiling and `must_not_declare_pub` rules and identities SHALL remain unchanged, and the re-export-only rule key and fact shape SHALL be distinct from them.
 
 #### Scenario: A helper beside a re-export reacts
 
@@ -120,13 +120,31 @@ A `ReexportOnlyBoundary` SHALL govern a resolved module whose direct items are `
 - **THEN** it still reacts, because this AST observation does not evaluate cfg predicates
 - **PINNED-BY** `cfg_is_observed_as_written`
 
-#### Scenario: Repeated macro invocations share one identity — a stated bound
+#### Scenario: A function-body impl is not a direct item
 
-- **WHEN** two item-position invocations have the same path in one module
-- **THEN** they produce one structured finding; identity is bounded to item kind, module, and name rather than invocation position
+- **WHEN** a governed module declares `fn outer() { impl Foo {} }`
+- **THEN** only `fn outer` reacts; the nested `impl` is part of the function
+- **PINNED-BY** `function_body_impl_is_not_a_direct_item`
+
+#### Scenario: A finding names the file that declares the item
+
+- **WHEN** a `Subtree` boundary governs a root whose child module `child.rs` declares `pub fn helper() {}`
+- **THEN** the one finding `fn helper` names `child.rs` as its file
+- **PINNED-BY** `finding_names_the_offending_source_file`
+
+#### Scenario: The rule key and fact shape are distinct from visibility
+
+- **WHEN** one module declaring `pub fn helper() {}` is governed by both a `ReexportOnlyBoundary` and a `must_not_declare_pub` `VisibilityBoundary`
+- **THEN** the re-export-only finding carries `tianheng.rule/hunyi/reexport-only-module`, fact shape `declared-item-kind` and `DenyBreach`, while the visibility finding keeps `tianheng.rule/hunyi/visibility-ceiling` and `declared-item-visibility`
+- **PINNED-BY** `rule_key_and_fact_are_distinct_from_visibility`
+
+#### Scenario: Direct items that render alike share one identity — a stated bound
+
+- **WHEN** one module declares two item-position invocations of the same macro path, two `impl Foo` blocks, or an `extern "C"` and an `extern "system"` block
+- **THEN** each pair produces one structured finding, because identity is item kind, module and rendered name rather than scan position, and an extern block renders no name
 - **PINNED-BY** `repeated_macro_path_shares_one_identity`
-
-Items produced only by macro expansion remain outside this observer's AST reach (bound: `semantic-visibility-boundary/a-macro-generated-item-is-a-documented-bound`). The invocation itself is a direct item and reacts.
+- **PINNED-BY** `repeated_inherent_impl_shares_one_identity`
+- **PINNED-BY** `repeated_extern_block_shares_one_identity`
 
 ### Requirement: Bare-pub item observation
 
