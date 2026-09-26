@@ -20,8 +20,9 @@ mod support;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use kanhe::shell;
 use shengmo::workspace::MARKER;
-use support::{shell, workflow};
+use support::workflow;
 
 fn workspace_root() -> Option<PathBuf> {
     shengmo::workspace::locate(

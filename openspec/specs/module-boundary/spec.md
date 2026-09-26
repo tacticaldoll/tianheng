@@ -774,10 +774,11 @@ another's — a library's internals are not the binary's — so erroring per roo
 library-only module exit 2 for the package's `bin` root, refusing to judge source that compiles.
 
 What a root without the governed module contributes depends on the rule's perimeter. For a rule whose
-perimeter is the governed module — every outbound and inbound rule, and inline-symbol-path confinement —
-that root holds nothing the rule governs, and nothing is observed there. External-crate confinement's
-perimeter is the whole root, with the governed module only the region where the confined import is
-permitted, so such a root is judged with an empty permitted region, per `external-crate-confinement`.
+perimeter is the governed module — every outbound and inbound rule, and `must_not_call_inline` —
+that root holds nothing the rule governs, and nothing is observed there. External-crate confinement and
+`confine_inline_call` have the whole root as their perimeter, with the governed module only the region where
+the confined import or inline call is permitted, so such a root is judged with an empty permitted region, per
+`external-crate-confinement` and `inline-symbol-path-confinement`.
 
 A package whose metadata reports no target at all SHALL fall back to its conventional source directory,
 which is what synthetic metadata in a caller's own tests carries; that fallback is load-bearing and SHALL

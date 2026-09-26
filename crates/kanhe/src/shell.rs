@@ -16,6 +16,12 @@
 //! supplied environment does not define are each either decided when the line runs or expanded by rules this
 //! does not implement, so [`words`] returns `None` for the line rather than a guess. A caller reading a witness
 //! therefore treats `None` as *not a witness*, and a caller reading a declaration treats it as unreadable.
+//!
+//! **Where one statement ends is bash's answer, taken from the lexer's own work.** [`statements`] cuts at a
+//! newline the lexer left as an operator of the text itself, and nowhere else: a backslash-newline is already
+//! gone by then, removed where bash removes it, so a line ending in an escaped backslash or in a backslash
+//! inside single quotes ends its statement exactly where bash ends the command. A reader whose claim is about
+//! which words belong to one command takes this split rather than walking continuations itself.
 
 use std::collections::BTreeMap;
 
@@ -292,18 +298,13 @@ fn expand(lexed: Vec<Word>, env: &BTreeMap<String, String>) -> Option<Argv> {
 /// such opener, so a script carrying one contributes nothing at all, rather than contributing whatever its
 /// remaining lines happen to spell.
 ///
-/// **Lexed once, whole, and split where bash splits it: at an unquoted newline.** A backslash-newline joins two
-/// lines inside [`lex`], as bash joins them, and nowhere else — not at an escaped backslash ending a line, not
-/// inside single quotes — so the continuation rule is the lexer's rather than a second one run first.
+/// The split is [`statements`]': lexed once, whole, and cut where bash cuts it — at a newline of the text's
+/// own, never across a substitution that spans lines — so the continuation rule is the lexer's rather than a
+/// second one run first.
 pub fn script_commands(script: &str, env: &BTreeMap<String, String>) -> Option<Vec<Argv>> {
     let mut commands = Vec::new();
-    let mut lexed = lex(script).into_iter().peekable();
-    while lexed.peek().is_some() {
-        let command: Vec<Word> = lexed
-            .by_ref()
-            .take_while(|word| !(word.operator && word.value == "\n"))
-            .collect();
-        let read = expand(command, env)?;
+    for statement in statements(script).ok()? {
+        let read = expand(statement.words, env)?;
         // A line of assignments alone is the shell's own act too: it changes what later lines expand to, and
         // this reads every line in the environment the workflow declares.
         let assignment_only = !read.words.is_empty() && read.command().is_none();
@@ -319,6 +320,53 @@ pub fn script_commands(script: &str, env: &BTreeMap<String, String>) -> Option<V
         }
     }
     Some(commands)
+}
+
+/// One statement of a script: the words between two of the text's own newlines, with the line it begins on.
+///
+/// A command substitution's interior words stay in the statement, at their own [`depth`](Word::depth): the
+/// substitution may span lines without splitting the command it stands in, and a reader scanning a
+/// statement's words sees them in the order they begin.
+pub struct Statement {
+    /// The one-based line the statement's first word begins on.
+    pub line: usize,
+    /// The statement's words and operators, in the order each begins.
+    pub words: Vec<Word>,
+}
+
+/// The statements of `script`, or the line and name of the first thing in it [`lex`] could not place.
+///
+/// The boundary is read off the lexer's work rather than walked again: a newline the lexer emitted as an
+/// operator of the text itself ends a statement, and nothing else does. A backslash-newline is already
+/// removed by then, as bash removes it; an escaped backslash or one inside single quotes is literal text, so
+/// the statement ends at the newline exactly as bash ends the command there. Where a comment opens is the
+/// lexer's own reading too — an unquoted `#` beginning a word — so a reader over statements takes no region
+/// pass first, and a comment's text can no more carry a token into a statement than it can carry one into
+/// bash.
+pub fn statements(script: &str) -> Result<Vec<Statement>, (usize, &'static str)> {
+    let mut out = Vec::new();
+    let mut current: Vec<Word> = Vec::new();
+    for word in lex_placed(script)? {
+        if word.operator && word.depth == 0 && word.value == "\n" {
+            if !current.is_empty() {
+                let line = current[0].line;
+                out.push(Statement {
+                    line,
+                    words: std::mem::take(&mut current),
+                });
+            }
+        } else {
+            current.push(word);
+        }
+    }
+    if !current.is_empty() {
+        let line = current[0].line;
+        out.push(Statement {
+            line,
+            words: current,
+        });
+    }
+    Ok(out)
 }
 
 /// One word of shell text, or one operator, where bash's own grammar puts the boundary.
@@ -359,11 +407,21 @@ pub struct Word {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Part {
     /// Text the shell takes as written: quoted, or escaped by a backslash.
-    Literal { text: String, quoted: bool },
+    Literal {
+        /// The text itself, escapes resolved.
+        text: String,
+        /// Whether it stood inside quotes — which is what keeps an empty expansion a word.
+        quoted: bool,
+    },
     /// Unquoted text, whose glob, brace and tilde characters the shell would still expand.
     Unquoted(String),
     /// `$NAME` or `${NAME}`, inside double quotes or not.
-    Param { name: String, quoted: bool },
+    Param {
+        /// The parameter's name, sigil and braces excluded.
+        name: String,
+        /// Whether it stood inside double quotes, which is what keeps its value one word.
+        quoted: bool,
+    },
     /// A special parameter — `$1`, `$@`, `$?` and the rest.
     Special(char),
     /// A `${…}` holding more than a name — a default, a substring, an indirection.

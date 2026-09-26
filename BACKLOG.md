@@ -565,7 +565,7 @@ consumer for an undemonstrated deduplication.
   trigger:* that refusal firing. *Version class:* patch. *Authority:* `repository-checks`.
 
 - **The shell-own word set is held against whichever bash runs the test.** *Class:* WATCH. *Observed
-  pressure:* `support/shell.rs`'s `SHELL_OWN_WORDS` is compared both ways with `compgen -b; compgen -k` from
+  pressure:* `kanhe::shell`'s `SHELL_OWN_WORDS` is compared both ways with `compgen -b; compgen -k` from
   the bash on the host, so a builtin one bash version has and another lacks turns one side red. *Observation
   source:* the same review's non-gated observations. *Current reaction or bound:* the comparison itself, which
   fails loudly rather than silently on a mismatch. *Risk:* a spurious red on a contributor's machine or on CI
@@ -705,7 +705,10 @@ consumer for an undemonstrated deduplication.
   the joined-line entry fired and it was promoted; an action falling behind an advisory in the pin entry,
   the validator's payload, and the never-released-version sweep until the workspace version moves were
   unobserved; the per-entry record is in the squash `docs(backlog): record the pre-cut reading in its proper
-  carrier`.
+  carrier`. The 2026-09-27 reading covered `v0.7.0` through the squash `feat(guibiao): permit an inline call
+  only within one module`: no entry changed state, and the never-released-version sweep was re-run once the
+  workspace version moved; the per-entry record is in the squash that moved the workspace version and dated
+  the release section.
 
 - **A codename index for a defect lives in the half of the corpus `doc_provenance` declares out of scope,
   and the token that would find it is shared with a measurement that must stay.** *Class:* WATCH — the
@@ -887,25 +890,25 @@ consumer for an undemonstrated deduplication.
   inside its range; the instance it finds is then the negative run a check would need. *Version class:*
   patch; no crate is touched. *Authority:* `repository-checks`, and `AGENTS.md`'s carrier taxonomy row.
 
+- **Where a shell comment opens is judged twice in `crates/kanhe`: the region's token-start rule and the
+  lexer's.** *Class:* WATCH. *Observed pressure:* the lexer's move from test support into `src/` — the
+  joined-line readers repair, recorded under BUILT below — put two judgements of one question in one crate:
+  `region`'s token-start rule, an approximation with two declared bounds, and `shell`'s exact reading, which
+  opens a comment at an unquoted `#` beginning a word. *Observation source:* *An extraction's corpus is the
+  pair of modules* applied to that move; the readers that searched shell text migrated to the lexer, and
+  `Source::shell()` keeps its remaining consumers on the approximation. *Current reaction or bound:* both
+  divergence directions are declared bounds of `repository-checks` with pinning directions — a marker after
+  an unquoted metacharacter stays in the region, a whitespace-preceded marker inside quotes is cut — so the
+  twin is governed where it can bite; what nothing holds is that the two judgements stay the only two and
+  stay consistent. *Risk:* a correction to the comment rule lands in one judgement and not the other.
+  *Promotion trigger:* a tracked script carrying either bound's shape — the bound then has a live instance,
+  and the region's shell accessor reads through the lexer rather than re-declaring the divergence. *Why not
+  converged with the repair:* the region is a total, line-oriented cut and the lexer a fallible whole-text
+  one, so converging changes every shell-region consumer's error shape and retires two declared bounds — a
+  design step past the repair that surfaced the twin. *Version class:* patch; `kanhe` is `publish = false`.
+  *Authority:* `AGENTS.md`'s *An extraction's corpus is the pair of modules*.
+
 ### READY-PATCH
-
-- **Three wrapper readers still join lines by `gate_identity::logical_lines`, which reads no quotes.**
-  *Class:* READY-PATCH — the third-reader promotion trigger fired, and the repair preserves the published
-  surface. *Observed pressure:* the acquisition sweep and the gate-call reader in `gate_exit_classes` search
-  joined statements for tokens; `kanhe::gate_identity::citations` also reads each script's `--exact <ident>`
-  citation with its `--test` and `-p` from joined statements. The third reader already existed when this
-  entry was written, so the earlier count of two was an undercount. `logical_lines` joins a line ending in
-  an escaped backslash, or in a backslash inside open single quotes, where bash does not. *Observation
-  source:* the 2026-09-26 pre-cut reading found the third reader and checked executed `scripts/*.sh` lines:
-  no wrapper or library line has either continuation shape today. *Current reaction or bound:* none for
-  these readers; the workflow's command reader already lexes whole. *Risk:* joined text can make an
-  unguarded acquisition look guarded; in `citations`, `value_after("--test")` or `-p` could read a value from
-  the joined next line and misattribute the target. No such line exists today. The acquisition sweep also
-  accepts a `|| {` opener without checking that the block's first command stops, so `x=$(tool) || { true; }`
-  passes. *Promotion trigger:* fired — the third reader of joined statements exists. *Version class:* patch;
-  `kanhe` is `publish = false`. *Authority:* `repository-checks`.
-
-  **Shape.** Split all three readers through the lexer.
 
 - **The ambient-ignore guard reads files where its property belongs to call sites, and says something false
   when one file holds both kinds.** *Class:* READY-PATCH — measured, and the correction touches no published
@@ -3413,6 +3416,31 @@ consumer for an undemonstrated deduplication.
     un-auditable probes into one finding" (0.4.0 sweep, `crates/louke/src/audit/scan/lexer.rs`).
     Mechanics reproduce at the byte-scanner level, but the trigger is not reachable from
     compilable adopter input — refuted on the reproduction lens.
+- **Three wrapper readers still join lines by `gate_identity::logical_lines`, which reads no quotes.**
+  *Class:* BUILT / HISTORY. *Observed pressure:* the acquisition sweep and the gate-call reader in
+  `gate_exit_classes` search joined statements for tokens; `kanhe::gate_identity::citations` also reads each
+  script's `--exact <ident>` citation with its `--test` and `-p` from joined statements. The third reader
+  already existed when this entry was written, so the earlier count of two was an undercount.
+  `logical_lines` joins a line ending in an escaped backslash, or in a backslash inside open single quotes,
+  where bash does not. *Observation source:* the 2026-09-26 pre-cut reading found the third reader and
+  checked executed `scripts/*.sh` lines: no wrapper or library line has either continuation shape today.
+  *Current reaction or bound:* none for these readers; the workflow's command reader already lexes whole.
+  *Risk:* joined text can make an unguarded acquisition look guarded; in `citations`, `value_after("--test")`
+  or `-p` could read a value from the joined next line and misattribute the target. No such line exists
+  today. The acquisition sweep also accepts a `|| {` opener without checking that the block's first command
+  stops, so `x=$(tool) || { true; }` passes. *Version class:* patch; `kanhe` is `publish = false`.
+  *Authority:* `repository-checks`.
+
+  **Built 2026-09-26.** The readers now split where bash splits, off `kanhe::shell` — the lexer moved from
+  test support into `crates/kanhe/src` because `citations` lives there and a second splitter would have been
+  two implementations of one rule; it depends on `std` alone, so 勘合's declared dependency boundary is
+  untouched. `logical_lines` is retired, and `region::Executed::positioned_lines` with it: its two callers
+  were among these readers, and a reaction without a subject is the shape this file withdraws — its
+  comment-under-a-continuation measurement stands now as a row of the lexer's failure matrix. The
+  acquisition sweep reads a `|| {` block past its opener: the block's first command must stop or assign the
+  acquired name, so `x=$(tool) || { true; }` is refused. The twin the extraction surfaced — the region's
+  token-start comment rule beside the lexer's exact one — is filed under WATCH above.
+
 - **BUILT / HISTORY:**
   - Opt-in gate flag `--disallow-stale` enforcing zero stale baseline entries in CI gate mode.
   - Non-generic compound type alias target traversal in `hunyi` (tuples, arrays, slices, references, raw pointers).

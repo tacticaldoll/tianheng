@@ -8,7 +8,7 @@ mod support;
 
 use std::collections::BTreeMap;
 
-use support::shell::{Argv, RESERVED_WORDS, SHELL_OWN_WORDS, script_commands, words};
+use kanhe::shell::{Argv, RESERVED_WORDS, SHELL_OWN_WORDS, script_commands, words};
 use support::workflow::{Workflow, is_comment_line, parse};
 
 fn read(text: &str) -> Workflow {

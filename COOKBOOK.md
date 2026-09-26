@@ -218,6 +218,29 @@ dimensions read them as real code — 圭表 since 0.2.3, 渾儀 and 漏刻 in 0
 under any other name stays out of scope.) A glob that could smuggle the surface in (`use std::time::*`, or a module
 that re-exports it, globbed) reacts fail-closed.
 
+### Permit an inline call only in one module (`confine_inline_call`)
+
+*Intent: only `crate::exec` spawns a process — every other module, in every compiled root, goes through it.*
+
+```rust
+.boundary(
+    ModuleBoundary::in_crate("my-app")
+        .module("crate::exec")
+        .confine_inline_call("std::process::Command")
+        .because("only exec spawns processes; the rest of the crate asks exec"),
+)
+```
+
+The permitting dual of `must_not_call_inline`, as `confine_external_crate` is for imports: an inline call under
+the prefix reacts anywhere **outside** `crate::exec`'s subtree — a sibling module, or a binary root that declares
+no `exec` at all, which is judged with an empty permitted region. It observes exactly what `must_not_call_inline`
+observes, with the same modifiers, and a new module cannot escape it the way it escapes a list of per-sibling
+`must_not_call_inline` boundaries. Permitting within `crate` is a constitution error. One over-reaction bound is
+worth knowing before you adopt it: a glob's `self` or `super` resolves against its file's module, so a sibling's
+`mod tests { use super::*; }` reacts when a `type` alias (of any visibility) or `pub use` of the prefix exists
+anywhere beneath the crate. A private `use` of the prefix in `crate::exec` does not trigger it; an alias does, so
+prefer the `use`, or baseline the glob finding.
+
 ### Also catch a fully-qualified external-crate call (opt-in `.strict_external()`)
 
 *Intent: the same clock-free core must not read the clock via an external crate either — e.g. a

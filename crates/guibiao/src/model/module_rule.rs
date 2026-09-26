@@ -149,6 +149,48 @@ pub enum ModuleRule {
         /// local precedence checks. Projection metadata and scan breadth only; never identity.
         strict_external: bool,
     },
+    /// Inline symbol-path **calls** resolving under a declared module-path prefix are **permitted only** within the
+    /// governed module's subtree: a call anywhere else in any compiled root of the package is a violation. The
+    /// permitting dual of [`ConfineInlineSymbolPath`](ModuleRule::ConfineInlineSymbolPath), as
+    /// [`ConfineExternalCrate`](ModuleRule::ConfineExternalCrate) permits a crate's imports only within its
+    /// subtree. The same scanner, the same facts and the same modifiers; the governed module names the permitted
+    /// region rather than the judged one, so its perimeter is the whole package and a root without the module has
+    /// an empty permitted region. The confined prefix is the violation target.
+    #[non_exhaustive]
+    ConfineInlineCall {
+        /// The confined module-path prefix (e.g. `"std::process::Command"`).
+        prefix: String,
+        /// If `Some`, react only on calls whose terminal segment (leaf-exact) is one of these verbs; `None` reacts
+        /// on every call under the prefix.
+        ending_with: Option<Vec<String>>,
+        /// If `true`, react on any path under the prefix outside the permitted region, mentions included.
+        /// Mutually exclusive with `ending_with`.
+        strict: bool,
+        /// If `true`, resolve a bare path head matching a declared dependency as external. Projection metadata and
+        /// scan breadth only; never identity.
+        strict_external: bool,
+    },
+}
+
+/// The permitting inline-confinement text projection: where the confined prefix may be used, rather than where it
+/// may not.
+pub(crate) fn inline_permission_text(
+    prefix: &str,
+    ending_with: &Option<Vec<String>>,
+    strict: bool,
+) -> String {
+    match (ending_with, strict) {
+        (_, true) => {
+            format!(
+                "confines naming inline under {prefix} to this module's subtree (strict: mentions too)"
+            )
+        }
+        (Some(verbs), false) => format!(
+            "confines inline calls under {prefix} ending with {} to this module's subtree",
+            verbs.join(", ")
+        ),
+        (None, false) => format!("confines inline calls under {prefix} to this module's subtree"),
+    }
 }
 
 /// The inline-confinement text projection. Neither it nor [`ModuleRule::label`] is identity;
@@ -238,6 +280,27 @@ impl ModuleRule {
                     ("strict", strict.to_string()),
                 ],
             ),
+            ModuleRule::ConfineInlineCall {
+                prefix,
+                ending_with,
+                strict,
+                strict_external: _,
+            } => RuleKey::of(
+                "tianheng.rule/guibiao/confine-inline-call",
+                [
+                    (
+                        "ending_with",
+                        canonical_set(
+                            ending_with
+                                .iter()
+                                .flat_map(|values| values.iter())
+                                .map(|verb| canonical_module_path(verb)),
+                        ),
+                    ),
+                    ("prefix", canonical_module_path(prefix)),
+                    ("strict", strict.to_string()),
+                ],
+            ),
         }
     }
 
@@ -250,6 +313,7 @@ impl ModuleRule {
             ModuleRule::MustOnlyBeImportedBy { .. } => "module may only be imported by",
             ModuleRule::ConfineExternalCrate { .. } => "external crate confined to module",
             ModuleRule::ConfineInlineSymbolPath { .. } => "inline symbol path confined to module",
+            ModuleRule::ConfineInlineCall { .. } => "inline symbol path permitted only in module",
         }
     }
 
@@ -259,6 +323,12 @@ impl ModuleRule {
     pub(crate) fn inline_payload(&self) -> Option<(&str, Option<&[String]>, bool, bool)> {
         match self {
             ModuleRule::ConfineInlineSymbolPath {
+                prefix,
+                ending_with,
+                strict,
+                strict_external,
+            } => Some((prefix, ending_with.as_deref(), *strict, *strict_external)),
+            ModuleRule::ConfineInlineCall {
                 prefix,
                 ending_with,
                 strict,
@@ -277,7 +347,9 @@ impl ModuleRule {
             | ModuleRule::MustNotBeImportedBy { .. }
             | ModuleRule::MustOnlyBeImportedBy { .. }
             | ModuleRule::ConfineInlineSymbolPath { .. } => Perimeter::GovernedModule,
-            ModuleRule::ConfineExternalCrate { .. } => Perimeter::WholeRoot,
+            ModuleRule::ConfineExternalCrate { .. } | ModuleRule::ConfineInlineCall { .. } => {
+                Perimeter::WholeRoot
+            }
         }
     }
 
@@ -292,7 +364,8 @@ impl ModuleRule {
             }
             ModuleRule::RestrictImportsTo { .. }
             | ModuleRule::MustOnlyBeImportedBy { .. }
-            | ModuleRule::ConfineExternalCrate { .. } => Polarity::AllowlistGap,
+            | ModuleRule::ConfineExternalCrate { .. }
+            | ModuleRule::ConfineInlineCall { .. } => Polarity::AllowlistGap,
             ModuleRule::ConfineInlineSymbolPath { .. } => Polarity::DenyBreach,
         }
     }
@@ -332,6 +405,19 @@ impl ModuleRule {
                     text
                 }
             }
+            ModuleRule::ConfineInlineCall {
+                prefix,
+                ending_with,
+                strict,
+                strict_external,
+            } => {
+                let text = inline_permission_text(prefix, ending_with, *strict);
+                if *strict_external {
+                    format!("{text} (strict-external)")
+                } else {
+                    text
+                }
+            }
         }
     }
 
@@ -358,6 +444,12 @@ impl ModuleRule {
                 vec![("external_crate", serde_json::json!(crate_name))]
             }
             ModuleRule::ConfineInlineSymbolPath {
+                prefix,
+                ending_with,
+                strict,
+                strict_external,
+            } => inline_confinement_json(prefix, ending_with, *strict, *strict_external),
+            ModuleRule::ConfineInlineCall {
                 prefix,
                 ending_with,
                 strict,
@@ -485,8 +577,28 @@ impl ModuleTargetDraft {
             ending_with: None,
             strict: false,
             external: false,
+            permitted: false,
             severity: Severity::Enforce,
             depth: ScanDepth::Subtree,
+        }
+    }
+
+    /// Permit inline symbol-path **calls** resolving under the module-path `prefix` (e.g.
+    /// `"std::process::Command"`) **only** within the governed subtree: a call anywhere else in any compiled root
+    /// of the package is a violation. The permitting dual of [`must_not_call_inline`](Self::must_not_call_inline),
+    /// as [`confine_external_crate`](Self::confine_external_crate) permits a crate's imports only within its
+    /// subtree — "only `crate::exec` spawns a process".
+    ///
+    /// The observation is `must_not_call_inline`'s: the same scanner, the same call-versus-mention default, the
+    /// same alias and glob resolution, and the same [`InlineConfinementDraft`] modifiers. What differs is the
+    /// region judged — every file of every compiled root outside the governed subtree — so a root whose graph has
+    /// no governed module is judged with an empty permitted region, and a package where no root declares it is a
+    /// constitution error. Confining to `crate` (the root) is a constitution error, since its subtree is the whole
+    /// crate and the rule could never react.
+    pub fn confine_inline_call(self, prefix: &str) -> InlineConfinementDraft {
+        InlineConfinementDraft {
+            permitted: true,
+            ..self.must_not_call_inline(prefix)
         }
     }
 
@@ -553,6 +665,9 @@ pub struct InlineConfinementDraft {
     ending_with: Option<Vec<String>>,
     strict: bool,
     external: bool,
+    /// Whether the governed module is the permitted region ([`ModuleRule::ConfineInlineCall`]) rather than the
+    /// judged one ([`ModuleRule::ConfineInlineSymbolPath`]).
+    permitted: bool,
     severity: Severity,
     depth: ScanDepth,
 }
@@ -638,11 +753,20 @@ impl InlineConfinementDraft {
 
     /// Finish the boundary, recording the human-readable `reason` (the repair hint).
     pub fn because(self, reason: &str) -> ModuleBoundary {
-        let rule = ModuleRule::ConfineInlineSymbolPath {
-            prefix: self.prefix,
-            ending_with: self.ending_with,
-            strict: self.strict,
-            strict_external: self.external,
+        let rule = if self.permitted {
+            ModuleRule::ConfineInlineCall {
+                prefix: self.prefix,
+                ending_with: self.ending_with,
+                strict: self.strict,
+                strict_external: self.external,
+            }
+        } else {
+            ModuleRule::ConfineInlineSymbolPath {
+                prefix: self.prefix,
+                ending_with: self.ending_with,
+                strict: self.strict,
+                strict_external: self.external,
+            }
         };
         ModuleBoundary {
             crate_package: self.crate_package,
