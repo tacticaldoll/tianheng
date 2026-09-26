@@ -8,7 +8,6 @@
 use std::path::Path;
 
 use crate::refusal::{Refusal, cannot_judge_at, violation_at};
-use crate::region::Source;
 
 /// The directory every tracked file of which is a wrapper or the shared library — a category closed by
 /// location, which is why nothing filters it by extension.
@@ -79,87 +78,53 @@ pub struct Citation {
     pub package: Option<String>,
 }
 
-/// Physical lines joined where one ends in a backslash — the shell's own continuation rule — each paired
-/// with the **one-based physical line it starts on**.
-///
-/// A gate invocation spans several lines. Asking about `--exact` and `--test` per physical line can find them
-/// in different units and bind neither, so the shell's continuation rule is applied before either is read.
-///
-/// **The starting line travels with the text because the other caller needs it and would otherwise write this
-/// rule again.** It did: a second implementation in the exit-class sweep joined on `trim_end().strip_suffix`,
-/// which continues a line ending in backslash-then-whitespace. Measured, bash does not — given `echo A \ `
-/// followed by `echo B`, it runs **two** commands, printing `A` and then `B`, because the backslash escapes
-/// the space rather than the newline. That sweep decides whether every acquisition in the two
-/// irreversible-act wrappers is guarded, and its failure direction is *reports guarded when it is not*: text
-/// pulled in from a following line can carry the very token the guard is recognised by.
-///
-/// **It reads no quotes, so it joins two lines bash does not**: one ending in an escaped backslash, and one
-/// ending in a backslash inside single quotes. A reader that needs bash's own split lexes the script whole
-/// instead, as the workflow's command reader does; the readers left on this one search a joined statement for a
-/// token, and `BACKLOG.md` carries what an over-joined line costs them.
-pub fn logical_lines(script: &str) -> Vec<(usize, String)> {
-    let mut joined = Vec::new();
-    let mut current = String::new();
-    let mut start = 1usize;
-    for (index, line) in script.lines().enumerate() {
-        if current.is_empty() {
-            start = index + 1;
-        }
-        if let Some(head) = line.strip_suffix('\\') {
-            current.push_str(head);
-            current.push(' ');
-            continue;
-        }
-        current.push_str(line);
-        joined.push((start, std::mem::take(&mut current)));
-    }
-    if !current.is_empty() {
-        joined.push((start, current));
-    }
-    joined
-}
-
-/// The value following `flag` in one logical line's whitespace-separated words.
-fn value_after(words: &[&str], flag: &str) -> Option<String> {
+/// The value following the word `flag` in one statement's words, quote removal applied — what the shell
+/// passes as the flag's argument.
+fn value_after(words: &[crate::shell::Word], flag: &str) -> Option<String> {
     words
         .iter()
-        .position(|word| *word == flag)
+        .position(|word| !word.operator && word.value == flag)
         .and_then(|at| words.get(at + 1))
-        .map(|value| (*value).to_string())
+        .filter(|value| !value.operator)
+        .map(|value| value.value.clone())
 }
 
 /// Every `--exact <ident>` a script cites, with the invocation each belongs to.
 ///
-/// **The region is decided once, by [`Source::shell`], and the continuation walk reads that.** This used to
-/// join raw lines and then skip the ones *beginning* with `#` — its own second opinion about what a script
-/// executes, and a narrower one: a **tail** comment was never cut, so `--exact` written after a `#` on an
-/// invocation line would have been read as a citation.
+/// Read off the script's own statements — [`crate::shell::statements`] — so the invocation a flag belongs to
+/// is the statement bash puts it in. A backslash-newline joins two lines into one invocation and nothing
+/// else does: a line ending in an escaped backslash, or in a backslash inside single quotes, ends its
+/// command at the newline, and a `--test` or `--exact` written on the next line is another statement's word,
+/// never this citation's. A reader that joins those lines anyway binds an identifier to a target written in
+/// a command bash never runs — the shape the fixture `a_citation_is_not_bound_across_a_line_bash_does_not_join`
+/// carries. Comments need no region pass here: the lexer opens one where bash does, at an unquoted `#`
+/// beginning a word.
 ///
-/// Through [`crate::region::Executed::positioned_lines`] rather than [`crate::region::Executed::lines`],
-/// because the rule applied below is the shell's continuation rule and **position is part of it**. The first
-/// repair joined the compacted lines, which makes a comment's neighbours adjacent and lets a trailing
-/// backslash continue across the very line bash uses to end the command.
-pub fn citations(script_path: &str, script: &str) -> Vec<Citation> {
+/// # Errors
+///
+/// The line and name of the first construct the lexer cannot place. A script that cannot be read word by
+/// word is refused rather than read past: a citation reported from past a misread word would be one this
+/// reader never judged.
+pub fn citations(script_path: &str, script: &str) -> Result<Vec<Citation>, (usize, &'static str)> {
     let mut found = Vec::new();
-    let source = Source::of(script);
-    for (_, line) in logical_lines(&source.shell().positioned_lines().join("\n")) {
-        let words: Vec<&str> = line.split_whitespace().collect();
+    for statement in crate::shell::statements(script)? {
+        let words = &statement.words;
         for (at, word) in words.iter().enumerate() {
-            if *word != "--exact" {
+            if word.operator || word.value != "--exact" {
                 continue;
             }
-            let Some(identifier) = words.get(at + 1) else {
+            let Some(identifier) = words.get(at + 1).filter(|word| !word.operator) else {
                 continue;
             };
             found.push(Citation {
                 script: script_path.to_string(),
-                identifier: (*identifier).to_string(),
-                target: value_after(&words, "--test"),
-                package: value_after(&words, "-p"),
+                identifier: identifier.value.clone(),
+                target: value_after(words, "--test"),
+                package: value_after(words, "-p"),
             });
         }
     }
-    found
+    Ok(found)
 }
 
 /// Each name a target's harness registers, **exactly as `--list` prints it**.
@@ -269,6 +234,10 @@ pub fn offences(
 /// second library is a change to the requirement rather than a row in a growing exclusion list — the shape
 /// `repository-checks` names when it says a refusal an operator cannot act on is one they work around.
 ///
+/// **A script the lexer cannot place is a cannot-judge, the third state beside *cites* and *cites not*.**
+/// [`citations`] refuses such a script rather than reading past the word it could not place, and this reader
+/// reports that rather than either answer — an unreadable script is not one read as citing nothing.
+///
 /// What this buys is the **shape**: a script deferring to nothing cannot exist. It is not a proof that a script
 /// which does defer does nothing else afterwards, and it does not try to be — deciding that from source text is
 /// the judgement over prose this repository has designed, measured three times and rejected.
@@ -276,7 +245,19 @@ pub fn uncited_scripts<'a>(scripts: impl IntoIterator<Item = (&'a str, &'a str)>
     scripts
         .into_iter()
         .filter_map(|(path, text)| {
-            let cites = !citations(path, text).is_empty();
+            let found = match citations(path, text) {
+                Ok(found) => found,
+                Err((line, what)) => {
+                    return Some(cannot_judge_at(
+                        "repository-checks#a-script-the-shell-reader-cannot-place",
+                        format!(
+                            "{path}:{line} holds {what}, so which gates this script cites cannot be read — \
+                             a script that cannot be read word by word is not one read as citing nothing"
+                        ),
+                    ));
+                }
+            };
+            let cites = !found.is_empty();
             if path == WRAPPERS_SHARED_LIBRARY {
                 return cites.then(|| {
                     violation_at(

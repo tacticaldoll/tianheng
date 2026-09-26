@@ -31,6 +31,20 @@ them.
 
 ## [Unreleased]
 
+### Self-governance
+
+- **The wrapper readers that searched shell text across joined lines now split where bash splits, off
+  `kanhe::shell`.** The lexer moved from test support into `crates/kanhe/src`, because the citation reader
+  lives there and a second splitter would have been two implementations of one rule.
+  `gate_identity::logical_lines` — which joined a line ending in an escaped backslash, or in a backslash
+  inside single quotes, where bash does not — is retired, and `region::Executed::positioned_lines` with it,
+  its callers having been these readers. The acquisition sweep reads a `|| {` block past its opener now: the
+  block's first command must stop or supply the acquired name's fallback, so `x=$(tool) || { true; }` is
+  refused rather than admitted as guarded. A citation binds its `--test` and `-p` from its own statement
+  only, and a script the lexer cannot place is a cannot-judge rather than an empty reading. The twin the
+  extraction surfaced — the region's token-start comment rule beside the lexer's exact one — is filed in
+  `BACKLOG.md` as WATCH, its two divergence directions already declared bounds.
+
 ## [0.7.0] - 2026-09-26
 
 ### Static

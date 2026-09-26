@@ -16,4 +16,5 @@ mod repository_path;
 mod restatement;
 mod sections;
 mod selection;
+mod shell;
 mod wrapper_parser;

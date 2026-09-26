@@ -1676,8 +1676,17 @@ status and only the tool's stderr, so the class reported is neither of the two t
 operator receives the tool's words for a fact about the wrapper. Measured: a failing commits read left the merge
 wrapper exiting `91` in silence. The corpus SHALL include the shared library, whose functions run inside each
 wrapper, so an acquisition written there chooses the class exactly as one written in a wrapper would. A guard is a
-stop: `cannot_judge`, or a function whose body calls one as a command at its own depth — a name printed as an
-argument, or called inside a command substitution, whose `exit` ends only that subshell, stops nothing.
+`||` followed by a stop — `cannot_judge`, or a function whose body calls one as a command at its own depth; a
+name printed as an argument, or called inside a command substitution, whose `exit` ends only that subshell,
+stops nothing — by a fallback assignment to the name being acquired, or by a block whose first command is one of
+those two. A block opening with anything else, `|| { true; }` included, swallows the failure and SHALL be refused
+exactly as no guard is.
+
+**Statement boundaries SHALL be read as bash reads them.** A backslash-newline joins two lines into one command
+and nothing else does: a line ending in an escaped backslash ends its command at the newline, and so does a
+backslash inside open single quotes. A token pulled across a boundary bash keeps can be the very token a guard is
+recognized by, so a reader that joins where bash does not reports an unguarded acquisition as guarded, or a
+routing as the gate's own that bash never made.
 
 A direction holding any of these stops SHALL assert the **class**, not merely that the wrapper failed. Asserting
 non-zero cannot see `1` from `2`, which is how five could-not-read conditions were split across both classes while
@@ -1723,6 +1732,21 @@ every direction covering them passed.
 
 - **WHEN** an external tool a wrapper reads evidence from exits non-zero
 - **THEN** the wrapper reports it in its own words and its own class, rather than exiting with the tool's status
+
+#### Scenario: An acquisition guarded only across a line bash does not join
+
+- **WHEN** an acquisition's line ends in an escaped backslash and the following line carries the guard
+- **THEN** the sweep refuses the acquisition as unguarded — bash ends the command at the newline, so the guard
+  is another command, and joining the two would certify a wrapper that exits with the tool's status
+- **PINNED-BY** `an_acquisition_guarded_only_across_a_line_bash_does_not_join_is_unguarded`
+
+#### Scenario: A block guard whose first command does not stop
+
+- **WHEN** an acquisition is followed by `|| {` whose first command neither stops nor assigns the acquired name —
+  `|| { true; }`
+- **THEN** the sweep refuses the acquisition as unguarded, because the block swallows the failure rather than
+  refusing it or supplying a value
+- **PINNED-BY** `a_block_guard_whose_first_command_is_not_a_stop_is_unguarded`
 
 ### Requirement: The merge SHALL be pinned to the head the gate read its evidence from
 
@@ -2122,6 +2146,11 @@ SHALL be joined to the `--test <target>` of the same invocation, and that target
 exactly once. A test identifier is a reference into this repository exactly as a path is, and the reference
 gate matches paths only.
 
+**The same invocation is one statement as bash reads it.** A backslash-newline joins two lines into one
+invocation and nothing else does — a line ending in an escaped backslash, or in a backslash inside open single
+quotes, ends its command at the newline. A reader that joins those lines anyway binds an identifier to a target
+written in a command bash never runs.
+
 **Every tracked script SHALL carry at least one such citation, and that SHALL be held per script — with one
 named exception.** A script citing no gate renders its own verdict, which is the shape this capability's
 Purpose refuses and the shape its retired predecessor described in full: `check_*.sh` gates paired with
@@ -2188,6 +2217,15 @@ before that.
 - **WHEN** a tracked script writes `--exact <ident>` with no `--test <target>` in the same invocation
 - **THEN** the check refuses as a cannot-judge naming the script and the identifier: an identifier it
   cannot bind to a target is one it could not resolve, not one it resolved as fine
+
+#### Scenario: A flag bound across a statement boundary bash keeps
+
+- **WHEN** an invocation's line ends in an escaped backslash, or in a backslash inside open single quotes, and
+  the following line carries the `--exact <ident>` or the `--test <target>`
+- **THEN** the citation is not bound across the boundary — the identifier stands in an invocation of its own
+  with no target of its own, and is refused as one the check cannot bind, rather than listed against a target
+  bash gave another command
+- **PINNED-BY** `a_citation_is_not_bound_across_a_line_bash_does_not_join`
 
 #### Scenario: The script enumeration fails
 

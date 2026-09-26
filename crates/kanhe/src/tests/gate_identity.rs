@@ -1,6 +1,6 @@
 //! The gate-identity judgement's failure matrix.
 
-use crate::gate_identity::{citations, logical_lines, offences, registered_names, uncited_scripts};
+use crate::gate_identity::{Citation, citations, offences, registered_names, uncited_scripts};
 use crate::refusal::Kind;
 
 /// A listing carrying every shape the join has to tell apart:
@@ -21,37 +21,18 @@ fn invocation(identifier: &str) -> String {
     )
 }
 
-#[test]
-fn a_wrapped_invocation_is_one_logical_line() {
-    let joined = logical_lines("a \\\n  b \\\n  c\nnext\n");
-    assert_eq!(
-        joined,
-        vec![(1, "a    b    c".to_string()), (4, "next".to_string())],
-        "each logical line carries the one-based physical line it starts on, so a caller reporting a \
-         position does not need a second copy of this rule to find it"
-    );
-}
-
-/// A backslash followed by whitespace escapes the **space**, not the newline, so the statement ends there.
-///
-/// Measured rather than reasoned about: `printf 'echo A \\ \necho B\n' > s.sh; bash s.sh` prints `A  ` and
-/// then `B` — two commands. This is the row the two implementations of this rule disagreed on. The other one
-/// joined with `trim_end().strip_suffix('\\')`, which continues here, and it lived in the sweep deciding
-/// whether every acquisition in the two irreversible-act wrappers is guarded — where over-joining reports an
-/// unguarded acquisition as guarded, because the pulled-in text can carry the token the guard is recognised
-/// by. There is one implementation now, and this row is what keeps a second from being written back.
-#[test]
-fn a_backslash_before_whitespace_ends_the_statement() {
-    assert_eq!(
-        logical_lines("echo A \\ \necho B\n"),
-        vec![(1, "echo A \\ ".to_string()), (2, "echo B".to_string())],
-        "bash runs these as two commands, so joining them is a statement this script never had"
-    );
+/// The citations of a fixture script, which every fixture here keeps placeable by construction.
+fn cited(script: &str) -> Vec<Citation> {
+    citations("scripts/w.sh", script).unwrap_or_else(|(line, what)| {
+        panic!(
+            "the fixture holds {what} at line {line}, which is not a row this matrix means to carry"
+        )
+    })
 }
 
 #[test]
 fn an_identifier_is_bound_to_the_target_of_its_own_invocation() {
-    let found = citations("scripts/w.sh", &invocation("the_gate"));
+    let found = cited(&invocation("the_gate"));
     assert_eq!(found.len(), 1);
     assert_eq!(found[0].identifier, "the_gate");
     assert_eq!(found[0].target.as_deref(), Some("merge_message"));
@@ -60,12 +41,54 @@ fn an_identifier_is_bound_to_the_target_of_its_own_invocation() {
 
 #[test]
 fn a_commented_invocation_cites_nothing() {
-    assert!(
-        citations(
-            "scripts/w.sh",
-            "# cargo test -p k --test t -- --exact ghost\n"
-        )
-        .is_empty()
+    assert!(cited("# cargo test -p k --test t -- --exact ghost\n").is_empty());
+}
+
+/// A line ending in an escaped backslash ends where bash ends the command, so a flag on the next line
+/// belongs to a statement of its own — never to this citation's invocation.
+///
+/// The reading this row replaces joined the two lines and bound `--test target_a` to `the_gate`: an
+/// invocation bash never runs, reported as the one it does. Here the identifier stands alone in its own
+/// statement, so it carries no target — and `offences` refuses it as one it cannot bind.
+#[test]
+fn a_citation_is_not_bound_across_a_line_bash_does_not_join() {
+    let found = cited("cargo test -p kanhe --test target_a \\\\\n-- --exact the_gate\n");
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].identifier, "the_gate");
+    assert_eq!(
+        found[0].target.as_deref(),
+        None,
+        "the `--test` sits in the statement bash ended at the escaped backslash, not in this citation's"
+    );
+    let refusals = offences(&found, lists);
+    assert_eq!(refusals.len(), 1, "{refusals:?}");
+    assert_eq!(refusals[0].kind, Kind::CannotJudge);
+    crate::refusal::expect(
+        "repository-checks#citation-names-no-test-target",
+        &refusals[0],
+    );
+}
+
+/// Inside single quotes a backslash is literal text and joins nothing: the string runs across the newline,
+/// exactly as bash passes it, and the identifier carries both.
+#[test]
+fn a_backslash_inside_single_quotes_is_part_of_the_word() {
+    let found = cited("cargo test -p kanhe --test target_a -- --exact 'the_gate\\\ncontinued'\n");
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].identifier, "the_gate\\\ncontinued");
+    assert_eq!(found[0].target.as_deref(), Some("target_a"));
+}
+
+/// A script the lexer cannot place is a cannot-judge, never an empty reading: reporting it as citing
+/// nothing would be the vacuity direction, and reading past the word would be a citation never judged.
+#[test]
+fn a_script_the_shell_reader_cannot_place_is_a_cannot_judge() {
+    let refusals = uncited_scripts([("scripts/w.sh", "cat <<EOF\n--exact ghost\nEOF\n")]);
+    assert_eq!(refusals.len(), 1, "{refusals:?}");
+    assert_eq!(refusals[0].kind, Kind::CannotJudge);
+    crate::refusal::expect(
+        "repository-checks#a-script-the-shell-reader-cannot-place",
+        &refusals[0],
     );
 }
 
@@ -91,9 +114,7 @@ fn a_registered_name_is_the_whole_listed_path() {
 /// segment made this read clean.
 #[test]
 fn a_citation_naming_a_leaf_inside_a_module_is_a_violation() {
-    let refusals = offences(&citations("scripts/w.sh", &invocation("ident")), |_, _| {
-        Ok(LISTING.to_string())
-    });
+    let refusals = offences(&cited(&invocation("ident")), |_, _| Ok(LISTING.to_string()));
     assert_eq!(refusals.len(), 1, "{refusals:?}");
     assert_eq!(refusals[0].kind, Kind::Violation);
     crate::refusal::expect(
@@ -113,10 +134,9 @@ fn a_citation_naming_a_leaf_inside_a_module_is_a_violation() {
 /// false refusal invented by the truncation rather than a fact about the target.
 #[test]
 fn a_leaf_shared_by_two_module_paths_is_not_a_duplicate() {
-    let refusals = offences(
-        &citations("scripts/w.sh", &invocation("the_gate")),
-        |_, _| Ok(LISTING.to_string()),
-    );
+    let refusals = offences(&cited(&invocation("the_gate")), |_, _| {
+        Ok(LISTING.to_string())
+    });
     assert!(
         refusals.is_empty(),
         "a citation `--exact` resolves to one test must not be refused, got {refusals:?}"
@@ -125,10 +145,7 @@ fn a_leaf_shared_by_two_module_paths_is_not_a_duplicate() {
 
 #[test]
 fn a_gate_the_target_does_not_register_is_a_violation() {
-    let refusals = offences(
-        &citations("scripts/w.sh", &invocation("renamed_away")),
-        lists,
-    );
+    let refusals = offences(&cited(&invocation("renamed_away")), lists);
     assert_eq!(refusals.len(), 1);
     assert_eq!(refusals[0].kind, Kind::Violation);
     crate::refusal::expect(
@@ -140,10 +157,9 @@ fn a_gate_the_target_does_not_register_is_a_violation() {
 
 #[test]
 fn a_gate_registered_twice_is_a_violation() {
-    let refusals = offences(
-        &citations("scripts/w.sh", &invocation("twice::same")),
-        |_, _| Ok(LISTING.to_string()),
-    );
+    let refusals = offences(&cited(&invocation("twice::same")), |_, _| {
+        Ok(LISTING.to_string())
+    });
     assert_eq!(refusals.len(), 1);
     assert_eq!(refusals[0].kind, Kind::Violation);
     crate::refusal::expect(
@@ -155,10 +171,7 @@ fn a_gate_registered_twice_is_a_violation() {
 
 #[test]
 fn an_identifier_with_no_target_cannot_be_judged() {
-    let refusals = offences(
-        &citations("scripts/w.sh", "cargo test -- --exact loose\n"),
-        lists,
-    );
+    let refusals = offences(&cited("cargo test -- --exact loose\n"), lists);
     assert_eq!(refusals.len(), 1);
     assert_eq!(refusals[0].kind, Kind::CannotJudge);
     crate::refusal::expect(
@@ -170,10 +183,9 @@ fn an_identifier_with_no_target_cannot_be_judged() {
 
 #[test]
 fn a_listing_that_cannot_be_read_cannot_be_judged() {
-    let refusals = offences(
-        &citations("scripts/w.sh", &invocation("the_gate")),
-        |_, _| Err("cargo exploded".to_string()),
-    );
+    let refusals = offences(&cited(&invocation("the_gate")), |_, _| {
+        Err("cargo exploded".to_string())
+    });
     assert_eq!(refusals.len(), 1);
     assert_eq!(refusals[0].kind, Kind::CannotJudge);
     crate::refusal::expect(
@@ -185,7 +197,7 @@ fn a_listing_that_cannot_be_read_cannot_be_judged() {
 
 #[test]
 fn a_gate_registered_once_is_clean() {
-    assert!(offences(&citations("scripts/w.sh", &invocation("the_gate")), lists).is_empty());
+    assert!(offences(&cited(&invocation("the_gate")), lists).is_empty());
 }
 
 /// A script that defers its verdict to a named gate is what a wrapper is.
@@ -266,30 +278,16 @@ fn a_script_whose_only_invocation_is_commented_out_is_named() {
     assert!(refusals[0].message.contains("scripts/probe.sh"));
 }
 
-/// A `#` on the first line of a continued invocation comments **that line**, not the continuation.
-///
-/// Measured, not reasoned about — `bash -c` on `# echo COMMENTED \` followed by `  echo THIS_RAN` prints
-/// `THIS_RAN`. A comment runs to end of line and a backslash inside one continues nothing.
-///
-/// The reader used to join raw physical lines *first* and then drop the joined line if it began with `#`, so
-/// it modelled the continuation as commented too. That is a **false negative** in a gate-identity check: an
-/// `--exact` naming a test that does not exist, written on the continuation of a commented line, executes and
-/// went unreported. Deciding the region once — with `Source::shell`, which cuts comments per physical line
-/// before anything is joined — is what surfaced it.
 /// A continuation does not reach **across** a comment, because bash ends the command there.
 ///
 /// Measured: for `echo START \` / `# comment` / `--exact ghost`, bash prints `START` and then reports
 /// `--exact: command not found` — the backslash pulls the comment onto the line and `#` at a word boundary
-/// ends the command, so the third line is its own command rather than part of the first.
-///
-/// The first repair of this reader dropped comment lines and joined what was left, which makes lines 1 and 3
-/// adjacent and binds `--exact ghost` into the `cargo test` invocation — an invocation bash never runs, with
-/// that line's `--test` and `-p` bound to it. Reading through the positioned region ends the continuation at
-/// the comment's own position, as bash does.
+/// ends the command, so the third line is its own command rather than part of the first. The reader lexes,
+/// so the comment opens exactly where bash opens it and no region pass is needed before the split.
 #[test]
 fn a_continuation_does_not_reach_across_a_comment() {
     let script = "cargo test -p kanhe --test t \\\n# a comment ends the command here\n    -- --exact ghost\n";
-    let found = citations("scripts/w.sh", script);
+    let found = cited(script);
     assert_eq!(
         found.len(),
         1,
@@ -304,9 +302,16 @@ fn a_continuation_does_not_reach_across_a_comment() {
     assert_eq!(found[0].package, None, "{found:?}");
 }
 
+/// A `#` on the first line of a continued invocation comments **that line**, not the continuation.
+///
+/// Measured, not reasoned about — `bash -c` on `# echo COMMENTED \` followed by `  echo THIS_RAN` prints
+/// `THIS_RAN`. A comment runs to end of line and a backslash inside one continues nothing, so the
+/// continuation executes and the citation on it is a citation. The reader sees this because the lexer opens
+/// a comment where bash does — an unquoted `#` beginning a word — rather than by dropping comment-marked
+/// lines before a join of its own, which would take the continuation down with the line.
 #[test]
 fn a_marker_on_the_first_line_does_not_comment_the_continuation() {
-    let found = citations("scripts/w.sh", &format!("# {}", invocation("ghost")));
+    let found = cited(&format!("# {}", invocation("ghost")));
     assert_eq!(
         found.len(),
         1,

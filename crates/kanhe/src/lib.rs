@@ -62,6 +62,7 @@ pub mod repository_path;
 pub mod restatement;
 pub mod sections;
 pub mod selection;
+pub mod shell;
 pub mod supplied;
 pub mod verdict_channel;
 pub mod wrapper_parser;
