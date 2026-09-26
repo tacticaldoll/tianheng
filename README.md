@@ -331,7 +331,7 @@ downward edge, never a cross-dimension one.
 
 A dimension's crate is **born when it is built** — never pre-created empty. A heavy dependency
 lives in the one dimension that needs it — among the packaged crates, only 渾儀 depends on the AST
-parser — and the static core stays dependency-light — what each crate may depend on is declared in the law and rendered in
+parser directly — and the static core stays dependency-light — what each crate may depend on is declared in the law and rendered in
 [`AGENTS.self-law.md`](AGENTS.self-law.md). See
 [`BACKLOG.md`](BACKLOG.md) for the deferred phases (their observation sources and open
 design questions) and the governance/observability layer.
