@@ -52,13 +52,10 @@ pub(crate) fn resolve_module_items_with_files(
     Ok(items)
 }
 
-/// Like [`resolve_module_items_with_files`], but retains each item's [`FlatItem`] tag (its own
-/// `cfg_if!` arm membership) instead of discarding it. A `#[cfg]`/`cfg_if!`-split at the MODULE
-/// level already gets its own branch index above; this is for the finer split that stays WITHIN
-/// one branch's own file — two mutually-exclusive sibling items (a `#[cfg(unix)] mod x;` beside a
-/// `#[cfg(not(unix))] pub use x::Y;`, or the two arms of one `cfg_if!` invocation) that share the
-/// identical branch index and file, but must not be treated as always coexisting when resolving
-/// one against the other (see `exposure.rs`'s cfg-aware re-export child-module shadow).
+/// The governed module's **direct** items, each with the file that declares it: every branch's
+/// items after transparent `cfg_if!` invocations are replaced by their arms' items. Unlike
+/// [`resolve_module_items_with_files`], an `impl` inside a function body is not recovered, so an item
+/// nested in a function stays part of that function rather than becoming a direct item.
 pub(crate) fn resolve_module_direct_items_with_files(
     src_dir: &Path,
     root_file: &Path,
@@ -76,6 +73,13 @@ pub(crate) fn resolve_module_direct_items_with_files(
         .collect())
 }
 
+/// Like [`resolve_module_items_with_files`], but retains each item's [`FlatItem`] tag (its own
+/// `cfg_if!` arm membership) instead of discarding it. A `#[cfg]`/`cfg_if!`-split at the MODULE
+/// level already gets its own branch index above; this is for the finer split that stays WITHIN
+/// one branch's own file — two mutually-exclusive sibling items (a `#[cfg(unix)] mod x;` beside a
+/// `#[cfg(not(unix))] pub use x::Y;`, or the two arms of one `cfg_if!` invocation) that share the
+/// identical branch index and file, but must not be treated as always coexisting when resolving
+/// one against the other (see `exposure.rs`'s cfg-aware re-export child-module shadow).
 pub(crate) fn resolve_module_items_with_cfg_tags(
     src_dir: &Path,
     root_file: &Path,

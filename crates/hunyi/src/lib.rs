@@ -117,7 +117,7 @@ pub struct SemanticBoundaries {
     pub trait_impl: Vec<TraitImplBoundary>,
     /// Visibility boundaries (`semantic-visibility-boundary`).
     pub visibility: Vec<VisibilityBoundary>,
-    /// Re-export-only module boundaries.
+    /// Re-export-only module boundaries (`semantic-visibility-boundary`).
     pub reexport_only: Vec<ReexportOnlyBoundary>,
     /// Forbidden-marker boundaries (`semantic-forbidden-marker`).
     pub forbidden_marker: Vec<ForbiddenMarkerBoundary>,
