@@ -99,6 +99,8 @@ them.
 
 ### Self-governance
 
+- The pre-cut reading's per-entry record goes in its squash commit; `BACKLOG.md` keeps only changed entry states and a pointer to that record.
+
 - **Six smaller repairs to the readers and fixtures the shell lexer serves.** A workflow `defaults` or `defaults.run` that is not a mapping is
   refused rather than read as declaring no shell. `per_target_corpus` asserts the `[[bin]]` root outside the
   source directory its header claimed, and its module doc and one test name describe the governed side rather than
