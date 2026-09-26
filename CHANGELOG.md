@@ -65,7 +65,14 @@ them.
   governed in place of the inline body rustc compiles. That now refuses the inline target, and an import
   written only in the uncompiled file no longer reacts. An undeclared top-level `src/mod.rs`, which also
   denotes `crate` by its path, is left out the same way. A library that declares `pub mod main;` over such a
-  file is now judged under `crate::main`, where it was refused as a cycle back to the crate root.
+  file is now judged under `crate::main`, where it was refused as a cycle back to the crate root. A package
+  every target of which is an example, a test, a bench or a build script is refused (exit 2) rather than
+  judged over a `src/` nothing compiles, where it reported findings about that directory. "Every compiled root"
+  means each library-kind and `bin` target throughout: an example, test, bench or build-script root is not
+  governed, which `module-boundary` now declares as a stated bound. `xingbiao::crate_root_files` is
+  `xingbiao::crate_roots`, which tells metadata reporting no target from targets none of which compiles a root;
+  `CrateRoots::compiled` gives the old function's list as a slice, and a `Compiled` answer is never empty by
+  construction.
 
   **Why a minor:** each closes a false negative by default, and the last also removes findings. A tree that
   was green may now exit 1 or 2, a recorded baseline may need new entries, and one holding a finding from an
@@ -80,6 +87,11 @@ them.
   A package whose binary roots do not import the confined crate is unaffected.
 - **A governed module declared inline in one root and backed by a file in another now exits 2.** Give the
   inline form its own file, or govern a module that is file-backed in every root that declares it.
+- **A package whose every target is an example, a test, a bench or a build script now exits 2** where it
+  reported findings from its `src/`. Govern a package with a library or binary target, or drop the boundary.
+- **A caller of `xingbiao::crate_root_files`** calls `xingbiao::crate_roots(package).compiled().to_vec()` for the
+  list it returned, or matches `CrateRoots`, whose `Compiled` holds a `CompiledRoots` that is never empty, to tell
+  no reported target from no compiled one.
 - **A package with a top-level `lib.rs`, `main.rs`, or `mod.rs` that no target compiles** may report fewer findings
   or a new inline-target refusal. Regenerate any recorded baseline with `tianheng check --write-baseline
   <file>` — `--disallow-stale` reports an entry from the uncompiled file — and re-apply `owner` / `tracker`

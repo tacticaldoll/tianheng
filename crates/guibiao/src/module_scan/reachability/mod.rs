@@ -62,7 +62,7 @@ pub(crate) fn governed_files(
 
 pub(crate) use walk::reachable_modules;
 
-/// Whether `file` is a second path to the module `crate` in the root at `root_relative`: a file whose
+/// Whether `file` names the module `crate` by its path alone in the root at `root_relative`: a file whose
 /// path-derived module is `crate` while not being that root. That set is a top-level `mod.rs` under any
 /// root, and a top-level `lib.rs` or `main.rs` beside a conventional root (a custom root gives those their
 /// stem). Each is either another compiled root — resolved on its own — or a file no target compiles, so its
@@ -70,7 +70,7 @@ pub(crate) use walk::reachable_modules;
 /// it still makes it that module's source: the resolver finds declared children on disk, not in the
 /// filtered file set. Without a named root (metadata reporting no target) nothing is excluded, because
 /// the conventional files are the root.
-pub(crate) fn is_another_crate_root(
+pub(crate) fn names_crate_by_path_alone(
     file: &Path,
     src_dir: &Path,
     root_relative: Option<&Path>,

@@ -83,7 +83,7 @@ pub fn find_package<'a>(metadata: &'a Value, package: &str) -> Option<&'a Value>
 }
 
 /// Whether a `cargo metadata` target's `kind` array contains `wanted` — the one-target shape
-/// check shared by [`crate_root_file`] (picking one library/bin target) and [`crate_root_files`]
+/// check shared by [`crate_root_file`] (picking one library/bin target) and [`crate_roots`]
 /// (every library/bin target of one package), through which [`member_root_files`] reaches it for the
 /// whole workspace.
 fn target_has_kind(target: &Value, wanted: &str) -> bool {
@@ -92,18 +92,50 @@ fn target_has_kind(target: &Value, wanted: &str) -> bool {
         .is_some_and(|kinds| kinds.iter().any(|k| k.as_str() == Some(wanted)))
 }
 
-/// **Every** compiled crate root of ONE package — each library-kind target and each `bin` target, in
-/// Cargo's reported order, deduplicated.
+/// Which of a package's crate roots are compiled, told apart from the two ways there can be none.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CrateRoots {
+    /// The metadata reports no target — the shape synthetic metadata in a caller's own tests carries, for which a
+    /// caller reads the conventional source directory.
+    Unreported,
+    /// It reports targets, none a library kind or a binary — an example, a test, a bench or a build script alone —
+    /// so no compiled root reads the package's `src/`, and reading it would judge a directory nothing builds.
+    NoneCompiled,
+    /// At least one library-kind or binary root.
+    Compiled(CompiledRoots),
+}
+
+/// A package's library-kind and binary roots, in Cargo's reported order, each once, and at least one — by
+/// construction, since only [`crate_roots`] builds one, so an empty list cannot stand for either state that has
+/// none.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CompiledRoots(Vec<PathBuf>);
+
+impl CompiledRoots {
+    /// The roots, in Cargo's reported order.
+    pub fn as_slice(&self) -> &[PathBuf] {
+        &self.0
+    }
+}
+
+impl CrateRoots {
+    /// The compiled roots, and none for either state that has none.
+    pub fn compiled(&self) -> &[PathBuf] {
+        match self {
+            Self::Compiled(roots) => roots.as_slice(),
+            Self::Unreported | Self::NoneCompiled => &[],
+        }
+    }
+}
+
+/// What ONE package's metadata says about its compiled crate roots: **every** one — each library-kind target
+/// and each `bin` target, in Cargo's reported order, deduplicated.
 ///
 /// The per-package counterpart of [`member_root_files`] (which spans the workspace) and the plural of
 /// [`crate_root_file`] (which picks one). A package's roots are separate compilation units: they each
 /// denote the module path `crate` and neither's declarations belong in the other's module graph, so a
 /// dimension that governs a package governs each root as its own corpus. Returning them all is what lets
 /// a violation written in a `bin` beside a library be observed at all.
-///
-/// Empty when the metadata reports no target — the shape synthetic metadata in a caller's own tests
-/// carries. A caller SHALL treat that as "fall back to the conventional source directory", not as "this
-/// package has no source": dropping that fallback silently un-governs every such test fixture.
 ///
 /// The uniqueness is **total**, not adjacency-dependent, and that distinction is load-bearing here in a
 /// way it is not in [`member_root_files`] (which sorts first, so `Vec::dedup` is total for it by
@@ -112,18 +144,29 @@ fn target_has_kind(target: &Value, wanted: &str) -> bool {
 /// between them. `Vec::dedup` alone therefore left `[x, y, x]` intact, and the root was scanned once per
 /// report. Order is Cargo's own and is preserved, because a caller's sibling-root exclusion reads this
 /// slice positionally against the root it is currently walking.
-pub fn crate_root_files(package: &Value) -> Vec<PathBuf> {
+///
+/// A target Cargo reports always carries its `src_path`, so a library or binary target without one is metadata
+/// no Cargo wrote; it contributes no root, and where no other target does either the package reads as
+/// [`CrateRoots::NoneCompiled`] — no root path was resolved, whatever the kinds claimed.
+pub fn crate_roots(package: &Value) -> CrateRoots {
+    let targets = match package["targets"].as_array() {
+        Some(targets) if !targets.is_empty() => targets,
+        _ => return CrateRoots::Unreported,
+    };
     let mut seen = std::collections::HashSet::new();
-    package["targets"]
-        .as_array()
-        .into_iter()
-        .flatten()
+    let roots: Vec<PathBuf> = targets
+        .iter()
         .filter(|t| {
             LIBRARY_KINDS.iter().any(|k| target_has_kind(t, k)) || target_has_kind(t, "bin")
         })
         .filter_map(|t| t["src_path"].as_str().map(PathBuf::from))
         .filter(|root| seen.insert(root.clone()))
-        .collect()
+        .collect();
+    if roots.is_empty() {
+        CrateRoots::NoneCompiled
+    } else {
+        CrateRoots::Compiled(CompiledRoots(roots))
+    }
 }
 
 /// A path as a **canonical identity label**: `/` as its only component separator, and every byte the
@@ -311,13 +354,18 @@ pub fn member_src_dirs(metadata: &Value) -> Vec<PathBuf> {
 
 /// Every workspace member library, proc-macro, and binary crate-root source file reported by Cargo.
 ///
-/// Which target kinds have a governable crate root is [`crate_root_files`]'s filter; what is this
+/// Which target kinds have a governable crate root is [`crate_roots`]'s filter; what is this
 /// function's own is the scope — every package rather than one — and the ordering: it sorts and
 /// dedups across packages, so the corpus is deterministic whatever order Cargo lists members in.
 pub fn member_root_files(metadata: &Value) -> Vec<PathBuf> {
     let mut roots: Vec<PathBuf> = metadata["packages"]
         .as_array()
-        .map(|packages| packages.iter().flat_map(crate_root_files).collect())
+        .map(|packages| {
+            packages
+                .iter()
+                .flat_map(|package| crate_roots(package).compiled().to_vec())
+                .collect()
+        })
         .unwrap_or_default();
     roots.sort();
     roots.dedup();

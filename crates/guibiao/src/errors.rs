@@ -38,6 +38,20 @@ pub(crate) fn missing_src_error(crate_package: &str) -> String {
     )
 }
 
+/// A package whose every target is an example, a test, a bench or a build script: no compiled root reads its
+/// `src/`, so a module boundary there could never react.
+///
+/// Deliberate **parallel** twin of hunyi's `no_compiled_root_error`: same intent and structure, differing
+/// only in the dimension noun ("module" here in 圭表, "semantic" in 渾儀) — not a verbatim twin,
+/// because each dimension names its own boundary kind.
+pub(crate) fn no_compiled_root_error(crate_package: &str) -> String {
+    format!(
+        "a module boundary is observed from a compiled crate root, and '{crate_package}' has none: no target \
+         Cargo reports for it is a library or a binary, so nothing its src directory holds is compiled into a \
+         root this boundary could govern"
+    )
+}
+
 /// A module boundary targets an inline `mod name { … }`, which owns no source file
 /// and so cannot be a governed target — distinct from an unknown-module typo.
 pub(crate) fn inline_module_target_error(

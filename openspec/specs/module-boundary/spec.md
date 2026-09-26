@@ -781,7 +781,10 @@ permitted, so such a root is judged with an empty permitted region, per `externa
 
 A package whose metadata reports no target at all SHALL fall back to its conventional source directory,
 which is what synthetic metadata in a caller's own tests carries; that fallback is load-bearing and SHALL
-NOT be dropped when the corpus becomes per-root.
+NOT be dropped when the corpus becomes per-root. A package whose metadata reports targets none of which is a
+library kind or a binary SHALL be a constitution error naming it, rather than falling back: no compiled root
+reads its `src/`, so a finding there would be about source nothing builds, and the governed corpus is the
+library-kind and `bin` roots, not an example, test, bench or build-script root.
 
 A target root whose path does not lie under the package's own directory SHALL be a constitution error
 naming it, because the compilation-unit identity role is that path relative to the package directory and
@@ -842,6 +845,23 @@ module, import path) pair rather than the path alone.
 - **THEN** the library's inline `shared` is refused as an inline target (exit 2) rather than governed
   through `src/shared.rs`, and the uncompiled file's import does not react, because none of those files'
   content is source the package compiles
+
+#### Scenario: A package whose targets compile no root is refused
+
+- **WHEN** a boundary governs a package every target of which Cargo reports as an example, a test, a bench or
+  a build script
+- **THEN** the system reports a constitution error (exit 2) naming the package, rather than judging its `src/`
+  directory: no compiled root reads it, so a finding there would be about source nothing builds
+- **PINNED-BY** `a_package_whose_targets_compile_no_root_is_refused`
+- **PINNED-BY** `guibiao_and_hunyi_agree_on_the_parallel_no_compiled_root_wording`
+
+#### Scenario: An example, test, bench or build-script root is not governed — a stated bound
+
+- **WHEN** a package with a library root has an example, test, bench or build-script target whose source
+  imports what a boundary on the package forbids
+- **THEN** the system reports no violation for it: the governed corpus is the library-kind and `bin` roots,
+  the code the package ships, and those targets are compiled beside it rather than into it
+- **PINNED-BY** `an_example_root_is_not_governed`
 
 #### Scenario: A conventional root filename reached through a declaration is that module's source
 

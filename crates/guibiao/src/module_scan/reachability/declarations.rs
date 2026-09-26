@@ -6,16 +6,16 @@ use super::super::lexer::{balanced_group_end, is_ident_byte, transparent_macro_b
 use super::super::path_vocab::{canonical_segment, is_mod_declaration_keyword};
 
 /// One `mod` declared at the top level of a byte range within already-cleaned (comment/string/
-/// macro-body-stripped) text: its canonical name, whether it is inline (`{ … }`, `true`) or file
-/// (`;`, `false`), and — for an inline declaration — the byte range of its body's *content*
-/// (excluding the enclosing braces), so a caller can re-scan just that span to find further
-/// declarations nested inside it. `direct_path_eq` is the cleaned-text position of the `=` in an
-/// **unconditional** `#[path = "…"]` preceding a FILE declaration — cleaning has already dropped
-/// the quoted value itself, so a caller resolves it by mapping this position back to the
-/// original source (see [`super::super::lexer::clean_with_positions`]) and reading from there.
+/// macro-body-stripped) text: its canonical name, and — for an inline declaration (`{ … }`) — the byte
+/// range of its body's *content* (excluding the enclosing braces), `None` for a file declaration (`;`), so a
+/// caller can re-scan just that span to find further declarations nested inside it. `direct_path_eq` is the
+/// cleaned-text position of the `=` in an **unconditional** `#[path = "…"]` preceding a FILE declaration —
+/// cleaning has already dropped the quoted value itself, so a caller resolves it by mapping this position back
+/// to the original source (see [`super::super::lexer::clean_with_positions`]) and reading from there.
 pub(super) struct DeclaredModule {
     pub(super) name: String,
-    pub(super) is_inline: bool,
+    /// The inline body's content span, and `None` for a file declaration — one field, so an inline
+    /// declaration without a body, or a file declaration with one, cannot be built.
     pub(super) body: Option<(usize, usize)>,
     pub(super) direct_path_eq: Option<usize>,
     pub(super) conditional_path_eqs: Vec<usize>,
@@ -190,7 +190,6 @@ pub(super) fn declared_modules_in(
                             let close = balanced_group_end(bytes, k).unwrap_or(bytes.len());
                             declared.push(DeclaredModule {
                                 name: canonical_segment(ident).to_string(),
-                                is_inline: true,
                                 body: Some((k + 1, close.saturating_sub(1))),
                                 direct_path_eq,
                                 conditional_path_eqs,
@@ -205,7 +204,6 @@ pub(super) fn declared_modules_in(
                             let (direct_path_eq, conditional_path_eqs) = path_attr_pair(bytes, i);
                             declared.push(DeclaredModule {
                                 name: canonical_segment(ident).to_string(),
-                                is_inline: false,
                                 body: None,
                                 direct_path_eq,
                                 conditional_path_eqs,
@@ -240,7 +238,7 @@ fn declared_modules_with_kind(source: &str) -> Vec<(String, bool)> {
     let len = cleaned.len();
     declared_modules_in(&cleaned, 0..len)
         .into_iter()
-        .map(|declared| (declared.name, declared.is_inline))
+        .map(|declared| (declared.name, declared.body.is_some()))
         .collect()
 }
 

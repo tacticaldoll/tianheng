@@ -3,13 +3,14 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**59 of 108 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**60 of 109 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
 - `inline-symbol-path-confinement/a-path-taken-as-a-value-is-a-documented-bound-under-the-default` — owner: adopter
 - `inline-symbol-path-confinement/an-extern-crate-rename-is-a-stated-bound-under-strict-external` — owner: engine
 - `inline-symbol-path-confinement/the-fully-qualified-external-call-is-a-stated-bound-under-the-default` — owner: adopter
+- `module-boundary/an-example-test-bench-or-build-script-root-is-not-governed-a-stated-bound` — owner: engine
 - `observation-bound-register/what-code-executed-inside-the-checkout-does-outside-it-is-not-observed-a-stated-bound` — owner: engine
 - `observation-bound-register/whether-a-citation-carrying-no-declared-mutation-is-defended-is-not-observed-a-stated-bound` — owner: engine
 - `observation-bound-register/whether-a-citation-demonstrates-the-direction-its-bound-declares-a-stated-bound` — owner: engine
@@ -476,7 +477,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: refuses to judge
 - **pinned by**: `a_worktree_holding_an_undecodable_path_is_not_judged_clean_or_dirty`
 
-## under-reacts (59)
+## under-reacts (60)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -517,6 +518,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the default observes `use`-rooted paths, leaving the un-`use`d fully-qualified spelling to the adopter's stricter opt-in
 - **its defence must show**: does not react
 - **pinned by**: `inline_strict_external_absent_fully_qualified_call_is_a_bound`
+
+### `module-boundary/an-example-test-bench-or-build-script-root-is-not-governed-a-stated-bound`
+
+> an example, test, bench or build-script target's source
+
+- **because**: the governed corpus is a package's library-kind and `bin` roots, the code it ships; a target compiled beside those rather than into them is outside it
+- **its defence must show**: does not react
+- **pinned by**: `an_example_root_is_not_governed`
 
 ### `observation-bound-register/what-code-executed-inside-the-checkout-does-outside-it-is-not-observed-a-stated-bound`
 

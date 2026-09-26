@@ -8,11 +8,12 @@
 //! this mirrors.
 //!
 //! Stated bound, not a silent gap: `missing_src_error`'s declared parallel twin is NOT pinned
-//! here. Constructing a fixture that reaches it (a package `cargo metadata` accepts but whose
-//! `crate_root_file` target search comes up empty) kept landing on a different, unrelated
-//! constitution error specific to each dimension's own module-target resolution rather than the
-//! shared "no src" spine; closing that gap needs a fixture shape neither dimension's public
-//! surface makes easy to construct, not a reason to assert a false pass.
+//! here. Both dimensions reach it only through synthetic metadata — Cargo refuses a manifest
+//! declaring no target before `cargo metadata` would report one, and every public surface these
+//! directions feed takes a manifest, not a metadata value. The state that once shared this
+//! bound's premise — `cargo metadata` accepted, the target search coming up empty — is the
+//! example-only package pinned below, which each dimension answers with its
+//! `no_compiled_root_error` twin.
 
 use std::path::{Path, PathBuf};
 
@@ -124,4 +125,61 @@ fn guibiao_and_hunyi_agree_on_the_parallel_unknown_module_wording() {
             "渾儀's unknown-module message dropped the shared spine {shared:?}: {hunyi_message:?}"
         );
     }
+}
+
+/// A package whose every target is an example compiles no root: Cargo accepts the manifest and
+/// reports the example as its one target, and both dimensions SHALL refuse it with the parallel
+/// `no_compiled_root_error` wording. The fixture's `src/lib.rs` exists, so a "cannot locate the
+/// crate root source" answer would be false of it — the divergence this direction forbids.
+#[test]
+fn guibiao_and_hunyi_agree_on_the_parallel_no_compiled_root_wording() {
+    let fixture = TempFixture::with_manifest_extra(
+        "errors-no-compiled-root",
+        "autolib = false\nautobins = false\n\n[[example]]\nname = \"e\"\npath = \"examples/e.rs\"\n",
+        "pub fn f() {}\n",
+    );
+    fixture.write("examples/e.rs", "fn main() {}\n");
+    let manifest = fixture.manifest();
+
+    let guibiao_message = gnomon_error(guibiao::check(
+        &GnomonConstitution::new("errors-no-compiled-root").boundary(
+            ModuleBoundary::in_crate("errors-no-compiled-root")
+                .module("crate::seam")
+                .must_not_import("crate::forbidden")
+                .because("conformance: a package compiling no root must fail loud identically"),
+        ),
+        manifest,
+    ));
+    let hunyi_message = hunyi_error(check_async_exposure(
+        &[AsyncExposureBoundary::in_crate("errors-no-compiled-root")
+            .module("crate::seam")
+            .must_not_expose_async_fn()
+            .because("conformance: a package compiling no root must fail loud identically")],
+        manifest,
+    ));
+
+    // Declared a *parallel*, not verbatim, twin: same principle and detail, differing only in the
+    // dimension noun. Pin the shared spine, plus each side's own noun.
+    for shared in [
+        "boundary is observed from a compiled crate root",
+        "'errors-no-compiled-root' has none: no target Cargo reports for it is a library or a binary",
+        "so nothing its src directory holds is compiled into a root this boundary could govern",
+    ] {
+        assert!(
+            guibiao_message.contains(shared),
+            "圭表's no-compiled-root message dropped the shared spine {shared:?}: {guibiao_message:?}"
+        );
+        assert!(
+            hunyi_message.contains(shared),
+            "渾儀's no-compiled-root message dropped the shared spine {shared:?}: {hunyi_message:?}"
+        );
+    }
+    assert!(
+        guibiao_message.contains("a module boundary"),
+        "圭表's refusal names its own dimension: {guibiao_message:?}"
+    );
+    assert!(
+        hunyi_message.contains("a semantic boundary"),
+        "渾儀's refusal names its own dimension: {hunyi_message:?}"
+    );
 }
