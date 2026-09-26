@@ -43,6 +43,91 @@ For each boundary, the system SHALL resolve the named governed module to a real 
 - **WHEN** a boundary anchors to `crate::foo`, declared only as `#[cfg_attr(windows, path = "win.rs")] mod foo;` with no conventional `foo.rs` present, and `win.rs` exists and declares a bare-`pub` item above the boundary's ceiling
 - **THEN** the system reads `win.rs` and reacts on the item, rather than reporting a constitution error — the `cfg_attr` target is now followed even with no sibling declaration to keep the branch count non-empty
 
+### Requirement: Re-export-only module boundary
+
+A `ReexportOnlyBoundary` SHALL govern a resolved module whose direct items are `use` declarations, regardless of their visibility or use-tree form. At `Shallow` depth, every other direct item, including a child `mod`, SHALL produce one `declared-item-kind` finding under `tianheng.rule/hunyi/reexport-only-module`. At `Subtree` depth, child `mod` declarations are containers and every descended module is judged by the same direct-item rule. Each finding SHALL use `DenyBreach`, the offending source file, and a structured identity carrying item kind, module-qualified item name, compilation unit, and governing package. A duplicate macro invocation path in one module shares one identity. An unrenderable item SHALL still react. An unresolved module anchor SHALL be a constitution error. Existing visibility-ceiling and `must_not_declare_pub` rules and identities SHALL remain unchanged.
+
+#### Scenario: A helper beside a re-export reacts
+
+- **WHEN** a governed module declares `pub use contract::*; pub fn helper() {}`
+- **THEN** the boundary exits 1 with one finding `fn helper`
+- **PINNED-BY** `v1_helper_in_reexport_module_fails`
+
+#### Scenario: An impl and item macro react
+
+- **WHEN** a governed module declares an `impl Trait for Foo {}` or an item-position `some_macro!{}`
+- **THEN** each item reacts as `impl Trait for Foo` or `macro some_macro!`
+- **PINNED-BY** `v2_impl_is_rendered_as_a_finding`
+- **PINNED-BY** `v3_item_macro_is_rendered_as_a_finding`
+
+#### Scenario: Every other direct item kind reacts
+
+- **WHEN** the module declares a function, nominal type, alias, constant, static, trait, trait alias, child module, extern crate or block, or macro definition
+- **THEN** each is one finding, including a verbatim or unrenderable item
+- **PINNED-BY** `kind_fn`
+- **PINNED-BY** `kind_struct`
+- **PINNED-BY** `kind_enum`
+- **PINNED-BY** `kind_union`
+- **PINNED-BY** `kind_type`
+- **PINNED-BY** `kind_const`
+- **PINNED-BY** `kind_static`
+- **PINNED-BY** `kind_trait`
+- **PINNED-BY** `kind_trait_alias`
+- **PINNED-BY** `kind_mod`
+- **PINNED-BY** `kind_extern_crate`
+- **PINNED-BY** `kind_extern_block`
+- **PINNED-BY** `kind_macro_rules`
+- **PINNED-BY** `kind_inherent_impl`
+- **PINNED-BY** `unrenderable_item_is_a_finding`
+
+#### Scenario: Every use form and a documented facade are clean
+
+- **WHEN** the module holds a glob, selective, private, or `pub(crate)` use, or `//!` documentation followed by `pub use contract::*;`
+- **THEN** the boundary is clean
+- **PINNED-BY** `clean_glob`
+- **PINNED-BY** `clean_selective`
+- **PINNED-BY** `clean_private`
+- **PINNED-BY** `clean_crate_use`
+- **PINNED-BY** `clean_real_facade`
+
+#### Scenario: Subtree permits a prelude container and judges its child
+
+- **WHEN** the root declares `pub mod prelude { pub use crate::contract::A; }` at `Subtree` depth
+- **THEN** it is clean, but a function directly in `prelude` reacts
+- **PINNED-BY** `subtree_permits_containers_and_governs_children`
+
+#### Scenario: Same-named child items have distinct identities
+
+- **WHEN** two descendant modules each declare `fn helper() {}` under a `Subtree` boundary
+- **THEN** two structured findings carry different module-qualified `item_name` values
+- **PINNED-BY** `same_named_child_items_keep_distinct_identities`
+
+#### Scenario: A transparent cfg_if arm is observed
+
+- **WHEN** a `cfg_if!` arm declares a function
+- **THEN** the function reacts
+- **PINNED-BY** `cfg_if_arm_item_is_observed`
+
+#### Scenario: An unresolved anchor is a constitution error
+
+- **WHEN** the declared module cannot be resolved
+- **THEN** evaluation returns exit 2, never a clean outcome or a violation
+- **PINNED-BY** `unresolved_anchor_is_constitution_error`
+
+#### Scenario: cfg-gated items are observed as written — a stated bound
+
+- **WHEN** a directly declared function bears `#[cfg(windows)]` on a different host
+- **THEN** it still reacts, because this AST observation does not evaluate cfg predicates
+- **PINNED-BY** `cfg_is_observed_as_written`
+
+#### Scenario: Repeated macro invocations share one identity — a stated bound
+
+- **WHEN** two item-position invocations have the same path in one module
+- **THEN** they produce one structured finding; identity is bounded to item kind, module, and name rather than invocation position
+- **PINNED-BY** `repeated_macro_path_shares_one_identity`
+
+Items produced only by macro expansion remain outside this observer's AST reach (bound: `semantic-visibility-boundary/a-macro-generated-item-is-a-documented-bound`). The invocation itself is a direct item and reacts.
+
 ### Requirement: Bare-pub item observation
 
 The system SHALL observe the governed module's **direct** items and react to each whose **declared** visibility rank is **strictly above** the boundary's ceiling. Visibility ranks, most to least visible, are: `pub` (Public) > `pub(crate)` (Crate) > `pub(super)` (Super) > inherited-private / `pub(self)` (Module). A `pub(in P)` form SHALL rank by its path matched **whole and single-segment**: exactly `crate` → Crate, exactly `super` → Super, exactly `self` → Module. Any **multi-segment or otherwise-unrecognized** `pub(in P)` path SHALL rank as **Crate, a conservative upper bound** — notably `pub(in super::super)`, which is legal Rust reaching the grandparent's whole subtree (broader than `pub(super)`) and therefore MUST NOT be ranked `Super`. A `pub(in P)` path is always an ancestor module within the crate, so such an item is at most crate-visible; ranking every unrecognized restricted form Crate never under-reacts (no false negative). The observed item kinds SHALL be exactly those of the prior rule — `fn`, `struct`/`enum`/`union`, `type`, `const`/`static`, `trait` (incl. alias), `extern crate`, **`mod`** (a submodule declaration), and **`use`** re-exports incl. a `use …::*` glob observed as a raw `Item::Use` node — **plus a `pub fn`, `pub static`, or `pub type` declared inside an `extern` block**: the FFI declaration is a real item in the enclosing module's own namespace, exactly as visible as a same-shaped ordinary `fn`/`static`/`type` item, and Rust cannot declare both an ordinary item and a foreign one under the same name in one module, so there is no identity collision in observing it identically (reusing the `fn`/`static`/`type` kinds verbatim rather than a distinct label). A foreign `macro` invocation and any unparsed foreign-item token stream carry no readable visibility keyword and stay out of scope, the same nature as this requirement's existing attribute-derived/opaque-token bounds below. An item at or below the ceiling SHALL NOT react.

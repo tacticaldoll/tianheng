@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**60 of 110 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**60 of 112 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -73,7 +73,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 **refuses to judge** and *out of reach* are kept distinct deliberately. The misclassification this model exists to prevent was exactly a confusion between them — a prediction of a silent false negative where the real behaviour was a fail-loud refusal — and a direction that cannot be named cannot be predicted with.
 
-## as intended, granularity bounded (5)
+## as intended, granularity bounded (6)
 
 ### `observation-bound-model/an-answer-that-depends-on-the-corpus-entry-point-has-no-extent-of-its-own-a-stated-bound`
 
@@ -114,6 +114,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: a complex const-generic expression, a same-named macro, a `verbatim` type or a lifetime cannot be rendered stably, so the two share one subject and key — each still reacts on first occurrence, and only baseline-dedup granularity is bounded
 - **its defence must show**: collapses granularity
 - **pinned by**: `an_unrenderable_sub_node_is_a_stated_rendering_bound`
+
+### `semantic-visibility-boundary/repeated-macro-invocations-share-one-identity-a-stated-bound`
+
+> two item macro invocations with the same path in one module
+
+- **because**: identity names the declared item kind, module and macro path, not invocation position
+- **its defence must show**: collapses granularity
+- **pinned by**: `repeated_macro_path_shares_one_identity`
 
 ## declines to refuse (1)
 
@@ -353,7 +361,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_macro_invocation_pub_item_is_a_documented_bound`
 
-## over-reacts (15)
+## over-reacts (16)
 
 ### `crate-dependency-boundary/an-optional-dependency-edge-is-observed-as-a-declared-one-a-stated-bound`
 
@@ -474,6 +482,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the conservative `Crate` rank exceeds the `Module` ceiling, so an effectively private item may react — never a silent pass
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
+
+### `semantic-visibility-boundary/cfg-gated-items-are-observed-as-written-a-stated-bound`
+
+> a directly declared item whose cfg predicate is false on the host
+
+- **because**: the AST reader observes the declaration as written without evaluating cfg, so a host-inactive item may react
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `cfg_is_observed_as_written`
 
 ## refuses to judge (1)
 

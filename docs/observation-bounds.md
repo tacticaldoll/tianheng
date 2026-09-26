@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**27 of 110 declared bounds have no pinning test.** That figure is the register's
+**27 of 112 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -748,6 +748,18 @@ fallback used where no manifest exists, which the register spec describes.
 - **pinned by**: `unsafe_in_a_macro_body_is_a_stated_bound`
 
 ## semantic-visibility-boundary
+
+### `semantic-visibility-boundary/cfg-gated-items-are-observed-as-written-a-stated-bound`
+
+> it still reacts, because this AST observation does not evaluate cfg predicates
+
+- **pinned by**: `cfg_is_observed_as_written`
+
+### `semantic-visibility-boundary/repeated-macro-invocations-share-one-identity-a-stated-bound`
+
+> they produce one structured finding; identity is bounded to item kind, module, and name rather than invocation position
+
+- **pinned by**: `repeated_macro_path_shares_one_identity`
 
 ### `semantic-visibility-boundary/a-macro-generated-item-is-a-documented-bound`
 

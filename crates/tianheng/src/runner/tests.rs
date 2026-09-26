@@ -1031,6 +1031,12 @@ fn list_document_covers_every_populated_dimension() {
                 .must_not_declare_pub()
                 .because("internal is private"),
         )
+        .reexport_only_boundary(
+            ReexportOnlyBoundary::in_crate("app")
+                .module("crate::facade")
+                .must_declare_only_reexports()
+                .because("facade carries only re-exports"),
+        )
         .forbidden_marker_boundary(
             ForbiddenMarkerBoundary::in_crate("app")
                 .module("crate::domain")
@@ -1049,6 +1055,7 @@ fn list_document_covers_every_populated_dimension() {
         ("semantic_boundaries", "semantic", "crate::domain"),
         ("trait_impl_boundaries", "semantic", "crate::Command"),
         ("visibility_boundaries", "semantic", "crate::internal"),
+        ("reexport_only_boundaries", "semantic", "crate::facade"),
         ("forbidden_marker_boundaries", "semantic", "crate::domain"),
         ("runtime_boundaries", "runtime", "domain-entry"),
     ] {
@@ -1127,6 +1134,12 @@ fn markdown_projection_covers_every_dimension_the_json_document_emits() {
                 .must_not_declare_pub()
                 .because("internal is private"),
         )
+        .reexport_only_boundary(
+            ReexportOnlyBoundary::in_crate("app")
+                .module("crate::facade")
+                .must_declare_only_reexports()
+                .because("facade carries only re-exports"),
+        )
         .forbidden_marker_boundary(
             ForbiddenMarkerBoundary::in_crate("app")
                 .module("crate::domain")
@@ -1167,11 +1180,12 @@ fn markdown_projection_covers_every_dimension_the_json_document_emits() {
 
     // Each known dimension: the fixture must populate it (a non-empty JSON array), and the
     // Markdown must carry its section — so the Markdown never carries less than the JSON.
-    const DIMENSIONS: [(&str, &str); 10] = [
+    const DIMENSIONS: [(&str, &str); 11] = [
         ("boundaries", "## Static boundaries"),
         ("semantic_boundaries", "## Semantic boundaries"),
         ("trait_impl_boundaries", "## Trait-impl-locality boundaries"),
         ("visibility_boundaries", "## Visibility boundaries"),
+        ("reexport_only_boundaries", "## Re-export-only boundaries"),
         (
             "forbidden_marker_boundaries",
             "## Forbidden-marker boundaries",
@@ -1247,6 +1261,12 @@ fn full_constitution() -> Constitution {
                 .module("crate::internal")
                 .must_not_declare_pub()
                 .because("internal is private"),
+        )
+        .reexport_only_boundary(
+            ReexportOnlyBoundary::in_crate("app")
+                .module("crate::facade")
+                .must_declare_only_reexports()
+                .because("facade carries only re-exports"),
         )
         .forbidden_marker_boundary(
             ForbiddenMarkerBoundary::in_crate("app")

@@ -266,6 +266,23 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "unsafe_in_a_macro_body_is_a_stated_bound",
         ),
         BoundDecl::pinned(
+            BoundId::new("semantic-visibility-boundary/cfg-gated-items-are-observed-as-written-a-stated-bound"),
+            "a directly declared item whose cfg predicate is false on the host",
+            Extent::Reached(Reached::OverReacts {
+                because: "the AST reader observes the declaration as written without evaluating cfg, so a host-inactive item may react".into(),
+            }),
+            "cfg_is_observed_as_written",
+        ),
+        BoundDecl::pinned(
+            BoundId::new("semantic-visibility-boundary/repeated-macro-invocations-share-one-identity-a-stated-bound"),
+            "two item macro invocations with the same path in one module",
+            Extent::Reached(Reached::AsIntended {
+                bounded: FactGranularity::Identity,
+                because: "identity names the declared item kind, module and macro path, not invocation position".into(),
+            }),
+            "repeated_macro_path_shares_one_identity",
+        ),
+        BoundDecl::pinned(
             BoundId::new(
                 "semantic-visibility-boundary/a-macro-generated-item-is-a-documented-bound",
             ),

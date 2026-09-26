@@ -59,6 +59,23 @@ pub(crate) fn resolve_module_items_with_files(
 /// `#[cfg(not(unix))] pub use x::Y;`, or the two arms of one `cfg_if!` invocation) that share the
 /// identical branch index and file, but must not be treated as always coexisting when resolving
 /// one against the other (see `exposure.rs`'s cfg-aware re-export child-module shadow).
+pub(crate) fn resolve_module_direct_items_with_files(
+    src_dir: &Path,
+    root_file: &Path,
+    module: &str,
+    crate_package: &str,
+) -> Result<Vec<(syn::Item, PathBuf)>, String> {
+    let branches = resolve_module_branches(src_dir, root_file, module, crate_package)?;
+    Ok(branches
+        .into_iter()
+        .flat_map(|(items, file, ..)| {
+            flatten_transparent_macros(&items)
+                .into_iter()
+                .map(move |flat| (flat.item, file.clone()))
+        })
+        .collect())
+}
+
 pub(crate) fn resolve_module_items_with_cfg_tags(
     src_dir: &Path,
     root_file: &Path,

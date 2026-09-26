@@ -29,6 +29,7 @@ Built capabilities (each passing Tianheng's capability-admission test — declar
   belong to the trait definition, which signature-coupling already governs.
 - **Trait-impl locality** — a trait may only be implemented in declared locations.
 - **Visibility** — a module must not declare bare `pub` items.
+- **Re-export-only** — a facade module declares only `use` items; opt into subtree depth to permit and govern child modules.
 - **Forbidden-marker** — a module's types must not acquire a forbidden trait/derive.
 - **Dyn-trait** — a module's public API must not *expose* trait-object (`dyn`) syntax (the
   type-shape complement of signature-coupling: internal `dyn` is fine; leaking dynamic
@@ -60,7 +61,7 @@ Built capabilities (each passing Tianheng's capability-admission test — declar
 
 ```rust
 use hunyi::{
-    SignatureBoundary, TraitImplBoundary, VisibilityBoundary, ForbiddenMarkerBoundary,
+    SignatureBoundary, TraitImplBoundary, VisibilityBoundary, ReexportOnlyBoundary, ForbiddenMarkerBoundary,
     DynTraitBoundary, ImplTraitBoundary, AsyncExposureBoundary,
 };
 
@@ -81,6 +82,12 @@ let visibility = VisibilityBoundary::in_crate("my-app")
     .module("crate::internal")
     .must_not_declare_pub()
     .because("internal is crate-private by contract");
+
+// re-export-only: a facade declares only use items
+let facade = ReexportOnlyBoundary::in_crate("my-app")
+    .module("crate::facade")
+    .must_declare_only_reexports()
+    .because("the facade carries only re-exports");
 
 // forbidden marker: domain types must not derive Serialize
 let marker = ForbiddenMarkerBoundary::in_crate("my-app")

@@ -60,6 +60,7 @@ mod dyn_trait;
 mod exposure;
 mod forbidden_marker;
 mod impl_trait;
+mod reexport_only;
 mod trait_impl;
 mod unsafe_confinement;
 mod visibility;
@@ -69,6 +70,7 @@ pub use dyn_trait::check_dyn_trait;
 pub use exposure::check;
 pub use forbidden_marker::check_forbidden_marker;
 pub use impl_trait::check_impl_trait;
+pub use reexport_only::check_reexport_only;
 pub use trait_impl::check_trait_impl_locality;
 pub use unsafe_confinement::check_unsafe_confinement;
 pub use visibility::check_visibility;
@@ -85,6 +87,8 @@ pub(crate) use impl_trait::{
     impl_trait_operand_subtree_findings, impl_trait_subtree_findings,
 };
 #[cfg(test)]
+pub(crate) use reexport_only::reexport_only_findings;
+#[cfg(test)]
 pub(crate) use trait_impl::trait_impl_findings;
 #[cfg(test)]
 pub(crate) use unsafe_confinement::unsafe_findings;
@@ -97,6 +101,7 @@ use crate::dyn_trait::check_dyn_trait_boundary;
 use crate::exposure::check_boundary;
 use crate::forbidden_marker::check_forbidden_marker_boundary;
 use crate::impl_trait::check_impl_trait_boundary;
+use crate::reexport_only::check_reexport_only_boundary;
 use crate::trait_impl::check_trait_impl_boundary;
 use crate::unsafe_confinement::check_unsafe_boundary;
 use crate::visibility::check_visibility_boundary;
@@ -112,6 +117,8 @@ pub struct SemanticBoundaries {
     pub trait_impl: Vec<TraitImplBoundary>,
     /// Visibility boundaries (`semantic-visibility-boundary`).
     pub visibility: Vec<VisibilityBoundary>,
+    /// Re-export-only module boundaries.
+    pub reexport_only: Vec<ReexportOnlyBoundary>,
     /// Forbidden-marker boundaries (`semantic-forbidden-marker`).
     pub forbidden_marker: Vec<ForbiddenMarkerBoundary>,
     /// Dyn-trait exposure boundaries (`semantic-dyn-trait-boundary`).
@@ -189,6 +196,11 @@ impl SemanticBoundaries {
                 boundaries: &self.visibility,
                 crate_package: VisibilityBoundary::crate_package,
                 check: check_visibility_boundary,
+            }),
+            Box::new(Capability {
+                boundaries: &self.reexport_only,
+                crate_package: ReexportOnlyBoundary::crate_package,
+                check: check_reexport_only_boundary,
             }),
             Box::new(Capability {
                 boundaries: &self.forbidden_marker,

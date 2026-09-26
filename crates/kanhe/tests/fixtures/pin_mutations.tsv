@@ -46,3 +46,5 @@ the_reader_decides_every_shape_as_the_table_says	crates/kanhe/tests/observer_pro
 an_assignment_that_is_not_an_assignment_word_is_not_read	crates/kanhe/tests/gate_exit_classes.rs	.filter(|word| !word.operator && word.assigns() == Some(name))	.filter(|word| !word.operator && (word.assigns() == Some(name) || word.value.contains(&format!("{{{name}:="))))
 an_example_root_is_not_governed	crates/xingbiao/src/lib.rs	|| target_has_kind(t, "bin")	|| target_has_kind(t, "bin") || target_has_kind(t, "example")
 a_sibling_test_glob_reacts_to_an_alias_the_permitted_module_declares	crates/guibiao/src/module_scan/symbol_scan.rs	        if path_within(name, glob) {	        if name.strip_prefix(glob).and_then(|rest| rest.strip_prefix("::")).is_some_and(|rest| !rest.contains("::")) {
+cfg_is_observed_as_written	crates/hunyi/src/reexport_only.rs	for item in items {	for item in items {\n            if let syn::Item::Fn(i) = &item { if i.attrs.iter().any(|a| a.path().is_ident("cfg")) { continue; } }
+repeated_macro_path_shares_one_identity	crates/hunyi/src/reexport_only.rs	sort_attributed_facts(&mut findings)?;	findings.sort_by(|a, b| a.0.cmp(&b.0));

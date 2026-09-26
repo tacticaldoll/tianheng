@@ -714,6 +714,36 @@ pub(crate) fn walk_subtree_modules(
             crate_package,
             &ancestors,
             0,
+            true,
+            &mut out,
+        )?;
+    }
+    Ok(out)
+}
+
+/// Walk the same resolved subtree while returning only direct items, excluding impls
+/// recovered from function bodies for other semantic observers.
+pub(crate) fn walk_subtree_direct_modules(
+    src_dir: &Path,
+    root_file: &Path,
+    module: &str,
+    crate_package: &str,
+) -> Result<Vec<(String, Vec<syn::Item>, PathBuf)>, String> {
+    let branches = resolve_module_branches(src_dir, root_file, module, crate_package)?;
+    let mut out: Vec<(String, Vec<syn::Item>, PathBuf)> = Vec::new();
+    for (items, file, child_dir, file_dir) in branches {
+        let mut ancestors: HashSet<PathBuf> = HashSet::new();
+        ancestors.insert(xingbiao::canonicalize_or_fail(&file)?);
+        collect_subtree(
+            items,
+            module.to_string(),
+            child_dir,
+            file_dir,
+            file,
+            crate_package,
+            &ancestors,
+            0,
+            false,
             &mut out,
         )?;
     }
@@ -737,10 +767,14 @@ fn collect_subtree(
     crate_package: &str,
     ancestors: &HashSet<PathBuf>,
     depth: usize,
+    include_nested_impls: bool,
     out: &mut Vec<(String, Vec<syn::Item>, PathBuf)>,
 ) -> Result<(), String> {
     check_module_depth(depth, &module, crate_package)?;
-    let (items, flat) = flatten_for_walk(&items);
+    let (mut items, flat) = flatten_for_walk(&items);
+    if !include_nested_impls {
+        items = flat.iter().map(|item| item.item.clone()).collect();
+    }
     for (child_items, child_module, sub_dir, sub_file_dir, opened, child_file) in
         resolve_child_modules(
             &flat,
@@ -765,6 +799,7 @@ fn collect_subtree(
                     crate_package,
                     &child_ancestors,
                     depth + 1,
+                    include_nested_impls,
                     out,
                 )?;
             }
@@ -777,6 +812,7 @@ fn collect_subtree(
                 crate_package,
                 ancestors,
                 depth + 1,
+                include_nested_impls,
                 out,
             )?,
         }

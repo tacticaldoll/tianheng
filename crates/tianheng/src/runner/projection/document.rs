@@ -2,8 +2,9 @@ use guibiao::constitution_json;
 use hunyi::{
     ASYNC_EXPOSURE_RULE, AsyncExposureBoundary, DYN_TRAIT_RULE, DynTraitBoundary,
     FORBIDDEN_MARKER_RULE, ForbiddenMarkerBoundary, IMPL_TRAIT_RULE, ImplTraitBoundary,
-    SIGNATURE_RULE, ScanDepth, SignatureBoundary, TRAIT_IMPL_RULE, TraitImplBoundary,
-    UNSAFE_CONFINEMENT_RULE, UnsafeBoundary, VisibilityBoundary,
+    REEXPORT_ONLY_RULE, ReexportOnlyBoundary, SIGNATURE_RULE, ScanDepth, SignatureBoundary,
+    TRAIT_IMPL_RULE, TraitImplBoundary, UNSAFE_CONFINEMENT_RULE, UnsafeBoundary,
+    VisibilityBoundary,
 };
 use louke::{RUNTIME_SEAM_RULE, RuntimeBoundary};
 use serde_json::Value;
@@ -103,6 +104,19 @@ pub(in crate::runner) fn visibility_boundary_json(boundary: &VisibilityBoundary)
         boundary.reason(),
         boundary.anchor(),
     )
+}
+/// The JSON projection of one re-export-only module boundary.
+pub(in crate::runner) fn reexport_only_boundary_json(boundary: &ReexportOnlyBoundary) -> Value {
+    let mut object = semantic_module_json(
+        boundary.module(),
+        boundary.crate_package(),
+        REEXPORT_ONLY_RULE,
+        boundary.severity().as_str(),
+        boundary.reason(),
+        boundary.anchor(),
+    );
+    object["scan_depth"] = serde_json::json!(boundary.scan_depth().as_str());
+    object
 }
 /// The JSON projection of one forbidden-marker boundary (`kind`, `target` = the subtree,
 /// `crate`, `rule`, `severity`, `reason`) plus the `forbidden` trait set.
@@ -235,6 +249,12 @@ pub(in crate::runner) fn list_document(constitution: &Constitution) -> Value {
         "visibility_boundaries",
         &semantic.visibility,
         visibility_boundary_json,
+    );
+    append_array(
+        &mut document,
+        "reexport_only_boundaries",
+        &semantic.reexport_only,
+        reexport_only_boundary_json,
     );
     append_array(
         &mut document,

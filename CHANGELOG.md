@@ -31,6 +31,14 @@ them.
 
 ## [Unreleased]
 
+### Semantic
+
+- **BREAKING** Add `ReexportOnlyBoundary` for facade modules and a `reexport_only` field to `SemanticBoundaries`. A declared boundary reacts to direct non-`use` items, with optional `Subtree` depth that permits child module containers and governs their contents. Existing visibility-ceiling identities remain unchanged.
+
+### Migration
+
+- Code constructing `SemanticBoundaries` with a struct literal must add `reexport_only: vec![]` or use `..Default::default()`.
+
 ## [0.7.1] - 2026-09-27
 
 ### Static
