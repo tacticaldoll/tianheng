@@ -917,6 +917,8 @@ the honest word is *unobserved*. That is the whole of it; per-entry labels sorti
 witnessed were considered and declined, because a field on sixty entries is a form to maintain and these
 two sentences reach the same failure at the point where it actually happens.
 
+A reading's per-entry record lives in the squash commit that carries it, because a commit is a record and `BACKLOG.md` is a live document; `BACKLOG.md` takes only the entries whose state the reading changed and one sentence pointing to the record.
+
 **The same occasion runs the set-membership sweep.** A claim that a set this tree enumerates has *only* these
 members, *never* that one, or one *alone* is held by nothing, and a declared set would hold only the claims an
 author already doubted — `BACKLOG.md` accepts that as debt, under *a claim about this tree, written as prose, is

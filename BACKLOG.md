@@ -572,17 +572,6 @@ consumer for an undemonstrated deduplication.
   after a runner image moves its bash, rather than a false pass. *Promotion trigger:* such a red, observed.
   *Version class:* patch; a test support module. *Authority:* `repository-checks`.
 
-- **Two wrapper readers still join lines by `gate_identity::logical_lines`, which reads no quotes.** *Class:*
-  WATCH. *Observed pressure:* the acquisition sweep and the gate-call reader in `gate_exit_classes` search a
-  joined statement for a token, and `logical_lines` joins a line ending in an escaped backslash, or in a
-  backslash inside single quotes, where bash does not. *Observation source:* the release reviews' finding on
-  two continuation rules; the workflow's command reader, which had the same defect, now lexes whole.
-  *Current reaction or bound:* none for the two readers; the lexer's split is the repair they would take.
-  *Risk:* a line pulled in from below carries the guard token, so the acquisition sweep reads an unguarded
-  acquisition as guarded. The acquisition sweep also takes a `|| {` opener as a guard without reading the block, so
-  `x=$(tool) || { true; }` passes; the block's first command being a stop is what a lexed statement would ask. *Promotion trigger:* either shape written in a wrapper or the library, or a third
-  reader of joined statements. *Version class:* patch; a repository check. *Authority:* `repository-checks`.
-
 - **The merge wrapper's account restates how a judged squash message is composed, which the gate owns.**
   *Class:* WATCH — one rule with two implementations, one measured divergence, repaired in place.
   *Observed pressure:* `account_for_the_merge` compares the squash commit GitHub records with the message the
@@ -689,72 +678,32 @@ consumer for an undemonstrated deduplication.
   already calls unmeasured rather than absent.
 
 - **A pre-cut trigger reading records the entries it decided, and the count of entries it did not is a
-  property of the reader.** *Class:* WATCH — the reading is a step someone performs and the attempt to check
-  it is what failed, which this file already records; what follows is the reading of 2026-09-08 and what it
-  produced. *Observed pressure:* the reading was framed against a **delta** rather than against the tree,
-  because a pre-cut reading asks whether the window fired a trigger and not whether one can be re-derived
-  from scratch. The corpus is what landed on the release branch after the previous reading: six squashes
-  over thirty-two files, measured on 2026-09-08, and each verdict below names what it checked inside it. The
-  squashes are named by their subjects in `CHANGELOG.md` rather than by their objects here, for the reason
-  the reference gate gives — `main` carries one commit per release, so a development object resolves in no
-  fresh clone. Of the live entries carrying a trigger field, the ones whose observable the delta
-  reaches were read; the rest were not moved by it, which is a narrower claim than *not fired* and is why
-  they carry no new date.
+  property of the reader.** *Class:* WATCH — the reading is a step someone performs, and its verdicts have
+  no canonical spelling. *Observed pressure:* a pre-cut reading asks whether the release window fired a
+  trigger, so it reads the whole entry against the window's delta. Reading only its trigger field can miss
+  a falsified premise even when the trigger has not fired.
 
-  **The unevaluated count came out 36, then 21, then 21, then 4, then 3, and every step was the reader.**
-  Looking for `Not fired` after the trigger sentence answered 36; admitting `fired` answered 21; admitting
-  `swept`, `witness-only`, `re-derived` and `evaluated` changed nothing, because those spellings sit *before*
-  the trigger in the entries that use them; reading the whole entry and admitting `measured` answered 4; and
-  reading those four found one whose verdict is spelled **FIRED** in capitals, which no case-sensitive
-  reader admits. Three entries genuinely carried none and now do. The sequence reproduces the conclusion this
-  file reached by a different route — a verdict here has no canonical spelling — and a fifth spelling is the
-  new part of it.
+  **A verdict has no canonical spelling.** The unevaluated count came out 36, then 21, then 21, then 4,
+  then 3, and every step was the reader: admitting `fired` reduced the first count, admitting `swept`,
+  `witness-only`, `re-derived` and `evaluated` changed nothing because those spellings preceded the trigger,
+  reading whole entries and admitting `measured` reduced it again, and one remaining verdict was spelled
+  **FIRED** in capitals. Three entries carried no verdict and now do.
 
-  **What the reading produced beyond verdicts.** One repair, in the window's own output: a requirement
-  clause added days earlier read *the two halves of one comparison SHALL NOT answer differently about one
-  grammar*, which reaches every comparison in that family while what reacts is one wrapper's recognition.
-  `AGENTS.md` refuses a reason asserting structure the law does not react to, and the entry for un-reacted
-  normative SHALLs is `READY-PATCH` on exactly that class with its strongest evidence being clauses written
-  in the same window as the sweep that is its control. The clause is now the reason it was standing in for.
-  *Promotion trigger:* a reading that finds a trigger fired which an earlier reading had recorded as not
-  fired — the case that would mean the discipline is being performed and getting the answer wrong, as
-  against not being performed. *Version class:* patch; this file ships in no crate. *Authority:* `AGENTS.md`'s
+  **A trigger label has no canonical spelling either.** The unreadable count came out 4, then 1 when the
+  reader widened from `*Promotion trigger:*` to any label containing *trigger*. The remaining condition was
+  written in an entry's heading rather than a trigger field.
+
+  Earlier per-entry verdicts remain available for comparing a new reading with an earlier one: the
+  2026-09-08 and 2026-09-20 records are in `BACKLOG.md` at `v0.6.0` and `v0.6.1`, respectively; the
+  2026-09-24 record is in the squash `docs(backlog): re-read three entries whose premises the tree has moved
+  past` on `release/0.7.0`. *Promotion trigger:* a reading finds a trigger fired that an earlier reading
+  recorded as not fired. *Version class:* patch; this file ships in no crate. *Authority:* `AGENTS.md`'s
   *`BACKLOG.md`'s promotion triggers are read against the window before the cut*.
 
-  **The reading of 2026-09-20, and the reader failed one field earlier than last time.** The corpus is what
-  landed on the release branch after the previous reading: two squashes over seventy-four files, rooted at
-  the `v0.6.0` snapshot. Nineteen live entries — one fired, one grew its class without firing, one grew the
-  residue it already reports, seven were evaluated and not fired, eight were not moved by the delta, and one
-  is unobserved because its trigger asks a property of an installed package this reading did not open.
-
-  **The unreadable count came out 4, then 1, in one step, and the step was the reader.** Extracting
-  `*Promotion trigger:*` answered four entries carrying no readable condition; widening to any label
-  containing *trigger* answered one. Five distinct labels are in use across the eighteen entries that carry
-  one, and a single entry carries **two** of them, which a reader taking the first would have halved while
-  reporting nothing. That is the failure the paragraph above records for verdicts, moved one field earlier:
-  the trigger's own label has no canonical spelling either, so a reader keyed to the label is narrower than
-  the set it claims to read before any verdict is reached. The one entry with no trigger field in any
-  spelling is the un-reacted-SHALL entry — which is also the only entry this reading found **fired**, so the
-  single condition that mattered had to be taken from a heading rather than from a field.
-
-  **The reading of 2026-09-24, taken against the whole entry rather than its trigger field.** The corpus is
-  what landed on the release branch after the `v0.6.1` snapshot. One entry **fired**: the prose-claim entry,
-  whose sweep, run from the subject side, found set-membership claims false and is recorded there. One entry
-  had a **premise falsified** without its trigger firing, which a reading keyed to the trigger would have
-  passed: the bounds-method reader's acceptance rested on a parse `kanhe` was said not to reach, while its own
-  test file had parsed with it since before the `v0.6.1` snapshot — reclassified, and the reason this reading
-  read whole entries. A closed record's corpus was found narrower than its claim, and its residue is filed.
-  The rest were read against the delta and not fired, each against what its trigger names: the merge gate's
-  message rule, whose diff is a comment; the ambient-ignore control file, untouched, with no ignore-sensitive
-  read added anywhere; the citations added, every one on an ordinary scenario and so outside what a mutation
-  may name; published-crate sources, with no block comment added; the round-count command, still answering
-  the files it named; the workflow's step names, unchanged over the Definition of Done job; the Node support
-  window, not reached; the breaking marks, one per breaking entry with its migration; the prelude and the
-  shell's semantic accessor, untouched. Two were not observed and say so: the unreleased-version sweep waits
-  for the workspace version to move for release preparation, and the validator's payload was not opened.
-  One is a steward's call rather than a verdict — whether the MSRV literal the `msrv` job now carries is the
-  third hand-maintained pin the pin entry counts, when it is a floor held to `rust-version` rather than a
-  version tracking an upstream.
+  The 2026-09-26 reading covered `v0.6.1` through the release branch's tip: the third-reader trigger in
+  the joined-line entry fired and it was promoted; an action falling behind an advisory in the pin entry,
+  the validator's payload, and the never-released-version sweep until the workspace version moves were
+  unobserved; the per-entry record is in this change's squash commit.
 
 - **A codename index for a defect lives in the half of the corpus `doc_provenance` declares out of scope,
   and the token that would find it is shared with a measurement that must stay.** *Class:* WATCH — the
@@ -937,6 +886,25 @@ consumer for an undemonstrated deduplication.
   patch; no crate is touched. *Authority:* `repository-checks`, and `AGENTS.md`'s carrier taxonomy row.
 
 ### READY-PATCH
+
+- **Three wrapper readers still join lines by `gate_identity::logical_lines`, which reads no quotes.**
+  *Class:* READY-PATCH — the third-reader promotion trigger fired, and the repair preserves the published
+  surface. *Observed pressure:* the acquisition sweep and the gate-call reader in `gate_exit_classes` search
+  joined statements for tokens; `kanhe::gate_identity::citations` also reads each script's `--exact <ident>`
+  citation with its `--test` and `-p` from joined statements. The third reader already existed when this
+  entry was written, so the earlier count of two was an undercount. `logical_lines` joins a line ending in
+  an escaped backslash, or in a backslash inside open single quotes, where bash does not. *Observation
+  source:* the 2026-09-26 pre-cut reading found the third reader and checked executed `scripts/*.sh` lines:
+  no wrapper or library line has either continuation shape today. *Current reaction or bound:* none for
+  these readers; the workflow's command reader already lexes whole. *Risk:* joined text can make an
+  unguarded acquisition look guarded; in `citations`, `value_after("--test")` or `-p` could read a value from
+  the joined next line and misattribute the target. No such line exists today. The acquisition sweep also
+  accepts a `|| {` opener without checking that the block's first command stops, so `x=$(tool) || { true; }`
+  passes. *Promotion trigger:* fired — the third reader of joined statements exists. *Version class:* patch;
+  `kanhe` is `publish = false`. *Authority:* `repository-checks`.
+
+  **Shape.** Split all three readers through the lexer. The steward chose to take this repair after the
+  0.7.0 cut.
 
 - **The ambient-ignore guard reads files where its property belongs to call sites, and says something false
   when one file holds both kinds.** *Class:* READY-PATCH — measured, and the correction touches no published
