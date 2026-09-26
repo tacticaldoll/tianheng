@@ -113,6 +113,20 @@ pub(super) fn every_static_rule_has_an_exact_semantic_key() {
                 ("strict", "false"),
             ],
         ),
+        (
+            ModuleRule::ConfineInlineCall {
+                prefix: "std::process::Command".to_string(),
+                ending_with: None,
+                strict: false,
+                strict_external: false,
+            },
+            "tianheng.rule/guibiao/confine-inline-call",
+            vec![
+                ("ending_with", "[]"),
+                ("prefix", "std::process::Command"),
+                ("strict", "false"),
+            ],
+        ),
     ];
     for (rule, expected, fields) in module_rules {
         assert_eq!(rule.key().rule_type(), expected);

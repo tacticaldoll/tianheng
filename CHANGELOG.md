@@ -31,6 +31,27 @@ them.
 
 ## [Unreleased]
 
+### Static
+
+- **圭表 can permit an inline call only within one module: `confine_inline_call(prefix)`.**
+  `ModuleBoundary::in_crate(p).module("crate::exec").confine_inline_call("std::process::Command")` makes an inline
+  call under the prefix a violation anywhere outside `crate::exec`'s subtree, in every compiled root — a sibling
+  module, or a binary root that declares no `exec`, judged with an empty permitted region. It is the permitting
+  dual of `must_not_call_inline`, as `confine_external_crate` is for imports: the same scanner, call-versus-mention
+  default, alias and glob resolution, and `.ending_with` / `.strict_prefix_only` / `.strict_external` modifiers.
+  Its findings are `allowlist_gap` under its own rule key, `tianheng.rule/guibiao/confine-inline-call`, so a new
+  module cannot escape it the way it escapes one `must_not_call_inline` per sibling. Permitting within `crate`, or
+  within a module no root declares, exits 2, and so does a declaration at `ScanDepth::Shallow`: the permitted region
+  is compared at a file's module, which cannot tell the permitted module from its inline children. Opt-in: nothing changes unless it is declared, and every
+  `must_not_call_inline` finding is byte-identical.
+- **The inline glob hazard's width is a declared over-reaction bound.** A glob reacts when any `type` alias or
+  `pub use` beneath its resolved module resolves under the prefix, whether or not the glob brings that name into
+  scope, and a glob's `self` or `super` resolves against its file's module — so a sibling's
+  `mod tests { use super::*; }` reacts when such an alias exists anywhere beneath the crate. This was already the
+  behaviour of `must_not_call_inline`; it is now registered as
+  `inline-symbol-path-confinement/a-glob-reacts-to-any-alias-or-re-export-beneath-its-resolved-module-a-stated-bound`,
+  and the glob requirement's case (c) says *a `type` alias of any visibility*, which is what the scanner reads.
+
 ### Self-governance
 
 - **The wrapper readers that searched shell text across joined lines now split where bash splits, off

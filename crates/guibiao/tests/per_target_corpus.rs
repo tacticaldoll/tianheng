@@ -949,3 +949,477 @@ fn a_conventional_root_filename_reached_through_a_declaration_is_that_modules_so
         violation.fact()
     );
 }
+
+/// Where an inline call to the confined prefix may appear: the permitted module's subtree, and nowhere else in any
+/// compiled root. The perimeter is the whole package, so a sibling module and a root that declares no permitted
+/// module are both outside the permitted region.
+fn exec_confines_command(package: &str) -> Constitution {
+    Constitution::new("inline-call-confinement").boundary(
+        ModuleBoundary::in_crate(package)
+            .module("crate::exec")
+            .confine_inline_call("std::process::Command")
+            .because("only exec spawns processes"),
+    )
+}
+
+/// The confined constructor call, assembled from two literals: this target spawns no process, and a census that
+/// reads test sources for a spawning constructor must not read one out of fixture text.
+macro_rules! spawn_call {
+    () => {
+        concat!("std::process::Command", "::new(\"true\")")
+    };
+}
+
+const EXEC_SPAWNS: &str = concat!("pub fn run() { let _ = ", spawn_call!(), "; }\n");
+
+fn fact_field<'a>(violation: &'a xuanji::Violation, key: &str) -> Option<&'a str> {
+    violation
+        .fact()
+        .fields()
+        .find_map(|(name, value)| (name == key).then_some(value))
+}
+
+fn confined_violations(outcome: &Outcome) -> &[xuanji::Violation] {
+    match outcome {
+        Outcome::Violations(report) => &report.violations,
+        other => panic!("expected Violations, got {other:?}"),
+    }
+}
+
+/// V1: a sibling of the permitted module calls the confined prefix inline, and the call is outside the permitted
+/// region.
+#[test]
+fn an_inline_call_in_a_sibling_of_the_permitted_module_reacts() {
+    let probe = RootProbe::new(
+        "inlinesibling",
+        "",
+        &[
+            ("src/lib.rs", "pub mod exec;\npub mod other;\n"),
+            ("src/exec.rs", EXEC_SPAWNS),
+            (
+                "src/other.rs",
+                concat!("pub fn leak() { let _ = ", spawn_call!(), "; }\n"),
+            ),
+        ],
+    );
+    let outcome = check(&exec_confines_command("inlinesibling"), probe.manifest());
+    assert_eq!(outcome.exit_code(), 1, "{outcome:?}");
+    let violations = confined_violations(&outcome);
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    let violation = &violations[0];
+    assert_eq!(
+        violation.finding,
+        "std::process::Command::new in crate::other"
+    );
+    assert_eq!(violation.target(), "std::process::Command");
+    assert_eq!(violation.polarity, Some(xuanji::Polarity::AllowlistGap));
+    assert_eq!(fact_field(violation, "unit"), Some("src/lib.rs"));
+    assert!(
+        violation
+            .file
+            .as_deref()
+            .is_some_and(|f| f.ends_with("src/other.rs")),
+        "{violation:?}"
+    );
+}
+
+/// V2: a binary root whose graph has no permitted module calls the confined prefix inline. Its permitted region is
+/// empty, so the call reacts under the binary root's own compilation unit.
+#[test]
+fn an_inline_call_in_a_root_without_the_permitted_module_reacts() {
+    let probe = RootProbe::new(
+        "inlinebin",
+        "",
+        &[
+            ("src/lib.rs", "pub mod exec;\n"),
+            ("src/exec.rs", EXEC_SPAWNS),
+            (
+                "src/main.rs",
+                concat!("fn main() { let _ = ", spawn_call!(), "; }\n"),
+            ),
+        ],
+    );
+    let outcome = check(&exec_confines_command("inlinebin"), probe.manifest());
+    assert_eq!(outcome.exit_code(), 1, "{outcome:?}");
+    let violations = confined_violations(&outcome);
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    let violation = &violations[0];
+    assert_eq!(violation.finding, "std::process::Command::new in crate");
+    assert_eq!(fact_field(violation, "unit"), Some("src/main.rs"));
+    assert!(
+        violation
+            .file
+            .as_deref()
+            .is_some_and(|f| f.ends_with("src/main.rs")),
+        "{violation:?}"
+    );
+}
+
+/// V3: an aliased import outside the permitted module does not hide the call; the use-map resolves the alias.
+#[test]
+fn an_aliased_inline_call_outside_the_permitted_module_reacts() {
+    let probe = RootProbe::new(
+        "inlinealias",
+        "",
+        &[
+            ("src/lib.rs", "pub mod exec;\npub mod other;\n"),
+            ("src/exec.rs", EXEC_SPAWNS),
+            (
+                "src/other.rs",
+                "use std::process::Command as Spawn;\npub fn leak() { let _ = Spawn::new(\"true\"); }\n",
+            ),
+        ],
+    );
+    let outcome = check(&exec_confines_command("inlinealias"), probe.manifest());
+    assert_eq!(outcome.exit_code(), 1, "{outcome:?}");
+    let violations = confined_violations(&outcome);
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(
+        violations[0].finding,
+        "std::process::Command::new in crate::other"
+    );
+}
+
+/// V4: a glob import that can bring a prefix-resolving name into scope outside the permitted module reacts
+/// fail-closed, as it does for `must_not_call_inline`.
+#[test]
+fn a_glob_bringing_the_confined_prefix_outside_the_permitted_module_reacts() {
+    let probe = RootProbe::new(
+        "inlineglob",
+        "",
+        &[
+            ("src/lib.rs", "pub mod exec;\npub mod other;\n"),
+            ("src/exec.rs", EXEC_SPAWNS),
+            (
+                "src/other.rs",
+                "use std::process::*;\npub fn nothing() {}\n",
+            ),
+        ],
+    );
+    let outcome = check(&exec_confines_command("inlineglob"), probe.manifest());
+    assert_eq!(outcome.exit_code(), 1, "{outcome:?}");
+    let violations = confined_violations(&outcome);
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].finding, "glob std::process in crate::other");
+}
+
+/// V5: at `warn()` the finding is reported as an advisory and the check still exits clean.
+#[test]
+fn a_warn_inline_call_confinement_reports_without_failing() {
+    let probe = RootProbe::new(
+        "inlinewarn",
+        "",
+        &[
+            ("src/lib.rs", "pub mod exec;\npub mod other;\n"),
+            ("src/exec.rs", EXEC_SPAWNS),
+            (
+                "src/other.rs",
+                concat!("pub fn leak() { let _ = ", spawn_call!(), "; }\n"),
+            ),
+        ],
+    );
+    let law = Constitution::new("inline-call-confinement").boundary(
+        ModuleBoundary::in_crate("inlinewarn")
+            .module("crate::exec")
+            .confine_inline_call("std::process::Command")
+            .warn()
+            .because("only exec spawns processes"),
+    );
+    let outcome = check(&law, probe.manifest());
+    assert_eq!(outcome.exit_code(), 0, "{outcome:?}");
+    assert_eq!(
+        confined_violations(&outcome).len(),
+        1,
+        "the advisory is still reported"
+    );
+}
+
+/// V6: a baseline accepting one finding does not accept a second one added later in another module.
+#[test]
+fn a_baselined_inline_call_does_not_mask_a_new_one() {
+    let probe = RootProbe::new(
+        "inlinebase",
+        "",
+        &[
+            (
+                "src/lib.rs",
+                "pub mod exec;\npub mod other;\npub mod later;\n",
+            ),
+            ("src/exec.rs", EXEC_SPAWNS),
+            (
+                "src/other.rs",
+                concat!("pub fn leak() { let _ = ", spawn_call!(), "; }\n"),
+            ),
+            ("src/later.rs", "\n"),
+        ],
+    );
+    let law = exec_confines_command("inlinebase");
+    let Outcome::Violations(accepted) = check(&law, probe.manifest()) else {
+        panic!("the sibling's call must react before it can be baselined");
+    };
+    let baseline = xuanji::Baseline::of(&accepted);
+    std::fs::write(
+        probe.dir.join("src/later.rs"),
+        concat!("pub fn again() { let _ = ", spawn_call!(), "; }\n"),
+    )
+    .expect("write the new call");
+    let Outcome::Violations(mut report) = check(&law, probe.manifest()) else {
+        panic!("both siblings call the confined prefix");
+    };
+    xuanji::apply_baseline(&mut report, &baseline);
+    let active: Vec<&str> = report
+        .violations
+        .iter()
+        .filter(|v| !v.baselined)
+        .map(|v| v.finding.as_str())
+        .collect();
+    assert_eq!(
+        active,
+        ["std::process::Command::new in crate::later"],
+        "{:?}",
+        report.violations
+    );
+}
+
+fn assert_clean(outcome: &Outcome) {
+    assert!(matches!(outcome, Outcome::Clean(_)), "{outcome:?}");
+}
+
+/// C1: the permitted module and its inline test module call the confined prefix, which is where it is permitted.
+#[test]
+fn inline_calls_within_the_permitted_module_and_its_inline_tests_are_clean() {
+    let probe = RootProbe::new(
+        "inlinepermitted",
+        "",
+        &[
+            ("src/lib.rs", "pub mod exec;\n"),
+            (
+                "src/exec.rs",
+                concat!(
+                    "pub fn run() { let _ = ",
+                    spawn_call!(),
+                    "; }\n#[cfg(test)]\nmod tests {\n    #[test]\n    fn spawns() { let _ = ",
+                    spawn_call!(),
+                    "; }\n}\n"
+                ),
+            ),
+        ],
+    );
+    assert_clean(&check(
+        &exec_confines_command("inlinepermitted"),
+        probe.manifest(),
+    ));
+}
+
+/// C2: under the call-versus-mention default, naming the type outside the permitted module is not a call.
+#[test]
+fn a_type_only_mention_outside_the_permitted_module_is_clean() {
+    let probe = RootProbe::new(
+        "inlinemention",
+        "",
+        &[
+            ("src/lib.rs", "pub mod exec;\npub mod other;\n"),
+            ("src/exec.rs", EXEC_SPAWNS),
+            (
+                "src/other.rs",
+                "pub fn take(_command: &std::process::Command) {}\n",
+            ),
+        ],
+    );
+    assert_clean(&check(
+        &exec_confines_command("inlinemention"),
+        probe.manifest(),
+    ));
+}
+
+/// C3: narrowed to `new`, a call under the prefix with another terminal segment outside the permitted module is
+/// clean.
+#[test]
+fn a_narrowed_inline_call_confinement_ignores_other_verbs() {
+    let probe = RootProbe::new(
+        "inlinenarrow",
+        "",
+        &[
+            ("src/lib.rs", "pub mod exec;\npub mod other;\n"),
+            ("src/exec.rs", EXEC_SPAWNS),
+            (
+                "src/other.rs",
+                "pub fn finish(command: &mut std::process::Command) {\n    let _ = std::process::Command::output(command);\n}\n",
+            ),
+        ],
+    );
+    let law = Constitution::new("inline-call-confinement").boundary(
+        ModuleBoundary::in_crate("inlinenarrow")
+            .module("crate::exec")
+            .confine_inline_call("std::process::Command")
+            .ending_with(["new"])
+            .because("only exec constructs a process"),
+    );
+    assert_clean(&check(&law, probe.manifest()));
+}
+
+/// C4: the permitted module's own private `use`, and `use super::*` inside a sibling's test module with no alias
+/// of the prefix anywhere in the crate, are clean — the shape of an adopter confining process spawning to one
+/// module.
+#[test]
+fn a_private_use_in_the_permitted_module_and_sibling_test_globs_are_clean() {
+    let probe = RootProbe::new(
+        "inlineshape",
+        "",
+        &[
+            ("src/lib.rs", "pub mod exec;\npub mod agent;\n"),
+            (
+                "src/exec.rs",
+                concat!(
+                    "use std::process::Command;\npub fn run() { let _ = Command",
+                    "::new(\"true\"); }\n"
+                ),
+            ),
+            (
+                "src/agent.rs",
+                "pub fn act() {}\n#[cfg(test)]\nmod tests {\n    use super::*;\n    #[test]\n    fn acts() { act(); }\n}\n",
+            ),
+        ],
+    );
+    assert_clean(&check(
+        &exec_confines_command("inlineshape"),
+        probe.manifest(),
+    ));
+}
+
+fn constitution_error(outcome: &Outcome) -> &str {
+    match outcome {
+        Outcome::ConstitutionError(message) => message,
+        other => panic!("expected a constitution error, got {other:?}"),
+    }
+}
+
+/// E1: permitting the prefix within `crate` permits it everywhere, so the rule could never react.
+#[test]
+fn an_inline_call_confinement_to_the_crate_root_is_refused() {
+    let probe = RootProbe::new(
+        "inlineroot",
+        "",
+        &[(
+            "src/lib.rs",
+            concat!("pub fn run() { let _ = ", spawn_call!(), "; }\n"),
+        )],
+    );
+    let law = Constitution::new("inline-call-confinement").boundary(
+        ModuleBoundary::in_crate("inlineroot")
+            .module("crate")
+            .confine_inline_call("std::process::Command")
+            .because("only the root spawns processes"),
+    );
+    let outcome = check(&law, probe.manifest());
+    assert_eq!(outcome.exit_code(), 2, "{outcome:?}");
+    assert!(
+        constitution_error(&outcome).contains("confine_inline_call"),
+        "{outcome:?}"
+    );
+}
+
+/// E2: a permitted module no compiled root declares is a constitution error, not an empty region everywhere.
+#[test]
+fn an_inline_call_confinement_to_a_module_no_root_declares_is_refused() {
+    let probe = RootProbe::new(
+        "inlineabsent",
+        "",
+        &[
+            ("src/lib.rs", "pub mod other;\n"),
+            (
+                "src/other.rs",
+                concat!("pub fn leak() { let _ = ", spawn_call!(), "; }\n"),
+            ),
+        ],
+    );
+    let outcome = check(&exec_confines_command("inlineabsent"), probe.manifest());
+    assert_eq!(outcome.exit_code(), 2, "{outcome:?}");
+}
+
+/// E3: an empty confined prefix is a misdeclaration, as it is for `must_not_call_inline`.
+#[test]
+fn an_inline_call_confinement_with_an_empty_prefix_is_refused() {
+    let probe = RootProbe::new(
+        "inlineempty",
+        "",
+        &[
+            ("src/lib.rs", "pub mod exec;\n"),
+            ("src/exec.rs", EXEC_SPAWNS),
+        ],
+    );
+    let law = Constitution::new("inline-call-confinement").boundary(
+        ModuleBoundary::in_crate("inlineempty")
+            .module("crate::exec")
+            .confine_inline_call(" ")
+            .because("a prefix is required"),
+    );
+    let outcome = check(&law, probe.manifest());
+    assert_eq!(outcome.exit_code(), 2, "{outcome:?}");
+    assert!(
+        constitution_error(&outcome).contains("`confine_inline_call`"),
+        "the refusal names the rule that was declared: {outcome:?}"
+    );
+}
+
+/// The glob over-reaction, shown rather than described: `use super::*` inside a sibling's inline test module is
+/// resolved against the file's module rather than the inline one, so it reads as `use crate::*`, and a `type`
+/// alias of the prefix anywhere beneath the crate is taken as a name it could bring into scope.
+#[test]
+fn a_sibling_test_glob_reacts_to_an_alias_the_permitted_module_declares() {
+    let probe = RootProbe::new(
+        "inlinealiasglob",
+        "",
+        &[
+            ("src/lib.rs", "pub mod exec;\npub mod agent;\n"),
+            (
+                "src/exec.rs",
+                "pub type Cmd = std::process::Command;\npub fn run() { let _ = Cmd::new(\"true\"); }\n",
+            ),
+            (
+                "src/agent.rs",
+                "pub fn act() {}\n#[cfg(test)]\nmod tests {\n    use super::*;\n    #[test]\n    fn acts() { act(); }\n}\n",
+            ),
+        ],
+    );
+    let outcome = check(&exec_confines_command("inlinealiasglob"), probe.manifest());
+    assert_eq!(outcome.exit_code(), 1, "{outcome:?}");
+    let violations = confined_violations(&outcome);
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].finding, "glob super in crate::agent");
+}
+
+/// E4: at `ScanDepth::Shallow` the permitted region is the anchored module alone, so the permitted file's inline
+/// child is outside it; the region is compared at file-module grain, which cannot tell the two apart, so the
+/// declaration is refused rather than read as permitting the child's call.
+#[test]
+fn an_inline_call_confinement_at_shallow_depth_is_refused() {
+    let probe = RootProbe::new(
+        "inlineshallow",
+        "",
+        &[
+            ("src/lib.rs", "pub mod exec;\n"),
+            (
+                "src/exec.rs",
+                concat!(
+                    "pub fn run() {}\nmod tests {\n    fn spawns() { let _ = ",
+                    spawn_call!(),
+                    "; }\n}\n"
+                ),
+            ),
+        ],
+    );
+    let law = Constitution::new("inline-call-confinement").boundary(
+        ModuleBoundary::in_crate("inlineshallow")
+            .module("crate::exec")
+            .confine_inline_call("std::process::Command")
+            .depth(xuanji::ScanDepth::Shallow)
+            .because("only exec itself spawns processes"),
+    );
+    let outcome = check(&law, probe.manifest());
+    assert_eq!(outcome.exit_code(), 2, "{outcome:?}");
+    assert!(
+        constitution_error(&outcome).contains("Shallow"),
+        "{outcome:?}"
+    );
+}

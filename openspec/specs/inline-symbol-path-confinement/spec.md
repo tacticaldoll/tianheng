@@ -117,13 +117,17 @@ segment below the ancestor into scope (`use std::*` brings module `time`, the se
 into scope); or (c) a **local module whose own re-export closure reaches under the prefix** —
 where "reaches" applies this same hazard test recursively (chased to a fixpoint / visited set,
 cycle-safe), over that module's re-exports resolved through the combined use-map + type-alias
-closure: a concrete `pub use std::time::…` (or `pub use std::time;` / `pub type … = std::time::…;`),
+closure: a concrete `pub use std::time::…` (or `pub use std::time;`, or a `type … = std::time::…;` alias of any visibility),
 OR a glob/ancestor re-export in that module that itself reaches the prefix (`pub use std::time::*;`
 / `pub use std::*;` inside `crate::support`, then `use crate::support::*;` in the subtree). Grouped or mixed glob forms (`use std::time::{*}`, `use std::time::{self, *}`)
 SHALL be treated as globs. A glob finding SHALL NOT be suppressed by `.ending_with` narrowing (a
 glob has no call terminal segment; narrowing applies to calls only). The scanner cannot prove such
 a glob introduces no forbidden read, so the glob itself is the violation — one finding, never an FP
-flood, never a silent pass.
+flood, never a silent pass. The hazard test is wider than what a glob can bring into scope, and that width SHALL
+be declared by the over-reaction scenario below rather than claimed as precision: it asks whether any alias or
+re-export **beneath** the glob's resolved module resolves under the prefix, not whether the glob brings that name
+into scope, and a glob's `self` or `super` is resolved against the file's module rather than the inline module it
+stands in.
 
 #### Scenario: A glob of the confined prefix reacts
 - **WHEN** `crate::core` declares `use std::time::*;` under a boundary confining `std::time`
@@ -148,6 +152,72 @@ flood, never a silent pass.
 #### Scenario: A glob finding is not suppressed by narrowing
 - **WHEN** a boundary declares `.must_not_call_inline("std::time").ending_with(["now"])` and `crate::core` declares `use std::time::*;`
 - **THEN** the system still reacts on the glob (narrowing filters call terminal segments, not globs)
+
+#### Scenario: A glob reacts to any alias or re-export beneath its resolved module — a stated bound
+- **WHEN** `crate::exec` declares `pub type Cmd = std::process::Command;` and a sibling `crate::agent` holds only `mod tests { use super::*; }`, under a boundary permitting `std::process::Command` only within `crate::exec`
+- **THEN** the system reacts on `glob super in crate::agent`: the inline module's `super` is resolved against the file's module, so the glob reads as one over the whole crate, and the alias beneath it is taken as a name it could bring into scope — an over-reaction declared, not a precision claim
+- **PINNED-BY** `a_sibling_test_glob_reacts_to_an_alias_the_permitted_module_declares`
+
+### Requirement: A prefix may be permitted only within the governed subtree
+
+`ModuleBoundary::in_crate(p).module(m).confine_inline_call(prefix)` SHALL permit inline calls resolving under
+`prefix` **only** within `m`'s subtree: a call anywhere else in any compiled root of the package SHALL be a
+violation, with the confined prefix as the target, the call's resolved path and module as the finding, and
+`allowlist_gap` polarity. It is the permitting dual of `must_not_call_inline`, as `confine_external_crate` is for
+imports, and it SHALL observe exactly what that rule observes: the same call-versus-mention default, the same
+alias, type-alias, re-export and glob resolution, and the same `.ending_with`, `.strict_prefix_only` and
+`.strict_external` modifiers. Its perimeter SHALL be the whole package: a compiled root whose graph has no `m`
+SHALL be judged with an empty permitted region, and a package where no root declares `m` SHALL be a
+constitution error. Permitting the prefix within `crate` SHALL be a constitution error, since the root's subtree
+is the whole crate and the rule could never react. A declaration at `ScanDepth::Shallow` SHALL be a constitution
+error: the permitted region is compared at the grain of a file's module, and a shallow region is the anchored module
+alone, so a call in an inline child of the permitted file could not be told apart from a permitted one. The
+misdeclarations `must_not_call_inline` refuses — an empty prefix, an empty verb set, narrowing combined with
+strict — SHALL be refused here too. Its rule identity SHALL be its own
+(`tianheng.rule/guibiao/confine-inline-call`), so declaring it leaves every `must_not_call_inline` finding
+byte-identical.
+
+#### Scenario: An inline call in a sibling of the permitted module reacts
+- **WHEN** `crate::exec` is the permitted module for `std::process::Command` and a sibling `crate::other` calls `std::process::Command::new(…)`
+- **THEN** the system exits 1 with `std::process::Command::new in crate::other`, `allowlist_gap`, under the library root's unit
+- **PINNED-BY** `an_inline_call_in_a_sibling_of_the_permitted_module_reacts`
+
+#### Scenario: An inline call in a root without the permitted module reacts
+- **WHEN** the library root declares `crate::exec` and the binary root, which declares no `exec`, calls `std::process::Command::new(…)`
+- **THEN** the system exits 1 with `std::process::Command::new in crate` under the binary root's unit
+- **PINNED-BY** `an_inline_call_in_a_root_without_the_permitted_module_reacts`
+
+#### Scenario: An aliased or glob-reached call outside the permitted module reacts
+- **WHEN** a sibling writes `use std::process::Command as Spawn;` and calls `Spawn::new(…)`, or writes `use std::process::*;`
+- **THEN** the system reacts on the resolved call, or on the glob, as `must_not_call_inline` does
+- **PINNED-BY** `an_aliased_inline_call_outside_the_permitted_module_reacts`
+- **PINNED-BY** `a_glob_bringing_the_confined_prefix_outside_the_permitted_module_reacts`
+
+#### Scenario: The permitted module, its inline tests and a mention elsewhere are clean
+- **WHEN** `crate::exec` and its inline `mod tests` call the prefix, a sibling only names the type, and siblings hold `mod tests { use super::*; }` with no alias of the prefix anywhere
+- **THEN** the system exits 0
+- **PINNED-BY** `inline_calls_within_the_permitted_module_and_its_inline_tests_are_clean`
+- **PINNED-BY** `a_type_only_mention_outside_the_permitted_module_is_clean`
+- **PINNED-BY** `a_private_use_in_the_permitted_module_and_sibling_test_globs_are_clean`
+
+#### Scenario: Narrowing applies to the permitting form
+- **WHEN** the boundary declares `.confine_inline_call("std::process::Command").ending_with(["new"])` and a sibling calls `std::process::Command::output(…)`
+- **THEN** the system exits 0
+- **PINNED-BY** `a_narrowed_inline_call_confinement_ignores_other_verbs`
+
+#### Scenario: A permitting confinement it cannot judge is refused
+- **WHEN** the permitted module is `crate`, no compiled root declares it, the confined prefix is empty, or the boundary is declared at `ScanDepth::Shallow`
+- **THEN** the system exits 2
+- **PINNED-BY** `an_inline_call_confinement_to_the_crate_root_is_refused`
+- **PINNED-BY** `an_inline_call_confinement_to_a_module_no_root_declares_is_refused`
+- **PINNED-BY** `an_inline_call_confinement_with_an_empty_prefix_is_refused`
+- **PINNED-BY** `an_inline_call_confinement_at_shallow_depth_is_refused`
+
+#### Scenario: Severity and baseline apply to the permitting form
+- **WHEN** the boundary is declared `warn()`, or one finding is baselined and a second call is added in another module
+- **THEN** the warn boundary exits 0 with the advisory reported, and only the new call reacts against the baseline
+- **PINNED-BY** `a_warn_inline_call_confinement_reports_without_failing`
+- **PINNED-BY** `a_baselined_inline_call_does_not_mask_a_new_one`
 
 ### Requirement: Explicit read-verb narrowing owns its false negative
 

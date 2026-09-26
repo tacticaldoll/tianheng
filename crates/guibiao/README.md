@@ -65,8 +65,9 @@ crate-to-crate layering surface), and `restrict_dependency_sources_to([…])` (a
 module-boundary rules**: `must_not_import`, `restrict_imports_to([…])`, `must_not_be_imported_by`,
 `must_only_be_imported_by([…])` (the closed inbound allowlist), `confine_external_crate` (confine
 an external crate's `use` imports to one module subtree — FFI / platform-vocabulary confinement), and
-`must_not_call_inline([…])` (confine an inline symbol path — e.g. `std::time::…::now` — to a declared
-module subtree; the inline-symbol-path / clock-free confinement).
+`must_not_call_inline("…")` (forbid an inline symbol path — e.g. `std::time::…::now` — within a declared
+module subtree; the inline-symbol-path / clock-free confinement), and `confine_inline_call("…")` (its permitting
+dual: permit an inline symbol path — e.g. `std::process::Command` — only within a declared module subtree).
 
 By default a crate rule observes the normal `[dependencies]` table; `.dependency_kind(DependencyKind::Dev)`
 (or `Build`) targets `[dev-dependencies]` / `[build-dependencies]` instead — a boundary governs

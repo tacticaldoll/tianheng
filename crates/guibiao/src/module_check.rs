@@ -6,7 +6,8 @@ use xuanji::ScanDepth;
 
 use crate::cargo_metadata::{compilation_unit_label, crate_roots, find_package};
 use crate::errors::{
-    confine_external_crate_on_crate_error, crate_not_found_error, inline_empty_prefix_error,
+    confine_external_crate_on_crate_error, confine_inline_call_on_crate_error,
+    confine_inline_call_shallow_error, crate_not_found_error, inline_empty_prefix_error,
     inline_empty_verbs_error, inline_module_target_error, inline_narrow_and_strict_error,
     missing_src_error, must_not_be_imported_by_on_crate_error,
     must_only_be_imported_by_on_crate_error, no_compiled_root_error, out_of_package_root_error,
@@ -459,16 +460,26 @@ fn check_inline_confinement(
     ending_with: Option<&[String]>,
     strict: bool,
     external: bool,
+    declared_as: &str,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
     if prefix.trim().is_empty() {
-        return Err(inline_empty_prefix_error(&boundary.crate_package));
+        return Err(inline_empty_prefix_error(
+            &boundary.crate_package,
+            declared_as,
+        ));
     }
     if ending_with.is_some() && strict {
-        return Err(inline_narrow_and_strict_error(&boundary.crate_package));
+        return Err(inline_narrow_and_strict_error(
+            &boundary.crate_package,
+            declared_as,
+        ));
     }
     if ending_with.is_some_and(|verbs| verbs.is_empty()) {
-        return Err(inline_empty_verbs_error(&boundary.crate_package));
+        return Err(inline_empty_verbs_error(
+            &boundary.crate_package,
+            declared_as,
+        ));
     }
     let all_files = ctx.all_files();
     let dependency_names = if external {
@@ -545,7 +556,8 @@ fn check_outbound_rule(
         ModuleRule::MustNotBeImportedBy { .. }
         | ModuleRule::MustOnlyBeImportedBy { .. }
         | ModuleRule::ConfineExternalCrate { .. }
-        | ModuleRule::ConfineInlineSymbolPath { .. } => {
+        | ModuleRule::ConfineInlineSymbolPath { .. }
+        | ModuleRule::ConfineInlineCall { .. } => {
             unreachable!("the inbound / confinement rules are evaluated above and return early")
         }
     };
@@ -671,6 +683,12 @@ fn suggested_module_path(package: &Value, candidate: &Path) -> String {
 /// not; under `WholeRoot` it is judged through the same dispatch as a governed root, with an empty
 /// permitted region. The caller keeps those findings only when some root is governed, so a package where
 /// no root has the module is still a constitution error.
+///
+/// `confine_inline_call` judges the complement of `must_not_call_inline`'s set: every file of the root whose
+/// module is outside the permitted subtree. An inline finding carries its file's module, and every inline child of
+/// a file lies within that file's module's subtree, so excluding a file by its module is exact under the subtree
+/// depth. It is not under `ScanDepth::Shallow`, where the permitted region is the anchored module alone and the
+/// permitted file's inline children fall outside it, so a shallow declaration is refused rather than judged.
 fn check_one_root(
     package: &Value,
     root_file: Option<&Path>,
@@ -788,16 +806,36 @@ fn check_one_root(
         return Ok(outcome);
     }
     if let Some((prefix, ending_with, strict, external)) = boundary.rule.inline_payload() {
+        let permitting = matches!(boundary.rule, ModuleRule::ConfineInlineCall { .. });
+        if permitting && governed_module == "crate" {
+            return Err(confine_inline_call_on_crate_error(&boundary.crate_package));
+        }
+        if permitting && boundary.depth == ScanDepth::Shallow {
+            return Err(confine_inline_call_shallow_error(&boundary.crate_package));
+        }
+        let judged: Vec<(PathBuf, String)> = if permitting {
+            ctx.all_files()
+                .into_iter()
+                .filter(|(_, module)| !within_scan_depth(module, &governed_module, boundary.depth))
+                .collect()
+        } else {
+            governed
+        };
         check_inline_confinement(
             &ctx,
             boundary,
             package,
-            &governed,
+            &judged,
             rule,
             prefix,
             ending_with,
             strict,
             external,
+            if permitting {
+                "confine_inline_call"
+            } else {
+                "must_not_call_inline"
+            },
             violations,
         )?;
         return Ok(outcome);
