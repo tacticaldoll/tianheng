@@ -498,6 +498,24 @@ pub fn claim_scratch(path: &Path) -> std::io::Result<()> {
     std::fs::create_dir(path)
 }
 
+/// A fixture's cleanup, settled inside a `Drop`: said on stderr while a failure is already unwinding, so the first
+/// failure stays the one reported, and a failure of its own otherwise, so a run that passed does not leave its
+/// fixture behind in silence.
+///
+/// **Fixture infrastructure, withheld from the API contract** for the reason [`claim_scratch`] gives: the guards
+/// that call it restore or remove something on drop and settle the result one way, and they live in test targets
+/// across crates.
+#[doc(hidden)]
+pub fn settle_cleanup(what: &str, path: &Path, result: std::io::Result<()>) {
+    if let Err(err) = result {
+        if std::thread::panicking() {
+            eprintln!("{what} '{}' failed during unwind: {err}", path.display());
+        } else {
+            panic!("{what} '{}' failed: {err}", path.display());
+        }
+    }
+}
+
 /// An RAII guard that restricts a file or directory to mode 000 during test execution
 /// and restores its original permissions on drop.
 ///
@@ -519,13 +537,27 @@ pub struct Unreadable<'a> {
 #[cfg(unix)]
 impl<'a> Unreadable<'a> {
     /// Restrict `path` to mode 000, returning `None` if mode 000 does not bite (e.g. running as root).
+    ///
+    /// Outside `TIANHENG_WORKSPACE_TESTS` that skip is allowed and said on stderr, so a run that did not judge an
+    /// unreadable input does not read as one that did.
     pub fn try_new(path: &'a Path) -> Option<Self> {
         use std::os::unix::fs::PermissionsExt;
         let original = std::fs::metadata(path)
-            .expect("read initial permissions")
+            .unwrap_or_else(|err| {
+                panic!(
+                    "Unreadable: cannot read the permissions of '{}': {err}",
+                    path.display()
+                )
+            })
             .permissions();
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o000))
-            .expect("drop read/traverse permissions");
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o000)).unwrap_or_else(
+            |err| {
+                panic!(
+                    "Unreadable: cannot restrict '{}' to mode 000: {err}",
+                    path.display()
+                )
+            },
+        );
         let accessible = if path.is_dir() {
             std::fs::read_dir(path).is_ok()
         } else {
@@ -538,6 +570,11 @@ impl<'a> Unreadable<'a> {
                 std::env::var_os("TIANHENG_WORKSPACE_TESTS").is_none(),
                 "mode 000 did not restrict the path — running as root would make this direction vacuous"
             );
+            eprintln!(
+                "Unreadable: mode 000 does not restrict '{}' for this process, so the direction using it is \
+                 skipped",
+                path.display()
+            );
             return None;
         }
         Some(Self { path, original })
@@ -547,18 +584,10 @@ impl<'a> Unreadable<'a> {
 #[cfg(unix)]
 impl Drop for Unreadable<'_> {
     fn drop(&mut self) {
-        if let Err(err) = std::fs::set_permissions(self.path, self.original.clone()) {
-            if std::thread::panicking() {
-                eprintln!(
-                    "Unreadable: failed to restore permissions for '{}' during unwind: {err}",
-                    self.path.display()
-                );
-            } else {
-                panic!(
-                    "Unreadable: failed to restore permissions for '{}': {err}",
-                    self.path.display()
-                );
-            }
-        }
+        settle_cleanup(
+            "Unreadable: restoring the permissions of",
+            self.path,
+            std::fs::set_permissions(self.path, self.original.clone()),
+        );
     }
 }

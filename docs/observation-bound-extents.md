@@ -18,7 +18,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `observation-bound-register/whether-a-pin-gutted-but-not-committed-still-bites-is-not-observed-a-stated-bound` — owner: engine
 - `observation-bound-register/whether-a-record-perturbs-the-check-or-the-pin-s-own-assertions-is-not-observed-a-stated-bound` — owner: engine
 - `observation-bound-register/which-member-holds-a-check-is-a-judgement-a-stated-bound` — owner: engine
-- `observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound` — owner: engine
+- `observer-protocol/a-method-on-another-trait-named-observer-is-read-a-stated-bound` — owner: engine
 - `observer-protocol/what-a-subject-does-not-establish-a-stated-bound` — owner: engine
 - `observer-protocol/whether-an-observer-s-own-verdict-is-correct-is-not-observed-a-stated-bound` — owner: adopter
 - `observer-protocol/whether-the-shell-makes-an-independent-semantic-decision-is-not-observed-a-stated-bound` — owner: engine
@@ -52,7 +52,7 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `repository-checks/a-refusal-constructed-outside-the-register-s-corpus-is-not-triaged-a-stated-bound` — owner: engine
 - `repository-checks/a-tool-configuration-set-in-the-environment-is-not-observed-a-stated-bound` — owner: engine
 - `repository-checks/a-whitespace-preceded-shell-marker-inside-quotes-is-cut-a-stated-bound` — owner: engine
-- `repository-checks/an-assignment-spelled-other-than-name-value-is-not-read-a-stated-bound` — owner: engine
+- `repository-checks/an-assignment-that-is-not-an-assignment-word-is-not-read-a-stated-bound` — owner: engine
 - `repository-checks/an-input-edited-inside-its-own-post-gate-re-read-a-stated-bound` — owner: engine
 - `repository-checks/files-no-capability-claims-a-stated-bound` — owner: engine
 - `repository-checks/the-consumer-stands-on-a-later-statement-a-stated-bound` — owner: engine
@@ -583,7 +583,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *which governance member a check belongs to is unobserved*
 
-### `observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound`
+### `observer-protocol/a-method-on-another-trait-named-observer-is-read-a-stated-bound`
 
 > a same-named method on an `impl` of another trait whose path ends in `Observer`, with the definition moved out of the inspected source
 
@@ -856,13 +856,13 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_shell_marker_inside_quotes_is_cut_from_the_region`
 
-### `repository-checks/an-assignment-spelled-other-than-name-value-is-not-read-a-stated-bound`
+### `repository-checks/an-assignment-that-is-not-an-assignment-word-is-not-read-a-stated-bound`
 
-> an assignment to a declared exit code or channel class that is not a `NAME=value` word — `+=`, `read`, `printf -v`, arithmetic, `${NAME:=…}`
+> an assignment to a declared exit code or channel class that is not an assignment word — `read`, `printf -v`, arithmetic, `${NAME:=…}`
 
-- **because**: the declaration check reads the `NAME=value` words a script spells, and bash's other assignment forms are an enumeration it stops short of; a value one changes is caught only where a direction runs the wrapper down that path and asserts its exit class
+- **because**: the declaration check reads the assignment words a script spells, `NAME=value` and `NAME+=value`, and bash's other assignment forms are an enumeration it stops short of; once the library is loaded each name is `readonly`, so bash refuses a later assignment in any form and the wrapper exits the unjudged class. Before it is loaded a wrapper's own statements run, and the declaration check refuses a wrapper that writes any of the names as a word, in whatever form
 - **its defence must show**: does not react
-- **pinned by**: `an_assignment_spelled_other_than_name_equals_value_is_not_read`
+- **pinned by**: `an_assignment_that_is_not_an_assignment_word_is_not_read`
 
 ### `repository-checks/an-input-edited-inside-its-own-post-gate-re-read-a-stated-bound`
 

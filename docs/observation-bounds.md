@@ -201,7 +201,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 - **unpinned**, tracked by: `BACKLOG.md` — *the shell's semantic delegation, held by construction*
 
-### `observer-protocol/a-whole-line-occurrence-that-is-not-the-definition-anchors-the-read-a-stated-bound`
+### `observer-protocol/a-method-on-another-trait-named-observer-is-read-a-stated-bound`
 
 > the reaction reads that method's body and reports it as the protocol's. Which trait a path names is name resolution — `use`s, renames, globs, local definitions — and the reader matches the last segment instead. What passes is a **second, hand-maintained path that agrees today**: a *divergent* list does not, because `observation-bound-model` reads every dimension's declarations through `Observer::bounds` and holds them in a bijection with the specs. The reaction's shape table carries the row, so the bound is shown rather than described
 
@@ -415,11 +415,11 @@ fallback used where no manifest exists, which the register spec describes.
 
 - **pinned by**: `a_refused_flag_cannot_sit_in_an_admitted_arguments_value_position`
 
-### `repository-checks/an-assignment-spelled-other-than-name-value-is-not-read-a-stated-bound`
+### `repository-checks/an-assignment-that-is-not-an-assignment-word-is-not-read-a-stated-bound`
 
-> the declaration check reports no offence for it. bash's assignment forms are the enumeration a reader stops short of, and declaring the names `readonly` was measured and refused: a plain assignment to a readonly name ends a non-interactive bash with status `1`, outside the ERR trap — the class reserved for a gate that ran and refused. What holds a changed value is running it, and only where the run is observed: a direction that runs a wrapper down a path and asserts the class it exits with fails on a value changed there. Not every direction that runs a wrapper asserts its class, so a path no class-asserting direction runs is what is left
+> the declaration check reports no offence for it. bash's assignment forms are the enumeration a reader stops short of; what holds the value is bash, since each name is declared `readonly`
 
-- **pinned by**: `an_assignment_spelled_other_than_name_equals_value_is_not_read`
+- **pinned by**: `an_assignment_that_is_not_an_assignment_word_is_not_read`
 
 ### `repository-checks/a-command-name-computed-when-the-line-runs-is-not-read-a-stated-bound`
 

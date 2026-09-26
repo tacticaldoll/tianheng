@@ -451,8 +451,8 @@ consumer for an undemonstrated deduplication.
   holds a **set-membership or absolute** claim (`only X`, `never Y`, `alone`), in any carrier. *Risk:* the
   projected prose is what conditions every agent that loads it, so a claim wider than its reaction is a false
   statement of the law at the surface 潛移 makes most load-bearing. Bounded by the claims being prose: nothing an
-  adopter resolves, and no exit class moves. *Promotion trigger:* a third instance, or the design below being
-  written. *Version class:* patch; the carriers ship in no crate. *Authority:* this entry, `AGENTS.md`'s *Bind a
+  adopter resolves, and no exit class moves. *Promotion trigger:* none while accepted — the *Reopening*
+  under the acceptance below is what reopens it. *Version class:* patch; the carriers ship in no crate. *Authority:* this entry, `AGENTS.md`'s *Bind a
   claim to its measurement* and *A census is produced, never typed*, and `crates/kanhe/src/census.rs`.
 
   **Not fired, read 2026-09-08 — and a careless reading would have promoted it on the wrong form.** The
@@ -483,7 +483,8 @@ consumer for an undemonstrated deduplication.
   `semantic-dyn-trait-boundary` said the same in an aside. Both are false — `crates/kanhe/Cargo.toml` names
   `syn` in `[dev-dependencies]`, which is permitted, and the root manifest's own comment says so and names
   the occupant. Both now say *the only **packaged** crate that depends on `syn`*, which is the wording that
-  manifest already reached and is exactly true.
+  manifest already reached. A later review narrowed it to *directly*: `tianheng` depends on `syn` through
+  `hunyi`, so the unqualified form was exact only about direct edges.
 
   **Neither would have been caught by declaring a phrase, and the reason generalises: the instances of this
   class are claims their author believed.** A declared set-claim is armed by an author writing it down, and
@@ -525,6 +526,62 @@ consumer for an undemonstrated deduplication.
   a false set-membership claim found in a released artifact that the sweep's vocabulary would not have reached.
 
 ### WATCH
+
+- **Two fixture shapes in the test infrastructure are written more than once, and the shared form is new
+  published surface.** *Class:* WATCH. *Observed pressure:* a static review of the window rooted at the
+  `v0.6.1` snapshot found `crates/tianheng/tests/baseline_cli.rs`'s `Restore` re-implementing
+  `xingbiao::Unreadable`'s drop — restore, report during unwind, panic otherwise — for a mode other than 000,
+  and six scratch-workspace fixtures sharing one `temp_dir()`-plus-claim-plus-`Drop` shape. *Observation
+  source:* that review's deduplication gate. *Current reaction or bound:* none; each copy is correct where it
+  stands. *Risk:* a fix to the restore or cleanup path lands in one copy. *Promotion trigger:* a second fixture
+  needing a mode other than 000 restored, for the restore guard; a new scratch-workspace fixture, for the
+  scratch shape — at which point the shared form in `xingbiao` is paid for by more than one caller. Deferred
+  rather than done now because each is a new `#[doc(hidden)]` item in a published crate for a single caller.
+  *Version class:* patch. *Authority:* `AGENTS.md`'s *An extraction's corpus is the pair of modules*.
+
+  **The restore half fired and is converged; the scratch half is narrowed.** kanhe's `support::fixture::Scratch`
+  became a third drop settling its cleanup the same way, which paid for the shared form: `xingbiao::settle_cleanup`
+  is the one rule, and `Unreadable`, `Restore` and `Scratch` each call it. The merge, publish and exit-class
+  directions take `Scratch`; the scratch fixtures in other test binaries — `bound_register`,
+  `capability_subjects` and their siblings, which compile no `support` module — keep their own, and are what
+  this entry still watches, together with the `Drop` guards across the crates' tests that still discard their
+  cleanup's result: `git grep -n -A6 'impl Drop for' -- crates | grep 'let _ ='` lists them, fourteen when this
+  was written. Each is a caller `settle_cleanup` would take; the trigger stays a new one being written.
+
+- **A mutation record is held to killing its pin, not to perturbing the behaviour its bound names.** *Class:*
+  WATCH. *Observed pressure:* the non-word assignment bound's record perturbed the `+=` row beside the bound's
+  shape, and `pin_bites` passed, because it asks only whether the cited test fails. *Observation source:* the
+  release reviews' structural cause on `pin_bites`. *Current reaction or bound:* that record now perturbs a
+  `${NAME:=}` form the bound names; nothing holds the next one to the same. *Risk:* a pin reported as biting
+  while no perturbation of the bound's own shape was ever run. *Promotion trigger:* a second record found
+  perturbing a row outside its bound's shape, or a decidable way to tell a bound's rows from the rows beside
+  them in its pinning test. *Version class:* patch; a repository check. *Authority:* `observation-bound-register`.
+
+- **The interpreter-window reader reads `ci.yml` alone.** *Class:* WATCH. *Observed pressure:* the reader over
+  the pinned `actions/setup-node` step enumerates one workflow file, which is every workflow the tree holds.
+  *Observation source:* the release reviews. *Current reaction or bound:* a second workflow file is refused by
+  `a_missed_event_filter_costs_a_delay_only_while_one_workflow_exists`, so the occasion to widen this reader is
+  announced rather than discovered. *Risk:* a second workflow pinning its own interpreter unread. *Promotion
+  trigger:* that refusal firing. *Version class:* patch. *Authority:* `repository-checks`.
+
+- **The shell-own word set is held against whichever bash runs the test.** *Class:* WATCH. *Observed
+  pressure:* `support/shell.rs`'s `SHELL_OWN_WORDS` is compared both ways with `compgen -b; compgen -k` from
+  the bash on the host, so a builtin one bash version has and another lacks turns one side red. *Observation
+  source:* the same review's non-gated observations. *Current reaction or bound:* the comparison itself, which
+  fails loudly rather than silently on a mismatch. *Risk:* a spurious red on a contributor's machine or on CI
+  after a runner image moves its bash, rather than a false pass. *Promotion trigger:* such a red, observed.
+  *Version class:* patch; a test support module. *Authority:* `repository-checks`.
+
+- **Two wrapper readers still join lines by `gate_identity::logical_lines`, which reads no quotes.** *Class:*
+  WATCH. *Observed pressure:* the acquisition sweep and the gate-call reader in `gate_exit_classes` search a
+  joined statement for a token, and `logical_lines` joins a line ending in an escaped backslash, or in a
+  backslash inside single quotes, where bash does not. *Observation source:* the release reviews' finding on
+  two continuation rules; the workflow's command reader, which had the same defect, now lexes whole.
+  *Current reaction or bound:* none for the two readers; the lexer's split is the repair they would take.
+  *Risk:* a line pulled in from below carries the guard token, so the acquisition sweep reads an unguarded
+  acquisition as guarded. The acquisition sweep also takes a `|| {` opener as a guard without reading the block, so
+  `x=$(tool) || { true; }` passes; the block's first command being a stop is what a lexed statement would ask. *Promotion trigger:* either shape written in a wrapper or the library, or a third
+  reader of joined statements. *Version class:* patch; a repository check. *Authority:* `repository-checks`.
 
 - **The merge wrapper's account restates how a judged squash message is composed, which the gate owns.**
   *Class:* WATCH — one rule with two implementations, one measured divergence, repaired in place.
@@ -1366,6 +1423,13 @@ consumer for an undemonstrated deduplication.
   this a class rather than one stub, and the repair is then the same for both: the fixture states what it
   needs and stops before the subject when it is absent.
 
+  **Fired, and repaired as written.** The publish fixture's `cargo` stub came to run `ps` to find the wrapper
+  behind the gate's command substitution — a second fixture taking a host tool it did not declare, found by
+  review. That dependency is gone by construction: the harness launches the wrapper through a shell that records
+  its PID and `exec`s it, and the stub signals that PID. `jq` is declared: `fixture::require_host_tool` stops the
+  merge directions before the subject, naming the tool, where it is absent. What stays watched is a third stub
+  taking an undeclared tool, which the same helper answers.
+
   *Trigger measured, not waited for — in the 0.5.0 window, and it has not fired.* The decidable half of it is
   enumerable: a stub is executed only where a test puts its directory on `PATH`, and exactly **two** test
   targets do — `publish_workflow` and `merge_workflow`. `merge_workflow`'s `gh` stub pipes through `jq`, which
@@ -1566,7 +1630,7 @@ consumer for an undemonstrated deduplication.
   release cut, in front of the two acts that cannot be undone. Promoting it is the first work of the window
   after this release rather than the last of this one.
 
-  **Extracted in the `0.7.0` window, the work this paragraph named.** `scripts/wrapper.sh` now holds the
+  **Extracted in the window rooted at the `v0.6.1` snapshot, the work this paragraph named.** `scripts/wrapper.sh` now holds the
   lifecycle once — the class helper and the refusal idiom, the ERR trap, the verdict channel's scalars, the
   two guards over the gate's run, the verdict file's lifecycle, and the failing path of a gate's run — and
   each wrapper keeps only what only it decides: its allowlist, its evidence, its gate. The exit codes are
@@ -1725,7 +1789,7 @@ consumer for an undemonstrated deduplication.
   the sibling wrapper entry gives — the Definition of Done is not edited at a release cut. First work of the
   window after, with the cost now measured rather than assumed.
 
-  **Done in the `0.7.0` window, as scheduled.** The Definition of Done now carries the MSRV suite as an
+  **Done in the window rooted at the `v0.6.1` snapshot, as scheduled.** The Definition of Done now carries the MSRV suite as an
   env-shaped line of its own — `TIANHENG_WORKSPACE_TESTS=1 cargo +1.85 test --workspace --all-features`,
   beside the two env-gated lines it follows — and the `msrv` job runs the same suite reading its pinned
   toolchain from the job's `env:`, which `dod_coherence` reads in that job's scope and compares as argv. Not a `rust-toolchain` file, for the reason
