@@ -34,6 +34,19 @@ external consumer SHALL be able to compose boundaries from all three instruments
 - **WHEN** a declaration uses dependency kind, source kind, visibility ceiling, or severity selectors
 - **THEN** their existing prelude names compile as part of the fluent declaration
 
+### Requirement: Semantic boundary bundles remain open for field additions
+
+An external crate SHALL construct `SemanticBoundaries` with `Default::default()` and MAY assign
+or push into its public fields. The type SHALL be non-exhaustive, so a struct literal, including
+functional record update, is rejected outside `hunyi` while field inspection remains available.
+
+#### Scenario: External construction and inspection
+
+- **WHEN** an external crate imports `tianheng::prelude::*` and `tianheng::SemanticBoundaries`
+  to construct a semantic boundary bundle
+- **THEN** it can use `default()`, push a boundary into a public field, and inspect that field
+- **PINNED-BY** `semantic_boundaries_are_constructible_and_inspectable_from_tianheng`
+
 ### Requirement: The prelude supports reaction inspection
 
 `tianheng::prelude::*` SHALL expose the existing boundary, rule, baseline, report, violation, and

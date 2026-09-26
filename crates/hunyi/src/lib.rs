@@ -109,7 +109,28 @@ use crate::visibility::check_visibility_boundary;
 /// The 渾儀 (semantic) dimension's boundaries, gathered so the shell takes the dimension as
 /// one unit rather than one parameter per capability. Each field is one capability's
 /// boundaries; [`check_all`] evaluates every non-empty bundle with a single `cargo metadata` read.
+/// Construct it with [`Default::default`], then push into or assign its public fields.
+///
+/// ```
+/// use hunyi::SemanticBoundaries;
+///
+/// let mut boundaries = SemanticBoundaries::default();
+/// boundaries.signature.push(
+///     hunyi::SignatureBoundary::in_crate("app")
+///         .module("crate::api")
+///         .must_not_expose("crate::internal::Client")
+///         .because("the API owns its vocabulary"),
+/// );
+/// assert_eq!(boundaries.signature.len(), 1);
+/// ```
+///
+/// ```compile_fail,E0639
+/// use hunyi::SemanticBoundaries;
+///
+/// let _ = SemanticBoundaries { ..Default::default() };
+/// ```
 #[derive(Debug, Clone, Default)]
+#[non_exhaustive]
 pub struct SemanticBoundaries {
     /// Exposure boundaries (`semantic-signature-coupling`).
     pub signature: Vec<SignatureBoundary>,
