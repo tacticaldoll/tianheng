@@ -96,8 +96,8 @@ fn mixed_auto_trait_operand_is_a_constitution_error() {
     );
 }
 
-fn assert_qualified_auto_trait_operand_is_refused(operand: &str) {
-    let tree = TempSrcTree::new("qualified-auto-operand");
+fn assert_qualified_auto_trait_operand_is_refused(operand: &str, label: &str) {
+    let tree = TempSrcTree::new(label);
     tree.write("lib.rs", "pub mod m;\n");
     tree.write("m.rs", "pub fn f() -> impl Send { todo!() }\n");
     let boundary = ImplTraitBoundary::in_crate("x")
@@ -113,17 +113,23 @@ fn assert_qualified_auto_trait_operand_is_refused(operand: &str) {
 
 #[test]
 fn qualified_std_auto_trait_operand_is_a_constitution_error() {
-    assert_qualified_auto_trait_operand_is_refused("std::marker::Sync");
+    assert_qualified_auto_trait_operand_is_refused(
+        "std::marker::Sync",
+        "qualified-std-auto-operand",
+    );
 }
 
 #[test]
 fn qualified_local_auto_trait_leaf_is_a_constitution_error() {
-    assert_qualified_auto_trait_operand_is_refused("crate::ports::Send");
+    assert_qualified_auto_trait_operand_is_refused(
+        "crate::ports::Send",
+        "qualified-local-auto-operand",
+    );
 }
 
 #[test]
 fn raw_auto_trait_leaf_is_a_constitution_error() {
-    assert_qualified_auto_trait_operand_is_refused("r#Send");
+    assert_qualified_auto_trait_operand_is_refused("r#Send", "raw-auto-operand");
 }
 
 #[test]
