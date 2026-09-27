@@ -78,6 +78,36 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
+                "semantic-dyn-trait-operand-boundary/a-local-trait-sharing-an-auto-trait-leaf-name-over-reacts-as-a-dyn-auto-bound-a-stated-bound",
+            ),
+            "an exposed dyn Trait whose bound is a local trait sharing an auto-trait leaf name",
+            Extent::Reached(Reached::OverReacts {
+                because: "auto-trait bounds are identified by leaf name without symbol resolution, so a local trait sharing an auto-trait name reacts as that auto trait".into(),
+            }),
+            "dyn_trait_local_auto_trait_leaf_over_reacts_is_a_bound",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "semantic-dyn-trait-operand-boundary/a-macro-generated-dyn-auto-bound-is-a-documented-bound",
+            ),
+            "a dyn auto bound appearing only in a macro's expansion, with no dyn token in the source",
+            Extent::OutOfReach {
+                because: "macros are not expanded, so a trait object introduced only by macro expansion is not observed".into(),
+            },
+            "dyn_macro_generated_auto_bound_is_a_bound",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "semantic-dyn-trait-operand-boundary/a-private-alias-hiding-a-dyn-auto-bound-in-a-public-position-is-a-stated-bound",
+            ),
+            "a non-public type alias holding a dyn with auto bounds, named by a public signature",
+            Extent::OutOfReach {
+                because: "the resolver does not expand type aliases, so the dyn is never seen from the public position that exposes it".into(),
+            },
+            "dyn_private_alias_hiding_auto_bound_is_a_bound",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
                 "semantic-forbidden-marker/an-unresolvable-hand-impl-self-type-is-a-documented-bound",
             ),
             "a hand-written impl whose self-type arrives through a glob import",
@@ -98,6 +128,26 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                           not over-reached".into(),
             },
             "impl_trait_operand_genuinely_unresolvable_bare_principal_is_a_bound",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "semantic-impl-trait-operand-boundary/a-local-trait-sharing-an-auto-trait-leaf-name-over-reacts-as-an-impl-auto-bound-a-stated-bound",
+            ),
+            "a returned impl Trait whose bound is a local trait sharing an auto-trait leaf name",
+            Extent::Reached(Reached::OverReacts {
+                because: "auto-trait bounds are identified by leaf name without symbol resolution, so a local trait sharing an auto-trait name reacts as that auto trait".into(),
+            }),
+            "impl_trait_local_auto_trait_leaf_over_reacts_is_a_bound",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "semantic-impl-trait-operand-boundary/a-macro-generated-impl-trait-auto-bound-is-a-documented-bound",
+            ),
+            "an impl trait auto bound appearing only in a macro's expansion, with no impl trait in the source",
+            Extent::OutOfReach {
+                because: "macros are not expanded, so a return-position impl trait introduced only by macro expansion is not observed".into(),
+            },
+            "impl_trait_macro_generated_auto_bound_is_a_bound",
         ),
         BoundDecl::pinned(
             BoundId::new("semantic-reexport-exposure/an-underscore-rename-is-a-documented-bound"),

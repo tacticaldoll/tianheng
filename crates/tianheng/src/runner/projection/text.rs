@@ -164,7 +164,11 @@ pub(in crate::runner) fn dyn_trait_text(boundaries: &[DynTraitBoundary]) -> Stri
             .map(|b| ModuleBlockSpec {
                 severity: b.severity().as_str(),
                 target: format!("module {} in {}", b.module(), b.crate_package()),
-                rule_line: shape_rule_text(DYN_TRAIT_RULE, b.forbidden_operands()),
+                rule_line: shape_rule_text(
+                    DYN_TRAIT_RULE,
+                    b.forbidden_operands(),
+                    b.forbidden_auto_bounds(),
+                ),
                 reason: b.reason(),
                 anchor: b.anchor(),
             })
@@ -174,11 +178,17 @@ pub(in crate::runner) fn dyn_trait_text(boundaries: &[DynTraitBoundary]) -> Stri
 /// The text rule line for a shape/existential boundary: the bare shape rule when shape-only, or
 /// `… of: A, B` when operand-scoped — so `list --format text` surfaces the operand set the JSON
 /// and markdown projections already carry (parity across the three `list` formats).
-pub(in crate::runner) fn shape_rule_text(rule: &str, operands: &[String]) -> String {
-    if operands.is_empty() {
-        rule.to_string()
-    } else {
+pub(in crate::runner) fn shape_rule_text(
+    rule: &str,
+    operands: &[String],
+    auto_bounds: &[String],
+) -> String {
+    if !operands.is_empty() {
         format!("{rule} of: {}", operands.join(", "))
+    } else if !auto_bounds.is_empty() {
+        format!("{rule} bounded by: {}", auto_bounds.join(", "))
+    } else {
+        rule.to_string()
     }
 }
 pub(in crate::runner) fn impl_trait_text(boundaries: &[ImplTraitBoundary]) -> String {
@@ -197,7 +207,11 @@ pub(in crate::runner) fn impl_trait_text(boundaries: &[ImplTraitBoundary]) -> St
                     target: format!("module {} in {}", b.module(), b.crate_package()),
                     rule_line: format!(
                         "{}{}",
-                        shape_rule_text(IMPL_TRAIT_RULE, b.forbidden_operands()),
+                        shape_rule_text(
+                            IMPL_TRAIT_RULE,
+                            b.forbidden_operands(),
+                            b.forbidden_auto_bounds(),
+                        ),
                         scope
                     ),
                     reason: b.reason(),

@@ -118,6 +118,84 @@ pub(crate) fn validate_exposed_trait_operands(
     Ok(())
 }
 
+/// Validate and normalize auto-trait bounds for dyn/impl-trait boundaries.
+///
+/// An operand set must be non-empty and well-formed (no empty path segments).
+/// Each entry must name one of the five std auto traits (`Send`, `Sync`, `Unpin`,
+/// `UnwindSafe`, `RefUnwindSafe`), either bare, or qualified with `std::marker::` or
+/// `core::marker::`. Any other path is rejected with an exit-2 constitution error.
+///
+/// Returns the normalized, deduplicated, sorted leaf names (e.g. `["Send"]`).
+pub(crate) fn auto_bound_leaves<'a>(
+    bounds: impl IntoIterator<Item = &'a (impl AsRef<str> + 'a)>,
+    boundary_kind: &str,
+) -> Result<std::collections::BTreeSet<String>, String> {
+    let mut leaves = std::collections::BTreeSet::new();
+    let mut any = false;
+
+    for raw in bounds {
+        any = true;
+        let s = raw.as_ref();
+        if has_empty_path_segment(s) {
+            return Err(crate::errors::malformed_path_operand_error(s));
+        }
+        let segs: Vec<&str> = s.split("::").collect();
+        let leaf = match segs.as_slice() {
+            [bare] => {
+                let stripped = strip_raw(bare);
+                if shape::is_auto_trait_leaf(&stripped) {
+                    stripped
+                } else {
+                    return Err(crate::errors::unrecognized_auto_trait_error(
+                        s,
+                        boundary_kind,
+                    ));
+                }
+            }
+            [p1, p2, leaf] => {
+                let p1 = strip_raw(p1);
+                let p2 = strip_raw(p2);
+                let stripped_leaf = strip_raw(leaf);
+                if (p1 == "std" || p1 == "core")
+                    && p2 == "marker"
+                    && shape::is_auto_trait_leaf(&stripped_leaf)
+                {
+                    stripped_leaf
+                } else {
+                    return Err(crate::errors::unrecognized_auto_trait_error(
+                        s,
+                        boundary_kind,
+                    ));
+                }
+            }
+            _ => {
+                return Err(crate::errors::unrecognized_auto_trait_error(
+                    s,
+                    boundary_kind,
+                ));
+            }
+        };
+        leaves.insert(leaf);
+    }
+
+    if !any {
+        return Err(crate::errors::empty_auto_bound_error(boundary_kind));
+    }
+
+    Ok(leaves)
+}
+
+/// Whether an exposure's auto traits contain any of the forbidden auto bound leaves.
+pub(crate) fn exposure_matches_auto_bounds(
+    exposure: &ShapeExposure,
+    forbidden_leaves: &std::collections::BTreeSet<String>,
+) -> bool {
+    exposure
+        .auto_traits
+        .iter()
+        .any(|t| forbidden_leaves.contains(t.as_str()))
+}
+
 /// Map each name a `use` brings into the module's scope to its full written path
 /// (`use a::b::C` → `C → a::b::C`; `use a::b::C as D` → `D → a::b::C`; `use a::b` →
 /// `b → a::b`). Glob imports bring no nameable leaf (a stated bound). Only the module's

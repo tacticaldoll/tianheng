@@ -1688,6 +1688,7 @@ mod fact_tests {
             ShapeExposure {
                 shape: "dyn Port".into(),
                 principals: Vec::new(),
+                auto_traits: Vec::new(),
                 seam: None,
             },
             ExposureKind::DynTrait,

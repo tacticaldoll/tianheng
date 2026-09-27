@@ -2,6 +2,15 @@
 
 use xuanji::{RuleKey, Severity};
 
+/// The target matching policy of a dyn-trait boundary: shape-only, principal-trait operand-scoped,
+/// or auto-trait bound-scoped.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum DynTraitTarget {
+    Any,
+    Principal(Vec<String>),
+    AutoBounds(Vec<String>),
+}
+
 /// A dyn-trait boundary: a module's public API must not **expose** trait-object (`dyn`)
 /// syntax. The type-shape complement of [`SignatureBoundary`] (signature-coupling): where
 /// that forbids an exposed *named type*, this forbids an exposed *type shape* — a `dyn`
@@ -10,20 +19,20 @@ use xuanji::{RuleKey, Severity};
 /// intent (by anchor scoping), not a lint. Declared in Rust and composed with the other
 /// dimensions at the gate.
 ///
-/// Two depths on one boundary type, selected by the builder:
+/// Three policies on one boundary type, selected by the builder:
 /// - [`must_not_expose_dyn`](DynTraitModuleDraft::must_not_expose_dyn) — **shape-only**: an
 ///   empty operand set, so *any* exposed `dyn` reacts.
 /// - [`must_not_expose_dyn_of`](DynTraitModuleDraft::must_not_expose_dyn_of) — **operand-scoped**:
 ///   only a `dyn` whose principal trait resolves into the named `forbidden_operands` set reacts.
+/// - [`must_not_expose_dyn_bounded_by`](DynTraitModuleDraft::must_not_expose_dyn_bounded_by) —
+///   **auto-bound-scoped**: only a `dyn` whose own bounds carry one of the named auto traits reacts.
 ///
 /// [`SignatureBoundary`]: crate::SignatureBoundary
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DynTraitBoundary {
     pub(crate) crate_package: String,
     pub(crate) module: String,
-    /// The forbidden trait operands. **Empty ⇒ shape-only** (any `dyn` reacts); a named set ⇒
-    /// only a `dyn` whose principal trait canonicalizes into the set reacts.
-    pub(crate) forbidden_operands: Vec<String>,
+    pub(crate) target: DynTraitTarget,
     pub(crate) reason: String,
     pub(crate) anchor: Option<String>,
     pub(crate) severity: Severity,
@@ -32,13 +41,35 @@ pub struct DynTraitBoundary {
 impl DynTraitBoundary {
     /// Stable semantic identity for this dyn-trait exposure rule.
     pub fn rule_key(&self) -> RuleKey {
-        RuleKey::of(
-            "tianheng.rule/hunyi/dyn-trait-exposure",
-            [(
-                "forbidden_operands",
-                super::canonical_path_set(&self.forbidden_operands),
-            )],
-        )
+        match &self.target {
+            DynTraitTarget::Any => RuleKey::of(
+                "tianheng.rule/hunyi/dyn-trait-exposure",
+                [("forbidden_operands", "[]".to_string())],
+            ),
+            DynTraitTarget::Principal(operands) => RuleKey::of(
+                "tianheng.rule/hunyi/dyn-trait-exposure",
+                [("forbidden_operands", super::canonical_path_set(operands))],
+            ),
+            DynTraitTarget::AutoBounds(bounds) => {
+                let leaves =
+                    crate::resolve::auto_bound_leaves(bounds, "dyn-trait").unwrap_or_else(|_| {
+                        bounds
+                            .iter()
+                            .map(|b| {
+                                crate::resolve::strip_raw(
+                                    b.rsplit_once("::").map_or(b.as_str(), |(_, leaf)| leaf),
+                                )
+                            })
+                            .collect()
+                    });
+                let json = serde_json::to_string(&leaves.into_iter().collect::<Vec<_>>())
+                    .expect("serialized leaves");
+                RuleKey::of(
+                    "tianheng.rule/hunyi/dyn-trait-auto-bound",
+                    [("forbidden_auto_bounds", json)],
+                )
+            }
+        }
     }
 
     /// Begin a dyn-trait boundary in the crate named `package`.
@@ -53,10 +84,21 @@ impl DynTraitBoundary {
         &self.module
     }
 
-    /// The forbidden trait operands. Empty ⇒ shape-only (any `dyn` reacts); a named set ⇒
+    /// The forbidden trait operands. Empty ⇒ shape-only or auto-bound; a named set ⇒
     /// only a `dyn` whose principal trait resolves into the set reacts.
     pub fn forbidden_operands(&self) -> &[String] {
-        &self.forbidden_operands
+        match &self.target {
+            DynTraitTarget::Principal(operands) => operands,
+            _ => &[],
+        }
+    }
+
+    /// The forbidden auto-trait bounds.
+    pub fn forbidden_auto_bounds(&self) -> &[String] {
+        match &self.target {
+            DynTraitTarget::AutoBounds(bounds) => bounds,
+            _ => &[],
+        }
     }
 
     /// The human-readable reason recorded with the boundary (the repair hint).
@@ -97,7 +139,7 @@ impl DynTraitModuleDraft {
         DynTraitBoundaryDraft {
             crate_package: self.crate_package,
             module: self.module,
-            forbidden_operands: Vec::new(),
+            target: DynTraitTarget::Any,
             severity: Severity::Enforce,
         }
     }
@@ -127,7 +169,22 @@ impl DynTraitModuleDraft {
         DynTraitBoundaryDraft {
             crate_package: self.crate_package,
             module: self.module,
-            forbidden_operands: operands.into_iter().map(Into::into).collect(),
+            target: DynTraitTarget::Principal(operands.into_iter().map(Into::into).collect()),
+            severity: Severity::Enforce,
+        }
+    }
+
+    /// Forbid the module's public API from exposing a `dyn` trait object carrying any of the
+    /// named **auto-trait bounds** (e.g. `Send`, `Sync`).
+    pub fn must_not_expose_dyn_bounded_by<I, S>(self, bounds: I) -> DynTraitBoundaryDraft
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        DynTraitBoundaryDraft {
+            crate_package: self.crate_package,
+            module: self.module,
+            target: DynTraitTarget::AutoBounds(bounds.into_iter().map(Into::into).collect()),
             severity: Severity::Enforce,
         }
     }
@@ -138,7 +195,7 @@ impl DynTraitModuleDraft {
 pub struct DynTraitBoundaryDraft {
     crate_package: String,
     module: String,
-    forbidden_operands: Vec<String>,
+    pub(crate) target: DynTraitTarget,
     severity: Severity,
 }
 
@@ -148,7 +205,7 @@ impl DynTraitBoundaryDraft {
         DynTraitBoundary {
             crate_package: self.crate_package,
             module: self.module,
-            forbidden_operands: self.forbidden_operands,
+            target: self.target,
             reason: reason.to_string(),
             anchor: None,
             severity: self.severity,

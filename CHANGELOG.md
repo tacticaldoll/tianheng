@@ -33,7 +33,10 @@ them.
 
 ### Semantic
 
-- **BREAKING** — **Dyn-trait and impl-trait operand boundaries reject auto-trait operands as constitution errors.** `must_not_expose_dyn_of` and `must_not_expose_impl_trait_of` now exit 2 when any forbidden operand has an auto-trait leaf, including a qualified spelling or an entry beside valid operands. These entries could not match: the observer removes auto-trait bounds before principal-trait resolution. The impl-trait rule applies equally with `including_submodules()`; `must_not_acquire("Send")` remains legal and reacts to an acquisition.
+- **BREAKING** — **Dyn-trait and impl-trait operand boundaries reject auto-trait operands as constitution errors.** `must_not_expose_dyn_of` and `must_not_expose_impl_trait_of` now exit 2 when any forbidden operand has an auto-trait leaf, including a qualified spelling or an entry beside valid operands. These entries could not match: the observer removes auto-trait bounds before principal-trait resolution. The error message directs the author to `must_not_expose_dyn_bounded_by` or `must_not_expose_impl_trait_bounded_by` (or to remove the entry). The impl-trait rule applies equally with `including_submodules()`; `must_not_acquire("Send")` remains legal and reacts to an acquisition.
+
+- **Auto-trait bound governance for returned impl Trait and dyn Trait: `must_not_expose_impl_trait_bounded_by` and `must_not_expose_dyn_bounded_by`.**
+  Adopters can now forbid specific auto-trait bounds (`Send`, `Sync`, `Unpin`, `UnwindSafe`, `RefUnwindSafe`) on returned `impl Trait` and exposed `dyn Trait` without blanket-forbidding all existential or dynamic dispatch returns. Bounded by leaf-name matching (`OverReacts`), macro expansion (`OutOfReach`), and private aliases for dyn (`OutOfReach`). Emits findings under `tianheng.rule/hunyi/impl-trait-auto-bound` and `tianheng.rule/hunyi/dyn-trait-auto-bound`, reusing existing exposure facts (`DenyBreach`) and projecting through `list` with `forbidden_auto_bounds`.
 
 - **BREAKING** — **渾儀 can hold a module to re-exports only: `ReexportOnlyBoundary`, carried in a new
   `reexport_only` field of `SemanticBoundaries`.** `ReexportOnlyBoundary::in_crate(p).module(m)
@@ -59,7 +62,7 @@ them.
 
 ### Migration
 
-- Remove auto-trait entries such as `Send` from `must_not_expose_dyn_of` and `must_not_expose_impl_trait_of` operand sets.
+- Remove auto-trait entries such as `Send` from `must_not_expose_dyn_of` and `must_not_expose_impl_trait_of` operand sets, or migrate to `must_not_expose_dyn_bounded_by` / `must_not_expose_impl_trait_bounded_by`.
 
 - Construct `SemanticBoundaries` with `SemanticBoundaries::default()` and assign or push into its
   public fields. A struct literal, including `..Default::default()`, does not compile outside `hunyi`.

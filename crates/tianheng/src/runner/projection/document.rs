@@ -165,7 +165,7 @@ fn subtree_scoped(mut object: Value, scan_depth: ScanDepth) -> Value {
 /// `target`, `crate`, `rule`, `severity`, `reason`). An operand-scoped boundary additionally
 /// carries the `forbidden` operand set; a shape-only boundary (empty set) emits no such field.
 pub(in crate::runner) fn dyn_trait_boundary_json(boundary: &DynTraitBoundary) -> Value {
-    shape_operand_boundary_json(
+    let mut object = shape_operand_boundary_json(
         boundary.module(),
         boundary.crate_package(),
         DYN_TRAIT_RULE,
@@ -173,21 +173,26 @@ pub(in crate::runner) fn dyn_trait_boundary_json(boundary: &DynTraitBoundary) ->
         boundary.reason(),
         boundary.anchor(),
         boundary.forbidden_operands(),
-    )
+    );
+    if !boundary.forbidden_auto_bounds().is_empty() {
+        object["forbidden_auto_bounds"] = serde_json::json!(boundary.forbidden_auto_bounds());
+    }
+    object
 }
 pub(in crate::runner) fn impl_trait_boundary_json(boundary: &ImplTraitBoundary) -> Value {
-    subtree_scoped(
-        shape_operand_boundary_json(
-            boundary.module(),
-            boundary.crate_package(),
-            IMPL_TRAIT_RULE,
-            boundary.severity().as_str(),
-            boundary.reason(),
-            boundary.anchor(),
-            boundary.forbidden_operands(),
-        ),
-        boundary.scan_depth(),
-    )
+    let mut object = shape_operand_boundary_json(
+        boundary.module(),
+        boundary.crate_package(),
+        IMPL_TRAIT_RULE,
+        boundary.severity().as_str(),
+        boundary.reason(),
+        boundary.anchor(),
+        boundary.forbidden_operands(),
+    );
+    if !boundary.forbidden_auto_bounds().is_empty() {
+        object["forbidden_auto_bounds"] = serde_json::json!(boundary.forbidden_auto_bounds());
+    }
+    subtree_scoped(object, boundary.scan_depth())
 }
 pub(in crate::runner) fn async_exposure_boundary_json(boundary: &AsyncExposureBoundary) -> Value {
     subtree_scoped(

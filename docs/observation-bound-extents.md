@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**60 of 112 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**60 of 117 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -162,7 +162,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_plain_fn_directly_in_a_const_body_stays_a_stated_bound`
 
-## out of reach (25)
+## out of reach (28)
 
 ### `external-crate-confinement/a-confined-crate-use-inside-a-string-or-macro-body-is-not-observed-a-stated-bound`
 
@@ -276,6 +276,22 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `dyn_operand_genuinely_unresolvable_bare_principal_is_a_bound`
 
+### `semantic-dyn-trait-operand-boundary/a-macro-generated-dyn-auto-bound-is-a-documented-bound`
+
+> a dyn auto bound appearing only in a macro's expansion, with no dyn token in the source
+
+- **because**: macros are not expanded, so a trait object introduced only by macro expansion is not observed
+- **its defence must show**: does not react
+- **pinned by**: `dyn_macro_generated_auto_bound_is_a_bound`
+
+### `semantic-dyn-trait-operand-boundary/a-private-alias-hiding-a-dyn-auto-bound-in-a-public-position-is-a-stated-bound`
+
+> a non-public type alias holding a dyn with auto bounds, named by a public signature
+
+- **because**: the resolver does not expand type aliases, so the dyn is never seen from the public position that exposes it
+- **its defence must show**: does not react
+- **pinned by**: `dyn_private_alias_hiding_auto_bound_is_a_bound`
+
 ### `semantic-forbidden-marker/an-unresolvable-hand-impl-self-type-is-a-documented-bound`
 
 > a hand-written impl whose self-type arrives through a glob import
@@ -291,6 +307,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the same resolver limit as the `dyn` operand dimension — a single bare segment is not over-reached
 - **its defence must show**: does not react
 - **pinned by**: `impl_trait_operand_genuinely_unresolvable_bare_principal_is_a_bound`
+
+### `semantic-impl-trait-operand-boundary/a-macro-generated-impl-trait-auto-bound-is-a-documented-bound`
+
+> an impl trait auto bound appearing only in a macro's expansion, with no impl trait in the source
+
+- **because**: macros are not expanded, so a return-position impl trait introduced only by macro expansion is not observed
+- **its defence must show**: does not react
+- **pinned by**: `impl_trait_macro_generated_auto_bound_is_a_bound`
 
 ### `semantic-reexport-exposure/a-non-forbidden-root-external-glob-is-a-documented-bound`
 
@@ -364,7 +388,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_macro_invocation_pub_item_is_a_documented_bound`
 
-## over-reacts (16)
+## over-reacts (18)
 
 ### `crate-dependency-boundary/an-optional-dependency-edge-is-observed-as-a-declared-one-a-stated-bound`
 
@@ -477,6 +501,22 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the check reads the `because` for the literal clause, so a reason that genuinely states the law in other words is refused; the direction is the safe one and closing it needs the check to decide two wordings state one law
 - **its defence must show**: reacts on a harmless shape
 - **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence check*
+
+### `semantic-dyn-trait-operand-boundary/a-local-trait-sharing-an-auto-trait-leaf-name-over-reacts-as-a-dyn-auto-bound-a-stated-bound`
+
+> an exposed dyn Trait whose bound is a local trait sharing an auto-trait leaf name
+
+- **because**: auto-trait bounds are identified by leaf name without symbol resolution, so a local trait sharing an auto-trait name reacts as that auto trait
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `dyn_trait_local_auto_trait_leaf_over_reacts_is_a_bound`
+
+### `semantic-impl-trait-operand-boundary/a-local-trait-sharing-an-auto-trait-leaf-name-over-reacts-as-an-impl-auto-bound-a-stated-bound`
+
+> a returned impl Trait whose bound is a local trait sharing an auto-trait leaf name
+
+- **because**: auto-trait bounds are identified by leaf name without symbol resolution, so a local trait sharing an auto-trait name reacts as that auto trait
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `impl_trait_local_auto_trait_leaf_over_reacts_is_a_bound`
 
 ### `semantic-visibility-boundary/a-pub-in-narrow-path-item-may-over-react-under-a-tight-ceiling-a-stated-bound`
 
