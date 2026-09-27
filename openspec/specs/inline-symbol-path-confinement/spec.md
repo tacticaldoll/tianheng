@@ -322,8 +322,11 @@ a stated bound. Each bound is a declared non-observation, not a silent pass on a
 
 A misdeclared boundary SHALL react with exit 2 (constitution error), never a silent no-op: an
 empty prefix; an empty verb set passed to `.ending_with([])`; the contradictory
-`.ending_with(…).strict_prefix_only()` combination; and a governed subtree anchor that resolves
-to no reachable module. A governed source file that exists but cannot be read SHALL likewise be a
+`.ending_with(…).strict_prefix_only()` combination; a governed subtree anchor that resolves
+to no reachable module; and a governed subtree anchor — the judged module of `must_not_call_inline`
+or the permitted module of `confine_inline_call` — written in any spelling but the canonical module
+path `module-boundary` states. The confined prefix is not a module of the crate and is not held to
+that spelling. A governed source file that exists but cannot be read SHALL likewise be a
 scan error (exit 2), never silently skipped. In contrast, a **valid** prefix that matches no
 inline call in a resolvable subtree is **clean** (exit 0), not an error — a confinement with zero
 findings is a passing reaction, exactly as a never-imported confined crate is clean under
@@ -332,6 +335,11 @@ findings is a passing reaction, exactly as a never-imported confined crate is cl
 #### Scenario: An empty prefix is a constitution error
 - **WHEN** a boundary declares `.must_not_call_inline("")`
 - **THEN** the system reacts with exit 2 (a misdeclaration), never a silent match-everything or match-nothing
+
+#### Scenario: A non-canonical governed subtree anchor is a constitution error
+- **WHEN** a boundary declares `.module("core").must_not_call_inline("std::time")`, or `.module("r#crate::exec").confine_inline_call("std::process::Command")`, over a crate declaring `crate::core` and `crate::exec`
+- **THEN** the system reacts with exit 2, quoting the written anchor and suggesting `crate::core` or `crate::exec`
+- **PINNED-BY** `every_module_path_role_refuses_a_non_canonical_spelling`
 
 #### Scenario: A valid confinement with no matching call is clean
 - **WHEN** a boundary confines `std::time` on `crate::core` and `crate::core` makes no inline call resolving under `std::time`

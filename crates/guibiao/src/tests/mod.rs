@@ -4,5 +4,6 @@ mod feature_rules;
 mod helpers;
 mod inbound_boundary;
 mod module_boundary;
+mod module_path;
 mod rule_model;
 mod symbol_confinement;

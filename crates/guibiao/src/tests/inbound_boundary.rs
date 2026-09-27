@@ -103,7 +103,10 @@ pub(super) fn must_only_be_imported_by_does_not_admit_a_prefix_colliding_sibling
     let (result, violations) = run_module_check(
         "only-prefix",
         &[
-            ("lib.rs", "pub mod internal;\npub mod facadex;\n"),
+            (
+                "lib.rs",
+                "pub mod facade {}\npub mod internal;\npub mod facadex;\n",
+            ),
             ("internal.rs", "// protected\n"),
             ("facadex.rs", "use crate::internal::Secret;\n"),
         ],
@@ -122,7 +125,7 @@ pub(super) fn must_only_be_imported_by_never_flags_the_protected_subtree() {
     let (result, violations) = run_module_check(
         "only-own-subtree",
         &[
-            ("lib.rs", "pub mod internal;\n"),
+            ("lib.rs", "pub mod facade {}\npub mod internal;\n"),
             ("internal.rs", "pub mod deep;\n"),
             ("internal/deep.rs", "use crate::internal::Secret;\n"),
         ],
@@ -177,7 +180,10 @@ pub(super) fn must_only_be_imported_by_ignores_external_imports() {
     let (result, violations) = run_module_check(
         "only-external",
         &[
-            ("lib.rs", "pub mod internal;\npub mod consumer;\n"),
+            (
+                "lib.rs",
+                "pub mod facade {}\npub mod internal;\npub mod consumer;\n",
+            ),
             ("internal.rs", "// protected\n"),
             ("consumer.rs", "use serde::Deserialize;\n"),
         ],

@@ -1623,7 +1623,7 @@ pub(super) fn inline_strict_external_default_path_module_attribution_unshifted()
 #[test]
 pub(super) fn scan_depth_shallow_vs_subtree_evaluates_submodule_matching() {
     let files = &[
-        ("lib.rs", "pub mod core;\n"),
+        ("lib.rs", "pub mod forbidden_on_sub {}\npub mod core;\n"),
         ("core.rs", "pub mod sub;\nuse crate::forbidden_on_core;\n"),
         ("core/sub.rs", "use crate::forbidden_on_sub;\n"),
     ];
@@ -1720,7 +1720,10 @@ pub(super) fn shallow_restrict_imports_to_ignores_descendant_imports() {
 #[test]
 pub(super) fn shallow_inbound_rules_protect_only_the_exact_module() {
     let files = &[
-        ("lib.rs", "pub mod protected;\npub mod client;\n"),
+        (
+            "lib.rs",
+            "pub mod facade {}\npub mod protected;\npub mod client;\n",
+        ),
         ("protected.rs", "pub mod detail;\n"),
         ("protected/detail.rs", "pub struct Item;\n"),
         ("client.rs", "use crate::protected::detail::Item;\n"),
@@ -1784,7 +1787,10 @@ pub(super) fn shallow_inbound_rules_react_to_an_item_import_of_the_anchored_modu
     // not exempt it. A lexical string comparison of the full import path against the anchored
     // module conflates the two cases; this regression pins the anchored one distinctly.
     let files = &[
-        ("lib.rs", "pub mod protected;\npub mod client;\n"),
+        (
+            "lib.rs",
+            "pub mod facade {}\npub mod protected;\npub mod client;\n",
+        ),
         ("protected.rs", "pub struct Secret;\n"),
         ("client.rs", "use crate::protected::Secret;\n"),
     ];
@@ -1829,7 +1835,7 @@ pub(super) fn shallow_inbound_rules_never_flag_the_protected_modules_own_descend
     // Subtree — otherwise fixing the target-match precision (the item-import false negative)
     // would introduce a false positive here instead.
     let files = &[
-        ("lib.rs", "pub mod protected;\n"),
+        ("lib.rs", "pub mod facade {}\npub mod protected;\n"),
         ("protected.rs", "pub mod detail;\npub struct Secret;\n"),
         ("protected/detail.rs", "use crate::protected::Secret;\n"),
     ];
@@ -1890,7 +1896,10 @@ pub(super) fn shallow_inbound_target_match_observes_the_value_namespace() {
     // `use protected::child;`, module-only) passing unchanged. The narrow false negative is closed
     // without buying the broad false positive that reacting on both readings would have cost.
     let files = &[
-        ("lib.rs", "pub mod protected;\npub mod consumer;\n"),
+        (
+            "lib.rs",
+            "pub mod facade {}\npub mod protected;\npub mod consumer;\n",
+        ),
         ("protected.rs", "pub mod foo;\npub fn foo() -> u8 { 7 }\n"),
         ("protected/foo.rs", "pub const INSIDE: u8 = 1;\n"),
         ("consumer.rs", "use crate::protected::foo;\n"),
@@ -1950,7 +1959,7 @@ pub(super) fn shallow_inbound_rules_do_not_read_a_file_the_self_import_exemption
         "}".repeat(200)
     );
     let files = &[
-        ("lib.rs", "pub mod protected;\n"),
+        ("lib.rs", "pub mod facade {}\npub mod protected;\n"),
         ("protected.rs", "pub mod detail;\npub struct Secret;\n"),
         ("protected/detail.rs", deep_use.as_str()),
     ];
@@ -2224,7 +2233,7 @@ pub(super) fn an_unterminated_block_comment_at_end_of_file_with_no_trailing_newl
     let (result, violations) = run_module_check(
         "unterminated-block-comment-eof",
         &[
-            ("lib.rs", "pub mod child;\n/*\u{7121}"),
+            ("lib.rs", "pub mod forbidden {}\npub mod child;\n/*\u{7121}"),
             ("child.rs", "use crate::forbidden::Thing;\n"),
             ("forbidden.rs", "pub struct Thing;\n"),
         ],

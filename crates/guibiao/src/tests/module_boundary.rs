@@ -65,7 +65,7 @@ pub(super) fn unreadable_governed_directory_is_a_scan_error() {
 #[test]
 pub(super) fn a_raw_identifier_module_is_governed_and_its_import_observed() {
     let ws = TempWorkspace::new("rawid");
-    ws.write("lib.rs", "pub mod r#type;\n");
+    ws.write("lib.rs", "pub mod r#type;\npub mod r#mod {}\n");
     ws.write("type.rs", "use crate::r#mod::Thing;\n");
 
     let metadata = ws.metadata("x");
@@ -93,7 +93,7 @@ pub(super) fn a_raw_identifier_module_is_governed_and_its_import_observed() {
 #[test]
 pub(super) fn module_boundary_uses_the_package_target_src_path() {
     let ws = TempWorkspace::new("custom-lib-path");
-    let root = ws.write_at("lib.rs", "pub mod kernel;\n");
+    let root = ws.write_at("lib.rs", "pub mod kernel;\npub mod io {}\n");
     ws.write_at("kernel.rs", "use crate::io::Sink;\n");
 
     let manifest = ws.dir().join("Cargo.toml");
@@ -138,7 +138,10 @@ pub(super) fn path_remapped_module_is_followed_not_governed_via_a_conventional_o
     let (result, violations) = run_module_check(
         "path-remap-boundary",
         &[
-            ("lib.rs", "#[path = \"weird.rs\"]\npub mod kernel;\n"),
+            (
+                "lib.rs",
+                "pub mod projection {}\n#[path = \"weird.rs\"]\npub mod kernel;\n",
+            ),
             ("weird.rs", "use crate::projection::Thing;\n"),
             ("kernel.rs", "use crate::projection::Wrong;\n"),
         ],
@@ -347,7 +350,7 @@ pub(super) fn a_file_backed_module_is_still_governed() {
     let (result, violations) = run_module_check(
         "file-backed",
         &[
-            ("lib.rs", "pub mod real;\n"),
+            ("lib.rs", "pub mod secret {}\npub mod real;\n"),
             ("real.rs", "use crate::secret::Thing;\n"),
         ],
         ModuleBoundary::in_crate("x")
@@ -373,7 +376,7 @@ pub(super) fn a_cfg_dual_declared_module_keeps_governing_its_conventional_file()
         &[
             (
                 "lib.rs",
-                "#[cfg(feature = \"k\")]\npub mod kernel;\n\
+                "pub mod secret {}\n#[cfg(feature = \"k\")]\npub mod kernel;\n\
                      #[cfg(not(feature = \"k\"))]\npub mod kernel { }\n",
             ),
             ("kernel.rs", "use crate::secret::Thing;\n"),
@@ -454,7 +457,7 @@ pub(super) fn a_cfg_gated_missing_plain_module_file_does_not_fail_an_unrelated_b
         &[
             (
                 "lib.rs",
-                "#[cfg(feature = \"absent\")]\npub mod child;\npub mod present;\n",
+                "pub mod forbidden {}\n#[cfg(feature = \"absent\")]\npub mod child;\npub mod present;\n",
             ),
             ("present.rs", "use crate::forbidden::Thing;\n"),
         ],
@@ -484,7 +487,7 @@ pub(super) fn a_missing_module_file_declared_inside_a_cfg_if_arm_is_tolerated() 
         &[
             (
                 "lib.rs",
-                "cfg_if::cfg_if! {\n\
+                "pub mod forbidden {}\ncfg_if::cfg_if! {\n\
                  if #[cfg(unix)] {\n\
                  pub mod unix_impl;\n\
                  } else {\n\
@@ -519,7 +522,7 @@ pub(super) fn an_arm_declared_module_whose_file_exists_is_still_governed() {
         &[
             (
                 "lib.rs",
-                "cfg_if::cfg_if! {\n\
+                "pub mod forbidden {}\ncfg_if::cfg_if! {\n\
                  if #[cfg(unix)] {\n\
                  pub mod unix_impl;\n\
                  } else {\n\
@@ -634,7 +637,7 @@ pub(super) fn a_missing_path_remap_target_declared_inside_a_cfg_if_arm_is_tolera
         &[
             (
                 "lib.rs",
-                "cfg_if::cfg_if! {\n\
+                "pub mod forbidden {}\ncfg_if::cfg_if! {\n\
                  if #[cfg(windows)] {\n\
                  #[path = \"windows_impl.rs\"]\n\
                  pub mod imp;\n\
@@ -722,7 +725,7 @@ pub(super) fn a_cfg_gated_unconditional_path_target_does_not_fail_an_unrelated_b
         &[
             (
                 "lib.rs",
-                "#[cfg(windows)]\n#[path = \"windows_impl.rs\"]\npub mod imp;\npub mod present;\n",
+                "pub mod forbidden {}\n#[cfg(windows)]\n#[path = \"windows_impl.rs\"]\npub mod imp;\npub mod present;\n",
             ),
             ("present.rs", "use crate::forbidden::Thing;\n"),
         ],
@@ -751,7 +754,7 @@ pub(super) fn a_cfg_gated_unconditional_path_target_is_tolerated_regardless_of_a
         &[
             (
                 "lib.rs",
-                "#[path = \"windows_impl.rs\"]\n#[cfg(windows)]\npub mod imp;\npub mod present;\n",
+                "pub mod forbidden {}\n#[path = \"windows_impl.rs\"]\n#[cfg(windows)]\npub mod imp;\npub mod present;\n",
             ),
             ("present.rs", "use crate::forbidden::Thing;\n"),
         ],
@@ -783,7 +786,7 @@ pub(super) fn a_cfg_attr_wrapped_path_is_recognized_as_a_remap() {
         &[
             (
                 "lib.rs",
-                "#[cfg_attr(unix, path = \"weird.rs\")]\npub mod foo;\n",
+                "pub mod forbidden {}\n#[cfg_attr(unix, path = \"weird.rs\")]\npub mod foo;\n",
             ),
             ("foo.rs", "use crate::forbidden::Y;\n"),
             ("weird.rs", "// the cfg(unix) remap target, clean\n"),
@@ -815,7 +818,7 @@ pub(super) fn restrict_imports_to_flags_an_import_outside_the_allowlist() {
     let (result, violations) = run_module_check(
         "restrict-outside",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod types {}\npub mod kernel;\n"),
             ("kernel.rs", "use crate::io::Sink;\n"),
         ],
         restrict_kernel_to_types("crate::kernel", &["crate::types"]),
@@ -833,7 +836,7 @@ pub(super) fn a_module_violation_carries_its_offending_file() {
     let (result, violations) = run_module_check(
         "module-file",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod types {}\npub mod kernel;\n"),
             ("kernel.rs", "use crate::io::Sink;\n"),
         ],
         restrict_kernel_to_types("crate::kernel", &["crate::types"]),
@@ -891,7 +894,7 @@ pub(super) fn restrict_imports_to_is_clean_within_the_allowlist() {
     let (result, violations) = run_module_check(
         "restrict-within",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod types {}\npub mod kernel;\n"),
             ("kernel.rs", "use crate::types::Id;\n"),
         ],
         restrict_kernel_to_types("crate::kernel", &["crate::types"]),
@@ -908,7 +911,7 @@ pub(super) fn restrict_imports_to_allows_the_governed_modules_own_subtree() {
     let (result, violations) = run_module_check(
         "restrict-ownsubtree",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod types {}\npub mod kernel;\n"),
             (
                 "kernel.rs",
                 "use crate::kernel;\nuse crate::kernel::detail::Thing;\nuse self::other::Thing2;\n",
@@ -942,7 +945,7 @@ pub(super) fn restrict_imports_to_does_not_treat_a_prefix_colliding_sibling_as_a
     let (result, violations) = run_module_check(
         "restrict-sibling",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod types {}\npub mod kernel;\n"),
             (
                 "kernel.rs",
                 "use crate::types::Id;\nuse crate::types_extra::Y;\n",
@@ -981,7 +984,7 @@ pub(super) fn restrict_imports_to_governs_a_super_reaching_outward_import() {
     let (result, violations) = run_module_check(
         "restrict-super",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod types {}\npub mod kernel;\n"),
             ("kernel.rs", "use super::other::Thing;\n"),
         ],
         restrict_kernel_to_types("crate::kernel", &["crate::types"]),
@@ -999,7 +1002,7 @@ pub(super) fn restrict_imports_to_canonicalizes_a_raw_identifier_allowlist_entry
     let (result, violations) = run_module_check(
         "restrict-rawid",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod r#type {}\npub mod kernel;\n"),
             ("kernel.rs", "use crate::r#type::Thing;\n"),
         ],
         restrict_kernel_to_types("crate::kernel", &["crate::r#type"]),
@@ -1029,7 +1032,7 @@ pub(super) fn restrict_imports_to_honors_warn_severity_and_its_distinct_label() 
     let (result, violations) = run_module_check(
         "restrict-warn",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod types {}\npub mod kernel;\n"),
             ("kernel.rs", "use crate::io::Sink;\n"),
         ],
         ModuleBoundary::in_crate("x")

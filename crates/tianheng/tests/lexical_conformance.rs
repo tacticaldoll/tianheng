@@ -50,7 +50,10 @@ fn louke_sees_a_real_probe(root: &Path) -> bool {
 }
 
 fn assert_both_agree(name: &str, body: &str, expect_real: bool) {
-    let fixture = TempFixture::new(name, body);
+    // 圭表 refuses a forbidden module the crate does not declare, so every fixture declares it,
+    // empty and ahead of the case's own lexical shape.
+    let body = format!("pub mod forbidden {{}}\n{body}");
+    let fixture = TempFixture::new(name, &body);
     let guibiao_outcome = guibiao_forbids_forbidden(name, fixture.manifest());
     let louke_sees_real = louke_sees_a_real_probe(fixture.lib());
 

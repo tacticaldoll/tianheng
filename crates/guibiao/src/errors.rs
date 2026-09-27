@@ -87,6 +87,59 @@ pub(crate) fn unknown_module_error(module: &str, crate_package: &str) -> String 
     )
 }
 
+/// A module path — a governed module, or a module a rule names — written in a spelling other than
+/// the canonical one. `suggestion` is the canonical spelling the written one most plausibly meant,
+/// when there is one.
+///
+/// Deliberate **verbatim** twin of hunyi's `non_canonical_module_anchor_error` (dimension split; a
+/// shared module would need a forbidden guibiao↔hunyi edge). The two copies MUST stay
+/// byte-identical — one spelling rule reads the same in either dimension.
+pub(crate) fn non_canonical_module_path_error(
+    written: &str,
+    crate_package: &str,
+    suggestion: Option<&str>,
+) -> String {
+    let repair = match suggestion {
+        Some("crate") => "write `crate` for the crate root".to_string(),
+        Some(spelling) => format!("write `{spelling}`"),
+        None => "write the module's path from the crate root, starting `crate::`".to_string(),
+    };
+    format!(
+        "a module is named by one spelling or it becomes two identities: '{written}' in crate \
+         '{crate_package}' is not `crate` or `crate::` followed by `::`-separated identifiers — \
+         {repair}"
+    )
+}
+
+/// A `must_not_import` or `must_not_be_imported_by` boundary naming a module that no compiled root
+/// of the crate declares: the edge it forbids can never be observed.
+pub(crate) fn unknown_forbidden_module_error(
+    module: &str,
+    crate_package: &str,
+    rule_method: &str,
+) -> String {
+    format!(
+        "a forbidden module must be a real module or the rule silently never reacts: `{rule_method}` \
+         names '{module}', which is not found among the reachable modules of crate \
+         '{crate_package}' (declared via `mod`) — check the path"
+    )
+}
+
+/// A `restrict_imports_to` or `must_only_be_imported_by` allowlist entry naming a module that no
+/// compiled root of the crate declares: the entry can never match, so every edge it was meant to
+/// permit is reported.
+pub(crate) fn unknown_allowed_module_error(
+    module: &str,
+    crate_package: &str,
+    rule_method: &str,
+) -> String {
+    format!(
+        "an allowed module must be a real module or it can never match: `{rule_method}` names \
+         '{module}', which is not found among the reachable modules of crate '{crate_package}' \
+         (declared via `mod`) — check the path"
+    )
+}
+
 /// A `restrict_imports_to` boundary targets the crate root `crate`, which has no
 /// outward internal edge.
 pub(crate) fn restrict_imports_to_on_crate_error(crate_package: &str) -> String {

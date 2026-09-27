@@ -109,6 +109,12 @@ them.
   the canonical `crate::…` spelling, and make sure it names a module the crate declares. Regenerate any
   baseline entry recorded under a non-canonical or `crate::r#…` target.
 
+- Rewrite every 圭表 module path — the module passed to `ModuleBoundary::…::module`, and each module named by
+  `must_not_import`, `must_not_be_imported_by`, `restrict_imports_to` and `must_only_be_imported_by` — in the
+  canonical `crate::…` spelling, naming a module some root of the crate declares. Address or baseline what a
+  repaired `must_not_import` or `must_not_be_imported_by` now reports, and regenerate a baseline entry recorded
+  under an allowlist that named no module.
+
 ### Static
 
 - **BREAKING** — **圭表 resolves `self` and `super` from their inline module for glob imports and ordinary
@@ -120,6 +126,26 @@ them.
   `inline-symbol-path-confinement/a-glob-reacts-to-any-alias-or-re-export-beneath-its-resolved-module-a-stated-bound`
   keeps its id and is narrowed to the remaining glob over-reaction: the glob may react to an alias beneath its
   resolved module even when it does not bring that alias name into scope.
+
+- **BREAKING** — **圭表 accepts a module path only in its canonical spelling, naming a module that exists.**
+  The rule 渾儀's module anchors follow, held by 圭表's own reading: a module path is `crate` or `crate::`
+  followed by `::`-separated identifiers, and any other spelling is a constitution error (exit 2) quoting what
+  was written and, where the text determines one, the canonical spelling to write. A module a rule names must
+  be declared via `mod` in some compiled root of the package. Three behaviours change:
+  - **`must_not_import` and `must_not_be_imported_by` could miss the edge they forbid.** The forbidden module
+    or importer was matched as written and never checked, so `kernel`, `self::kernel`, `crate::kernel::`,
+    `crate:: kernel` or a module the crate does not declare matched nothing, and a crate whose `crate::other`
+    imports `crate::kernel::K` exited 0 under `must_not_import("kernel")`. Each is now exit 2.
+  - **`restrict_imports_to` and `must_only_be_imported_by` over-reported.** An entry in any of those spellings,
+    or naming no module, could never match, so every edge it was written to permit was a violation (exit 1).
+    Each is now exit 2 naming the entry.
+  - **The governed module refuses every non-canonical spelling, with a suggestion.** Most were already exit 2
+    as an unknown module, and now say which spelling to write; `r#crate::kernel` was judged as
+    `crate::kernel` and is now exit 2, for the governed module and for a named module alike.
+
+  `crate::r#kernel` and `crate::kernel` remain one module and one identity. The inline-call prefix of
+  `must_not_call_inline` and `confine_inline_call`, and the crate name of `confine_external_crate`, are not
+  module paths of the crate and are unchanged.
 
 ## [0.7.1] - 2026-09-27
 
