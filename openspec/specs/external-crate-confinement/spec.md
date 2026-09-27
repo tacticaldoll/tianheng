@@ -60,9 +60,9 @@ The system SHALL scan every reachable file of every compiled root of the target 
 
 #### Scenario: A root that declares the permitted module itself is permitted there by module path, not file
 
-- **WHEN** a binary root declares a path-remapped `mod seam;` (for example,
-  `#[cfg_attr(unix, path = "bin_seam.rs")] mod seam;`) and `mod cli;`, the remapped `crate::seam` source
-  imports `brick`, and `crate::cli` also imports `brick`, under the confinement of `brick` to `crate::seam`
+- **WHEN** a binary root declares `#[path = "bin_seam.rs"] mod seam;` and `mod cli;`, the remapped
+  `crate::seam` source imports `brick`, and `crate::cli` also imports `brick`, under the confinement of
+  `brick` to `crate::seam`
 - **THEN** the remapped `crate::seam` import is clean and the `crate::cli` import reacts, because the
   permitted region is the module path declared by the root, not the conventional or physical source file
 - **PINNED-BY** `a_root_declaring_a_remapped_permitted_module_is_clean_by_module_path`

@@ -751,7 +751,7 @@ fn roots_that_each_declare_the_permitted_module_are_clean() {
 
 /// The permitted region follows the root's declared module path even when `#[path]` puts that module in a
 /// different file. This ordinary scenario has no mutation record: its negative proof is the single-engine
-/// mutation that ignores `#[path]`, after which neither root has a conventional `seam.rs` fallback and the
+/// mutation that ignores the plain `#[path]` attribute, after which neither root has a conventional `seam.rs` fallback and the
 /// permitted module is absent rather than silently clean.
 #[test]
 fn a_root_declaring_a_remapped_permitted_module_is_clean_by_module_path() {
@@ -759,14 +759,11 @@ fn a_root_declaring_a_remapped_permitted_module_is_clean_by_module_path() {
         "confineremapped",
         "",
         &[
-            (
-                "src/lib.rs",
-                "#[cfg_attr(unix, path = \"lib_seam.rs\")]\npub mod seam;\n",
-            ),
+            ("src/lib.rs", "#[path = \"lib_seam.rs\"]\npub mod seam;\n"),
             ("src/lib_seam.rs", "\n"),
             (
                 "src/main.rs",
-                "#[cfg_attr(unix, path = \"bin_seam.rs\")]\nmod seam;\nmod cli;\nfn main() {}\n",
+                "#[path = \"bin_seam.rs\"]\nmod seam;\nmod cli;\nfn main() {}\n",
             ),
             ("src/bin_seam.rs", "use brick::B;\n"),
             ("src/cli.rs", "use brick::B;\n"),
