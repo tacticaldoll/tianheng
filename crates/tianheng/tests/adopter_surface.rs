@@ -205,8 +205,9 @@ fn wildcard_prelude_is_the_external_adopter_contract() {
     assert_eq!(Polarity::DenyBreach.as_str(), "deny_breach");
 }
 
-/// Pins the external default-and-push construction contract, which also works without the attribute.
-/// The `compile_fail,E0639` doctest on `hunyi::SemanticBoundaries` guards `#[non_exhaustive]`.
+/// Pins the external default-and-push contract; this test also passes without `#[non_exhaustive]`.
+/// The `SemanticBoundaries` compile-fail doctest fails when that attribute is removed because its
+/// snippet then compiles. Its compiling sibling checks the same import and `Default` path.
 #[test]
 fn semantic_boundaries_are_constructible_and_inspectable_from_tianheng() {
     let mut boundaries = tianheng::SemanticBoundaries::default();

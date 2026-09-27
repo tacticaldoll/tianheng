@@ -39,8 +39,14 @@ external consumer SHALL be able to compose boundaries from all three instruments
 An external crate SHALL construct `SemanticBoundaries` with `Default::default()` and MAY assign
 or push into its public fields. The type SHALL be non-exhaustive, so a struct literal, including
 functional record update, is rejected outside `hunyi` while field inspection remains available.
-The compiler reports E0639 for that rejection; the `compile_fail,E0639` doctest on
-`SemanticBoundaries` holds it. Doctests cannot be cited by `PINNED-BY`.
+The `compile_fail` doctest on `SemanticBoundaries` checks the rejection: removing the attribute
+makes that snippet compile. Its compiling sibling uses the same import and `Default` path, ruling
+out an unrelated missing-name or missing-`Default` error. Doctests cannot be cited by `PINNED-BY`.
+
+Stable rustdoc checks whether a `compile_fail` snippet fails, not which error code it emits.
+Measured under rustc 1.96.0 with `cargo test -p hunyi --doc`: replacing the failing line with
+`let _: u8 = "not a u8";` (E0308) while retaining a temporary `compile_fail,E0639` fence
+still passes.
 
 #### Scenario: External construction and inspection
 

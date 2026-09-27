@@ -124,7 +124,7 @@ use crate::visibility::check_visibility_boundary;
 /// assert_eq!(boundaries.signature.len(), 1);
 /// ```
 ///
-/// ```compile_fail,E0639
+/// ```compile_fail
 /// use hunyi::SemanticBoundaries;
 ///
 /// let _ = SemanticBoundaries { ..Default::default() };
