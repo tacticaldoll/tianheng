@@ -129,7 +129,7 @@ pub(crate) fn inline_symbol_findings(
         }
 
         let call_text = strip_comments_and_strings(raw);
-        for occurrence in path_occurrences(&call_text, module, external) {
+        for occurrence in path_occurrences(&call_text, module) {
             let Some(resolved) = resolve_head(
                 &occurrence.segments,
                 module,
@@ -178,7 +178,7 @@ struct PathOccurrence {
 /// depth but never touch the stack, so a call anywhere inside `mod tests { … }` attributes to
 /// `…::tests`). The caller's `external` mode remains a resolution policy, not a lexical-module
 /// attribution policy.
-fn path_occurrences(source: &str, base_module: &str, _external: bool) -> Vec<PathOccurrence> {
+fn path_occurrences(source: &str, base_module: &str) -> Vec<PathOccurrence> {
     let bytes = source.as_bytes();
     let mut out = Vec::new();
     let inline_modules = scan_inline_modules(source, base_module);

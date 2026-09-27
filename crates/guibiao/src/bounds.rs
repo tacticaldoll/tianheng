@@ -155,7 +155,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
-                "inline-symbol-path-confinement/a-glob-reacts-to-an-alias-or-re-export-beneath-its-resolved-module-even-when-the-glob-does-not-import-it-a-stated-bound",
+                "inline-symbol-path-confinement/a-glob-reacts-to-any-alias-or-re-export-beneath-its-resolved-module-a-stated-bound",
             ),
             "a glob import whose resolved module has, anywhere beneath it, a `type` alias or `pub use` of the confined \
              prefix, whether or not the glob actually imports that name",

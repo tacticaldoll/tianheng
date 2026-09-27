@@ -153,7 +153,7 @@ stands in.
 - **WHEN** a boundary declares `.must_not_call_inline("std::time").ending_with(["now"])` and `crate::core` declares `use std::time::*;`
 - **THEN** the system still reacts on the glob (narrowing filters call terminal segments, not globs)
 
-#### Scenario: A glob reacts to an alias or re-export beneath its resolved module even when the glob does not import it — a stated bound
+#### Scenario: A glob reacts to any alias or re-export beneath its resolved module — a stated bound
 - **WHEN** `crate::agent` declares `mod hidden { pub type Spawner = std::process::Command; }` and holds only `mod tests { use super::*; }`, under a boundary permitting `std::process::Command` only within `crate::exec`
 - **THEN** the system reacts on `glob super in crate::agent`: the glob only brings the `hidden` module into scope, not `Spawner`, but the alias beneath the glob's resolved module is still treated as a possible prefix-resolving name — an over-reaction declared, not a precision claim
 - **PINNED-BY** `a_sibling_test_glob_reacts_to_an_alias_in_its_resolved_module`

@@ -85,7 +85,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 ## inline-symbol-path-confinement
 
-### `inline-symbol-path-confinement/a-glob-reacts-to-an-alias-or-re-export-beneath-its-resolved-module-even-when-the-glob-does-not-import-it-a-stated-bound`
+### `inline-symbol-path-confinement/a-glob-reacts-to-any-alias-or-re-export-beneath-its-resolved-module-a-stated-bound`
 
 > the system reacts on `glob super in crate::agent`: the glob only brings the `hidden` module into scope, not `Spawner`, but the alias beneath the glob's resolved module is still treated as a possible prefix-resolving name — an over-reaction declared, not a precision claim
 

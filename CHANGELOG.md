@@ -73,8 +73,8 @@ them.
   must address or baseline, while findings removed by corrected resolution may leave redundant baseline entries.
   The bound registered in 0.7.1 as
   `inline-symbol-path-confinement/a-glob-reacts-to-any-alias-or-re-export-beneath-its-resolved-module-a-stated-bound`
-  is narrowed and renamed to
-  `inline-symbol-path-confinement/a-glob-reacts-to-an-alias-or-re-export-beneath-its-resolved-module-even-when-the-glob-does-not-import-it-a-stated-bound`.
+  keeps its id and is narrowed to the remaining glob over-reaction: the glob may react to an alias beneath its
+  resolved module even when it does not bring that alias name into scope.
 
 ## [0.7.1] - 2026-09-27
 
