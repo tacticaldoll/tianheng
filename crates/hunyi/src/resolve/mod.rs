@@ -108,10 +108,10 @@ pub(crate) fn validate_exposed_trait_operands(
 ) -> Result<(), String> {
     validate_path_operands(operands)?;
     if let Some(bad) = operands.iter().find(|operand| {
-        operand
-            .rsplit("::")
-            .next()
-            .is_some_and(shape::is_auto_trait_leaf)
+        let leaf = operand
+            .rsplit_once("::")
+            .map_or(operand.as_str(), |(_, leaf)| leaf);
+        shape::is_auto_trait_leaf(leaf)
     }) {
         return Err(crate::errors::auto_trait_operand_error(bad, boundary_kind));
     }
