@@ -14,7 +14,10 @@ use crate::resolve::{
     ImplTraitCollector, PathCollector, ShapeExposure, UseMap, canonical_self_owner,
     canonical_self_owner_without_fallback, stamp_seam, strip_raw,
 };
-use crate::syn_util::{GenericsPosition, impl_generics_positions, is_public};
+use crate::syn_util::{
+    ForeignDecl, GenericsPosition, UndecodableForeignItem, decode_foreign_item,
+    impl_generics_positions, is_public,
+};
 
 /// Collect the returned-`impl Trait` [`ShapeExposure`]s in the **return type** of a public item's
 /// functions/methods only (the existential positions). Never visits argument positions (APIT is
@@ -256,13 +259,16 @@ pub(crate) fn collect_named_field_exposures<'f, E>(
 /// function signatures, constants, statics, trait definitions (supertraits, associated
 /// types, and methods), inherent `impl` blocks (generic bounds, pub methods, and pub
 /// associated items), `pub use` re-exports, `pub extern crate`, and public foreign items.
+///
+/// A foreign item is read through [`decode_foreign_item`], so a `safe`- or `unsafe`-qualified one
+/// exposes exactly what its unqualified form does, and one it cannot decode is refused.
 pub(crate) fn collect_item_exposures(
     item: &syn::Item,
     module: &str,
     uses: &UseMap,
     ordinal: usize,
     out: &mut Vec<PathExposure>,
-) {
+) -> Result<(), UndecodableForeignItem> {
     match item {
         syn::Item::Fn(item) if is_public(&item.vis) => {
             let seam = fn_seam(module, &item.sig.ident);
@@ -460,23 +466,27 @@ pub(crate) fn collect_item_exposures(
         }
         syn::Item::ForeignMod(item) => {
             for foreign_item in &item.items {
-                match foreign_item {
-                    syn::ForeignItem::Fn(f) if is_public(&f.vis) => {
-                        let seam = fn_seam(module, &f.sig.ident);
-                        out.extend(tag_paths(paths_in_signature(&f.sig), &seam));
+                match decode_foreign_item(foreign_item)? {
+                    ForeignDecl::Fn { vis, sig } if is_public(&vis) => {
+                        let seam = fn_seam(module, &sig.ident);
+                        out.extend(tag_paths(paths_in_signature(&sig), &seam));
                     }
-                    syn::ForeignItem::Static(s) if is_public(&s.vis) => {
+                    ForeignDecl::Static { vis, ident, ty, .. } if is_public(&vis) => {
                         out.extend(tag_paths(
-                            paths_in_type(&s.ty),
-                            &item_seam(ItemKind::Static, module, &s.ident),
+                            paths_in_type(&ty),
+                            &item_seam(ItemKind::Static, module, &ident),
                         ));
                     }
-                    _ => {}
+                    ForeignDecl::Fn { .. }
+                    | ForeignDecl::Static { .. }
+                    | ForeignDecl::Type { .. }
+                    | ForeignDecl::Macro => {}
                 }
             }
         }
         _ => {}
     }
+    Ok(())
 }
 
 /// Whether an ident is the `self` keyword-segment of a `use` tree (`{self, X}` / `self as alias`),

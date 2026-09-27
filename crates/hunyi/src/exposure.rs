@@ -18,7 +18,7 @@ use crate::crate_scope::{
 use crate::driver::run_boundaries;
 use crate::dsl::SignatureBoundary;
 use crate::emit::{SingleModuleViolationContext, push_single_module_violations};
-use crate::errors::unknown_module_error;
+use crate::errors::{undecodable_foreign_item_error, unknown_module_error};
 use crate::file_scope::{over_each_unit, resolve_crate_units};
 use crate::finding::{ExposureKind, PathExposure, SemanticFact, sort_faceted_facts};
 use crate::module_resolve::resolve_module_items_with_cfg_tags;
@@ -169,12 +169,13 @@ fn collect_all_exposures(
     scopes: &HashMap<usize, FileScope>,
     module: &str,
     include_trait_impls: bool,
-) -> Vec<(PathExposure, PathBuf, usize, FlatItem)> {
+) -> Result<Vec<(PathExposure, PathBuf, usize, FlatItem)>, String> {
     let mut exposed = Vec::new();
     for (ordinal, (flat, file, branch)) in items_with_files.iter().enumerate() {
         let uses = &scopes[branch].uses;
         let mut buf = Vec::new();
-        collect_item_exposures(&flat.item, module, uses, ordinal, &mut buf);
+        collect_item_exposures(&flat.item, module, uses, ordinal, &mut buf)
+            .map_err(|undecodable| undecodable_foreign_item_error(file, &undecodable.seen))?;
         if include_trait_impls {
             collect_trait_impl_exposures(&flat.item, module, uses, ordinal, &mut buf);
         }
@@ -183,7 +184,7 @@ fn collect_all_exposures(
                 .map(|exposure| (exposure, file.clone(), *branch, flat.clone())),
         );
     }
-    exposed
+    Ok(exposed)
 }
 
 /// Resolve one exposure's path against the in-scope `use`s, the crate-wide re-export/alias
@@ -297,7 +298,7 @@ pub(crate) fn module_findings(
     let scopes = build_file_scopes(&items_by_branch, &externs, &extern_renames);
     let forbidden: Vec<String> = forbidden.iter().map(|f| canonical_path_str(f)).collect();
 
-    let exposed = collect_all_exposures(&items_with_files, &scopes, module, include_trait_impls);
+    let exposed = collect_all_exposures(&items_with_files, &scopes, module, include_trait_impls)?;
 
     let mut findings: Vec<(SemanticFact, PathBuf)> = exposed
         .iter()

@@ -33,6 +33,16 @@ them.
 
 ### Semantic
 
+- **BREAKING** — **渾儀 observes `safe`- and `unsafe`-qualified foreign items.** Inside an edition-2024
+  `unsafe extern` block, `pub safe static`, `pub safe fn` and `pub unsafe static` passed every visibility
+  ceiling, `must_not_declare_pub` and `must_not_expose` boundary, because `syn` 2 leaves those qualifiers
+  unparsed and the item was skipped; the same declaration without a qualifier reacted. They now react
+  exactly as their unqualified forms do, with the same finding and identity — `pub safe static X` is
+  `pub static X` to a baseline. Declarations that passed before may now report violations to repair or
+  baseline. A foreign item 渾儀 cannot read as a `fn`, `static`, `type` or macro invocation, with any
+  qualifier removed, is now a constitution error (exit 2) naming the tokens and the file, where it was
+  skipped: a `#[cfg]`-disabled foreign `fn` with a body compiles and is such an item.
+
 - **BREAKING** — **Dyn-trait and impl-trait operand boundaries reject auto-trait operands as constitution errors.** `must_not_expose_dyn_of` and `must_not_expose_impl_trait_of` now exit 2 when any forbidden operand has an auto-trait leaf, including a qualified spelling or an entry beside valid operands. These entries could not match: the observer removes auto-trait bounds before principal-trait resolution. The error message directs the author to `must_not_expose_dyn_bounded_by` or `must_not_expose_impl_trait_bounded_by` (or to remove the entry). The impl-trait rule applies equally with `including_submodules()`; `must_not_acquire("Send")` remains legal and reacts to an acquisition.
 
 - **Auto-trait bound governance for returned impl Trait and dyn Trait: `must_not_expose_impl_trait_bounded_by` and `must_not_expose_dyn_bounded_by`.**
@@ -61,6 +71,11 @@ them.
   fields. Future semantic boundary fields can be added without changing this construction path.
 
 ### Migration
+
+- Repair or baseline a public `safe`- or `unsafe`-qualified foreign item that now reports under a
+  visibility or signature-coupling boundary. A foreign item reported as undecodable, such as a
+  `#[cfg]`-disabled foreign `fn` with a body, is rewritten as a declaration or moved out of the
+  `extern` block.
 
 - Remove auto-trait entries such as `Send` from `must_not_expose_dyn_of` and `must_not_expose_impl_trait_of` operand sets, or migrate to `must_not_expose_dyn_bounded_by` / `must_not_expose_impl_trait_bounded_by`.
 
