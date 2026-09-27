@@ -173,18 +173,18 @@ struct PathOccurrence {
 
 /// Scan all call and path-mention occurrences in `source`.
 ///
-/// Under `external` each occurrence carries its true (inline) module, tracked by inline
+/// Every occurrence carries its true (inline) module, tracked by inline
 /// `mod name { … }` nesting exactly as [`super::use_scan`]'s walk does (non-`mod` braces move the
 /// depth but never touch the stack, so a call anywhere inside `mod tests { … }` attributes to
-/// `…::tests`). When `external` is `false` the tracking is skipped entirely and every occurrence is
-/// keyed to `base_module`.
-fn path_occurrences(source: &str, base_module: &str, external: bool) -> Vec<PathOccurrence> {
+/// `…::tests`). The caller's `external` mode remains a resolution policy, not a lexical-module
+/// attribution policy.
+fn path_occurrences(source: &str, base_module: &str, _external: bool) -> Vec<PathOccurrence> {
     let bytes = source.as_bytes();
     let mut out = Vec::new();
-    let inline_modules = external.then(|| scan_inline_modules(source, base_module));
+    let inline_modules = scan_inline_modules(source, base_module);
     let mut i = 0;
     while i < bytes.len() {
-        if external && matches!(bytes[i], b'{' | b'}') {
+        if matches!(bytes[i], b'{' | b'}') {
             i += 1;
             continue;
         }
@@ -220,15 +220,7 @@ fn path_occurrences(source: &str, base_module: &str, external: bool) -> Vec<Path
         let segments = normalize_segments(&bytes[start..end]);
         let is_call = is_call_application(bytes, end);
         if segments.contains("::") || is_call {
-            let module = if external {
-                inline_modules
-                    .as_ref()
-                    .expect("inline module scan exists under external resolution")
-                    .contexts[i]
-                    .clone()
-            } else {
-                base_module.to_string()
-            };
+            let module = inline_modules.modules[inline_modules.contexts[i] as usize].clone();
             out.push(PathOccurrence {
                 segments,
                 is_call,
@@ -340,7 +332,8 @@ fn glob_import_paths(source: &str, base_module: &str) -> Result<Vec<(String, Str
                 UseStatementScan::Statement { body, next } => {
                     let mut bases = Vec::new();
                     glob_bases(&body, &mut bases, 0)?;
-                    let module = inline_modules.contexts[i].clone();
+                    let module =
+                        inline_modules.modules[inline_modules.contexts[i] as usize].clone();
                     paths.extend(bases.into_iter().map(|path| (path, module.clone())));
                     i = next;
                     continue;
@@ -670,7 +663,10 @@ fn collect_definition_names(
         {
             let site = &inline_modules.sites[site_index];
             if capture_inline_mod_names && depth == site.module_top && !site.name.is_empty() {
-                out.insert(format!("{}::{}", site.enclosing, site.name));
+                out.insert(format!(
+                    "{}::{}",
+                    inline_modules.modules[site.enclosing as usize], site.name
+                ));
             }
             site_index += 1;
             i = site.brace;
@@ -709,7 +705,10 @@ fn collect_definition_names(
                     let name =
                         normalize_segments(&bytes[name_start..end_of_ident(bytes, name_start)]);
                     if !name.is_empty() {
-                        out.insert(format!("{}::{name}", inline_modules.contexts[i]));
+                        out.insert(format!(
+                            "{}::{name}",
+                            inline_modules.modules[inline_modules.contexts[i] as usize]
+                        ));
                     }
                 }
             }

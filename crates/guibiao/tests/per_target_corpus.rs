@@ -999,6 +999,16 @@ fn exec_confines_command(package: &str) -> Constitution {
     )
 }
 
+fn exec_confines_command_strict(package: &str) -> Constitution {
+    Constitution::new("inline-call-confinement").boundary(
+        ModuleBoundary::in_crate(package)
+            .module("crate::exec")
+            .confine_inline_call("std::process::Command")
+            .strict_external()
+            .because("only exec spawns processes"),
+    )
+}
+
 /// The confined constructor call, assembled from two literals: this target spawns no process, and a census that
 /// reads test sources for a spawning constructor must not read one out of fixture text.
 macro_rules! spawn_call {
@@ -1420,6 +1430,69 @@ fn a_sibling_test_glob_reacts_to_an_alias_in_its_resolved_module() {
     let violations = confined_violations(&outcome);
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert_eq!(violations[0].finding, "glob super in crate::agent");
+}
+
+/// Precision guard: a private alias directly in the glob's parent is in `super::*`'s scope and must react;
+/// this is not the over-reaction bound's pin.
+#[test]
+fn a_sibling_test_glob_reacts_to_an_alias_in_its_parent_as_a_precision_guard() {
+    let probe = RootProbe::new(
+        "inlinealiasprecision",
+        "",
+        &[
+            ("src/lib.rs", "pub mod exec;\npub mod agent;\n"),
+            ("src/exec.rs", "pub fn run() {}\n"),
+            (
+                "src/agent.rs",
+                "type Spawner = std::process::Command;\npub fn act() {}\nmod tests {\n    use super::*;\n}\n",
+            ),
+        ],
+    );
+    let outcome = check(
+        &exec_confines_command("inlinealiasprecision"),
+        probe.manifest(),
+    );
+    assert_eq!(outcome.exit_code(), 1, "{outcome:?}");
+    let violations = confined_violations(&outcome);
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].finding, "glob super in crate::agent");
+}
+
+fn inline_super_alias_probe(name: &str) -> RootProbe {
+    RootProbe::new(
+        name,
+        "",
+        &[
+            ("src/lib.rs", "pub mod exec;\npub mod agent;\n"),
+            ("src/exec.rs", "pub fn run() {}\n"),
+            (
+                "src/agent.rs",
+                "type Cmd = std::process::Command;\nmod inner {\n    fn f() { let _ = super::Cmd::new(\"true\"); }\n}\n",
+            ),
+        ],
+    )
+}
+
+#[test]
+fn an_inline_super_path_resolves_from_its_true_module_in_default_mode() {
+    let probe = inline_super_alias_probe("inlinealiaspathdefault");
+    let outcome = check(
+        &exec_confines_command("inlinealiaspathdefault"),
+        probe.manifest(),
+    );
+    assert_eq!(outcome.exit_code(), 1, "{outcome:?}");
+    assert_eq!(confined_violations(&outcome).len(), 1, "{outcome:?}");
+}
+
+#[test]
+fn an_inline_super_path_resolves_from_its_true_module_in_strict_external_mode() {
+    let probe = inline_super_alias_probe("inlinealiaspathstrict");
+    let outcome = check(
+        &exec_confines_command_strict("inlinealiaspathstrict"),
+        probe.manifest(),
+    );
+    assert_eq!(outcome.exit_code(), 1, "{outcome:?}");
+    assert_eq!(confined_violations(&outcome).len(), 1, "{outcome:?}");
 }
 
 /// The inline test module's `super::*` is resolved from its true inline module, so a private alias

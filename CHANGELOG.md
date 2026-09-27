@@ -66,13 +66,15 @@ them.
 
 ### Static
 
-- **BREAKING** — **圭表 resolves glob `self` and `super` from their inline module.** A sibling
-  `mod tests { use super::*; }` no longer reacts merely because another file declares a confined-prefix alias;
-  nested `super::super::*` now reaches the correct ancestor and emits the finding that was previously missed.
-  The new finding may require an adopter to address it or regenerate a baseline, while findings removed by the
-  corrected resolution may leave redundant entries in an existing baseline. The bound registered in 0.7.1 as
+- **BREAKING** — **圭表 resolves `self` and `super` from their inline module for glob imports and ordinary
+  paths.** A sibling `mod tests { use super::*; }` no longer reacts merely because another file declares a
+  confined-prefix alias; nested `super::super::*` reaches the correct ancestor, and ordinary `super::Cmd`
+  paths now reach the alias in their actual inline parent. These corrections may add findings that adopters
+  must address or baseline, while findings removed by corrected resolution may leave redundant baseline entries.
+  The bound registered in 0.7.1 as
   `inline-symbol-path-confinement/a-glob-reacts-to-any-alias-or-re-export-beneath-its-resolved-module-a-stated-bound`
-  is narrowed in the Unreleased entry and renamed to the new bound id.
+  is narrowed and renamed to
+  `inline-symbol-path-confinement/a-glob-reacts-to-an-alias-or-re-export-beneath-its-resolved-module-even-when-the-glob-does-not-import-it-a-stated-bound`.
 
 ## [0.7.1] - 2026-09-27
 

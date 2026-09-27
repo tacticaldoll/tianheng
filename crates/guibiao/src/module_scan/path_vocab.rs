@@ -99,12 +99,14 @@ pub(super) fn effective_module(base: &str, mod_stack: &[(String, usize)]) -> Str
 }
 
 /// The one lexical walk shared by symbol readers that need the module enclosing a byte position.
-/// `contexts[i]` is the inline-module path at byte `i`; `sites` records each inline `mod name {`
-/// with the brace depth and enclosing module it had when encountered. Keeping the stack here makes
-/// glob, path-occurrence, and definition readers agree on inline nesting instead of carrying three
-/// copies of the same push/pop walk.
+/// `contexts[i]` is an index into `modules` for the inline-module path at byte `i`; `sites` records
+/// each inline `mod name {` with the brace depth and enclosing module it had when encountered.
+/// Keeping the stack here makes glob, path-occurrence, and definition readers agree on inline
+/// nesting instead of carrying three copies of the same push/pop walk. An index per byte avoids
+/// cloning a module `String` for every source byte.
 pub(super) struct InlineModuleScan {
-    pub contexts: Vec<String>,
+    pub contexts: Vec<u32>,
+    pub modules: Vec<String>,
     pub module_tops: Vec<usize>,
     pub sites: Vec<InlineModuleSite>,
 }
@@ -114,32 +116,44 @@ pub(super) struct InlineModuleSite {
     pub name: String,
     pub brace: usize,
     pub module_top: usize,
-    pub enclosing: String,
+    pub enclosing: u32,
 }
 
 pub(super) fn scan_inline_modules(source: &str, base: &str) -> InlineModuleScan {
     let bytes = source.as_bytes();
-    let mut contexts = vec![base.to_string(); bytes.len() + 1];
+    let mut contexts = vec![0u32; bytes.len() + 1];
     let mut module_tops = vec![0usize; bytes.len() + 1];
+    let mut modules = vec![base.to_string()];
+    let mut module_indices = std::collections::HashMap::from([(base.to_string(), 0u32)]);
     let mut sites = Vec::new();
     let mut i = 0;
     let mut depth = 0usize;
-    let mut mod_stack: Vec<(String, usize)> = Vec::new();
+    let mut mod_stack: Vec<(u32, usize)> = Vec::new();
+    let mut current = 0u32;
     while i < bytes.len() {
-        contexts[i] = effective_module(base, &mod_stack);
+        contexts[i] = current;
         module_tops[i] = mod_stack.last().map_or(0, |(_, d)| d + 1);
         if let Some((name_start, name_end, brace)) = inline_mod_at(bytes, i) {
-            let enclosing = contexts[i].clone();
             let name = canonical_segment(&String::from_utf8_lossy(&bytes[name_start..name_end]))
                 .to_string();
+            let path = format!("{}::{name}", modules[current as usize]);
+            let next = if let Some(&index) = module_indices.get(&path) {
+                index
+            } else {
+                let index = u32::try_from(modules.len()).expect("inline module table exceeds u32");
+                modules.push(path.clone());
+                module_indices.insert(path, index);
+                index
+            };
             sites.push(InlineModuleSite {
                 at: i,
                 name: name.clone(),
                 brace,
                 module_top: mod_stack.last().map_or(0, |(_, d)| d + 1),
-                enclosing,
+                enclosing: current,
             });
-            mod_stack.push((name, depth));
+            mod_stack.push((next, depth));
+            current = next;
             i = brace;
             continue;
         }
@@ -150,15 +164,17 @@ pub(super) fn scan_inline_modules(source: &str, base: &str) -> InlineModuleScan 
                 while mod_stack.last().is_some_and(|(_, d)| *d == depth) {
                     mod_stack.pop();
                 }
+                current = mod_stack.last().map_or(0, |(index, _)| *index);
             }
             _ => {}
         }
         i += 1;
     }
-    contexts[bytes.len()] = effective_module(base, &mod_stack);
+    contexts[bytes.len()] = current;
     module_tops[bytes.len()] = mod_stack.last().map_or(0, |(_, d)| d + 1);
     InlineModuleScan {
         contexts,
+        modules,
         module_tops,
         sites,
     }
