@@ -108,11 +108,11 @@ pub(crate) fn inline_symbol_findings(
                 .or_insert_with(|| target.clone());
         }
 
-        for glob_path in glob_import_paths(&decl_text)? {
+        for (glob_path, occurrence_module) in glob_import_paths(&decl_text, module)? {
             if let Some(resolved) = resolve_head(
                 &glob_path,
                 module,
-                module,
+                &occurrence_module,
                 use_map,
                 root_modules,
                 external_vocab.as_ref(),
@@ -348,11 +348,57 @@ const MAX_SYMBOL_NEST_DEPTH: usize = 64;
 
 /// Every glob import path in already-declaration-cleaned source: a `use <path>::*;` (bare) or a
 /// grouped `use <path>::{ … * … };` (the `*` among the group members). Returns the module-path
-/// `<path>` (without the trailing `::*`), for each glob.
-fn glob_import_paths(source: &str) -> Result<Vec<String>, String> {
+/// `<path>` (without the trailing `::*`) and the true inline module enclosing the `use`.
+fn glob_import_paths(source: &str, base_module: &str) -> Result<Vec<(String, String)>, String> {
+    use super::lexer::UseStatementScan;
+    let bytes = source.as_bytes();
     let mut paths = Vec::new();
-    for tree in use_statements(source) {
-        glob_bases(&tree, &mut paths, 0)?;
+    let mut i = 0;
+    let mut depth = 0usize;
+    let mut mod_stack: Vec<(String, usize)> = Vec::new();
+    while i < bytes.len() {
+        if let Some((name_start, name_end, brace)) = inline_mod_at(bytes, i) {
+            mod_stack.push((
+                canonical_segment(&normalize_segments(&bytes[name_start..name_end])).to_string(),
+                depth,
+            ));
+            i = brace;
+            continue;
+        }
+        match bytes[i] {
+            b'{' => {
+                depth += 1;
+                i += 1;
+                continue;
+            }
+            b'}' => {
+                depth = depth.saturating_sub(1);
+                while mod_stack.last().is_some_and(|(_, d)| *d == depth) {
+                    mod_stack.pop();
+                }
+                i += 1;
+                continue;
+            }
+            _ => {}
+        }
+        if super::lexer::keyword_starts_at(bytes, i, b"use") {
+            match super::lexer::scan_use_statement(bytes, source, i) {
+                UseStatementScan::Statement { body, next } => {
+                    let mut bases = Vec::new();
+                    glob_bases(&body, &mut bases, 0)?;
+                    let module = effective_module(base_module, &mod_stack);
+                    paths.extend(bases.into_iter().map(|path| (path, module.clone())));
+                    i = next;
+                    continue;
+                }
+                UseStatementScan::NotAStatement { resume_at } => {
+                    i = resume_at;
+                    continue;
+                }
+                UseStatementScan::Unterminated => break,
+            }
+        }
+        i += 1;
     }
     Ok(paths)
 }
@@ -928,7 +974,7 @@ fn resolve_head(
     let base: String = match head.as_str() {
         "std" | "core" | "alloc" => parts.join("::"),
         "crate" => fold_canonical_segments(&parts_str)?,
-        "self" | "super" => resolve_self_super(current_module, &parts_str)?,
+        "self" | "super" => resolve_self_super(occurrence_module, &parts_str)?,
         other => {
             if let Some(target) = use_map.get(other) {
                 let mut base = target.clone();
