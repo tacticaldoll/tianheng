@@ -41,8 +41,8 @@ them.
   render. At `Shallow` depth a child `mod` is itself a finding; at `Subtree` depth it is a container and each
   descended module is judged by the same rule. Items inside a transparent `cfg_if!` arm are observed; an item
   inside a function body is not a direct item, and items produced only by a macro's expansion are not read.
-  Existing visibility-ceiling and `must_not_declare_pub` rule keys and identities are unchanged. The field is
-  what makes this breaking: a struct literal of `SemanticBoundaries` no longer compiles without it.
+  Existing visibility-ceiling and `must_not_declare_pub` rule keys and identities are unchanged. The
+  new field requires the construction migration below.
 
   A finding's identity is its item kind, module-qualified rendered name, compilation unit and governing
   package, never its position, so direct items of one module that render alike share one identity: two
@@ -51,9 +51,14 @@ them.
   a second item rendering alike; this is a declared bound,
   `semantic-visibility-boundary/direct-items-that-render-alike-share-one-identity-a-stated-bound`.
 
+- **BREAKING** — **`SemanticBoundaries` is non-exhaustive while its fields remain public.**
+  External crates construct it with `SemanticBoundaries::default()` and assign or push into its
+  fields. Future semantic boundary fields can be added without changing this construction path.
+
 ### Migration
 
-- Code constructing `SemanticBoundaries` with a struct literal must add `reexport_only: vec![]` or use `..Default::default()`.
+- Construct `SemanticBoundaries` with `SemanticBoundaries::default()` and assign or push into its
+  public fields. A struct literal, including `..Default::default()`, does not compile outside `hunyi`.
 
 ## [0.7.1] - 2026-09-27
 
