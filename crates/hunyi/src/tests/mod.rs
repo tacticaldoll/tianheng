@@ -1,4 +1,5 @@
 mod async_exposure;
+mod auto_trait_operand;
 mod dyn_trait;
 mod finding_source_file;
 mod forbidden_marker;

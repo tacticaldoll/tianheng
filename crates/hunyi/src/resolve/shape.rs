@@ -145,6 +145,15 @@ impl<'ast> Visit<'ast> for DynCollector {
     }
 }
 
+/// The leaf-name test used both when collecting principal traits and when validating a
+/// dyn/impl-trait forbidden operand. Raw identifiers compare by their unprefixed leaf.
+pub(crate) fn is_auto_trait_leaf(leaf: &str) -> bool {
+    matches!(
+        strip_raw(leaf).as_str(),
+        "Send" | "Sync" | "Unpin" | "UnwindSafe" | "RefUnwindSafe"
+    )
+}
+
 /// The **non-auto trait** paths among a shape node's bounds — the operands an operand-scoped rule
 /// matches against. A `dyn` object has exactly one non-auto (principal) trait; a returned
 /// `impl Trait` may name several (`impl Foo + Bar`), so every non-auto trait is returned, not just
@@ -153,7 +162,8 @@ impl<'ast> Visit<'ast> for DynCollector {
 /// principal** (`dyn Send + crate::Port`, `impl Send + Foo`; both valid Rust, only lifetimes are
 /// order-constrained), so taking the first trait bound would resolve `Send` and silently pass a
 /// forbidden operand (a false negative). Empty when the bounds carry no non-auto trait
-/// (`dyn Send`, or lifetimes only) — correctly matching no operand.
+/// (`dyn Send`, or lifetimes only) — matching no principal. A forbidden operand naming one
+/// of these auto-trait leaves is rejected before resolution.
 ///
 /// Stated bound: auto traits are recognized by their std leaf name
 /// (`Send`/`Sync`/`Unpin`/`UnwindSafe`/`RefUnwindSafe`); a user-defined `auto trait` (unstable) or a
@@ -164,13 +174,12 @@ impl<'ast> Visit<'ast> for DynCollector {
 fn principal_trait_paths(
     bounds: &syn::punctuated::Punctuated<syn::TypeParamBound, syn::token::Plus>,
 ) -> Vec<syn::Path> {
-    const AUTO_TRAITS: [&str; 5] = ["Send", "Sync", "Unpin", "UnwindSafe", "RefUnwindSafe"];
     bounds
         .iter()
         .filter_map(|bound| match bound {
             syn::TypeParamBound::Trait(trait_bound) => {
-                let leaf = strip_raw(&trait_bound.path.segments.last()?.ident.to_string());
-                (!AUTO_TRAITS.contains(&leaf.as_str())).then(|| trait_bound.path.clone())
+                let leaf = trait_bound.path.segments.last()?.ident.to_string();
+                (!is_auto_trait_leaf(&leaf)).then(|| trait_bound.path.clone())
             }
             _ => None,
         })

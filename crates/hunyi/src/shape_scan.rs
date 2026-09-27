@@ -13,7 +13,7 @@ use crate::crate_scope::{extern_resolution, file_extern_scope, resolve_principal
 use crate::finding::{ExposureKind, SemanticFact, shape_finding, sort_faceted_facts};
 use crate::module_resolve::resolve_module_items_with_files;
 use crate::resolve::{
-    ShapeExposure, UseMap, canonical_path_str, collect_uses, validate_path_operands,
+    ShapeExposure, UseMap, canonical_path_str, collect_uses, validate_exposed_trait_operands,
 };
 
 /// A `use`-map per BRANCH, not one shared map over the flattened cross-branch union: two
@@ -128,7 +128,16 @@ pub(crate) fn operand_module_findings(
         impl Fn(&syn::Item, &str, &UseMap, usize, &mut Vec<ShapeExposure>),
     ),
 ) -> Result<Vec<(SemanticFact, PathBuf)>, String> {
-    validate_path_operands(forbidden)?;
+    validate_exposed_trait_operands(
+        forbidden,
+        match fact_kind {
+            ExposureKind::DynTrait => "dyn-trait",
+            ExposureKind::ImplTrait => "impl-trait",
+            ExposureKind::Signature => {
+                unreachable!("signature exposure has no principal-trait operands")
+            }
+        },
+    )?;
     let items_with_files =
         resolve_module_items_with_files(src_dir, root_file, module, crate_package)?;
     let uses_by_branch = uses_by_branch(&items_with_files);
