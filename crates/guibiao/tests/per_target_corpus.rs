@@ -759,7 +759,10 @@ fn a_root_declaring_a_remapped_permitted_module_is_clean_by_module_path() {
         "confineremapped",
         "",
         &[
-            ("src/lib.rs", "#[cfg_attr(unix, path = \"lib_seam.rs\")]\npub mod seam;\n"),
+            (
+                "src/lib.rs",
+                "#[cfg_attr(unix, path = \"lib_seam.rs\")]\npub mod seam;\n",
+            ),
             ("src/lib_seam.rs", "\n"),
             (
                 "src/main.rs",
