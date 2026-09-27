@@ -150,24 +150,12 @@ fn auto_trait_leaves(
         .collect()
 }
 
-pub(crate) fn dyn_auto_trait_leaves(
-    bounds: &syn::punctuated::Punctuated<syn::TypeParamBound, syn::token::Plus>,
-) -> Vec<String> {
-    auto_trait_leaves(bounds)
-}
-
-pub(crate) fn impl_auto_trait_leaves(
-    bounds: &syn::punctuated::Punctuated<syn::TypeParamBound, syn::token::Plus>,
-) -> Vec<String> {
-    auto_trait_leaves(bounds)
-}
-
 impl<'ast> Visit<'ast> for DynCollector {
     fn visit_type_trait_object(&mut self, node: &'ast syn::TypeTraitObject) {
         self.exposures.push(ShapeExposure {
             shape: trait_object_to_string(node),
             principals: principal_trait_paths(&node.bounds),
-            auto_traits: dyn_auto_trait_leaves(&node.bounds),
+            auto_traits: auto_trait_leaves(&node.bounds),
             seam: None,
         });
         syn::visit::visit_type_trait_object(self, node);
@@ -261,7 +249,7 @@ impl<'ast> Visit<'ast> for ImplTraitCollector {
         self.exposures.push(ShapeExposure {
             shape: impl_trait_to_string(node),
             principals: principal_trait_paths(&node.bounds),
-            auto_traits: impl_auto_trait_leaves(&node.bounds),
+            auto_traits: auto_trait_leaves(&node.bounds),
             seam: None,
         });
         syn::visit::visit_type_impl_trait(self, node);

@@ -840,3 +840,40 @@ fn dyn_auto_bound_invalid_qualifier_exits_2() {
     };
     assert!(err.contains("foo::Send"), "{err}");
 }
+
+#[test]
+fn impl_auto_bound_three_segment_invalid_qualifier_exits_2_shallow_and_subtree() {
+    let tree = TempSrcTree::new("impl-three-segment-invalid-qual");
+    tree.write("lib.rs", "pub mod m;\n");
+    tree.write("m.rs", "pub fn f() -> impl Send { todo!() }\n");
+    let m = manifest(&tree);
+
+    for boundary in [
+        ImplTraitBoundary::in_crate("x")
+            .module("crate::m")
+            .must_not_expose_impl_trait_bounded_by(["crate::marker::Send"])
+            .because("reason"),
+        ImplTraitBoundary::in_crate("x")
+            .module("crate::m")
+            .must_not_expose_impl_trait_bounded_by(["crate::marker::Send"])
+            .including_submodules()
+            .because("reason"),
+    ] {
+        assert_eq!(check_impl_trait(&[boundary], &m).exit_code(), 2);
+    }
+}
+
+#[test]
+fn dyn_auto_bound_three_segment_invalid_qualifier_exits_2() {
+    let tree = TempSrcTree::new("dyn-three-segment-invalid-qual");
+    tree.write("lib.rs", "pub mod m;\n");
+    tree.write("m.rs", "pub fn f() -> Box<dyn Send> { todo!() }\n");
+    let boundary = DynTraitBoundary::in_crate("x")
+        .module("crate::m")
+        .must_not_expose_dyn_bounded_by(["crate::marker::Send"])
+        .because("reason");
+    assert_eq!(
+        check_dyn_trait(&[boundary], &manifest(&tree)).exit_code(),
+        2
+    );
+}

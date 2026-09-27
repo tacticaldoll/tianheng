@@ -51,19 +51,12 @@ impl DynTraitBoundary {
                 [("forbidden_operands", super::canonical_path_set(operands))],
             ),
             DynTraitTarget::AutoBounds(bounds) => {
-                let leaves =
-                    crate::resolve::auto_bound_leaves(bounds, "dyn-trait").unwrap_or_else(|_| {
-                        bounds
-                            .iter()
-                            .map(|b| {
-                                crate::resolve::strip_raw(
-                                    b.rsplit_once("::").map_or(b.as_str(), |(_, leaf)| leaf),
-                                )
-                            })
-                            .collect()
-                    });
-                let json = serde_json::to_string(&leaves.into_iter().collect::<Vec<_>>())
-                    .expect("serialized leaves");
+                let json = crate::resolve::auto_bound_leaves(bounds, "dyn-trait")
+                    .map(|leaves| {
+                        serde_json::to_string(&leaves.into_iter().collect::<Vec<_>>())
+                            .expect("serialized leaves")
+                    })
+                    .unwrap_or_else(|_| super::canonical_path_set(bounds));
                 RuleKey::of(
                     "tianheng.rule/hunyi/dyn-trait-auto-bound",
                     [("forbidden_auto_bounds", json)],
