@@ -749,6 +749,43 @@ fn roots_that_each_declare_the_permitted_module_are_clean() {
     assert_eq!(outcome.exit_code(), 0, "{outcome:?}");
 }
 
+/// The permitted region follows the root's declared module path even when `#[path]` puts that module in a
+/// different file. This ordinary scenario has no mutation record: its negative proof is the single-engine
+/// mutation that ignores the plain `#[path]` attribute, after which neither root has a conventional `seam.rs` fallback and the
+/// permitted module is absent rather than silently clean.
+#[test]
+fn a_root_declaring_a_remapped_permitted_module_is_clean_by_module_path() {
+    let probe = RootProbe::new(
+        "confineremapped",
+        "",
+        &[
+            ("src/lib.rs", "#[path = \"lib_seam.rs\"]\npub mod seam;\n"),
+            ("src/lib_seam.rs", "\n"),
+            (
+                "src/main.rs",
+                "#[path = \"bin_seam.rs\"]\nmod seam;\nmod cli;\nfn main() {}\n",
+            ),
+            ("src/bin_seam.rs", "use brick::B;\n"),
+            ("src/cli.rs", "use brick::B;\n"),
+        ],
+    );
+    let outcome = check(&confined_to_seam("confineremapped"), probe.manifest());
+    let Outcome::Violations(report) = outcome else {
+        panic!("the remapped seam is permitted but cli must react: {outcome:?}");
+    };
+    assert_eq!(report.violations.len(), 1, "{report:?}");
+    let violation = &report.violations[0];
+    assert_eq!(violation.target(), "brick");
+    assert_eq!(violation.finding, "crate::cli");
+    assert!(
+        violation
+            .file
+            .as_deref()
+            .is_some_and(|file| file.ends_with("src/cli.rs")),
+        "the forbidden module is the cli source: {violation:?}"
+    );
+}
+
 /// No root declaring the permitted module is still a constitution error, and the imports an absent root
 /// was scanned for do not leak out beside it. Kept for the contract: it held before the empty-region
 /// judgement existed, and pins that the findings it collects are dropped when no root is governed.

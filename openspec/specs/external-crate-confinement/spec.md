@@ -58,6 +58,15 @@ The system SHALL scan every reachable file of every compiled root of the target 
   permitted subtree bounds where the import is allowed and not where it is looked for; a library finding's
   identity is unchanged by the binary root being judged
 
+#### Scenario: A root that declares the permitted module itself is permitted there by module path, not file
+
+- **WHEN** a binary root declares `#[path = "bin_seam.rs"] mod seam;` and `mod cli;`, the remapped
+  `crate::seam` source imports `brick`, and `crate::cli` also imports `brick`, under the confinement of
+  `brick` to `crate::seam`
+- **THEN** the remapped `crate::seam` import is clean and the `crate::cli` import reacts, because the
+  permitted region is the module path declared by the root, not the conventional or physical source file
+- **PINNED-BY** `a_root_declaring_a_remapped_permitted_module_is_clean_by_module_path`
+
 #### Scenario: A root without the permitted subtree is judged only when some root declares it
 
 - **WHEN** no root of the package declares the permitted subtree, and a root imports the confined crate
