@@ -999,6 +999,16 @@ fn exec_confines_command(package: &str) -> Constitution {
     )
 }
 
+fn exec_confines_command_strict(package: &str) -> Constitution {
+    Constitution::new("inline-call-confinement").boundary(
+        ModuleBoundary::in_crate(package)
+            .module("crate::exec")
+            .confine_inline_call("std::process::Command")
+            .strict_external()
+            .because("only exec spawns processes"),
+    )
+}
+
 /// The confined constructor call, assembled from two literals: this target spawns no process, and a census that
 /// reads test sources for a spawning constructor must not read one out of fixture text.
 macro_rules! spawn_call {
@@ -1399,23 +1409,19 @@ fn an_inline_call_confinement_with_an_empty_prefix_is_refused() {
     );
 }
 
-/// The glob over-reaction, shown rather than described: `use super::*` inside a sibling's inline test module is
-/// resolved against the file's module rather than the inline one, so it reads as `use crate::*`, and a `type`
-/// alias of the prefix anywhere beneath the crate is taken as a name it could bring into scope.
+/// The glob over-reaction, shown rather than described: a private alias beneath the glob's resolved module is
+/// treated as a name the glob could bring into scope even when it is not actually imported.
 #[test]
-fn a_sibling_test_glob_reacts_to_an_alias_the_permitted_module_declares() {
+fn a_sibling_test_glob_reacts_to_an_alias_in_its_resolved_module() {
     let probe = RootProbe::new(
         "inlinealiasglob",
         "",
         &[
             ("src/lib.rs", "pub mod exec;\npub mod agent;\n"),
-            (
-                "src/exec.rs",
-                "pub type Cmd = std::process::Command;\npub fn run() { let _ = Cmd::new(\"true\"); }\n",
-            ),
+            ("src/exec.rs", "pub fn run() {}\n"),
             (
                 "src/agent.rs",
-                "pub fn act() {}\n#[cfg(test)]\nmod tests {\n    use super::*;\n    #[test]\n    fn acts() { act(); }\n}\n",
+                "mod hidden {\n    pub type Spawner = std::process::Command;\n}\npub fn act() {}\nmod tests {\n    use super::*;\n    fn acts() { act(); }\n}\n",
             ),
         ],
     );
@@ -1424,6 +1430,154 @@ fn a_sibling_test_glob_reacts_to_an_alias_the_permitted_module_declares() {
     let violations = confined_violations(&outcome);
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert_eq!(violations[0].finding, "glob super in crate::agent");
+}
+
+/// Precision guard: a private alias directly in the glob's parent is in `super::*`'s scope and must react;
+/// this is not the over-reaction bound's pin.
+#[test]
+fn a_sibling_test_glob_reacts_to_an_alias_in_its_parent_as_a_precision_guard() {
+    let probe = RootProbe::new(
+        "inlinealiasprecision",
+        "",
+        &[
+            ("src/lib.rs", "pub mod exec;\npub mod agent;\n"),
+            ("src/exec.rs", "pub fn run() {}\n"),
+            (
+                "src/agent.rs",
+                "type Spawner = std::process::Command;\npub fn act() {}\nmod tests {\n    use super::*;\n}\n",
+            ),
+        ],
+    );
+    let outcome = check(
+        &exec_confines_command("inlinealiasprecision"),
+        probe.manifest(),
+    );
+    assert_eq!(outcome.exit_code(), 1, "{outcome:?}");
+    let violations = confined_violations(&outcome);
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].finding, "glob super in crate::agent");
+}
+
+fn inline_super_alias_probe(name: &str) -> RootProbe {
+    RootProbe::new(
+        name,
+        "",
+        &[
+            ("src/lib.rs", "pub mod exec;\npub mod agent;\n"),
+            ("src/exec.rs", "pub fn run() {}\n"),
+            (
+                "src/agent.rs",
+                "type Cmd = std::process::Command;\nmod inner {\n    fn f() { let _ = super::Cmd::new(\"true\"); }\n}\n",
+            ),
+        ],
+    )
+}
+
+#[test]
+fn an_inline_super_path_resolves_from_its_true_module_in_default_mode() {
+    let probe = inline_super_alias_probe("inlinealiaspathdefault");
+    let outcome = check(
+        &exec_confines_command("inlinealiaspathdefault"),
+        probe.manifest(),
+    );
+    assert_eq!(outcome.exit_code(), 1, "{outcome:?}");
+    assert_eq!(confined_violations(&outcome).len(), 1, "{outcome:?}");
+}
+
+#[test]
+fn an_inline_super_path_resolves_from_its_true_module_in_strict_external_mode() {
+    let probe = inline_super_alias_probe("inlinealiaspathstrict");
+    let outcome = check(
+        &exec_confines_command_strict("inlinealiaspathstrict"),
+        probe.manifest(),
+    );
+    assert_eq!(outcome.exit_code(), 1, "{outcome:?}");
+    assert_eq!(confined_violations(&outcome).len(), 1, "{outcome:?}");
+}
+
+/// The inline test module's `super::*` is resolved from its true inline module, so a private alias
+/// in a sibling file cannot make this glob reach the confined prefix.
+#[test]
+fn a_sibling_test_glob_ignores_an_alias_in_another_file() {
+    let probe = RootProbe::new(
+        "inlinealiasother",
+        "",
+        &[
+            (
+                "src/lib.rs",
+                "pub mod exec;\npub mod other;\npub mod agent;\n",
+            ),
+            ("src/exec.rs", "pub fn run() {}\n"),
+            (
+                "src/other.rs",
+                "type Spawner = std::process::Command;\npub fn unrelated() {}\n",
+            ),
+            (
+                "src/agent.rs",
+                "pub fn act() {}\n#[cfg(test)]\nmod tests {\n    use super::*;\n    #[test]\n    fn acts() { act(); }\n}\n",
+            ),
+        ],
+    );
+    assert_clean(&check(
+        &exec_confines_command("inlinealiasother"),
+        probe.manifest(),
+    ));
+}
+
+/// Nested inline modules use the corresponding ancestor for `super::super::*`, not the file module.
+#[test]
+fn a_nested_inline_glob_resolves_to_its_true_ancestor() {
+    let probe = RootProbe::new(
+        "inlinealiasnested",
+        "",
+        &[
+            ("src/lib.rs", "pub mod exec;\npub mod agent;\n"),
+            ("src/exec.rs", "pub fn run() {}\n"),
+            (
+                "src/agent.rs",
+                "type Spawner = std::process::Command;\npub fn act() {}\nmod outer {\n    mod tests {\n        use super::super::*;\n        fn acts() { act(); }\n    }\n}\n",
+            ),
+        ],
+    );
+    let outcome = check(
+        &exec_confines_command("inlinealiasnested"),
+        probe.manifest(),
+    );
+    assert_eq!(outcome.exit_code(), 1, "{outcome:?}");
+    let violations = confined_violations(&outcome);
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].finding, "glob super::super in crate::agent");
+}
+
+/// File-module `self`/`super` globs retain their existing file-module resolution contract.
+#[test]
+fn file_module_self_and_super_globs_keep_their_resolution() {
+    let probe = RootProbe::new(
+        "inlinealiasfile",
+        "",
+        &[
+            ("src/lib.rs", "pub mod exec;\npub mod agent;\n"),
+            ("src/exec.rs", "pub fn run() {}\n"),
+            (
+                "src/agent.rs",
+                "type Spawner = std::process::Command;\nuse self::*;\nuse super::*;\npub fn act() {}\n",
+            ),
+        ],
+    );
+    let outcome = check(&exec_confines_command("inlinealiasfile"), probe.manifest());
+    assert_eq!(outcome.exit_code(), 1, "{outcome:?}");
+    let violations = confined_violations(&outcome);
+    assert_eq!(violations.len(), 2, "{violations:?}");
+    assert!(
+        violations
+            .iter()
+            .any(|v| v.finding == "glob self in crate::agent")
+    );
+    assert!(
+        violations
+            .iter()
+            .any(|v| v.finding == "glob super in crate::agent")
+    );
 }
 
 /// E4: at `ScanDepth::Shallow` the permitted region is the anchored module alone, so the permitted file's inline

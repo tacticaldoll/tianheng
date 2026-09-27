@@ -14,9 +14,8 @@ use crate::finding::ModuleFact;
 
 use super::lexer::{is_ident_byte, strip_comments_and_strings, strip_macro_bodies};
 use super::path_vocab::{
-    brace_content, canonical_module_path, canonical_segment, effective_module,
-    fold_canonical_segments, inline_mod_at, is_crate_root_shadow, path_within, resolve_self_super,
-    split_top_commas,
+    brace_content, canonical_module_path, canonical_segment, fold_canonical_segments,
+    is_crate_root_shadow, path_within, resolve_self_super, scan_inline_modules, split_top_commas,
 };
 
 /// The crate-wide resolution context, built once from every reachable file: the local definition
@@ -108,11 +107,11 @@ pub(crate) fn inline_symbol_findings(
                 .or_insert_with(|| target.clone());
         }
 
-        for glob_path in glob_import_paths(&decl_text)? {
+        for (glob_path, occurrence_module) in glob_import_paths(&decl_text, module)? {
             if let Some(resolved) = resolve_head(
                 &glob_path,
                 module,
-                module,
+                &occurrence_module,
                 use_map,
                 root_modules,
                 external_vocab.as_ref(),
@@ -130,7 +129,7 @@ pub(crate) fn inline_symbol_findings(
         }
 
         let call_text = strip_comments_and_strings(raw);
-        for occurrence in path_occurrences(&call_text, module, external) {
+        for occurrence in path_occurrences(&call_text, module) {
             let Some(resolved) = resolve_head(
                 &occurrence.segments,
                 module,
@@ -174,44 +173,20 @@ struct PathOccurrence {
 
 /// Scan all call and path-mention occurrences in `source`.
 ///
-/// Under `external` each occurrence carries its true (inline) module, tracked by inline
+/// Every occurrence carries its true (inline) module, tracked by inline
 /// `mod name { … }` nesting exactly as [`super::use_scan`]'s walk does (non-`mod` braces move the
 /// depth but never touch the stack, so a call anywhere inside `mod tests { … }` attributes to
-/// `…::tests`). When `external` is `false` the tracking is skipped entirely and every occurrence is
-/// keyed to `base_module`.
-fn path_occurrences(source: &str, base_module: &str, external: bool) -> Vec<PathOccurrence> {
+/// `…::tests`). The caller's `external` mode remains a resolution policy, not a lexical-module
+/// attribution policy.
+fn path_occurrences(source: &str, base_module: &str) -> Vec<PathOccurrence> {
     let bytes = source.as_bytes();
     let mut out = Vec::new();
+    let inline_modules = scan_inline_modules(source, base_module);
     let mut i = 0;
-    let mut depth = 0usize;
-    let mut mod_stack: Vec<(String, usize)> = Vec::new();
     while i < bytes.len() {
-        if external {
-            if let Some((name_start, name_end, brace)) = inline_mod_at(bytes, i) {
-                mod_stack.push((
-                    canonical_segment(&normalize_segments(&bytes[name_start..name_end]))
-                        .to_string(),
-                    depth,
-                ));
-                i = brace;
-                continue;
-            }
-            match bytes[i] {
-                b'{' => {
-                    depth += 1;
-                    i += 1;
-                    continue;
-                }
-                b'}' => {
-                    depth = depth.saturating_sub(1);
-                    while mod_stack.last().is_some_and(|(_, d)| *d == depth) {
-                        mod_stack.pop();
-                    }
-                    i += 1;
-                    continue;
-                }
-                _ => {}
-            }
+        if matches!(bytes[i], b'{' | b'}') {
+            i += 1;
+            continue;
         }
         if !is_ident_byte(bytes[i]) || bytes[i].is_ascii_digit() {
             i += 1;
@@ -245,11 +220,7 @@ fn path_occurrences(source: &str, base_module: &str, external: bool) -> Vec<Path
         let segments = normalize_segments(&bytes[start..end]);
         let is_call = is_call_application(bytes, end);
         if segments.contains("::") || is_call {
-            let module = if external {
-                effective_module(base_module, &mod_stack)
-            } else {
-                base_module.to_string()
-            };
+            let module = inline_modules.modules[inline_modules.contexts[i] as usize].clone();
             out.push(PathOccurrence {
                 segments,
                 is_call,
@@ -348,11 +319,33 @@ const MAX_SYMBOL_NEST_DEPTH: usize = 64;
 
 /// Every glob import path in already-declaration-cleaned source: a `use <path>::*;` (bare) or a
 /// grouped `use <path>::{ … * … };` (the `*` among the group members). Returns the module-path
-/// `<path>` (without the trailing `::*`), for each glob.
-fn glob_import_paths(source: &str) -> Result<Vec<String>, String> {
+/// `<path>` (without the trailing `::*`) and the true inline module enclosing the `use`.
+fn glob_import_paths(source: &str, base_module: &str) -> Result<Vec<(String, String)>, String> {
+    use super::lexer::UseStatementScan;
+    let bytes = source.as_bytes();
+    let inline_modules = scan_inline_modules(source, base_module);
     let mut paths = Vec::new();
-    for tree in use_statements(source) {
-        glob_bases(&tree, &mut paths, 0)?;
+    let mut i = 0;
+    while i < bytes.len() {
+        if super::lexer::keyword_starts_at(bytes, i, b"use") {
+            match super::lexer::scan_use_statement(bytes, source, i) {
+                UseStatementScan::Statement { body, next } => {
+                    let mut bases = Vec::new();
+                    glob_bases(&body, &mut bases, 0)?;
+                    let module =
+                        inline_modules.modules[inline_modules.contexts[i] as usize].clone();
+                    paths.extend(bases.into_iter().map(|path| (path, module.clone())));
+                    i = next;
+                    continue;
+                }
+                UseStatementScan::NotAStatement { resume_at } => {
+                    i = resume_at;
+                    continue;
+                }
+                UseStatementScan::Unterminated => break,
+            }
+        }
+        i += 1;
     }
     Ok(paths)
 }
@@ -646,12 +639,13 @@ fn collect_definition_names(
     out: &mut HashSet<String>,
 ) {
     let bytes = source.as_bytes();
+    let inline_modules = scan_inline_modules(source, module);
     let mut i = 0;
     let mut depth = 0usize;
-    let mut mod_stack: Vec<(String, usize)> = Vec::new();
     let mut extern_opens: Vec<usize> = Vec::new();
+    let mut site_index = 0usize;
     while i < bytes.len() {
-        let module_top = mod_stack.last().map_or(0, |(_, d)| d + 1);
+        let module_top = inline_modules.module_tops[i];
         let top = if extern_opens.last() == Some(&module_top) {
             module_top + 1
         } else {
@@ -662,13 +656,20 @@ fn collect_definition_names(
             i = brace;
             continue;
         }
-        if let Some((name_start, name_end, brace)) = inline_mod_at(bytes, i) {
-            let name = normalize_segments(&bytes[name_start..name_end]);
-            if capture_inline_mod_names && depth == module_top && !name.is_empty() {
-                out.insert(format!("{}::{name}", effective_module(module, &mod_stack)));
+        if inline_modules
+            .sites
+            .get(site_index)
+            .is_some_and(|site| site.at == i)
+        {
+            let site = &inline_modules.sites[site_index];
+            if capture_inline_mod_names && depth == site.module_top && !site.name.is_empty() {
+                out.insert(format!(
+                    "{}::{}",
+                    inline_modules.modules[site.enclosing as usize], site.name
+                ));
             }
-            mod_stack.push((canonical_segment(name.trim()).to_string(), depth));
-            i = brace;
+            site_index += 1;
+            i = site.brace;
             continue;
         }
         match bytes[i] {
@@ -679,9 +680,6 @@ fn collect_definition_names(
             }
             b'}' => {
                 depth = depth.saturating_sub(1);
-                while mod_stack.last().is_some_and(|(_, d)| *d == depth) {
-                    mod_stack.pop();
-                }
                 while extern_opens.last().is_some_and(|d| *d >= depth) {
                     extern_opens.pop();
                 }
@@ -707,7 +705,10 @@ fn collect_definition_names(
                     let name =
                         normalize_segments(&bytes[name_start..end_of_ident(bytes, name_start)]);
                     if !name.is_empty() {
-                        out.insert(format!("{}::{name}", effective_module(module, &mod_stack)));
+                        out.insert(format!(
+                            "{}::{name}",
+                            inline_modules.modules[inline_modules.contexts[i] as usize]
+                        ));
                     }
                 }
             }
@@ -906,9 +907,8 @@ fn head_is_external_dependency(
 /// `occurrence_module` is the occurrence's true (inline) module (`{file_module}::inner…`) and is used
 /// ONLY inside the `external` branch, for the local-shadow ladder — so a file-top item cannot mask
 /// an external call in an inline submodule, and a submodule-local item shadows only its own module.
-/// Everything else (the `{current_module}::…` fallback, `self`/`super`, the finding's module) keeps
-/// using the FILE module `current_module`; on the default path (`external` `None`) the parameter is
-/// unread (the caller passes the file module there anyway).
+/// Relative `self`/`super` resolution uses `occurrence_module`; the `{current_module}::…` fallback
+/// and the finding's module continue to use the FILE module `current_module`.
 fn resolve_head(
     segments: &str,
     current_module: &str,
@@ -928,7 +928,7 @@ fn resolve_head(
     let base: String = match head.as_str() {
         "std" | "core" | "alloc" => parts.join("::"),
         "crate" => fold_canonical_segments(&parts_str)?,
-        "self" | "super" => resolve_self_super(current_module, &parts_str)?,
+        "self" | "super" => resolve_self_super(occurrence_module, &parts_str)?,
         other => {
             if let Some(target) = use_map.get(other) {
                 let mut base = target.clone();

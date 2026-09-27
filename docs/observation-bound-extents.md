@@ -392,11 +392,11 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 ### `inline-symbol-path-confinement/a-glob-reacts-to-any-alias-or-re-export-beneath-its-resolved-module-a-stated-bound`
 
-> a glob import whose resolved module has, anywhere beneath it, a `type` alias or `pub use` of the confined prefix — `use super::*` inside an inline module included, which resolves against the file's module
+> a glob import whose resolved module has, anywhere beneath it, a `type` alias or `pub use` of the confined prefix, whether or not the glob actually imports that name
 
-- **because**: the glob hazard asks whether any definition beneath the glob's module resolves under the prefix, not whether the glob brings that name into scope, and a glob's `self` or `super` is resolved against the file's module rather than the inline module it stands in — so a sibling's `mod tests { use super::*; }` reads as a glob over the whole crate
+- **because**: the glob hazard asks whether any definition beneath the glob's resolved module resolves under the prefix, not whether the glob brings that name into scope
 - **its defence must show**: reacts on a harmless shape
-- **pinned by**: `a_sibling_test_glob_reacts_to_an_alias_the_permitted_module_declares`
+- **pinned by**: `a_sibling_test_glob_reacts_to_an_alias_in_its_resolved_module`
 
 ### `reference-integrity/a-code-span-shaped-like-an-object-is-refused-though-it-names-none-a-stated-bound`
 

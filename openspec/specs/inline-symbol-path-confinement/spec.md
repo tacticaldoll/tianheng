@@ -154,9 +154,9 @@ stands in.
 - **THEN** the system still reacts on the glob (narrowing filters call terminal segments, not globs)
 
 #### Scenario: A glob reacts to any alias or re-export beneath its resolved module — a stated bound
-- **WHEN** `crate::exec` declares `pub type Cmd = std::process::Command;` and a sibling `crate::agent` holds only `mod tests { use super::*; }`, under a boundary permitting `std::process::Command` only within `crate::exec`
-- **THEN** the system reacts on `glob super in crate::agent`: the inline module's `super` is resolved against the file's module, so the glob reads as one over the whole crate, and the alias beneath it is taken as a name it could bring into scope — an over-reaction declared, not a precision claim
-- **PINNED-BY** `a_sibling_test_glob_reacts_to_an_alias_the_permitted_module_declares`
+- **WHEN** `crate::agent` declares `mod hidden { pub type Spawner = std::process::Command; }` and holds only `mod tests { use super::*; }`, under a boundary permitting `std::process::Command` only within `crate::exec`
+- **THEN** the system reacts on `glob super in crate::agent`: the glob only brings the `hidden` module into scope, not `Spawner`, but the alias beneath the glob's resolved module is still treated as a possible prefix-resolving name — an over-reaction declared, not a precision claim
+- **PINNED-BY** `a_sibling_test_glob_reacts_to_an_alias_in_its_resolved_module`
 
 ### Requirement: A prefix may be permitted only within the governed subtree
 

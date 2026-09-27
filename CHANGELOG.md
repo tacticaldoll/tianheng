@@ -64,6 +64,18 @@ them.
 - Construct `SemanticBoundaries` with `SemanticBoundaries::default()` and assign or push into its
   public fields. A struct literal, including `..Default::default()`, does not compile outside `hunyi`.
 
+### Static
+
+- **BREAKING** — **圭表 resolves `self` and `super` from their inline module for glob imports and ordinary
+  paths.** A sibling `mod tests { use super::*; }` no longer reacts merely because another file declares a
+  confined-prefix alias; nested `super::super::*` reaches the correct ancestor, and ordinary `super::Cmd`
+  paths now reach the alias in their actual inline parent. These corrections may add findings that adopters
+  must address or baseline, while findings removed by corrected resolution may leave redundant baseline entries.
+  The bound registered in 0.7.1 as
+  `inline-symbol-path-confinement/a-glob-reacts-to-any-alias-or-re-export-beneath-its-resolved-module-a-stated-bound`
+  keeps its id and is narrowed to the remaining glob over-reaction: the glob may react to an alias beneath its
+  resolved module even when it does not bring that alias name into scope.
+
 ## [0.7.1] - 2026-09-27
 
 ### Static
