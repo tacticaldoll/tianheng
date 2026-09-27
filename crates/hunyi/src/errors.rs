@@ -119,9 +119,40 @@ pub(crate) fn malformed_path_operand_error(operand: &str) -> String {
 /// A dyn/impl-trait operand whose leaf is an auto trait can never match: those observers
 /// remove auto-trait bounds before principal-trait resolution.
 pub(crate) fn auto_trait_operand_error(operand: &str, boundary_kind: &str) -> String {
+    let builder = match boundary_kind {
+        "impl-trait" => "must_not_expose_impl_trait_bounded_by",
+        "dyn" | "dyn-trait" => "must_not_expose_dyn_bounded_by",
+        _ => "must_not_expose_impl_trait_bounded_by",
+    };
     format!(
         "{boundary_kind} forbidden operand '{operand}' can never react: this operand set matches \
-         principal traits, and auto-trait bounds are removed before resolution; remove this entry"
+         principal traits, and auto-trait bounds are removed before resolution; to govern \
+         auto-trait bounds, use {builder}(...) instead, or remove this entry"
+    )
+}
+
+pub(crate) fn empty_auto_bound_error(boundary_kind: &str) -> String {
+    let shape_builder = match boundary_kind {
+        "impl-trait" => "must_not_expose_impl_trait",
+        "dyn" | "dyn-trait" => "must_not_expose_dyn",
+        _ => "must_not_expose_impl_trait",
+    };
+    format!(
+        "{boundary_kind} forbidden auto-trait bound set cannot be empty: to forbid all {boundary_kind} \
+         exposures, use {shape_builder}() instead"
+    )
+}
+
+pub(crate) fn unrecognized_auto_trait_error(operand: &str, boundary_kind: &str) -> String {
+    let of_builder = match boundary_kind {
+        "impl-trait" => "must_not_expose_impl_trait_of",
+        "dyn" | "dyn-trait" => "must_not_expose_dyn_of",
+        _ => "must_not_expose_impl_trait_of",
+    };
+    format!(
+        "{boundary_kind} forbidden auto-trait bound '{operand}' is not a recognized std auto trait: \
+         auto-trait bounds accept only Send, Sync, Unpin, UnwindSafe, RefUnwindSafe (bare or qualified); \
+         for principal trait operands, use {of_builder} instead"
     )
 }
 

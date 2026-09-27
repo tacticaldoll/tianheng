@@ -98,6 +98,7 @@ impl<'ast> Visit<'ast> for PathCollector {
 pub(crate) struct ShapeExposure {
     pub(crate) shape: String,
     pub(crate) principals: Vec<syn::Path>,
+    pub(crate) auto_traits: Vec<String>,
     /// The public **seam** (the owning item / sub-element) this shape is exposed at, e.g.
     /// `fn crate::api::make` or `field crate::api::Cfg::sink`. `None` as pushed by the visitor
     /// (which sees only the shape node, not its owner); the `collect_item_*` walker stamps it
@@ -134,11 +135,27 @@ pub(crate) struct DynCollector {
     pub(crate) exposures: Vec<ShapeExposure>,
 }
 
+fn auto_trait_leaves(
+    bounds: &syn::punctuated::Punctuated<syn::TypeParamBound, syn::token::Plus>,
+) -> Vec<String> {
+    bounds
+        .iter()
+        .filter_map(|bound| match bound {
+            syn::TypeParamBound::Trait(trait_bound) => {
+                let leaf = strip_raw(&trait_bound.path.segments.last()?.ident.to_string());
+                is_auto_trait_leaf(&leaf).then_some(leaf)
+            }
+            _ => None,
+        })
+        .collect()
+}
+
 impl<'ast> Visit<'ast> for DynCollector {
     fn visit_type_trait_object(&mut self, node: &'ast syn::TypeTraitObject) {
         self.exposures.push(ShapeExposure {
             shape: trait_object_to_string(node),
             principals: principal_trait_paths(&node.bounds),
+            auto_traits: auto_trait_leaves(&node.bounds),
             seam: None,
         });
         syn::visit::visit_type_trait_object(self, node);
@@ -232,6 +249,7 @@ impl<'ast> Visit<'ast> for ImplTraitCollector {
         self.exposures.push(ShapeExposure {
             shape: impl_trait_to_string(node),
             principals: principal_trait_paths(&node.bounds),
+            auto_traits: auto_trait_leaves(&node.bounds),
             seam: None,
         });
         syn::visit::visit_type_impl_trait(self, node);

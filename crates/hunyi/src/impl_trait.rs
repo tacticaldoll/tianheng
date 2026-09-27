@@ -55,22 +55,32 @@ pub(crate) fn check_impl_trait_boundary(
             let rule_key = boundary.rule_key();
 
             if boundary.including_submodules() {
-                let findings = if boundary.forbidden_operands.is_empty() {
-                    impl_trait_subtree_findings(
+                let findings = match &boundary.target {
+                    crate::dsl::ImplTraitTarget::Any => impl_trait_subtree_findings(
                         src_dir,
                         root_file,
                         &boundary.module,
                         &boundary.crate_package,
-                    )?
-                } else {
-                    impl_trait_operand_subtree_findings(
-                        src_dir,
-                        root_file,
-                        &boundary.module,
-                        &boundary.forbidden_operands,
-                        &boundary.crate_package,
-                        &dependency_names(package),
-                    )?
+                    )?,
+                    crate::dsl::ImplTraitTarget::Principal(operands) => {
+                        impl_trait_operand_subtree_findings(
+                            src_dir,
+                            root_file,
+                            &boundary.module,
+                            operands,
+                            &boundary.crate_package,
+                            &dependency_names(package),
+                        )?
+                    }
+                    crate::dsl::ImplTraitTarget::AutoBounds(bounds) => {
+                        impl_trait_auto_bound_subtree_findings(
+                            src_dir,
+                            root_file,
+                            &boundary.module,
+                            bounds,
+                            &boundary.crate_package,
+                        )?
+                    }
                 };
                 push_multi_module_violations(
                     violations,
@@ -90,22 +100,32 @@ pub(crate) fn check_impl_trait_boundary(
                 return Ok(());
             }
 
-            let findings = if boundary.forbidden_operands.is_empty() {
-                impl_trait_module_findings(
+            let findings = match &boundary.target {
+                crate::dsl::ImplTraitTarget::Any => impl_trait_module_findings(
                     src_dir,
                     root_file,
                     &boundary.module,
                     &boundary.crate_package,
-                )?
-            } else {
-                impl_trait_operand_module_findings(
-                    src_dir,
-                    root_file,
-                    &boundary.module,
-                    &boundary.forbidden_operands,
-                    &boundary.crate_package,
-                    &dependency_names(package),
-                )?
+                )?,
+                crate::dsl::ImplTraitTarget::Principal(operands) => {
+                    impl_trait_operand_module_findings(
+                        src_dir,
+                        root_file,
+                        &boundary.module,
+                        operands,
+                        &boundary.crate_package,
+                        &dependency_names(package),
+                    )?
+                }
+                crate::dsl::ImplTraitTarget::AutoBounds(bounds) => {
+                    impl_trait_auto_bound_module_findings(
+                        src_dir,
+                        root_file,
+                        &boundary.module,
+                        bounds,
+                        &boundary.crate_package,
+                    )?
+                }
             };
 
             push_single_module_violations(
@@ -180,12 +200,26 @@ pub(crate) fn impl_trait_operand_subtree_findings(
     collect_impl_trait_subtree_findings(modules, &filter)
 }
 
+pub(crate) fn impl_trait_auto_bound_subtree_findings(
+    src_dir: &Path,
+    root_file: &Path,
+    module: &str,
+    bounds: &[String],
+    crate_package: &str,
+) -> Result<Vec<(SemanticFact, String, PathBuf)>, String> {
+    let forbidden_leaves = crate::resolve::auto_bound_leaves(bounds, "impl-trait")?;
+    let modules = walk_subtree_modules(src_dir, root_file, module, crate_package)?;
+    let filter = ImplTraitSubtreeFilter::AutoBounds(forbidden_leaves);
+    collect_impl_trait_subtree_findings(modules, &filter)
+}
+
 enum ImplTraitSubtreeFilter {
     Any,
     Forbidden {
         resolution: ExternResolution,
         paths: Vec<String>,
     },
+    AutoBounds(std::collections::BTreeSet<String>),
 }
 
 impl ImplTraitSubtreeFilter {
@@ -196,14 +230,23 @@ impl ImplTraitSubtreeFilter {
         file_scope: Option<&FileExternScope>,
         exposures: &mut Vec<ShapeExposure>,
     ) {
-        let Self::Forbidden { resolution, paths } = self else {
-            return;
-        };
-        let file_scope =
-            file_scope.expect("a forbidden subtree filter precomputes one scope per module");
-        exposures.retain(|exposure| {
-            matches_forbidden_principal(exposure, uses, module, resolution, file_scope, paths)
-        });
+        match self {
+            Self::Any => {}
+            Self::Forbidden { resolution, paths } => {
+                let file_scope = file_scope
+                    .expect("a forbidden subtree filter precomputes one scope per module");
+                exposures.retain(|exposure| {
+                    matches_forbidden_principal(
+                        exposure, uses, module, resolution, file_scope, paths,
+                    )
+                });
+            }
+            Self::AutoBounds(leaves) => {
+                exposures.retain(|exposure| {
+                    crate::resolve::exposure_matches_auto_bounds(exposure, leaves)
+                });
+            }
+        }
     }
 }
 
@@ -217,7 +260,7 @@ fn collect_impl_trait_subtree_findings(
     for (mod_path, items, file) in &modules {
         let uses = collect_uses(items);
         let file_scope = match filter {
-            ImplTraitSubtreeFilter::Any => None,
+            ImplTraitSubtreeFilter::Any | ImplTraitSubtreeFilter::AutoBounds(_) => None,
             ImplTraitSubtreeFilter::Forbidden { resolution, .. } => {
                 Some(file_extern_scope(resolution, items))
             }
@@ -288,6 +331,23 @@ pub(crate) fn impl_trait_operand_module_findings(
         forbidden,
         crate_package,
         dep_names,
+        (ExposureKind::ImplTrait, collect_item_return_impl_traits),
+    )
+}
+
+pub(crate) fn impl_trait_auto_bound_module_findings(
+    src_dir: &Path,
+    root_file: &Path,
+    module: &str,
+    bounds: &[String],
+    crate_package: &str,
+) -> Result<Vec<(SemanticFact, PathBuf)>, String> {
+    crate::shape_scan::auto_bound_module_findings(
+        src_dir,
+        root_file,
+        module,
+        bounds,
+        crate_package,
         (ExposureKind::ImplTrait, collect_item_return_impl_traits),
     )
 }

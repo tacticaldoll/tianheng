@@ -41,22 +41,28 @@ pub(crate) fn check_dyn_trait_boundary(
         &units,
         &unknown_module_error(&boundary.module, &boundary.crate_package),
         |root_file, src_dir, unit| {
-            let findings = if boundary.forbidden_operands.is_empty() {
-                dyn_module_findings(
+            let findings = match &boundary.target {
+                crate::dsl::DynTraitTarget::Any => dyn_module_findings(
                     src_dir,
                     root_file,
                     &boundary.module,
                     &boundary.crate_package,
-                )?
-            } else {
-                dyn_operand_module_findings(
+                )?,
+                crate::dsl::DynTraitTarget::Principal(operands) => dyn_operand_module_findings(
                     src_dir,
                     root_file,
                     &boundary.module,
-                    &boundary.forbidden_operands,
+                    operands,
                     &boundary.crate_package,
                     &dependency_names(package),
-                )?
+                )?,
+                crate::dsl::DynTraitTarget::AutoBounds(bounds) => dyn_auto_bound_module_findings(
+                    src_dir,
+                    root_file,
+                    &boundary.module,
+                    bounds,
+                    &boundary.crate_package,
+                )?,
             };
 
             push_single_module_violations(
@@ -126,6 +132,23 @@ pub(crate) fn dyn_operand_module_findings(
         forbidden,
         crate_package,
         dep_names,
+        (ExposureKind::DynTrait, collect_item_dyn_exposures),
+    )
+}
+
+pub(crate) fn dyn_auto_bound_module_findings(
+    src_dir: &Path,
+    root_file: &Path,
+    module: &str,
+    bounds: &[String],
+    crate_package: &str,
+) -> Result<Vec<(SemanticFact, PathBuf)>, String> {
+    crate::shape_scan::auto_bound_module_findings(
+        src_dir,
+        root_file,
+        module,
+        bounds,
+        crate_package,
         (ExposureKind::DynTrait, collect_item_dyn_exposures),
     )
 }

@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**27 of 112 declared bounds have no pinning test.** That figure is the register's
+**27 of 117 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -630,6 +630,24 @@ fallback used where no manifest exists, which the register spec describes.
 
 - **pinned by**: `dyn_operand_genuinely_unresolvable_bare_principal_is_a_bound`
 
+### `semantic-dyn-trait-operand-boundary/a-local-trait-sharing-an-auto-trait-leaf-name-over-reacts-as-a-dyn-auto-bound-a-stated-bound`
+
+> the system over-reacts and emits a violation, because auto-trait bounds are identified by leaf name without symbol resolution
+
+- **pinned by**: `dyn_trait_local_auto_trait_leaf_over_reacts_is_a_bound`
+
+### `semantic-dyn-trait-operand-boundary/a-macro-generated-dyn-auto-bound-is-a-documented-bound`
+
+> the system does not observe the trait object and reports no violation — a documented coverage bound
+
+- **pinned by**: `dyn_macro_generated_auto_bound_is_a_bound`
+
+### `semantic-dyn-trait-operand-boundary/a-private-alias-hiding-a-dyn-auto-bound-in-a-public-position-is-a-stated-bound`
+
+> the system does not observe the hidden `dyn` auto bound and reports no violation — a stated coverage bound
+
+- **pinned by**: `dyn_private_alias_hiding_auto_bound_is_a_bound`
+
 ## semantic-forbidden-marker
 
 ### `semantic-forbidden-marker/an-unresolvable-hand-impl-self-type-is-a-documented-bound`
@@ -645,6 +663,18 @@ fallback used where no manifest exists, which the register spec describes.
 > the system does not resolve the principal and reports no violation — a stated resolver-coverage bound, never a silent claim over a resolvable operand
 
 - **pinned by**: `impl_trait_operand_genuinely_unresolvable_bare_principal_is_a_bound`
+
+### `semantic-impl-trait-operand-boundary/a-local-trait-sharing-an-auto-trait-leaf-name-over-reacts-as-an-impl-auto-bound-a-stated-bound`
+
+> the system over-reacts and emits a violation, because auto-trait bounds are identified by leaf name without symbol resolution
+
+- **pinned by**: `impl_trait_local_auto_trait_leaf_over_reacts_is_a_bound`
+
+### `semantic-impl-trait-operand-boundary/a-macro-generated-impl-trait-auto-bound-is-a-documented-bound`
+
+> the system does not observe the return-position impl trait and reports no violation — a documented coverage bound
+
+- **pinned by**: `impl_trait_macro_generated_auto_bound_is_a_bound`
 
 ## semantic-reexport-exposure
 
