@@ -41,6 +41,44 @@ fn dyn_auto_trait_operand_is_a_constitution_error() {
 }
 
 #[test]
+fn dyn_qualified_auto_trait_operand_is_a_constitution_error() {
+    let tree = TempSrcTree::new("dyn-qualified-auto-operand");
+    tree.write("lib.rs", "pub mod m;\n");
+    tree.write(
+        "m.rs",
+        "pub fn f() -> Box<dyn crate::ports::Port + Sync> { todo!() }\n",
+    );
+    let boundary = DynTraitBoundary::in_crate("x")
+        .module("crate::m")
+        .must_not_expose_dyn_of(["std::marker::Sync"])
+        .because("no dyn Port");
+    assert_auto_operand_error(
+        check_dyn_trait(&[boundary], &manifest(&tree)),
+        "std::marker::Sync",
+        "dyn",
+    );
+}
+
+#[test]
+fn dyn_mixed_auto_trait_operand_is_a_constitution_error() {
+    let tree = TempSrcTree::new("dyn-mixed-auto-operand");
+    tree.write("lib.rs", "pub mod m;\n");
+    tree.write(
+        "m.rs",
+        "pub fn f() -> Box<dyn crate::ports::Port + Send> { todo!() }\n",
+    );
+    let boundary = DynTraitBoundary::in_crate("x")
+        .module("crate::m")
+        .must_not_expose_dyn_of(["crate::ports::Port", "Send"])
+        .because("no dyn Port");
+    assert_auto_operand_error(
+        check_dyn_trait(&[boundary], &manifest(&tree)),
+        "Send",
+        "dyn",
+    );
+}
+
+#[test]
 fn impl_auto_trait_operand_is_a_constitution_error() {
     let tree = TempSrcTree::new("impl-auto-operand");
     tree.write("lib.rs", "pub mod m;\n");

@@ -33,7 +33,7 @@ them.
 
 ### Semantic
 
-- **BREAKING** — **Dyn-trait and impl-trait operand boundaries reject auto-trait operands as constitution errors.** `must_not_expose_dyn_of` and `must_not_expose_impl_trait_of` now exit 2 when any forbidden operand has an auto-trait leaf, including a qualified spelling or an entry beside valid operands. These entries could not match: the observer removes auto-trait bounds before principal-trait resolution. The impl-trait rule applies equally with `including_submodules()`; other forbidden-operand capabilities retain their existing matching.
+- **BREAKING** — **Dyn-trait and impl-trait operand boundaries reject auto-trait operands as constitution errors.** `must_not_expose_dyn_of` and `must_not_expose_impl_trait_of` now exit 2 when any forbidden operand has an auto-trait leaf, including a qualified spelling or an entry beside valid operands. These entries could not match: the observer removes auto-trait bounds before principal-trait resolution. The impl-trait rule applies equally with `including_submodules()`; `must_not_acquire("Send")` remains legal and reacts to an acquisition.
 
 - **BREAKING** — **渾儀 can hold a module to re-exports only: `ReexportOnlyBoundary`, carried in a new
   `reexport_only` field of `SemanticBoundaries`.** `ReexportOnlyBoundary::in_crate(p).module(m)
