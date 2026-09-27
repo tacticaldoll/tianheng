@@ -72,7 +72,7 @@ them.
   The new finding may require an adopter to address it or regenerate a baseline, while findings removed by the
   corrected resolution may leave redundant entries in an existing baseline. The bound registered in 0.7.1 as
   `inline-symbol-path-confinement/a-glob-reacts-to-any-alias-or-re-export-beneath-its-resolved-module-a-stated-bound`
-  is narrowed in this window and renamed to the new bound id.
+  is narrowed in the Unreleased entry and renamed to the new bound id.
 
 ## [0.7.1] - 2026-09-27
 
