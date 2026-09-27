@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 use xuanji::{Outcome, Polarity, Violation};
 
+use crate::anchor::canonical_module_anchor;
 use crate::collect::collect_item_async_exposures;
 use crate::driver::run_boundaries;
 use crate::dsl::AsyncExposureBoundary;
@@ -39,10 +40,11 @@ pub(crate) fn check_async_exposure_boundary(
     boundary: &AsyncExposureBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
+    let module = canonical_module_anchor(&boundary.module, &boundary.crate_package)?;
     let (_package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
     over_each_unit(
         &units,
-        &unknown_module_error(&boundary.module, &boundary.crate_package),
+        &unknown_module_error(&module, &boundary.crate_package),
         |root_file, src_dir, unit| {
             let rule_key = boundary.rule_key();
 
@@ -50,13 +52,13 @@ pub(crate) fn check_async_exposure_boundary(
                 let findings = async_exposure_subtree_findings(
                     src_dir,
                     root_file,
-                    &boundary.module,
+                    &module,
                     &boundary.crate_package,
                 )?;
                 push_multi_module_violations(
                     violations,
                     MultiModuleViolationContext {
-                        target: &boundary.module,
+                        target: &module,
                         rule: ASYNC_EXPOSURE_RULE,
                         rule_key,
                         reason: &boundary.reason,
@@ -74,14 +76,14 @@ pub(crate) fn check_async_exposure_boundary(
             let findings = async_exposure_module_findings(
                 src_dir,
                 root_file,
-                &boundary.module,
+                &module,
                 &boundary.crate_package,
             )?;
 
             push_single_module_violations(
                 violations,
                 SingleModuleViolationContext {
-                    module: &boundary.module,
+                    module: &module,
                     rule: ASYNC_EXPOSURE_RULE,
                     rule_key,
                     reason: &boundary.reason,

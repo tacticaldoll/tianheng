@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 use xuanji::{Outcome, Polarity, Violation};
 
+use crate::anchor::{canonical_module_anchor, module_exists_in_unit};
 use crate::containment::{leaf_of, path_leaf, resolve_self_type, under_subtree};
 use crate::driver::run_boundaries;
 use crate::dsl::ForbiddenMarkerBoundary;
@@ -53,15 +54,16 @@ pub(crate) fn check_forbidden_marker_boundary(
     boundary: &ForbiddenMarkerBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
+    let module = canonical_module_anchor(&boundary.module, &boundary.crate_package)?;
     let (_package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
     over_each_unit(
         &units,
-        &unknown_module_error(&boundary.module, &boundary.crate_package),
+        &unknown_module_error(&module, &boundary.crate_package),
         |root_file, src_dir, unit| {
             let findings = forbidden_marker_findings(
                 src_dir,
                 root_file,
-                &boundary.module,
+                &module,
                 &boundary.forbidden,
                 &boundary.crate_package,
             )?;
@@ -69,7 +71,7 @@ pub(crate) fn check_forbidden_marker_boundary(
             push_multi_module_violations(
                 violations,
                 MultiModuleViolationContext {
-                    target: &boundary.module,
+                    target: &module,
                     rule: FORBIDDEN_MARKER_RULE,
                     rule_key: boundary.rule_key(),
                     reason: &boundary.reason,
@@ -92,6 +94,8 @@ pub(crate) fn check_forbidden_marker_boundary(
 /// the trait path both match; never a silent miss). Sorted, deduplicated.
 ///
 /// Forbidden operands are validated with `validate_path_operands` to reject empty path segments.
+/// The subtree must exist in this unit's module graph; its absence is the anchor-absence error, so
+/// `over_each_unit` defers it to a unit that declares the module and refuses only where none does.
 pub(crate) fn forbidden_marker_findings(
     src_dir: &Path,
     root_file: &Path,
@@ -100,8 +104,11 @@ pub(crate) fn forbidden_marker_findings(
     crate_package: &str,
 ) -> Result<Vec<(SemanticFact, String, PathBuf)>, String> {
     validate_path_operands(forbidden)?;
-    let scan = scan_crate(src_dir, root_file, crate_package, &HashSet::new())?;
     let subtree = canonical_path_str(subtree);
+    if !module_exists_in_unit(src_dir, root_file, &subtree, crate_package)? {
+        return Err(unknown_module_error(&subtree, crate_package));
+    }
+    let scan = scan_crate(src_dir, root_file, crate_package, &HashSet::new())?;
     let defined: HashSet<&str> = scan
         .type_defs
         .iter()

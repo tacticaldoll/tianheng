@@ -70,6 +70,29 @@ them.
   External crates construct it with `SemanticBoundaries::default()` and assign or push into its
   fields. Future semantic boundary fields can be added without changing this construction path.
 
+- **BREAKING** — **渾儀 accepts a module anchor only in its canonical spelling, naming a module that
+  exists.** A module anchor, and each entry of `only_under([...])` and `only_implemented_in` / `and_in`, is
+  `crate` or `crate::` followed by `::`-separated identifiers. Any other spelling is a constitution error
+  (exit 2) quoting what was written and, where the text determines one, the canonical spelling to write.
+  Three behaviours change:
+  - **Module-anchored boundaries** (visibility, re-export-only, signature-coupling, dyn-trait, impl-trait,
+    async-exposure, forbidden-marker, and `NoExistentialLeak` through them) accepted `crate::kernel::`,
+    `kernel`, `crate::::kernel` and `r#crate::kernel` as `crate::kernel`, and the empty string as the crate
+    root. Each reacted with the written text as its violation target, so a baseline entry recorded under
+    one spelling did not suppress the same finding declared under another. These now exit 2 where they
+    exited 1.
+  - **Forbidden-marker** never checked that its anchor exists. A mistyped or non-canonical anchor such as
+    `crate::nope`, `self::domain` or `::crate::domain` governed no type and exited 0. It is now a
+    constitution error, as it is for every single-module capability.
+  - **The `only_under` and `only_implemented_in` location lists** refused an empty `::` segment, but accepted
+    a location naming no module (`kernel`, `crate::nope`, `self::kernel`, a segment carrying whitespace).
+    Such an entry never matched, so every genuinely placed site was reported as a violation. It is now a
+    constitution error naming the entry. The empty-set and crate-root refusals are unchanged.
+
+  `r#x` and `x` are the one equivalence folded, because rustc defines it: `crate::r#kernel` is accepted,
+  and its violation target and identity are those of `crate::kernel`, where they carried the raw spelling.
+  A baseline entry recorded under a `crate::r#…` target is stale.
+
 ### Migration
 
 - Repair or baseline a public `safe`- or `unsafe`-qualified foreign item that now reports under a
@@ -81,6 +104,10 @@ them.
 
 - Construct `SemanticBoundaries` with `SemanticBoundaries::default()` and assign or push into its
   public fields. A struct literal, including `..Default::default()`, does not compile outside `hunyi`.
+
+- Rewrite every 渾儀 module anchor and every `only_under` / `only_implemented_in` / `and_in` location in
+  the canonical `crate::…` spelling, and make sure it names a module the crate declares. Regenerate any
+  baseline entry recorded under a non-canonical or `crate::r#…` target.
 
 ### Static
 

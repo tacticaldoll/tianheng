@@ -451,8 +451,8 @@ pub(super) fn trait_impl_rejects_a_malformed_colon_allowed_location() {
             "constitution error must name the malformed allowed entry {bad:?}: {err}"
         );
     }
-    // The empty string itself is also a malformed allowed entry — see must_not_expose's
-    // identical note; this shares the same `validate_path_operands` guard.
+    // The empty string itself is also a malformed allowed entry: a location is a module anchor,
+    // so it is held to the anchor's one spelling and the refusal suggests the crate root.
     let empty_err = locality_findings(
         "malformed-allowed-empty",
         files,
@@ -461,7 +461,7 @@ pub(super) fn trait_impl_rejects_a_malformed_colon_allowed_location() {
     )
     .unwrap_err();
     assert!(
-        empty_err.contains("is empty"),
+        empty_err.contains("''") && empty_err.contains("write `crate`"),
         "constitution error must flag the empty allowed entry: {empty_err}"
     );
     // Control: the well-formed spelling for the identical, genuinely-in-place impl still passes

@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 use xuanji::{Outcome, Violation};
 
+use crate::anchor::canonical_module_anchor;
 use crate::collect::{collect_item_exposures, collect_trait_impl_exposures};
 use crate::containment::matches_forbidden;
 use crate::crate_scope::{
@@ -52,15 +53,16 @@ pub(crate) fn check_boundary(
     boundary: &SignatureBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
+    let module = canonical_module_anchor(&boundary.module, &boundary.crate_package)?;
     let (package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
     over_each_unit(
         &units,
-        &unknown_module_error(&boundary.module, &boundary.crate_package),
+        &unknown_module_error(&module, &boundary.crate_package),
         |root_file, src_dir, unit| {
             let findings = module_findings(
                 src_dir,
                 root_file,
-                &boundary.module,
+                &module,
                 &boundary.forbidden,
                 &boundary.crate_package,
                 boundary.including_trait_impls,
@@ -70,7 +72,7 @@ pub(crate) fn check_boundary(
             push_single_module_violations(
                 violations,
                 SingleModuleViolationContext {
-                    module: &boundary.module,
+                    module: &module,
                     rule: SIGNATURE_RULE,
                     rule_key: boundary.rule_key(),
                     reason: &boundary.reason,

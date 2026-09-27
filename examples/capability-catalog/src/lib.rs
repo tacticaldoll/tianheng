@@ -1,5 +1,6 @@
 //! Deliberately violating source for the capability-catalog contract checks.
 
+pub mod allowed;
 pub mod governance;
 pub mod marked;
 pub mod misplaced;

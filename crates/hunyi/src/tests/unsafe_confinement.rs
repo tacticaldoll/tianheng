@@ -221,9 +221,10 @@ pub(super) fn unsafe_production_violation_separates_target_rule_and_fact_roles()
     let (metadata, _fixture) = fixture_metadata(
         "unsafe-identity",
         &[
-            ("lib.rs", "pub mod net;\npub mod ffi;\n"),
+            ("lib.rs", "pub mod net;\npub mod ffi;\npub mod raw;\n"),
             ("net.rs", "pub unsafe fn decode() {}\n"),
             ("ffi.rs", ""),
+            ("raw.rs", ""),
         ],
     );
     let boundary = UnsafeBoundary::in_crate("x")
@@ -362,11 +363,11 @@ pub(super) fn unsafe_confinement_rejects_a_malformed_colon_allowed_location() {
             "constitution error must name the malformed allowed entry {bad:?}: {err}"
         );
     }
-    // The empty string itself is also a malformed allowed entry — see must_not_expose's
-    // identical note; this shares the same `validate_path_operands` guard.
+    // The empty string itself is also a malformed allowed entry: a location is a module anchor,
+    // so it is held to the anchor's one spelling and the refusal suggests the crate root.
     let empty_err = unsafe_labels("malformed-allowed-empty", files, &[""]).unwrap_err();
     assert!(
-        empty_err.contains("is empty"),
+        empty_err.contains("''") && empty_err.contains("write `crate`"),
         "constitution error must flag the empty allowed entry: {empty_err}"
     );
     // Control: the well-formed spelling for the identical, genuinely-confined site still passes

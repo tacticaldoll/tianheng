@@ -41,6 +41,7 @@ pub use dsl::*;
 mod rules;
 pub use rules::*;
 
+mod anchor;
 mod collect;
 mod containment;
 mod crate_scope;

@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 use xuanji::{Outcome, Violation};
 
+use crate::anchor::canonical_module_anchor;
 use crate::collect::collect_item_dyn_exposures;
 use crate::crate_scope::dependency_names;
 use crate::driver::run_boundaries;
@@ -36,22 +37,20 @@ pub(crate) fn check_dyn_trait_boundary(
     boundary: &DynTraitBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
+    let module = canonical_module_anchor(&boundary.module, &boundary.crate_package)?;
     let (package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
     over_each_unit(
         &units,
-        &unknown_module_error(&boundary.module, &boundary.crate_package),
+        &unknown_module_error(&module, &boundary.crate_package),
         |root_file, src_dir, unit| {
             let findings = match &boundary.target {
-                crate::dsl::DynTraitTarget::Any => dyn_module_findings(
-                    src_dir,
-                    root_file,
-                    &boundary.module,
-                    &boundary.crate_package,
-                )?,
+                crate::dsl::DynTraitTarget::Any => {
+                    dyn_module_findings(src_dir, root_file, &module, &boundary.crate_package)?
+                }
                 crate::dsl::DynTraitTarget::Principal(operands) => dyn_operand_module_findings(
                     src_dir,
                     root_file,
-                    &boundary.module,
+                    &module,
                     operands,
                     &boundary.crate_package,
                     &dependency_names(package),
@@ -59,7 +58,7 @@ pub(crate) fn check_dyn_trait_boundary(
                 crate::dsl::DynTraitTarget::AutoBounds(bounds) => dyn_auto_bound_module_findings(
                     src_dir,
                     root_file,
-                    &boundary.module,
+                    &module,
                     bounds,
                     &boundary.crate_package,
                 )?,
@@ -68,7 +67,7 @@ pub(crate) fn check_dyn_trait_boundary(
             push_single_module_violations(
                 violations,
                 SingleModuleViolationContext {
-                    module: &boundary.module,
+                    module: &module,
                     rule: DYN_TRAIT_RULE,
                     rule_key: boundary.rule_key(),
                     reason: &boundary.reason,

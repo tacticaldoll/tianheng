@@ -73,6 +73,8 @@ pub struct SignatureCrateDraft {
 
 impl SignatureCrateDraft {
     /// Anchor the boundary to a module path within the crate (e.g. `crate::domain`).
+    /// Written from the crate root — `crate` or `crate::a::b`, a raw identifier read as its plain
+    /// form; any other spelling, or a module the crate does not declare, is a constitution error (exit 2).
     pub fn module(self, module: &str) -> SignatureModuleDraft {
         SignatureModuleDraft {
             crate_package: self.crate_package,

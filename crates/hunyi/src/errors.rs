@@ -49,6 +49,35 @@ pub(crate) fn unknown_module_error(module: &str, crate_package: &str) -> String 
     )
 }
 
+/// A module anchor or allowed location written in a spelling other than the canonical one.
+///
+/// `suggestion` is the canonical spelling the written one most plausibly meant, when there is one.
+pub(crate) fn non_canonical_module_anchor_error(
+    written: &str,
+    crate_package: &str,
+    suggestion: Option<&str>,
+) -> String {
+    let repair = match suggestion {
+        Some("crate") => "write `crate` for the crate root".to_string(),
+        Some(spelling) => format!("write `{spelling}`"),
+        None => "write the module's path from the crate root, starting `crate::`".to_string(),
+    };
+    format!(
+        "a module is named by one spelling or it becomes two identities: '{written}' in crate \
+         '{crate_package}' is not `crate` or `crate::` followed by `::`-separated identifiers — \
+         {repair}"
+    )
+}
+
+/// An allowed location naming a module that no compilation unit of the crate declares.
+pub(crate) fn unknown_location_error(location: &str, crate_package: &str) -> String {
+    format!(
+        "an allowed location must name a real module or it can never match: location \
+         '{location}' is not found among the modules of crate '{crate_package}' (declared via \
+         `mod`) — check the path"
+    )
+}
+
 pub(crate) fn unknown_trait_error(trait_path: &str, crate_package: &str) -> String {
     format!(
         "a trait-impl-locality boundary must anchor to a real local trait or it silently never \

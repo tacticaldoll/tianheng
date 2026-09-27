@@ -150,6 +150,36 @@ always either inert or broken, never meaningfully different from the bare form.
 - **WHEN** a boundary declares `only_implemented_in("crate::commands")` against the same crate
 - **THEN** the system reports no violation for the genuinely-in-place impl, exactly as before this requirement existed
 
+### Requirement: An allowed location is a canonical module that exists
+
+Each allowed-location entry SHALL be held to the module-anchor spelling `semantic-signature-coupling`
+states: `crate`, or `crate::` followed by `::`-separated identifiers, any other spelling a
+constitution error (exit 2) quoting the entry as written and naming the canonical spelling where
+the text determines one, and a raw identifier accepted as its plain form. The empty-segment shapes the
+requirement above names are among the spellings refused here. Each canonical entry SHALL also name a
+module some compilation unit of the crate declares, and one that no unit declares SHALL be a
+constitution error (exit 2) naming it. An entry naming no module can never contain a impl, so every
+genuinely placed impl would be reported as a violation that names no cause, where the refusal names
+the entry. An entry declared in one compilation unit and absent from another is a real location.
+
+#### Scenario: A location not rooted at `crate` is a constitution error
+
+- **WHEN** a boundary declares `only_implemented_in("commands")` and the crate declares `crate::commands`
+- **THEN** the system emits a constitution error (exit 2) quoting `commands` and suggesting `crate::commands`, rather than reporting the impls placed under `crate::commands` as violations
+- **PINNED-BY** `every_anchored_capability_refuses_a_non_canonical_spelling`
+
+#### Scenario: A location naming no module is a constitution error
+
+- **WHEN** a boundary declares `only_implemented_in("crate::nope")` and the crate declares no such module
+- **THEN** the system emits a constitution error (exit 2) naming `crate::nope`, rather than reporting every impl as a violation
+- **PINNED-BY** `every_anchored_capability_refuses_a_module_that_does_not_exist`
+
+#### Scenario: A location declared in one compilation unit is real
+
+- **WHEN** a package has a library declaring `crate::ffi` and a binary that does not, and the boundary allows `crate::ffi`
+- **THEN** the system judges the boundary, and the impls under the library's `crate::ffi` are clean
+- **PINNED-BY** `a_module_present_in_one_compilation_unit_is_not_absent`
+
 ### Requirement: Trait-path resolution scope and no false negative
 
 The system SHALL resolve the trait named at an impl site to a canonical path using the shared 渾儀 resolver: the file's in-scope `use` declarations (including renamed imports), `crate::`/`self`/`super`-relative paths (including a `use` target that is itself `self`/`super`-relative), a **bare or relative name resolved against the current module and crate root** (a same-module trait needs no `use`), and **local `pub use` re-export chains** (a trait reached through a facade path matches the anchor). A trait whose resolution would require capabilities beyond this — a glob import (`use …::*`), a macro-generated impl, or `#[cfg]` feature evaluation — is OUT OF SCOPE, a stated coverage bound, not a claimed reaction. `#[cfg]`-gated code is observed **as written** (cfg-agnostic), and a `#[cfg]`-gated module whose source file is legitimately absent is skipped, not a scan error. A module reached only through a `cfg_attr`-wrapped `#[path]` remap is followed too: an inline body regardless of the attribute (which has no effect on an inline module's content), and a file module's conventional file and its `cfg_attr` target both read when they exist on disk, cfg-blind union rather than a skip bound. Within the resolved scope there SHALL be no false negative: an impl of the anchored trait whose trait path *is* resolvable and whose location is disallowed MUST react. The system MUST NOT silently pass a disallowed impl it was able to resolve to the anchored trait. When a `use`-map name involved in resolution — on either the boundary's own declared anchor (reached through its re-export facade) or an impl site's written trait path — resolves to **more than one** candidate because of a mutually-exclusive `#[cfg]`-gated `use` alias for the identical local name, every candidate SHALL be checked, and the anchor match SHALL react if any impl-site candidate canonicalizes to any declared-anchor candidate, never silently keeping only the candidate from whichever declaration was written last (observation cannot know which `#[cfg]` branch is live).

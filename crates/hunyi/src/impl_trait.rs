@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 use xuanji::{Outcome, Polarity, Violation};
 
+use crate::anchor::canonical_module_anchor;
 use crate::collect::collect_item_return_impl_traits;
 use crate::crate_scope::{
     ExternResolution, FileExternScope, dependency_names, extern_resolution, file_extern_scope,
@@ -47,10 +48,11 @@ pub(crate) fn check_impl_trait_boundary(
     boundary: &ImplTraitBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
+    let module = canonical_module_anchor(&boundary.module, &boundary.crate_package)?;
     let (package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
     over_each_unit(
         &units,
-        &unknown_module_error(&boundary.module, &boundary.crate_package),
+        &unknown_module_error(&module, &boundary.crate_package),
         |root_file, src_dir, unit| {
             let rule_key = boundary.rule_key();
 
@@ -59,14 +61,14 @@ pub(crate) fn check_impl_trait_boundary(
                     crate::dsl::ImplTraitTarget::Any => impl_trait_subtree_findings(
                         src_dir,
                         root_file,
-                        &boundary.module,
+                        &module,
                         &boundary.crate_package,
                     )?,
                     crate::dsl::ImplTraitTarget::Principal(operands) => {
                         impl_trait_operand_subtree_findings(
                             src_dir,
                             root_file,
-                            &boundary.module,
+                            &module,
                             operands,
                             &boundary.crate_package,
                             &dependency_names(package),
@@ -76,7 +78,7 @@ pub(crate) fn check_impl_trait_boundary(
                         impl_trait_auto_bound_subtree_findings(
                             src_dir,
                             root_file,
-                            &boundary.module,
+                            &module,
                             bounds,
                             &boundary.crate_package,
                         )?
@@ -85,7 +87,7 @@ pub(crate) fn check_impl_trait_boundary(
                 push_multi_module_violations(
                     violations,
                     MultiModuleViolationContext {
-                        target: &boundary.module,
+                        target: &module,
                         rule: IMPL_TRAIT_RULE,
                         rule_key,
                         reason: &boundary.reason,
@@ -104,14 +106,14 @@ pub(crate) fn check_impl_trait_boundary(
                 crate::dsl::ImplTraitTarget::Any => impl_trait_module_findings(
                     src_dir,
                     root_file,
-                    &boundary.module,
+                    &module,
                     &boundary.crate_package,
                 )?,
                 crate::dsl::ImplTraitTarget::Principal(operands) => {
                     impl_trait_operand_module_findings(
                         src_dir,
                         root_file,
-                        &boundary.module,
+                        &module,
                         operands,
                         &boundary.crate_package,
                         &dependency_names(package),
@@ -121,7 +123,7 @@ pub(crate) fn check_impl_trait_boundary(
                     impl_trait_auto_bound_module_findings(
                         src_dir,
                         root_file,
-                        &boundary.module,
+                        &module,
                         bounds,
                         &boundary.crate_package,
                     )?
@@ -131,7 +133,7 @@ pub(crate) fn check_impl_trait_boundary(
             push_single_module_violations(
                 violations,
                 SingleModuleViolationContext {
-                    module: &boundary.module,
+                    module: &module,
                     rule: IMPL_TRAIT_RULE,
                     rule_key,
                     reason: &boundary.reason,

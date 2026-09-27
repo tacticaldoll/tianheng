@@ -154,6 +154,49 @@ If the boundary's target crate is absent from the workspace, the system SHALL tr
 - **WHEN** a governed module is declared only via `#[cfg_attr(any(), path = "never.rs")] pub mod domain;` with `domain.rs` (the conventional file, present) declaring `#[derive(serde::Serialize)] pub struct Order;` and `never.rs` (the target) absent, under a boundary forbidding `serde::Serialize`
 - **THEN** the system reads `domain.rs` — the file every build actually compiles here — and reacts, never treating the `cfg_attr` attribute as a bound to skip the module outright
 
+### Requirement: A forbidden-marker anchor has one canonical spelling
+
+The forbidden-marker boundary's module anchor SHALL be held to the spelling `semantic-signature-coupling`
+states for every module-anchored semantic capability: `crate`, or `crate::` followed by
+`::`-separated identifiers. Any other spelling SHALL be a constitution error (exit 2) quoting what was
+written and naming the canonical spelling where the text determines one, and a raw identifier SHALL
+be accepted as its plain form in the violation target and identity. The anchor is this boundary's
+violation `target`, so the spelling is what decides which baseline entry a finding matches.
+
+#### Scenario: A forbidden-marker anchor not rooted at `crate` is a constitution error
+
+- **WHEN** a developer writes `ForbiddenMarkerBoundary::in_crate("app").module("domain")` and the crate declares `crate::domain`
+- **THEN** the system emits a constitution error (exit 2) quoting `domain` and suggesting `crate::domain`, rather than reacting under a target spelled `domain`
+- **PINNED-BY** `every_anchored_capability_refuses_a_non_canonical_spelling`
+
+#### Scenario: A raw-identifier forbidden-marker anchor keeps the plain identity
+
+- **WHEN** a forbidden-marker boundary anchors to `crate::r#domain`
+- **THEN** its violations carry the target `crate::domain` and the identities a `crate::domain` anchor produces
+- **PINNED-BY** `a_raw_identifier_anchor_is_the_same_identity_as_its_plain_spelling`
+
+### Requirement: A forbidden-marker anchor names a module that exists
+
+The governed subtree's anchor SHALL name a module the target crate declares. A canonical anchor
+that no compilation unit of the crate declares SHALL be a constitution error (exit 2) naming the
+anchor, the refusal every single-module capability makes through anchor resolution. The subtree is
+judged by where types are defined, so without it a mistyped anchor would govern no type and the
+boundary would report clean. A package's roots are separate module graphs: an anchor declared in
+one compilation unit and absent from another SHALL be governed where it is declared, and refused
+only where no unit declares it.
+
+#### Scenario: An anchor naming no module is a constitution error
+
+- **WHEN** a forbidden-marker boundary anchors to `crate::domian` and the crate declares no such module
+- **THEN** the system emits a constitution error (exit 2) naming `crate::domian`, never exit 0
+- **PINNED-BY** `every_anchored_capability_refuses_a_module_that_does_not_exist`
+
+#### Scenario: An anchor declared in one compilation unit is governed there
+
+- **WHEN** a package has a library declaring `crate::ffi` and a binary that does not, and a forbidden-marker boundary anchors to `crate::ffi`
+- **THEN** the library's acquisitions under `crate::ffi` react, and the binary's absence of the module is not an error
+- **PINNED-BY** `a_module_present_in_one_compilation_unit_is_not_absent`
+
 ### Requirement: CI reaction, severity, and baseline parity
 
 The system SHALL fold forbidden-marker findings into the same exit-code contract as the other dimensions (0 clean / 1 enforce violation / 2 constitution or scan error) and aggregate them with the other boundaries. A boundary SHALL carry a severity (`enforce` default, or `warn`, which reports without failing), and its violations SHALL be gated against the same `Baseline` (identity `(target, rule_key, fact)`, the rule a fixed string), so a project may adopt the boundary on a dirty codebase and gate only on new acquisitions.

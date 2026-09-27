@@ -108,6 +108,8 @@ impl TraitImplTraitDraft {
     /// Allow the trait to be implemented under the given module path or prefix
     /// (`::`-delimited containment, so `crate::commands` also allows
     /// `crate::commands::greet`). Implementations outside the allowed location(s) react.
+    /// The location is written from the crate root and names a module the crate declares; any other
+    /// spelling, or a module no compilation unit declares, is a constitution error (exit 2).
     pub fn only_implemented_in(self, location: &str) -> TraitImplBoundaryDraft {
         TraitImplBoundaryDraft {
             crate_package: self.crate_package,
@@ -130,6 +132,7 @@ pub struct TraitImplBoundaryDraft {
 impl TraitImplBoundaryDraft {
     /// Also allow the trait to be implemented under another module path / prefix (a
     /// boundary MAY allow more than one location).
+    /// Held to the same spelling and existence as [`only_implemented_in`](TraitImplTraitDraft::only_implemented_in).
     pub fn and_in(mut self, location: &str) -> Self {
         self.allowed_locations.push(location.to_string());
         self

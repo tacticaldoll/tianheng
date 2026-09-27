@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 use xuanji::{Outcome, Violation};
 
+use crate::anchor::canonical_module_anchor;
 use crate::driver::run_boundaries;
 use crate::dsl::VisibilityBoundary;
 use crate::emit::{SingleModuleViolationContext, push_single_module_violations};
@@ -31,15 +32,16 @@ pub(crate) fn check_visibility_boundary(
     boundary: &VisibilityBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
+    let module = canonical_module_anchor(&boundary.module, &boundary.crate_package)?;
     let (_package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
     over_each_unit(
         &units,
-        &unknown_module_error(&boundary.module, &boundary.crate_package),
+        &unknown_module_error(&module, &boundary.crate_package),
         |root_file, src_dir, unit| {
             let findings = visibility_findings(
                 src_dir,
                 root_file,
-                &boundary.module,
+                &module,
                 &boundary.crate_package,
                 boundary.ceiling().rank(),
             )?;
@@ -47,7 +49,7 @@ pub(crate) fn check_visibility_boundary(
             push_single_module_violations(
                 violations,
                 SingleModuleViolationContext {
-                    module: &boundary.module,
+                    module: &module,
                     rule: boundary.ceiling().rule(),
                     rule_key: boundary.rule_key(),
                     reason: &boundary.reason,

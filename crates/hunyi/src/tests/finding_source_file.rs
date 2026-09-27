@@ -1142,7 +1142,11 @@ pub(super) fn a_trait_impl_locality_violation_carries_its_impl_site_file() {
     let (metadata, _fixture) = fixture_metadata(
         "locality",
         &[
-            ("lib.rs", "pub mod plugins;\npub trait Command {}\n"),
+            (
+                "lib.rs",
+                "pub mod allowed;\npub mod plugins;\npub trait Command {}\n",
+            ),
+            ("allowed.rs", ""),
             (
                 "plugins.rs",
                 "pub struct P;\nimpl crate::Command for P {}\n",
@@ -1170,7 +1174,11 @@ pub(super) fn a_trait_impl_in_a_nested_module_resolves_to_mod_rs() {
     let (metadata, _fixture) = fixture_metadata(
         "locality-nested",
         &[
-            ("lib.rs", "pub mod plugins;\npub trait Command {}\n"),
+            (
+                "lib.rs",
+                "pub mod allowed;\npub mod plugins;\npub trait Command {}\n",
+            ),
+            ("allowed.rs", ""),
             (
                 "plugins/mod.rs",
                 "pub struct P;\nimpl crate::Command for P {}\n",
