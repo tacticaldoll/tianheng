@@ -71,10 +71,33 @@ declare and that is no extern head (a prelude trait, a glob-imported trait, or a
 mentions), a macro-generated trait, or a glob/foreign-module re-export — is dropped, the stated
 resolver-coverage bound, never a silent pass of a *resolvable* operand; the drop holds against
 **every** operand spelling, including the module-qualified one a bare name would produce if it were
-declared. Auto-trait and lifetime bounds are never operands.
+declared. Auto-trait and lifetime bounds are never principal operands. A forbidden operand
+whose final path segment is recognized as an auto trait by the same std leaf-name test that
+removes auto-trait bounds from the principal list (e.g. `Send`, including qualified and
+raw-identifier spellings) SHALL be rejected as a constitution error before resolution, even in a
+mixed set: the observer removes those bounds before principal resolution, so the entry can never
+react. This applies equally with `including_submodules()`.
 The finding is the **seam-qualified** rendered `impl …` shape (`{shape}
 exposed by {seam}`), and the return-position scoping is inherited unchanged (argument-position `impl
 Trait` and `async fn` are not governed). A mutually-exclusive `#[cfg]` collision on the `use`-map name a principal trait resolves through — the identical discipline signature-coupling's own resolver ladder states — SHALL treat every candidate target as a possible principal and react if any is forbidden, never silently keeping only the declaration written last. The crate-wide re-export closure this resolver walks includes a `pub use` declared in a module reached only through a `cfg_attr`-wrapped `#[path]` remap — the identical crate-wide collection signature-coupling's own closure gets, never a silent gap specific to this operand-scoped resolver. A forbidden operand shaped with an empty `::`-segment (leading, trailing, or doubled `::`, or the empty string) is rejected as a constitution error, inheriting signature-coupling's own requirement for the identical reason: this resolver ladder never produces a canonicalized principal with an empty segment, so such an operand could never react. This holds identically for the subtree-scoped (`including_submodules()`) path, which canonicalizes its own copy of the forbidden set through the same rejection.
+
+#### Scenario: Auto-trait markers are not principal operands
+
+- **WHEN** a module returns `impl crate::ports::Port + Send` and the boundary forbids `["crate::ports::Port"]`
+- **THEN** the system emits a violation on the named principal trait; the trailing `Send` marker is removed before principal resolution
+- **PINNED-BY** `impl_trait_operand_filters_auto_trait_markers_and_refuses_them_as_operands`
+- **PINNED-BY** `named_principal_and_forbidden_marker_send_remain_observable`
+
+#### Scenario: An auto-trait operand is a constitution error
+
+- **WHEN** an impl-trait operand boundary forbids `["Send"]`, `["std::marker::Sync"]`, or a mixed set containing an auto-trait leaf, with or without `including_submodules()`
+- **THEN** the system exits 2 before principal resolution, names the offending operand, and directs the author to remove it
+- **PINNED-BY** `impl_auto_trait_operand_is_a_constitution_error`
+- **PINNED-BY** `impl_subtree_auto_trait_operand_is_a_constitution_error`
+- **PINNED-BY** `mixed_auto_trait_operand_is_a_constitution_error`
+- **PINNED-BY** `qualified_std_auto_trait_operand_is_a_constitution_error`
+- **PINNED-BY** `qualified_local_auto_trait_leaf_is_a_constitution_error`
+- **PINNED-BY** `raw_auto_trait_leaf_is_a_constitution_error`
 
 #### Scenario: A returned impl Trait of a named forbidden trait is flagged
 

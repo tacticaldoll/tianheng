@@ -116,8 +116,9 @@ impl DynTraitModuleDraft {
     /// trait that does not resolve — a bare name with no `use` (a std `dyn Fn(…)` / `dyn
     /// Iterator<…>`, a bare `dyn Send`), a macro-generated or glob/cross-crate re-exported trait
     /// — is out of the resolver's stated coverage and is not matched; a *resolvable* operand is
-    /// never silently passed. Auto-trait / lifetime bounds are never operands (only the principal,
-    /// non-auto trait is matched, regardless of its position among the bounds).
+    /// never silently passed. Auto-trait / lifetime bounds are never principal operands (only
+    /// the non-auto trait is matched, regardless of its position among the bounds). A forbidden
+    /// operand whose leaf names an auto trait is a constitution error; remove that entry.
     pub fn must_not_expose_dyn_of<I, S>(self, operands: I) -> DynTraitBoundaryDraft
     where
         I: IntoIterator<Item = S>,

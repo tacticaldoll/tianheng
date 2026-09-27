@@ -100,6 +100,24 @@ pub(crate) fn validate_path_operands(operands: &[String]) -> Result<(), String> 
     Ok(())
 }
 
+/// Validate only dyn/impl-trait exposure operands. The observer removes auto-trait
+/// bounds before principal resolution, so a forbidden auto-trait leaf cannot react.
+pub(crate) fn validate_exposed_trait_operands(
+    operands: &[String],
+    boundary_kind: &str,
+) -> Result<(), String> {
+    validate_path_operands(operands)?;
+    if let Some(bad) = operands.iter().find(|operand| {
+        let leaf = operand
+            .rsplit_once("::")
+            .map_or(operand.as_str(), |(_, leaf)| leaf);
+        shape::is_auto_trait_leaf(leaf)
+    }) {
+        return Err(crate::errors::auto_trait_operand_error(bad, boundary_kind));
+    }
+    Ok(())
+}
+
 /// Map each name a `use` brings into the module's scope to its full written path
 /// (`use a::b::C` → `C → a::b::C`; `use a::b::C as D` → `D → a::b::C`; `use a::b` →
 /// `b → a::b`). Glob imports bring no nameable leaf (a stated bound). Only the module's

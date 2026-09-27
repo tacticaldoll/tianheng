@@ -129,8 +129,10 @@ impl ImplTraitModuleDraft {
     /// facade matches its defining path (the same 渾儀 resolver the forbidden-type rule uses).
     ///
     /// Bounds (stated): an **empty** `operands` set degenerates to shape-only (any returned
-    /// `impl Trait`) — loud, never an inert no-op. Auto-trait/lifetime bounds are never operands
-    /// (a returned `impl Foo + Bar` may name several non-auto traits — forbidding any one flags it).
+    /// `impl Trait`) — loud, never an inert no-op. Auto-trait/lifetime bounds are never
+    /// principal operands (a returned `impl Foo + Bar` may name several non-auto traits —
+    /// forbidding any one flags it). A forbidden operand whose leaf names an auto trait is a
+    /// constitution error; remove that entry.
     /// A principal that does not resolve — a bare std trait
     /// (`impl Iterator`/`impl Future` written bare), a macro/glob re-export — is out of the
     /// resolver's stated coverage and not matched; a *resolvable* operand is never silently passed.

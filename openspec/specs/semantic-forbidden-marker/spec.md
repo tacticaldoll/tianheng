@@ -84,6 +84,16 @@ The system SHALL react when a governed type acquires a forbidden trait by **eith
 
 A forbidden entry SHALL match a derive/trait path by **leaf identifier** — so a forbidden `Serialize` or `serde::Serialize` matches `#[derive(Serialize)]`, `#[derive(serde::Serialize)]`, `#[derive(serde_derive::Serialize)]`, and `impl serde::Serialize for …` alike (the derive-macro re-export path and the trait path share a leaf, and the resolver is cross-crate-blind, so leaf is what reliably catches acquisition). The compared leaf is taken from the path **resolved through the acquisition site's `use`-map**, so a locally renamed trait or derive — `use serde::Serialize as Ser; impl Ser for …` or `#[derive(Ser)]` — resolves to its true leaf `Serialize` and reacts (a local rename is observable, so a missed one would be a false negative); a path that does not resolve locally — a bare/prelude name or a cross-crate path — falls back to its **written** leaf, keeping the match cross-crate-blind (the derive-macro-crate path `serde_derive::Serialize` still matches by the leaf `Serialize`). A path-qualified forbidden entry is accepted for the author's clarity but does **not** narrow the match — narrowing by resolved path would silently miss the derive-macro-crate path (`serde_derive::Serialize`), the exact false negative the contract forbids. The cost is a documented false **positive** when two traits share a leaf — reportable, and the safe direction, since a false negative is the one forbidden bug. When the acquisition site's `use`-map resolves the derive/trait name to **more than one** candidate — a mutually-exclusive `#[cfg]`-gated `use` alias for the identical local name — every candidate's leaf SHALL be checked and the match SHALL react if any candidate's leaf matches, never silently keeping only the leaf of whichever declaration was written last (observation cannot know which `#[cfg]` branch is live). A forbidden entry whose **leaf itself would be empty** — a trailing `::` (`"serde::"`), a doubled `::`, or the empty string — SHALL be rejected as a constitution error rather than silently compared: leaf-identifier matching is immune to a *leading* `::` (`leaf_of("::serde::Serialize")` is still the real leaf `Serialize`), but not to a *trailing* one, since no real identifier is ever empty and such an entry could therefore never match anything, in the same silent-pass class signature-coupling's own forbidden-operand validation closes for its own (full-path) matching mechanism.
 
+An auto-trait leaf such as `Send` remains a valid `must_not_acquire` operand: this boundary
+observes a governed type genuinely acquiring that trait by a hand impl or derive. The
+principal-trait operand refusal for dyn/impl-trait exposure does not apply to acquisition.
+
+#### Scenario: An auto-trait acquisition remains observable
+
+- **WHEN** a governed type has `impl Send for T` and its forbidden-marker boundary declares `must_not_acquire("Send")`
+- **THEN** the system emits an acquisition violation rather than refusing the operand as a constitution error
+- **PINNED-BY** `named_principal_and_forbidden_marker_send_remain_observable`
+
 #### Scenario: A derive-macro-crate path still reacts
 
 - **WHEN** a governed type declares `#[derive(serde_derive::Serialize)] pub struct Order;` under a boundary forbidding `serde::Serialize`

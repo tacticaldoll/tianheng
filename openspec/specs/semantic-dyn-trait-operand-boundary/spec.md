@@ -40,8 +40,12 @@ principal trait canonicalizes to a member of the forbidden operand set, and SHAL
 violation for a `dyn` whose principal trait is outside the set. The **principal trait** is the trait
 object's sole non-auto trait — matched regardless of its position among the bounds, so an auto-trait
 (`Send`, `Sync`) or lifetime bound (which may be written before or after it, e.g. `dyn Send + Port`)
-is never the matched operand. The principal trait path SHALL be canonicalized and matched **exactly as
-signature-coupling matches a forbidden type** — through the *same* resolver ladder: the module's
+is never the matched operand. A forbidden operand whose final path segment is recognized as
+an auto trait by the same std leaf-name test that removes auto-trait bounds from the principal list
+(e.g. `Send`, including qualified and raw-identifier spellings) SHALL be rejected as a
+constitution error before resolution, even when another operand is valid: the observer removes
+those bounds before principal resolution, so that entry can never react. The principal trait path
+SHALL be canonicalized and matched **exactly as signature-coupling matches a forbidden type** — through the *same* resolver ladder: the module's
 `use` map, `crate`/`self`/`super`-relative paths, the **external-crate name-set oracle** (declared
 dependencies ∪ sysroot, `.rename`- and `-`→`_`-aware, with a crate-root `extern crate … as` rename
 applied and a leading-`::` head resolved against the raw set), and the `pub use` re-export closure,
@@ -111,10 +115,20 @@ The finding is the **seam-qualified** rendered `dyn …` shape (`{shape} exposed
 - **THEN** the system does not resolve the principal and reports no violation — a stated resolver-coverage bound (the oracle does not over-reach a single bare segment), never a silent claim of cleanliness over a resolvable operand
 - **PINNED-BY** `dyn_operand_genuinely_unresolvable_bare_principal_is_a_bound`
 
-#### Scenario: Auto-trait markers are not operands
+#### Scenario: Auto-trait markers are not principal operands
 
 - **WHEN** the module exposes `dyn crate::ports::Port + Send` and the boundary forbids `["crate::ports::Port"]`
-- **THEN** the system emits a violation on the principal trait `crate::ports::Port` (the sole non-auto trait); the trailing `Send` marker is not the operand, so a boundary forbidding only `["Send"]` flags nothing here — and a bare `dyn Send` carries no principal at all, `Send` being removed as an auto trait *before* any resolution runs, so no candidate is ever built for it
+- **THEN** the system emits a violation on the principal trait `crate::ports::Port`; the trailing `Send` marker is removed before principal resolution
+- **PINNED-BY** `dyn_operand_filters_auto_trait_markers_and_refuses_them_as_operands`
+- **PINNED-BY** `principal_collector_keeps_named_trait_and_discards_auto_marker`
+
+#### Scenario: An auto-trait operand is a constitution error
+
+- **WHEN** a dyn operand boundary forbids `["Send"]`, `["std::marker::Sync"]`, or a mixed set containing an auto-trait leaf
+- **THEN** the system exits 2 before principal resolution, names the offending operand, and directs the author to remove it
+- **PINNED-BY** `dyn_auto_trait_operand_is_a_constitution_error`
+- **PINNED-BY** `dyn_qualified_auto_trait_operand_is_a_constitution_error`
+- **PINNED-BY** `dyn_mixed_auto_trait_operand_is_a_constitution_error`
 
 #### Scenario: Two mutually-exclusive cfg-gated use aliases for the principal trait's name both react
 

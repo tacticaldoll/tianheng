@@ -33,6 +33,8 @@ them.
 
 ### Semantic
 
+- **BREAKING** — **Dyn-trait and impl-trait operand boundaries reject auto-trait operands as constitution errors.** `must_not_expose_dyn_of` and `must_not_expose_impl_trait_of` now exit 2 when any forbidden operand has an auto-trait leaf, including a qualified spelling or an entry beside valid operands. These entries could not match: the observer removes auto-trait bounds before principal-trait resolution. The impl-trait rule applies equally with `including_submodules()`; `must_not_acquire("Send")` remains legal and reacts to an acquisition.
+
 - **BREAKING** — **渾儀 can hold a module to re-exports only: `ReexportOnlyBoundary`, carried in a new
   `reexport_only` field of `SemanticBoundaries`.** `ReexportOnlyBoundary::in_crate(p).module(m)
   .must_declare_only_reexports()` makes every direct item of `m` that is not a `use`, of any visibility or
@@ -56,6 +58,8 @@ them.
   fields. Future semantic boundary fields can be added without changing this construction path.
 
 ### Migration
+
+- Remove auto-trait entries such as `Send` from `must_not_expose_dyn_of` and `must_not_expose_impl_trait_of` operand sets.
 
 - Construct `SemanticBoundaries` with `SemanticBoundaries::default()` and assign or push into its
   public fields. A struct literal, including `..Default::default()`, does not compile outside `hunyi`.

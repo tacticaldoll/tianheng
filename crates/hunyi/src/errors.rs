@@ -116,6 +116,15 @@ pub(crate) fn malformed_path_operand_error(operand: &str) -> String {
     )
 }
 
+/// A dyn/impl-trait operand whose leaf is an auto trait can never match: those observers
+/// remove auto-trait bounds before principal-trait resolution.
+pub(crate) fn auto_trait_operand_error(operand: &str, boundary_kind: &str) -> String {
+    format!(
+        "{boundary_kind} forbidden operand '{operand}' can never react: this operand set matches \
+         principal traits, and auto-trait bounds are removed before resolution; remove this entry"
+    )
+}
+
 pub(crate) fn missing_module_file_error(module: &str, crate_package: &str) -> String {
     format!(
         "module '{module}' of crate '{crate_package}' is declared (`mod …;`) but its source file \
