@@ -9,7 +9,7 @@ use xuanji::{Outcome, Violation};
 use crate::driver::run_boundaries;
 use crate::dsl::VisibilityBoundary;
 use crate::emit::{SingleModuleViolationContext, push_single_module_violations};
-use crate::errors::unknown_module_error;
+use crate::errors::{undecodable_foreign_item_error, unknown_module_error};
 use crate::file_scope::{over_each_unit, resolve_crate_units};
 use crate::finding::{SemanticFact, sort_faceted_facts};
 use crate::module_resolve::resolve_module_items_with_files;
@@ -78,24 +78,25 @@ pub(crate) fn visibility_findings(
 ) -> Result<Vec<(SemanticFact, PathBuf)>, String> {
     let items_with_files =
         resolve_module_items_with_files(src_dir, root_file, module, crate_package)?;
-    let mut findings: Vec<(SemanticFact, PathBuf)> = items_with_files
-        .iter()
-        .flat_map(|(item, file, _branch)| {
-            item_observation(item, ceiling_rank)
+    let mut findings: Vec<(SemanticFact, PathBuf)> = Vec::new();
+    for (item, file, _branch) in &items_with_files {
+        let observed = item_observation(item, ceiling_rank)
+            .map_err(|undecodable| undecodable_foreign_item_error(file, &undecodable.seen))?;
+        findings.extend(
+            observed
                 .into_iter()
-                .map(move |obs| (obs, file))
-        })
-        .map(|((visibility, item_kind, item_name), file)| {
-            (
-                SemanticFact::Visibility {
-                    visibility,
-                    item_kind,
-                    item_name,
-                },
-                file.clone(),
-            )
-        })
-        .collect();
+                .map(|(visibility, item_kind, item_name)| {
+                    (
+                        SemanticFact::Visibility {
+                            visibility,
+                            item_kind,
+                            item_name,
+                        },
+                        file.clone(),
+                    )
+                }),
+        );
+    }
     sort_faceted_facts(&mut findings)?;
     Ok(findings)
 }

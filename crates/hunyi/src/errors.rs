@@ -205,3 +205,18 @@ pub(crate) fn out_of_package_root_error(crate_package: &str, root: &std::path::P
         root.display()
     )
 }
+
+/// A foreign item in `file` that `crate::syn_util::decode_foreign_item` cannot read as a `fn`,
+/// `static`, `type` or macro, with any `safe` or `unsafe` qualifier removed.
+///
+/// Its visibility and signature are unread, so neither the visibility ceiling nor an exposure rule
+/// can be judged against it, and passing it would be a silent pass over a declaration.
+pub(crate) fn undecodable_foreign_item_error(file: &Path, seen: &str) -> String {
+    format!(
+        "cannot judge a foreign item in {}: {seen} inside an `extern` block does not parse as a \
+         `fn`, `static`, `type` or macro invocation with any leading `safe` or `unsafe` \
+         qualifier removed, so its visibility and signature cannot be read and a boundary over \
+         this module would pass it unobserved",
+        file.display()
+    )
+}

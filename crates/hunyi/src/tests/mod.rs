@@ -3,6 +3,7 @@ mod auto_trait_operand;
 mod dyn_trait;
 mod finding_source_file;
 mod forbidden_marker;
+mod foreign_item;
 mod helpers;
 mod impl_trait;
 mod macro_and_body_nested;

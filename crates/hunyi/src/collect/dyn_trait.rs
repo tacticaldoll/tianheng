@@ -208,7 +208,7 @@ mod tests {
         let item: syn::Item = syn::parse_str(item_src).unwrap();
         let uses = UseMap::new();
         let mut out = Vec::new();
-        collect_item_exposures(&item, module, &uses, 0, &mut out);
+        assert!(collect_item_exposures(&item, module, &uses, 0, &mut out).is_ok());
         out.iter()
             .flat_map(|e| resolve_path_all(&e.path, &uses, module, BareFallback::Ignore))
             .collect()
