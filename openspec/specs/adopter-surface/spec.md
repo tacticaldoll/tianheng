@@ -39,6 +39,8 @@ external consumer SHALL be able to compose boundaries from all three instruments
 An external crate SHALL construct `SemanticBoundaries` with `Default::default()` and MAY assign
 or push into its public fields. The type SHALL be non-exhaustive, so a struct literal, including
 functional record update, is rejected outside `hunyi` while field inspection remains available.
+The compiler reports E0639 for that rejection; the `compile_fail,E0639` doctest on
+`SemanticBoundaries` holds it. Doctests cannot be cited by `PINNED-BY`.
 
 #### Scenario: External construction and inspection
 
