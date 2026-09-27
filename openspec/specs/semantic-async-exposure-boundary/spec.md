@@ -214,6 +214,27 @@ text/JSON/markdown projection with its own boundary section. The implementation 
 - **WHEN** the constitution is projected via `list` (text/json/markdown)
 - **THEN** the async-exposure boundary appears with its target, module, rule, severity, and reason — through its own projection section, parallel to the sibling boundaries
 
+### Requirement: A async-exposure anchor has one canonical spelling
+
+The async-exposure boundary's module anchor SHALL be held to the spelling `semantic-signature-coupling`
+states for every module-anchored semantic capability: `crate`, or `crate::` followed by
+`::`-separated identifiers. Any other spelling SHALL be a constitution error (exit 2) quoting what was
+written and naming the canonical spelling where the text determines one, and a raw identifier SHALL
+be accepted as its plain form in the violation target and identity. The anchor is this boundary's
+violation `target`, so the spelling is what decides which baseline entry a finding matches. Under `including_submodules` the target stays the anchor, so the subtree's findings share its one spelling.
+
+#### Scenario: A async-exposure anchor not rooted at `crate` is a constitution error
+
+- **WHEN** a developer writes `AsyncExposureBoundary::in_crate("app").module("core")` and the crate declares `crate::core`
+- **THEN** the system emits a constitution error (exit 2) quoting `core` and suggesting `crate::core`, rather than reacting under a target spelled `core`
+- **PINNED-BY** `every_anchored_capability_refuses_a_non_canonical_spelling`
+
+#### Scenario: A raw-identifier async-exposure anchor keeps the plain identity
+
+- **WHEN** a async-exposure boundary anchors to `crate::r#core`
+- **THEN** its violations carry the target `crate::core` and the identities a `crate::core` anchor produces
+- **PINNED-BY** `a_raw_identifier_anchor_is_the_same_identity_as_its_plain_spelling`
+
 ### Requirement: An impl nested in a const or fn body is observed
 
 `semantic-signature-coupling` states, on behalf of every single-module-anchored semantic capability that observes an inherent impl's public API, that an `impl` block written as a direct statement of the outermost body of a `const` initializer or a `fn`'s own body (the "const-eval trick" idiom and its fn-body-nested sibling) SHALL be observed exactly as if written at the module's own top level, bounded to one level deep and to `const`/`fn` only (never `static`, never a further-nested `impl`, never any OTHER item kind recovered from a body this way). This capability applies that same property to an inherent impl's `async fn` methods.

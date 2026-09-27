@@ -101,6 +101,27 @@ parallel to dyn-trait. The implementation SHALL keep the `syn` dependency quaran
 - **WHEN** the constitution is projected via `list` (text/json/markdown)
 - **THEN** the impl-trait boundary appears with its target, module, rule, severity, and reason — through its own projection section, parallel to the dyn-trait boundary
 
+### Requirement: A impl-trait anchor has one canonical spelling
+
+The impl-trait boundary's module anchor SHALL be held to the spelling `semantic-signature-coupling`
+states for every module-anchored semantic capability: `crate`, or `crate::` followed by
+`::`-separated identifiers. Any other spelling SHALL be a constitution error (exit 2) quoting what was
+written and naming the canonical spelling where the text determines one, and a raw identifier SHALL
+be accepted as its plain form in the violation target and identity. The anchor is this boundary's
+violation `target`, so the spelling is what decides which baseline entry a finding matches. The operand-scoped form (`semantic-impl-trait-operand-boundary`) takes its anchor through the same `.module(...)` and is held to the same spelling.
+
+#### Scenario: A impl-trait anchor not rooted at `crate` is a constitution error
+
+- **WHEN** a developer writes `ImplTraitBoundary::in_crate("app").module("api")` and the crate declares `crate::api`
+- **THEN** the system emits a constitution error (exit 2) quoting `api` and suggesting `crate::api`, rather than reacting under a target spelled `api`
+- **PINNED-BY** `every_anchored_capability_refuses_a_non_canonical_spelling`
+
+#### Scenario: A raw-identifier impl-trait anchor keeps the plain identity
+
+- **WHEN** a impl-trait boundary anchors to `crate::r#api`
+- **THEN** its violations carry the target `crate::api` and the identities a `crate::api` anchor produces
+- **PINNED-BY** `a_raw_identifier_anchor_is_the_same_identity_as_its_plain_spelling`
+
 ### Requirement: Impl-trait facts preserve shape and seam separately
 
 Impl-trait violations SHALL encode the canonical forbidden shape/subject and public seam as

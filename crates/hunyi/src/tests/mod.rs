@@ -7,6 +7,7 @@ mod foreign_item;
 mod helpers;
 mod impl_trait;
 mod macro_and_body_nested;
+mod module_anchor;
 mod reexport_only;
 mod resolver_fidelity;
 mod signature;

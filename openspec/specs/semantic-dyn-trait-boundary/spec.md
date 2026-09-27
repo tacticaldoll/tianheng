@@ -217,6 +217,27 @@ dependency allowlist is untouched — no `quote` edge is added.
 - **WHEN** self-governance runs against the workspace
 - **THEN** the boundaries asserting `guibiao` does not depend on `syn` and `hunyi` does not depend on `tianheng` continue to hold, and the dyn-trait capability adds no dependency to `hunyi`'s allowlist
 
+### Requirement: A dyn-trait anchor has one canonical spelling
+
+The dyn-trait boundary's module anchor SHALL be held to the spelling `semantic-signature-coupling`
+states for every module-anchored semantic capability: `crate`, or `crate::` followed by
+`::`-separated identifiers. Any other spelling SHALL be a constitution error (exit 2) quoting what was
+written and naming the canonical spelling where the text determines one, and a raw identifier SHALL
+be accepted as its plain form in the violation target and identity. The anchor is this boundary's
+violation `target`, so the spelling is what decides which baseline entry a finding matches. The operand-scoped form (`semantic-dyn-trait-operand-boundary`) takes its anchor through the same `.module(...)` and is held to the same spelling.
+
+#### Scenario: A dyn-trait anchor not rooted at `crate` is a constitution error
+
+- **WHEN** a developer writes `DynTraitBoundary::in_crate("app").module("api")` and the crate declares `crate::api`
+- **THEN** the system emits a constitution error (exit 2) quoting `api` and suggesting `crate::api`, rather than reacting under a target spelled `api`
+- **PINNED-BY** `every_anchored_capability_refuses_a_non_canonical_spelling`
+
+#### Scenario: A raw-identifier dyn-trait anchor keeps the plain identity
+
+- **WHEN** a dyn-trait boundary anchors to `crate::r#api`
+- **THEN** its violations carry the target `crate::api` and the identities a `crate::api` anchor produces
+- **PINNED-BY** `a_raw_identifier_anchor_is_the_same_identity_as_its_plain_spelling`
+
 ### Requirement: Dyn-trait facts preserve shape and seam separately
 
 Dyn-trait violations SHALL encode the canonical forbidden shape/subject and public seam as separate

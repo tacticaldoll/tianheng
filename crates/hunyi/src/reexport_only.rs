@@ -4,6 +4,7 @@ use serde_json::Value;
 use std::path::{Path, PathBuf};
 use xuanji::{Outcome, Polarity, ScanDepth, Violation};
 
+use crate::anchor::canonical_module_anchor;
 use crate::driver::run_boundaries;
 use crate::dsl::ReexportOnlyBoundary;
 use crate::emit::{MultiModuleViolationContext, push_multi_module_violations};
@@ -25,22 +26,23 @@ pub(crate) fn check_reexport_only_boundary(
     boundary: &ReexportOnlyBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
+    let module = canonical_module_anchor(&boundary.module, &boundary.crate_package)?;
     let (_package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
     over_each_unit(
         &units,
-        &unknown_module_error(&boundary.module, &boundary.crate_package),
+        &unknown_module_error(&module, &boundary.crate_package),
         |root_file, src_dir, unit| {
             let findings = reexport_only_findings(
                 src_dir,
                 root_file,
-                &boundary.module,
+                &module,
                 &boundary.crate_package,
                 boundary.depth,
             )?;
             push_multi_module_violations(
                 violations,
                 MultiModuleViolationContext {
-                    target: &boundary.module,
+                    target: &module,
                     rule: REEXPORT_ONLY_RULE,
                     rule_key: boundary.rule_key(),
                     reason: &boundary.reason,

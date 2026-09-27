@@ -78,7 +78,7 @@ fn guibiao_and_hunyi_agree_a_namesake_sibling_is_not_contained() {
 
     let fixture = TempFixture::new(
         "path-within-sibling-hunyi",
-        "pub mod domainish { pub fn f() { unsafe {} } }\n",
+        "pub mod domain {}\npub mod domainish { pub fn f() { unsafe {} } }\n",
     );
     let outcome = hunyi_confines_unsafe_to_domain("path-within-sibling-hunyi", fixture.manifest());
     assert_eq!(

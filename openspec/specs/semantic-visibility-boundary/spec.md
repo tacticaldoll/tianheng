@@ -43,6 +43,27 @@ For each boundary, the system SHALL resolve the named governed module to a real 
 - **WHEN** a boundary anchors to `crate::foo`, declared only as `#[cfg_attr(windows, path = "win.rs")] mod foo;` with no conventional `foo.rs` present, and `win.rs` exists and declares a bare-`pub` item above the boundary's ceiling
 - **THEN** the system reads `win.rs` and reacts on the item, rather than reporting a constitution error — the `cfg_attr` target is now followed even with no sibling declaration to keep the branch count non-empty
 
+### Requirement: A visibility or re-export-only anchor has one canonical spelling
+
+The visibility or re-export-only boundary's module anchor SHALL be held to the spelling `semantic-signature-coupling`
+states for every module-anchored semantic capability: `crate`, or `crate::` followed by
+`::`-separated identifiers. Any other spelling SHALL be a constitution error (exit 2) quoting what was
+written and naming the canonical spelling where the text determines one, and a raw identifier SHALL
+be accepted as its plain form in the violation target and identity. The anchor is this boundary's
+violation `target`, so the spelling is what decides which baseline entry a finding matches. The re-export-only boundary takes its anchor through the same `.module(...)` and is held to the same spelling.
+
+#### Scenario: A visibility or re-export-only anchor not rooted at `crate` is a constitution error
+
+- **WHEN** a developer writes `VisibilityBoundary::in_crate("app").module("internal")` and the crate declares `crate::internal`
+- **THEN** the system emits a constitution error (exit 2) quoting `internal` and suggesting `crate::internal`, rather than reacting under a target spelled `internal`
+- **PINNED-BY** `every_anchored_capability_refuses_a_non_canonical_spelling`
+
+#### Scenario: A raw-identifier visibility or re-export-only anchor keeps the plain identity
+
+- **WHEN** a visibility or re-export-only boundary anchors to `crate::r#internal`
+- **THEN** its violations carry the target `crate::internal` and the identities a `crate::internal` anchor produces
+- **PINNED-BY** `a_raw_identifier_anchor_is_the_same_identity_as_its_plain_spelling`
+
 ### Requirement: Re-export-only module boundary
 
 A `ReexportOnlyBoundary` SHALL govern a resolved module whose direct items are `use` declarations, regardless of their visibility or use-tree form. At `Shallow` depth, every other direct item, including a child `mod`, SHALL produce one `declared-item-kind` finding under `tianheng.rule/hunyi/reexport-only-module`. At `Subtree` depth, child `mod` declarations are containers and every descended module is judged by the same direct-item rule. A direct item is one the module declares at item position, after a transparent `cfg_if!` invocation is replaced by its arms; an item inside a function body belongs to that function and is not a direct item of the module. An item-position macro invocation is itself a direct item and reacts, while items produced only by its expansion remain outside this observer's AST reach (bound: `semantic-visibility-boundary/a-macro-generated-item-is-a-documented-bound`). Each finding SHALL use `DenyBreach`, SHALL name the source file that declares the offending item, and SHALL carry a structured identity of item kind, module-qualified item name, compilation unit, and governing package. Direct items of one module whose kind and rendered name coincide share one identity; scan position is never part of it. An unrenderable item SHALL still react. An unresolved module anchor SHALL be a constitution error. Existing visibility-ceiling and `must_not_declare_pub` rules and identities SHALL remain unchanged, and the re-export-only rule key and fact shape SHALL be distinct from them.
