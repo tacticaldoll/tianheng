@@ -98,6 +98,72 @@ pub(super) fn effective_module(base: &str, mod_stack: &[(String, usize)]) -> Str
     module
 }
 
+/// The one lexical walk shared by symbol readers that need the module enclosing a byte position.
+/// `contexts[i]` is the inline-module path at byte `i`; `sites` records each inline `mod name {`
+/// with the brace depth and enclosing module it had when encountered. Keeping the stack here makes
+/// glob, path-occurrence, and definition readers agree on inline nesting instead of carrying three
+/// copies of the same push/pop walk.
+pub(super) struct InlineModuleScan {
+    pub contexts: Vec<String>,
+    pub module_tops: Vec<usize>,
+    pub sites: Vec<InlineModuleSite>,
+}
+
+pub(super) struct InlineModuleSite {
+    pub at: usize,
+    pub name: String,
+    pub brace: usize,
+    pub module_top: usize,
+    pub enclosing: String,
+}
+
+pub(super) fn scan_inline_modules(source: &str, base: &str) -> InlineModuleScan {
+    let bytes = source.as_bytes();
+    let mut contexts = vec![base.to_string(); bytes.len() + 1];
+    let mut module_tops = vec![0usize; bytes.len() + 1];
+    let mut sites = Vec::new();
+    let mut i = 0;
+    let mut depth = 0usize;
+    let mut mod_stack: Vec<(String, usize)> = Vec::new();
+    while i < bytes.len() {
+        contexts[i] = effective_module(base, &mod_stack);
+        module_tops[i] = mod_stack.last().map_or(0, |(_, d)| d + 1);
+        if let Some((name_start, name_end, brace)) = inline_mod_at(bytes, i) {
+            let enclosing = contexts[i].clone();
+            let name = canonical_segment(&String::from_utf8_lossy(&bytes[name_start..name_end]))
+                .to_string();
+            sites.push(InlineModuleSite {
+                at: i,
+                name: name.clone(),
+                brace,
+                module_top: mod_stack.last().map_or(0, |(_, d)| d + 1),
+                enclosing,
+            });
+            mod_stack.push((name, depth));
+            i = brace;
+            continue;
+        }
+        match bytes[i] {
+            b'{' => depth += 1,
+            b'}' => {
+                depth = depth.saturating_sub(1);
+                while mod_stack.last().is_some_and(|(_, d)| *d == depth) {
+                    mod_stack.pop();
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    contexts[bytes.len()] = effective_module(base, &mod_stack);
+    module_tops[bytes.len()] = mod_stack.last().map_or(0, |(_, d)| d + 1);
+    InlineModuleScan {
+        contexts,
+        module_tops,
+        sites,
+    }
+}
+
 /// Whether a bare head names a crate-root module that **shadows** the extern prelude. Only at the
 /// crate root itself (`current_module == "crate"`) is a sibling `mod` in scope, so a bare
 /// `use foo::…` / path there resolves to the local `crate::foo`; in any submodule the same bare head

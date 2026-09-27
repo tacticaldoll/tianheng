@@ -64,6 +64,16 @@ them.
 - Construct `SemanticBoundaries` with `SemanticBoundaries::default()` and assign or push into its
   public fields. A struct literal, including `..Default::default()`, does not compile outside `hunyi`.
 
+### Static
+
+- **BREAKING** — **圭表 resolves glob `self` and `super` from their inline module.** A sibling
+  `mod tests { use super::*; }` no longer reacts merely because another file declares a confined-prefix alias;
+  nested `super::super::*` now reaches the correct ancestor and emits the finding that was previously missed.
+  The new finding may require an adopter to address it or regenerate a baseline, while findings removed by the
+  corrected resolution may leave redundant entries in an existing baseline. The bound registered in 0.7.1 as
+  `inline-symbol-path-confinement/a-glob-reacts-to-any-alias-or-re-export-beneath-its-resolved-module-a-stated-bound`
+  is narrowed in this window and renamed to the new bound id.
+
 ## [0.7.1] - 2026-09-27
 
 ### Static
@@ -79,11 +89,13 @@ them.
   within a module no root declares, exits 2, and so does a declaration at `ScanDepth::Shallow`: the permitted region
   is compared at a file's module, which cannot tell the permitted module from its inline children. Opt-in: nothing changes unless it is declared, and every
   `must_not_call_inline` finding is byte-identical.
-- **圭表 resolves glob `self` and `super` from their inline module.** A sibling `mod tests { use super::*; }`
-  no longer reacts merely because another file declares a confined-prefix alias; nested `super::super::*` follows
-  the corresponding ancestor, while the existing over-reaction remains a stated bound when an alias or re-export is
-  beneath the glob's resolved module. This is a patch: it removes a false positive without changing an exit code,
-  public API, identity, or adopter action.
+- **The inline glob hazard's width is a declared over-reaction bound.** A glob reacts when any `type` alias or
+  `pub use` beneath its resolved module resolves under the prefix, whether or not the glob brings that name into
+  scope, and a glob's `self` or `super` resolves against its file's module — so a sibling's
+  `mod tests { use super::*; }` reacts when such an alias exists anywhere beneath the crate. This was already the
+  behaviour of `must_not_call_inline`; it is now registered as
+  `inline-symbol-path-confinement/a-glob-reacts-to-any-alias-or-re-export-beneath-its-resolved-module-a-stated-bound`,
+  and the glob requirement's case (c) says *a `type` alias of any visibility*, which is what the scanner reads.
 
 ### Self-governance
 

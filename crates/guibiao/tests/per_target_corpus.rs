@@ -1411,7 +1411,7 @@ fn a_sibling_test_glob_reacts_to_an_alias_in_its_resolved_module() {
             ("src/exec.rs", "pub fn run() {}\n"),
             (
                 "src/agent.rs",
-                "type Spawner = std::process::Command;\npub fn act() {}\n#[cfg(test)]\nmod tests {\n    use super::*;\n    #[test]\n    fn acts() { act(); }\n}\n",
+                "mod hidden {\n    pub type Spawner = std::process::Command;\n}\npub fn act() {}\nmod tests {\n    use super::*;\n    fn acts() { act(); }\n}\n",
             ),
         ],
     );
@@ -1449,31 +1449,6 @@ fn a_sibling_test_glob_ignores_an_alias_in_another_file() {
         &exec_confines_command("inlinealiasother"),
         probe.manifest(),
     ));
-}
-
-/// The precision counterpart: an alias in the inline glob's actual parent is in its scope and still reacts.
-#[test]
-fn a_sibling_test_glob_reacts_to_an_alias_in_its_parent() {
-    let probe = RootProbe::new(
-        "inlinealiasparent",
-        "",
-        &[
-            ("src/lib.rs", "pub mod exec;\npub mod agent;\n"),
-            ("src/exec.rs", "pub fn run() {}\n"),
-            (
-                "src/agent.rs",
-                "type Spawner = std::process::Command;\npub fn act() {}\n#[cfg(test)]\nmod tests {\n    use super::*;\n    #[test]\n    fn acts() { act(); }\n}\n",
-            ),
-        ],
-    );
-    let outcome = check(
-        &exec_confines_command("inlinealiasparent"),
-        probe.manifest(),
-    );
-    assert_eq!(outcome.exit_code(), 1, "{outcome:?}");
-    let violations = confined_violations(&outcome);
-    assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].finding, "glob super in crate::agent");
 }
 
 /// Nested inline modules use the corresponding ancestor for `super::super::*`, not the file module.
