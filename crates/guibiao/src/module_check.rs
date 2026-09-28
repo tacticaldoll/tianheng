@@ -11,17 +11,19 @@ use crate::errors::{
     inline_empty_verbs_error, inline_module_target_error, inline_narrow_and_strict_error,
     missing_src_error, must_not_be_imported_by_on_crate_error,
     must_only_be_imported_by_on_crate_error, no_compiled_root_error,
-    non_canonical_module_path_error, out_of_package_root_error, restrict_imports_to_on_crate_error,
-    unknown_allowed_module_error, unknown_forbidden_module_error, unknown_module_error,
-    unreadable_governed_file_error,
+    non_canonical_inline_prefix_error, non_canonical_module_path_error, out_of_package_root_error,
+    restrict_imports_to_on_crate_error, unknown_allowed_module_error,
+    unknown_forbidden_module_error, unknown_inline_prefix_error, unknown_inline_prefix_head_error,
+    unknown_module_error, unreadable_governed_file_error,
 };
 use crate::finding::ModuleFact;
 use crate::model::module_rule::Perimeter;
 use crate::module_scan::{
     ImportedPath, InlineFinding, canonical_module_path, canonical_module_spelling,
-    declaration_text, external_imports_with_importers, governed_files, imports_with_importers,
-    inline_symbol_findings, names_crate_by_path_alone, package_name_to_import_ident, path_within,
-    reachable_modules, rust_files, value_namespace_item_names,
+    canonical_symbol_path_spelling, declaration_text, external_imports_with_importers,
+    governed_files, imports_with_importers, inline_symbol_findings, local_item_definitions,
+    names_crate_by_path_alone, package_name_to_import_ident, path_within, reachable_modules,
+    rust_files, value_namespace_item_names,
 };
 use crate::{BoundaryKind, ModuleBoundary, ModuleRule, Violation, ViolationId};
 
@@ -287,6 +289,112 @@ impl NamedModules {
             )),
         }
     }
+}
+
+/// An inline confinement's prefix, in its canonical spelling, with the builder that declared it.
+///
+/// Both builders — `must_not_call_inline` and `confine_inline_call` — pass through here, so the
+/// prefix a call is compared with is one spelling in either. The spelling is judged before the
+/// package is read; what the prefix names is judged by [`InlinePrefix::require_names_something`]
+/// once every root has been, since a module or item present in one compilation unit is real.
+struct InlinePrefix {
+    rule_method: &'static str,
+    written: String,
+    canonical: String,
+}
+
+impl InlinePrefix {
+    /// `None` for a rule that is not an inline confinement, and for a blank prefix, which the
+    /// empty-prefix refusal in [`check_inline_confinement`] answers.
+    fn of(boundary: &ModuleBoundary) -> Result<Option<Self>, String> {
+        let Some((prefix, ..)) = boundary.rule.inline_payload() else {
+            return Ok(None);
+        };
+        if prefix.trim().is_empty() {
+            return Ok(None);
+        }
+        let rule_method = if matches!(boundary.rule, ModuleRule::ConfineInlineCall { .. }) {
+            "confine_inline_call"
+        } else {
+            "must_not_call_inline"
+        };
+        let canonical = canonical_symbol_path_spelling(prefix).map_err(|suggestion| {
+            non_canonical_inline_prefix_error(
+                prefix,
+                &boundary.crate_package,
+                rule_method,
+                suggestion.as_deref(),
+            )
+        })?;
+        Ok(Some(Self {
+            rule_method,
+            written: prefix.to_string(),
+            canonical,
+        }))
+    }
+
+    /// Refuse a prefix that names nothing a call can reach, where the refusal can be decided.
+    ///
+    /// A `crate::` prefix must name a module some compiled root declares, or an item defined at the
+    /// top level of one; segments past that item are not read, since the scanner collects no
+    /// associated items. Any other first segment names a crate, and what that crate holds is its own
+    /// source, which the scanner does not read. A sysroot crate, a dependency under its local name, or
+    /// the package's own library is accepted as such. A first segment none of those confirms is still
+    /// accepted — a dependency's crate name can differ from its package name, and `--no-deps` metadata
+    /// does not say what it is — unless the same path rooted at `crate` names something, which is the
+    /// one reading the text determines: that prefix is refused, suggesting the rooted spelling.
+    fn require_names_something(
+        &self,
+        modules: &std::collections::BTreeSet<String>,
+        items: &std::collections::BTreeSet<String>,
+        external_crates: &[String],
+        crate_package: &str,
+    ) -> Result<(), String> {
+        let head = self
+            .canonical
+            .split_once("::")
+            .map_or(self.canonical.as_str(), |(head, _)| head);
+        match head {
+            "crate" if names_a_local_path(&self.canonical, modules, items) => Ok(()),
+            "crate" => Err(unknown_inline_prefix_error(
+                &self.written,
+                crate_package,
+                self.rule_method,
+            )),
+            "std" | "core" | "alloc" | "proc_macro" | "test" => Ok(()),
+            _ if external_crates.iter().any(|name| name == head) => Ok(()),
+            _ => {
+                let rooted = format!("crate::{}", self.canonical);
+                if names_a_local_path(&rooted, modules, items) {
+                    Err(unknown_inline_prefix_head_error(
+                        &self.written,
+                        crate_package,
+                        self.rule_method,
+                        &rooted,
+                    ))
+                } else {
+                    Ok(())
+                }
+            }
+        }
+    }
+}
+
+/// Whether a `crate`-rooted path names a declared module, or descends through declared modules to an
+/// item one of them defines. Whatever follows that item is not read.
+fn names_a_local_path(
+    path: &str,
+    modules: &std::collections::BTreeSet<String>,
+    items: &std::collections::BTreeSet<String>,
+) -> bool {
+    let segments: Vec<&str> = path.split("::").collect();
+    for end in 2..=segments.len() {
+        let named = segments[..end].join("::");
+        if !modules.contains(&named) {
+            return items.contains(&named);
+        }
+    }
+    true
 }
 
 /// The crate-wide scan state every rule family below reads from — resolved once in
@@ -694,17 +802,43 @@ pub(crate) fn check_module_boundary(
 ) -> Result<(), String> {
     canonical_spelling_or_error(&boundary.module, &boundary.crate_package)?;
     let named = NamedModules::of(boundary)?;
+    let inline_prefix = InlinePrefix::of(boundary)?;
     let package = find_package(metadata, &boundary.crate_package)
         .ok_or_else(|| crate_not_found_error(&boundary.crate_package))?;
+    let require_named = |declared: &std::collections::BTreeSet<String>,
+                         items: &std::collections::BTreeSet<String>| {
+        named.require_exist(declared, &boundary.crate_package)?;
+        match &inline_prefix {
+            Some(prefix) => prefix.require_names_something(
+                declared,
+                items,
+                &crate::cargo_metadata::dependency_import_names(package)
+                    .into_iter()
+                    .chain(crate::cargo_metadata::library_import_names(package))
+                    .collect::<Vec<_>>(),
+                &boundary.crate_package,
+            ),
+            None => Ok(()),
+        }
+    };
     let mut declared = std::collections::BTreeSet::new();
+    let mut items = std::collections::BTreeSet::new();
     let compiled = match crate_roots(package) {
         CrateRoots::Compiled(roots) => roots,
         CrateRoots::NoneCompiled => return Err(no_compiled_root_error(&boundary.crate_package)),
         CrateRoots::Unreported => {
             let mut found = Vec::new();
-            return match check_one_root(package, None, None, boundary, &mut declared, &mut found)? {
+            return match check_one_root(
+                package,
+                None,
+                None,
+                boundary,
+                &mut declared,
+                &mut items,
+                &mut found,
+            )? {
                 RootOutcome::Governed => {
-                    named.require_exist(&declared, &boundary.crate_package)?;
+                    require_named(&declared, &items)?;
                     violations.append(&mut found);
                     Ok(())
                 }
@@ -723,6 +857,7 @@ pub(crate) fn check_module_boundary(
             Some(roots),
             boundary,
             &mut declared,
+            &mut items,
             &mut found,
         )? {
             RootOutcome::Governed => governed_somewhere = true,
@@ -736,7 +871,7 @@ pub(crate) fn check_module_boundary(
     match deferred {
         Some(reason) if !governed_somewhere => Err(reason),
         _ => {
-            named.require_exist(&declared, &boundary.crate_package)?;
+            require_named(&declared, &items)?;
             violations.append(&mut found);
             Ok(())
         }
@@ -783,6 +918,7 @@ fn check_one_root(
     sibling_roots: Option<&[PathBuf]>,
     boundary: &ModuleBoundary,
     declared: &mut std::collections::BTreeSet<String>,
+    items: &mut std::collections::BTreeSet<String>,
     violations: &mut Vec<Violation>,
 ) -> Result<RootOutcome, String> {
     let src_dir = match root_file.and_then(Path::parent) {
@@ -844,6 +980,9 @@ fn check_one_root(
         remap_shadowed: &remap_shadowed,
         root_modules: &root_modules,
     };
+    if boundary.rule.inline_payload().is_some() {
+        items.extend(local_item_definitions(&ctx.all_files())?);
+    }
 
     let outcome = match (
         governed.is_empty(),

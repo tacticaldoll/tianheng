@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**60 of 125 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**60 of 127 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -136,7 +136,15 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **pinned by**: `repeated_extern_block_shares_one_identity`
 - **pinned by**: `repeated_unrenderable_items_share_one_identity`
 
-## declines to refuse (1)
+## declines to refuse (2)
+
+### `inline-symbol-path-confinement/a-prefix-segment-past-what-guibiao-reads-is-not-verified-a-stated-bound`
+
+> an inline-call prefix misspelled after a crate's name or after an item of the crate, or starting at a segment nothing confirms and whose `crate::` reading names nothing
+
+- **because**: another crate's contents are its own source and associated items are not collected, and a dependency's crate name can differ from what `--no-deps` metadata reports, so refusing what those segments name would refuse prefixes that are right
+- **its defence must show**: does not refuse
+- **pinned by**: `a_prefix_past_what_guibiao_reads_is_not_verified`
 
 ### `semantic-trait-impl-locality/a-cfg-gated-module-with-an-absent-file-is-skipped-not-a-scan-error-a-stated-bound`
 
@@ -584,7 +592,15 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `cfg_is_observed_as_written`
 
-## refuses to judge (3)
+## refuses to judge (4)
+
+### `inline-symbol-path-confinement/a-prefix-naming-a-macro-generated-item-is-refused-a-stated-bound`
+
+> a `crate::` inline-call prefix naming an item a macro invocation defines
+
+- **because**: macro bodies are stripped before items are collected, so the item is absent from the set the prefix is held to and the prefix is refused as naming nothing
+- **its defence must show**: refuses to judge
+- **pinned by**: `a_prefix_naming_a_macro_generated_item_is_refused`
 
 ### `publish-source-integrity/whether-a-worktree-holding-an-undecodable-path-is-clean-is-not-observed-a-stated-bound`
 

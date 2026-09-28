@@ -350,7 +350,8 @@ declared in one root and absent from another SHALL be accepted. The governed mod
 file-based-target requirement below.
 
 The inline-symbol-path prefix of `must_not_call_inline` and `confine_inline_call`, and the crate name of
-`confine_external_crate`, name paths outside the crate's module graph and are not held to this spelling.
+`confine_external_crate`, name paths outside the crate's module graph and are not held to this spelling; the
+prefix is held to its own, which `inline-symbol-path-confinement` states.
 
 #### Scenario: A forbidden module written without its crate root is a constitution error
 

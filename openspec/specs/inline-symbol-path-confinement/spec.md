@@ -325,12 +325,60 @@ empty prefix; an empty verb set passed to `.ending_with([])`; the contradictory
 `.ending_with(…).strict_prefix_only()` combination; a governed subtree anchor that resolves
 to no reachable module; and a governed subtree anchor — the judged module of `must_not_call_inline`
 or the permitted module of `confine_inline_call` — written in any spelling but the canonical module
-path `module-boundary` states. The confined prefix is not a module of the crate and is not held to
-that spelling. A governed source file that exists but cannot be read SHALL likewise be a
+path `module-boundary` states. A governed source file that exists but cannot be read SHALL likewise be a
 scan error (exit 2), never silently skipped. In contrast, a **valid** prefix that matches no
 inline call in a resolvable subtree is **clean** (exit 0), not an error — a confinement with zero
 findings is a passing reaction, exactly as a never-imported confined crate is clean under
 `external-crate-confinement`.
+
+The confined prefix of either builder SHALL be held to one spelling and to naming something, through one
+implementation both share, because a prefix is compared with resolved call paths segment by segment and one
+that matches no spelling a resolved path takes never reacts. Its spelling SHALL be `::`-separated identifiers,
+read by the identifier test module paths are read by, not starting at `self` or `super`; `r#x` and `x` SHALL be
+one identifier, recorded without the raw prefix. Any other spelling — an empty segment, a leading or trailing
+`::`, whitespace — SHALL be exit 2, quoting the written prefix and suggesting its trimmed, non-empty segments
+when those are a valid spelling. A blank prefix SHALL keep the empty-prefix refusal above. A first segment
+that is not `crate` names a crate, whose contents the scanner does not read. A sysroot crate (`std`, `core`,
+`alloc`, `proc_macro`, `test`), a dependency the package declares under the local name a rename gives it, and the
+package's own library SHALL be accepted. A first segment none of those confirms SHALL be accepted too, since a
+dependency's crate name can differ from what `--no-deps` metadata reports, unless the same path rooted at `crate`
+names something the crate declares — that SHALL be exit 2 suggesting the rooted spelling. A
+`crate`-rooted prefix SHALL name a module some compiled root of the package declares, or an item one defines at
+its top level, or be exit 2; a module or item present in one compilation unit is present. What a prefix names
+past its first segment when that is not `crate`, or past an item of the crate, is not read — the bounds below.
+
+#### Scenario: A prefix naming nothing, or written without its root, is a constitution error
+- **WHEN** a crate declares `crate::clock` with `fn now`, `crate::core` calls `crate::clock::now()`, and a boundary declares `.must_not_call_inline(p)` on `crate::core`, or `.module("crate::clock").confine_inline_call(p)`, for `p` of `crate::clcok` or `clock`
+- **THEN** the system exits 2 — naming the written prefix, and for `clock` suggesting `crate::clock`, which names a module the crate declares — where it previously exited 0 with the call unobserved
+- **PINNED-BY** `a_misspelled_crate_prefix_is_refused_not_judged_clean`
+- **PINNED-BY** `a_prefix_written_without_its_crate_root_is_refused_with_the_rooted_spelling`
+
+#### Scenario: A non-canonical prefix is a constitution error
+- **WHEN** either builder is given `crate::clock::`, `std::time::`, `::std::time` or `self::clock`
+- **THEN** the system exits 2, quoting the written prefix and suggesting `crate::clock` or `std::time` where the trimmed segments are a valid spelling
+- **PINNED-BY** `a_prefix_with_a_trailing_separator_is_refused`
+- **PINNED-BY** `an_inline_prefix_is_accepted_only_in_its_canonical_spelling`
+
+#### Scenario: A prefix naming something that exists is accepted
+- **WHEN** either builder is given `crate::clock`, `crate::clock::now`, `crate::r#clock`, `std::time`, a dependency's local name, a renamed dependency's local name, or a module only the binary root declares
+- **THEN** the system accepts it, and `crate::clock` and `crate::clock::now` react on the call exactly as before
+- **PINNED-BY** `an_inline_prefix_naming_a_module_reacts_on_its_call`
+- **PINNED-BY** `an_inline_prefix_naming_something_that_exists_is_accepted`
+
+#### Scenario: A first segment naming another crate is accepted
+- **WHEN** either builder is given `proc_macro`, `test`, the package's own library name followed by a module, a dependency's underscore-folded name, or `inilike::load` where the dependency declaring `[lib] name = "inilike"` is reported under its package name
+- **THEN** the system accepts the prefix
+- **PINNED-BY** `a_first_segment_naming_another_crate_is_accepted`
+
+#### Scenario: A prefix segment past what guibiao reads is not verified — a stated bound
+- **WHEN** either builder is given `std::tiem`, `extdep::nosuch` under a declared dependency `extdep`, `crate::clock::Clock::nwo` where `Clock` is a type `crate::clock` defines, or `clcok` where no `crate::clcok` exists and no dependency is named `clcok`
+- **THEN** the system accepts the prefix and reports no violation: another crate's contents are its own source, associated items are not collected, and a first segment nothing confirms may be a dependency's crate name, so a misspelling there matches nothing and is not refused
+- **PINNED-BY** `a_prefix_past_what_guibiao_reads_is_not_verified`
+
+#### Scenario: A prefix naming a macro-generated item is refused — a stated bound
+- **WHEN** `crate::clock` defines `stamp` through `make!(pub fn stamp() -> u64 { 0 });`, `crate::core` calls `crate::clock::stamp()`, and either builder is given `crate::clock::stamp`
+- **THEN** the system exits 2 as for a prefix naming nothing: macro bodies are stripped before items are collected, so the item is not in the set the prefix is held to
+- **PINNED-BY** `a_prefix_naming_a_macro_generated_item_is_refused`
 
 #### Scenario: An empty prefix is a constitution error
 - **WHEN** a boundary declares `.must_not_call_inline("")`
