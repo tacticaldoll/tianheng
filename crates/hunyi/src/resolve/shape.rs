@@ -162,13 +162,31 @@ impl<'ast> Visit<'ast> for DynCollector {
     }
 }
 
+/// The standard module that defines each supported auto trait. This table is shared by
+/// principal-operand rejection and qualified auto-bound validation.
+pub(crate) const AUTO_TRAIT_MODULES: &[(&str, &str)] = &[
+    ("Send", "marker"),
+    ("Sync", "marker"),
+    ("Unpin", "marker"),
+    ("UnwindSafe", "panic"),
+    ("RefUnwindSafe", "panic"),
+];
+
+pub(crate) fn auto_trait_module(leaf: &str) -> Option<&'static str> {
+    let leaf = strip_raw(leaf);
+    AUTO_TRAIT_MODULES
+        .iter()
+        .find_map(|(name, module)| (*name == leaf).then_some(*module))
+}
+
+pub(crate) fn auto_trait_standard_path(leaf: &str) -> Option<String> {
+    auto_trait_module(leaf).map(|module| format!("std::{module}::{leaf}"))
+}
+
 /// The leaf-name test used both when collecting principal traits and when validating a
 /// dyn/impl-trait forbidden operand. Raw identifiers compare by their unprefixed leaf.
 pub(crate) fn is_auto_trait_leaf(leaf: &str) -> bool {
-    matches!(
-        strip_raw(leaf).as_str(),
-        "Send" | "Sync" | "Unpin" | "UnwindSafe" | "RefUnwindSafe"
-    )
+    auto_trait_module(leaf).is_some()
 }
 
 /// The **non-auto trait** paths among a shape node's bounds — the operands an operand-scoped rule

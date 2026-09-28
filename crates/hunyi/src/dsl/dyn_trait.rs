@@ -51,12 +51,15 @@ impl DynTraitBoundary {
                 [("forbidden_operands", super::canonical_path_set(operands))],
             ),
             DynTraitTarget::AutoBounds(bounds) => {
-                let json = crate::resolve::auto_bound_leaves(bounds, "dyn-trait")
-                    .map(|leaves| {
-                        serde_json::to_string(&leaves.into_iter().collect::<Vec<_>>())
-                            .expect("serialized leaves")
-                    })
-                    .unwrap_or_else(|_| super::canonical_path_set(bounds));
+                let json = crate::resolve::auto_bound_leaves(
+                    bounds,
+                    crate::resolve::AutoTraitBoundaryKind::Dyn,
+                )
+                .map(|leaves| {
+                    serde_json::to_string(&leaves.into_iter().collect::<Vec<_>>())
+                        .expect("serialized leaves")
+                })
+                .unwrap_or_else(|_| super::canonical_path_set(bounds));
                 RuleKey::of(
                     "tianheng.rule/hunyi/dyn-trait-auto-bound",
                     [("forbidden_auto_bounds", json)],
@@ -92,6 +95,16 @@ impl DynTraitBoundary {
             DynTraitTarget::AutoBounds(bounds) => bounds,
             _ => &[],
         }
+    }
+
+    /// Return the sorted, deduplicated auto-trait leaves used by the rule key and projections.
+    pub fn forbidden_auto_bound_leaves(&self) -> Vec<String> {
+        crate::resolve::auto_bound_leaves(
+            self.forbidden_auto_bounds(),
+            crate::resolve::AutoTraitBoundaryKind::Dyn,
+        )
+        .map(|leaves| leaves.into_iter().collect())
+        .unwrap_or_default()
     }
 
     /// The human-readable reason recorded with the boundary (the repair hint).

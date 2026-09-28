@@ -45,6 +45,11 @@ fn main() -> std::process::ExitCode {
   baselines, boundary/rule model types, the pure static `check`, and `check_constitution` for the
   unified law.
 
+Semantic builders are available from the same prelude: use
+`DynTraitBoundary::in_crate(...).module(...).must_not_expose_dyn_bounded_by([...])` or
+`ImplTraitBoundary::in_crate(...).module(...).must_not_expose_impl_trait_bounded_by([...])`
+to govern selected auto-trait bounds without forbidding every `dyn` or returned `impl Trait`.
+
 Rules remain builder-owned even though they are inspectable: obtain `Rule` or `ModuleRule` from a
 built boundary's `rule()` accessor and match known fields with `..`. For a focused semantic
 signature-coupling test, import `tianheng::check_semantic` explicitly; it is not the full semantic

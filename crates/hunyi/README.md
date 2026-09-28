@@ -39,17 +39,20 @@ Built capabilities (each passing Tianheng's capability-admission test — declar
   e.g. forbid `dyn crate::Port` while allowing `dyn std::error::Error`). An empty operand set
   degenerates to shape-only (any `dyn`), never a no-op; auto-trait markers (`Send`) are never
   operands; a principal trait outside the resolver's coverage (a bare std trait, macro/glob
-  re-export) is the stated bound, never a silent pass of a resolvable operand.
+  re-export) is the stated bound, never a silent pass of a resolvable operand. A third mode,
+  `must_not_expose_dyn_bounded_by(["Send"])`, forbids selected auto-trait bounds; accepted
+  qualified spellings name the defining `marker` or `panic` module under `std` or `core`.
 - **Impl-trait** — a module's public API must not *return* a written `impl Trait` (RPIT), the
   **existential** complement of dyn-trait's dynamic dispatch: an RPIT at a seam leaks an
   unnameable type the caller cannot name or store, and silently commits to its auto-traits.
-  Two depths: `must_not_expose_impl_trait()` is **shape-only** (any returned `impl Trait` reacts),
+  Three modes: `must_not_expose_impl_trait()` is **shape-only** (any returned `impl Trait` reacts),
   and `must_not_expose_impl_trait_of([...])` is **operand-scoped** (only a returned `impl Trait`
   whose principal trait resolves into the named set reacts — e.g. allow `impl Iterator` but forbid
   `impl crate::Port`), an empty set degenerating to shape-only. Governs **return positions only**:
   argument-position `impl Trait` (APIT) is universal, not a leak, and `async fn`'s implicit
   `impl Future` is a distinct, out-of-scope existential form — both stated bounds, never silent
-  misses; auto-trait markers are never operands.
+  misses; auto-trait markers are never operands. `must_not_expose_impl_trait_bounded_by(["Send"])`
+  is the third mode, forbidding selected auto-trait bounds by their normalized leaf names.
 - **Async-exposure** — a module's public API must not declare an `async fn`, the **implicit**
   existential complement of impl-trait: an `async fn` leaks a compiler-inserted `impl Future` and
   commits the seam to async. `must_not_expose_async_fn()` is shape-only (any public `async fn` at

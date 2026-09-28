@@ -147,41 +147,55 @@ pub(crate) fn malformed_path_operand_error(operand: &str) -> String {
 
 /// A dyn/impl-trait operand whose leaf is an auto trait can never match: those observers
 /// remove auto-trait bounds before principal-trait resolution.
-pub(crate) fn auto_trait_operand_error(operand: &str, boundary_kind: &str) -> String {
-    let builder = match boundary_kind {
-        "impl-trait" => "must_not_expose_impl_trait_bounded_by",
-        "dyn" | "dyn-trait" => "must_not_expose_dyn_bounded_by",
-        _ => "must_not_expose_impl_trait_bounded_by",
-    };
+pub(crate) fn auto_trait_operand_error(
+    operand: &str,
+    boundary_kind: crate::resolve::AutoTraitBoundaryKind,
+) -> String {
+    let builder = boundary_kind.bound_builder();
+    let leaf = operand.rsplit_once("::").map_or(operand, |(_, leaf)| leaf);
     format!(
-        "{boundary_kind} forbidden operand '{operand}' can never react: this operand set matches \
+        "{} forbidden operand '{operand}' can never react: this operand set matches \
          principal traits, and auto-trait bounds are removed before resolution; to govern \
-         auto-trait bounds, use {builder}(...) instead, or remove this entry"
+         auto-trait bounds, use {builder}([\"{leaf}\"]) instead, or remove this entry",
+        boundary_kind.display_name(),
     )
 }
 
-pub(crate) fn empty_auto_bound_error(boundary_kind: &str) -> String {
-    let shape_builder = match boundary_kind {
-        "impl-trait" => "must_not_expose_impl_trait",
-        "dyn" | "dyn-trait" => "must_not_expose_dyn",
-        _ => "must_not_expose_impl_trait",
-    };
+pub(crate) fn empty_auto_bound_error(
+    boundary_kind: crate::resolve::AutoTraitBoundaryKind,
+) -> String {
     format!(
-        "{boundary_kind} forbidden auto-trait bound set cannot be empty: to forbid all {boundary_kind} \
-         exposures, use {shape_builder}() instead"
+        "{} forbidden auto-trait bound set cannot be empty: to forbid all {} exposures, use {}() instead",
+        boundary_kind.display_name(),
+        boundary_kind.display_name(),
+        boundary_kind.shape_builder()
     )
 }
 
-pub(crate) fn unrecognized_auto_trait_error(operand: &str, boundary_kind: &str) -> String {
-    let of_builder = match boundary_kind {
-        "impl-trait" => "must_not_expose_impl_trait_of",
-        "dyn" | "dyn-trait" => "must_not_expose_dyn_of",
-        _ => "must_not_expose_impl_trait_of",
-    };
+pub(crate) fn unrecognized_auto_trait_error(
+    operand: &str,
+    boundary_kind: crate::resolve::AutoTraitBoundaryKind,
+) -> String {
+    let of_builder = boundary_kind.operand_builder();
     format!(
-        "{boundary_kind} forbidden auto-trait bound '{operand}' is not a recognized std auto trait: \
+        "{} forbidden auto-trait bound '{operand}' is not a recognized std auto trait: \
          auto-trait bounds accept only Send, Sync, Unpin, UnwindSafe, RefUnwindSafe (bare or qualified); \
-         for principal trait operands, use {of_builder} instead"
+         for principal trait operands, use {of_builder} instead",
+        boundary_kind.display_name()
+    )
+}
+
+pub(crate) fn wrong_auto_trait_module_error(
+    operand: &str,
+    leaf: &str,
+    module: &str,
+    standard_path: String,
+    boundary_kind: crate::resolve::AutoTraitBoundaryKind,
+) -> String {
+    format!(
+        "{} forbidden auto-trait bound '{operand}' names auto trait '{leaf}', but {leaf} is defined in \
+         std::{module}; use {standard_path} or bare {leaf} instead",
+        boundary_kind.display_name()
     )
 }
 
