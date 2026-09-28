@@ -1742,7 +1742,7 @@ fn an_inline_module_type_alias_resolves_under_its_inline_path() {
 fn a_leading_colon_names_the_dependency_not_the_same_named_module() {
     let probe = RootProbe::new(
         "inlinedisambiguate",
-        "[dependencies]\nmd5x_pkg = { path = \"md5x_dep\", package = \"md5x_pkg\" }\n",
+        "[dependencies]\nmd5x = { path = \"md5x_dep\", package = \"md5x_pkg\" }\n",
         &[
             ("src/lib.rs", "pub mod md5x;\npub mod core;\n"),
             ("src/md5x.rs", "pub fn compute() -> u32 { 1 }\n"),
@@ -1756,7 +1756,7 @@ fn a_leading_colon_names_the_dependency_not_the_same_named_module() {
             ),
             (
                 "md5x_dep/Cargo.toml",
-                "[package]\nname = \"md5x_pkg\"\nversion = \"0.1.0\"\nedition = \"2021\"\n[lib]\nname = \"md5x\"\n",
+                "[package]\nname = \"md5x_pkg\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
             ),
             ("md5x_dep/src/lib.rs", "pub fn compute() -> u32 { 0 }\n"),
         ],
