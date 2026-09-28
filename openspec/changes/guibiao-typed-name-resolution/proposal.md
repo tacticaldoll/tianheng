@@ -21,6 +21,12 @@ The proposed change asks one question for a path head: **which typed binding doe
 
 The complete per-scenario measurements and raw commands/output are in [measurements.md](measurements.md), [measurements.raw.log](measurements.raw.log) and [measurements.revision.raw.log](measurements.revision.raw.log). The requirement delta is a draft in [spec.md](spec.md); it is not yet the active capability spec.
 
+## Capabilities
+
+- `inline-symbol-path-confinement` — modified: its path heads resolve from the scope table, its prefix-head refusal becomes the finite set, and it gains the bounds this change declares.
+- `external-crate-confinement`, `crate-dependency-boundary`, `crate-source-boundary` — their subjects include the guibiao scanner files this change edits (`path_vocab.rs`, the scanner module), but their requirements do not change: import reports are read by the existing `use_scan` walk, which this change leaves byte-identical.
+- `release-coherence` — `CHANGELOG.md` gains this change's `[Unreleased]` and Migration entries; the release-coherence requirements on that file do not change.
+
 ## Compatibility direction
 
 Against v0.7.1, R2's normalized key and the closed false negatives — R2's `::std::time`, block-local imports (B3/B4), cfg-exclusive imports (E6) and edition-2015 root paths (D) — each require adopter action and are **BREAKING** under this repository's versioning rule; so is refusing a `_` prefix head, which never named anything that compiles. R1, R3, R4 and every keyword prefix head keep v0.7.1's answer: a boundary prefix is a name, so `async` and `r#async` are one head and neither needs rewriting. R6 and the block-local item shadow (F) remove false positives and are patch-class. The full table is design i.
