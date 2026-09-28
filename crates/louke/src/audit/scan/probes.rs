@@ -315,7 +315,7 @@ pub(crate) fn inline_mod_bases(
 /// error) rather than crashing the process. Past the cap, this is a stated observation bound,
 /// never a silent truncation — matching every other depth-bound walker in this workspace
 /// (`hunyi::scan::MAX_MODULE_DEPTH`, `guibiao::use_scan::MAX_USE_NEST_DEPTH`,
-/// `guibiao::symbol_scan::MAX_SYMBOL_NEST_DEPTH`).
+/// `guibiao::scope_graph::MAX_SYMBOL_NEST_DEPTH`).
 const MAX_SCOPE_NEST_DEPTH: usize = 300;
 
 /// Traverses module declarations in `bytes[start..end]`.
