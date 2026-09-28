@@ -1,0 +1,3756 @@
+## R1-parent-private-use-through-super-glob · rustc (2021)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R1-parent-private-use-through-super-glob/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## R1-parent-private-use-through-super-glob · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=std::time PROBE_MODULE=crate::clock PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R1-parent-private-use-through-super-glob/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::time
+Rule:
+  inline symbol path confined to module
+Found:
+  std::time::SystemTime::now in crate::clock
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R1-parent-private-use-through-super-glob/src/clock.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## R1-parent-private-use-through-super-glob · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=std::time PROBE_MODULE=crate::clock PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R1-parent-private-use-through-super-glob/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::time
+Rule:
+  inline symbol path confined to module
+Found:
+  std::time::SystemTime::now in crate::clock
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R1-parent-private-use-through-super-glob/src/clock.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## R1-parent-private-use-through-super-glob · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=std::time PROBE_MODULE=crate::clock PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R1-parent-private-use-through-super-glob/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::time
+Rule:
+  inline symbol path confined to module
+Found:
+  std::time::SystemTime::now in crate::clock
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R1-parent-private-use-through-super-glob/src/clock.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## R1-parent-private-use-through-super-glob · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=std::time PROBE_MODULE=crate::clock PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R1-parent-private-use-through-super-glob/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::time
+Rule:
+  inline symbol path confined to module
+Found:
+  std::time::SystemTime::now in crate::clock
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R1-parent-private-use-through-super-glob/src/clock.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## R1-parent-private-use-through-super-glob · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=std::time PROBE_MODULE=crate::clock PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R1-parent-private-use-through-super-glob/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 2 reached)
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 0
+
+## R1-parent-private-use-through-super-glob · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=std::time PROBE_MODULE=crate::clock PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R1-parent-private-use-through-super-glob/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 2 reached)
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 0
+
+## R2-prefix-relative · rustc (2021)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-relative/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## R2-prefix-relative · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=std::time PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-relative/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::time
+Rule:
+  inline symbol path confined to module
+Found:
+  std::time::SystemTime::now in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-relative/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## R2-prefix-relative · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=std::time PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-relative/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::time
+Rule:
+  inline symbol path confined to module
+Found:
+  std::time::SystemTime::now in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-relative/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## R2-prefix-relative · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=std::time PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-relative/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::time
+Rule:
+  inline symbol path confined to module
+Found:
+  std::time::SystemTime::now in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-relative/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## R2-prefix-relative · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=std::time PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-relative/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::time
+Rule:
+  inline symbol path confined to module
+Found:
+  std::time::SystemTime::now in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-relative/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## R2-prefix-relative · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=std::time PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-relative/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::time
+Rule:
+  inline symbol path confined to module
+Found:
+  std::time::SystemTime::now in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-relative/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## R2-prefix-relative · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=std::time PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-relative/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::time
+Rule:
+  inline symbol path confined to module
+Found:
+  std::time::SystemTime::now in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-relative/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## R2-prefix-global · rustc (2021)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-global/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## R2-prefix-global · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=::std::time PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-global/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 2 reached)
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 0
+
+## R2-prefix-global · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=::std::time PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-global/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 2 reached)
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 0
+
+## R2-prefix-global · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=::std::time PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-global/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names '::std::time', which is not `::`-separated identifiers rooted at a crate — write `std::time`
+[exit code] 2
+
+## R2-prefix-global · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=::std::time PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-global/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names '::std::time', which is not `::`-separated identifiers rooted at a crate — write `std::time`
+[exit code] 2
+
+## R2-prefix-global · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=::std::time PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-global/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  ::std::time
+Rule:
+  inline symbol path confined to module
+Found:
+  std::time::SystemTime::now in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-global/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## R2-prefix-global · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=::std::time PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-global/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  ::std::time
+Rule:
+  inline symbol path confined to module
+Found:
+  std::time::SystemTime::now in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-global/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## R3-bare-dependency-head · rustc (2021)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R3-bare-dependency-head/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## R3-bare-dependency-head · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=md5x PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R3-bare-dependency-head/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 4 reached)
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 0
+
+## R3-bare-dependency-head · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=md5x PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R3-bare-dependency-head/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  md5x
+Rule:
+  inline symbol path confined to module
+Found:
+  md5x::compute in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R3-bare-dependency-head/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R3-bare-dependency-head · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=md5x PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R3-bare-dependency-head/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 4 reached)
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 0
+
+## R3-bare-dependency-head · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=md5x PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R3-bare-dependency-head/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  md5x
+Rule:
+  inline symbol path confined to module
+Found:
+  md5x::compute in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R3-bare-dependency-head/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R3-bare-dependency-head · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=md5x PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R3-bare-dependency-head/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 4 reached)
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 0
+
+## R3-bare-dependency-head · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=md5x PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R3-bare-dependency-head/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  md5x
+Rule:
+  inline symbol path confined to module
+Found:
+  md5x::compute in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R3-bare-dependency-head/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R3-leading-root-dependency-head · rustc (2021)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R3-leading-root-dependency-head/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## R3-leading-root-dependency-head · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=md5x PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R3-leading-root-dependency-head/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 4 reached)
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 0
+
+## R3-leading-root-dependency-head · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=md5x PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R3-leading-root-dependency-head/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  md5x
+Rule:
+  inline symbol path confined to module
+Found:
+  md5x::compute in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R3-leading-root-dependency-head/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R3-leading-root-dependency-head · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=md5x PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R3-leading-root-dependency-head/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 4 reached)
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 0
+
+## R3-leading-root-dependency-head · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=md5x PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R3-leading-root-dependency-head/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  md5x
+Rule:
+  inline symbol path confined to module
+Found:
+  md5x::compute in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R3-leading-root-dependency-head/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R3-leading-root-dependency-head · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=md5x PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R3-leading-root-dependency-head/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  md5x
+Rule:
+  inline symbol path confined to module
+Found:
+  md5x::compute in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R3-leading-root-dependency-head/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R3-leading-root-dependency-head · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=md5x PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R3-leading-root-dependency-head/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  md5x
+Rule:
+  inline symbol path confined to module
+Found:
+  md5x::compute in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R3-leading-root-dependency-head/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R4-local-module-shadows-same-named-dependency · rustc (2021)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R4-local-module-shadows-same-named-dependency/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## R4-local-module-shadows-same-named-dependency · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=::md5x PROBE_MODULE=crate PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R4-local-module-shadows-same-named-dependency/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 4 reached)
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 0
+
+## R4-local-module-shadows-same-named-dependency · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=::md5x PROBE_MODULE=crate PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R4-local-module-shadows-same-named-dependency/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 4 reached)
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 0
+
+## R4-local-module-shadows-same-named-dependency · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=::md5x PROBE_MODULE=crate PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R4-local-module-shadows-same-named-dependency/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names '::md5x', which is not `::`-separated identifiers rooted at a crate — write `md5x`
+[exit code] 2
+
+## R4-local-module-shadows-same-named-dependency · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=::md5x PROBE_MODULE=crate PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R4-local-module-shadows-same-named-dependency/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names '::md5x', which is not `::`-separated identifiers rooted at a crate — write `md5x`
+[exit code] 2
+
+## R4-local-module-shadows-same-named-dependency · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=::md5x PROBE_MODULE=crate PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R4-local-module-shadows-same-named-dependency/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 4 reached)
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 0
+
+## R4-local-module-shadows-same-named-dependency · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=::md5x PROBE_MODULE=crate PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R4-local-module-shadows-same-named-dependency/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 4 reached)
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 0
+
+## R5-2018-gen · rustc (2018)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-gen/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## R5-2018-gen · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=gen PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-gen/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  gen
+Rule:
+  inline symbol path confined to module
+Found:
+  gen::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-gen/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2018-gen · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=gen PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-gen/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  gen
+Rule:
+  inline symbol path confined to module
+Found:
+  gen::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-gen/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2018-gen · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=gen PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-gen/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  gen
+Rule:
+  inline symbol path confined to module
+Found:
+  gen::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-gen/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2018-gen · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=gen PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-gen/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  gen
+Rule:
+  inline symbol path confined to module
+Found:
+  gen::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-gen/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2018-gen · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=gen PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-gen/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names 'gen', which is not `::`-separated identifiers rooted at a crate — write the path from `crate`, `std`, `core`, `alloc` or a dependency
+[exit code] 2
+
+## R5-2018-gen · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=gen PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-gen/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names 'gen', which is not `::`-separated identifiers rooted at a crate — write the path from `crate`, `std`, `core`, `alloc` or a dependency
+[exit code] 2
+
+## R5-2018-async · rustc (2018)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-async/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## R5-2018-async · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=async PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-async/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  async
+Rule:
+  inline symbol path confined to module
+Found:
+  async::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-async/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2018-async · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=async PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-async/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  async
+Rule:
+  inline symbol path confined to module
+Found:
+  async::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-async/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2018-async · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=async PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-async/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  async
+Rule:
+  inline symbol path confined to module
+Found:
+  async::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-async/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2018-async · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=async PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-async/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  async
+Rule:
+  inline symbol path confined to module
+Found:
+  async::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-async/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2018-async · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=async PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-async/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names 'async', which is not `::`-separated identifiers rooted at a crate — write the path from `crate`, `std`, `core`, `alloc` or a dependency
+[exit code] 2
+
+## R5-2018-async · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=async PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-async/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names 'async', which is not `::`-separated identifiers rooted at a crate — write the path from `crate`, `std`, `core`, `alloc` or a dependency
+[exit code] 2
+
+## R5-2018-dyn · rustc (2018)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-dyn/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## R5-2018-dyn · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=dyn PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-dyn/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  dyn
+Rule:
+  inline symbol path confined to module
+Found:
+  dyn::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-dyn/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2018-dyn · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=dyn PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-dyn/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  dyn
+Rule:
+  inline symbol path confined to module
+Found:
+  dyn::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-dyn/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2018-dyn · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=dyn PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-dyn/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  dyn
+Rule:
+  inline symbol path confined to module
+Found:
+  dyn::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-dyn/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2018-dyn · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=dyn PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-dyn/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  dyn
+Rule:
+  inline symbol path confined to module
+Found:
+  dyn::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-dyn/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2018-dyn · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=dyn PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-dyn/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names 'dyn', which is not `::`-separated identifiers rooted at a crate — write the path from `crate`, `std`, `core`, `alloc` or a dependency
+[exit code] 2
+
+## R5-2018-dyn · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=dyn PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-dyn/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names 'dyn', which is not `::`-separated identifiers rooted at a crate — write the path from `crate`, `std`, `core`, `alloc` or a dependency
+[exit code] 2
+
+## R5-2018-try · rustc (2018)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-try/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## R5-2018-try · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=try PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-try/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  try
+Rule:
+  inline symbol path confined to module
+Found:
+  try::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-try/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2018-try · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=try PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-try/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  try
+Rule:
+  inline symbol path confined to module
+Found:
+  try::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-try/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2018-try · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=try PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-try/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  try
+Rule:
+  inline symbol path confined to module
+Found:
+  try::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-try/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2018-try · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=try PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-try/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  try
+Rule:
+  inline symbol path confined to module
+Found:
+  try::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-try/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2018-try · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=try PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-try/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names 'try', which is not `::`-separated identifiers rooted at a crate — write the path from `crate`, `std`, `core`, `alloc` or a dependency
+[exit code] 2
+
+## R5-2018-try · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=try PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-try/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names 'try', which is not `::`-separated identifiers rooted at a crate — write the path from `crate`, `std`, `core`, `alloc` or a dependency
+[exit code] 2
+
+## R5-2018-_ · rustc (2018)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-_/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+error: expected one of `.`, `;`, `?`, `}`, or an operator, found `::`
+ --> src/core.rs:4:29
+  |
+4 |     pub fn call() -> u32 { _::f() }
+  |                             ^^ expected one of `.`, `;`, `?`, `}`, or an operator
+
+error: could not compile `probe` (lib test) due to 1 previous error
+[exit code] 101
+
+## R5-2018-_ · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=_ PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-_/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 2 reached)
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 0
+
+## R5-2018-_ · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=_ PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-_/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 2 reached)
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 0
+
+## R5-2018-_ · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=_ PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-_/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 2 reached)
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 0
+
+## R5-2018-_ · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=_ PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-_/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 2 reached)
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 0
+
+## R5-2018-_ · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=_ PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-_/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 2 reached)
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 0
+
+## R5-2018-_ · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=_ PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-_/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 2 reached)
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 0
+
+## R5-2018-union · rustc (2018)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-union/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## R5-2018-union · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=union PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-union/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  union
+Rule:
+  inline symbol path confined to module
+Found:
+  union::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-union/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2018-union · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=union PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-union/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  union
+Rule:
+  inline symbol path confined to module
+Found:
+  union::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-union/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2018-union · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=union PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-union/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  union
+Rule:
+  inline symbol path confined to module
+Found:
+  union::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-union/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2018-union · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=union PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-union/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  union
+Rule:
+  inline symbol path confined to module
+Found:
+  union::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-union/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2018-union · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=union PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-union/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  union
+Rule:
+  inline symbol path confined to module
+Found:
+  union::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-union/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2018-union · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=union PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-union/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  union
+Rule:
+  inline symbol path confined to module
+Found:
+  union::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2018-union/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2021-gen · rustc (2021)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-gen/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## R5-2021-gen · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=gen PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-gen/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  gen
+Rule:
+  inline symbol path confined to module
+Found:
+  gen::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-gen/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2021-gen · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=gen PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-gen/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  gen
+Rule:
+  inline symbol path confined to module
+Found:
+  gen::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-gen/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2021-gen · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=gen PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-gen/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  gen
+Rule:
+  inline symbol path confined to module
+Found:
+  gen::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-gen/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2021-gen · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=gen PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-gen/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  gen
+Rule:
+  inline symbol path confined to module
+Found:
+  gen::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-gen/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2021-gen · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=gen PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-gen/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names 'gen', which is not `::`-separated identifiers rooted at a crate — write the path from `crate`, `std`, `core`, `alloc` or a dependency
+[exit code] 2
+
+## R5-2021-gen · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=gen PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-gen/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names 'gen', which is not `::`-separated identifiers rooted at a crate — write the path from `crate`, `std`, `core`, `alloc` or a dependency
+[exit code] 2
+
+## R5-2021-async · rustc (2021)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-async/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## R5-2021-async · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=async PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-async/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  async
+Rule:
+  inline symbol path confined to module
+Found:
+  async::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-async/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2021-async · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=async PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-async/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  async
+Rule:
+  inline symbol path confined to module
+Found:
+  async::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-async/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2021-async · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=async PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-async/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  async
+Rule:
+  inline symbol path confined to module
+Found:
+  async::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-async/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2021-async · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=async PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-async/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  async
+Rule:
+  inline symbol path confined to module
+Found:
+  async::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-async/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2021-async · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=async PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-async/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names 'async', which is not `::`-separated identifiers rooted at a crate — write the path from `crate`, `std`, `core`, `alloc` or a dependency
+[exit code] 2
+
+## R5-2021-async · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=async PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-async/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names 'async', which is not `::`-separated identifiers rooted at a crate — write the path from `crate`, `std`, `core`, `alloc` or a dependency
+[exit code] 2
+
+## R5-2021-dyn · rustc (2021)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-dyn/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## R5-2021-dyn · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=dyn PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-dyn/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  dyn
+Rule:
+  inline symbol path confined to module
+Found:
+  dyn::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-dyn/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2021-dyn · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=dyn PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-dyn/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  dyn
+Rule:
+  inline symbol path confined to module
+Found:
+  dyn::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-dyn/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2021-dyn · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=dyn PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-dyn/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  dyn
+Rule:
+  inline symbol path confined to module
+Found:
+  dyn::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-dyn/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2021-dyn · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=dyn PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-dyn/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  dyn
+Rule:
+  inline symbol path confined to module
+Found:
+  dyn::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-dyn/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2021-dyn · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=dyn PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-dyn/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names 'dyn', which is not `::`-separated identifiers rooted at a crate — write the path from `crate`, `std`, `core`, `alloc` or a dependency
+[exit code] 2
+
+## R5-2021-dyn · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=dyn PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-dyn/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names 'dyn', which is not `::`-separated identifiers rooted at a crate — write the path from `crate`, `std`, `core`, `alloc` or a dependency
+[exit code] 2
+
+## R5-2021-try · rustc (2021)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-try/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## R5-2021-try · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=try PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-try/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  try
+Rule:
+  inline symbol path confined to module
+Found:
+  try::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-try/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2021-try · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=try PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-try/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  try
+Rule:
+  inline symbol path confined to module
+Found:
+  try::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-try/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2021-try · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=try PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-try/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  try
+Rule:
+  inline symbol path confined to module
+Found:
+  try::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-try/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2021-try · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=try PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-try/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  try
+Rule:
+  inline symbol path confined to module
+Found:
+  try::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-try/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2021-try · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=try PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-try/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names 'try', which is not `::`-separated identifiers rooted at a crate — write the path from `crate`, `std`, `core`, `alloc` or a dependency
+[exit code] 2
+
+## R5-2021-try · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=try PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-try/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names 'try', which is not `::`-separated identifiers rooted at a crate — write the path from `crate`, `std`, `core`, `alloc` or a dependency
+[exit code] 2
+
+## R5-2021-_ · rustc (2021)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-_/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+error: expected one of `.`, `;`, `?`, `}`, or an operator, found `::`
+ --> src/core.rs:4:29
+  |
+4 |     pub fn call() -> u32 { _::f() }
+  |                             ^^ expected one of `.`, `;`, `?`, `}`, or an operator
+
+error: could not compile `probe` (lib test) due to 1 previous error
+[exit code] 101
+
+## R5-2021-_ · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=_ PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-_/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 2 reached)
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 0
+
+## R5-2021-_ · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=_ PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-_/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 2 reached)
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 0
+
+## R5-2021-_ · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=_ PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-_/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 2 reached)
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 0
+
+## R5-2021-_ · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=_ PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-_/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 2 reached)
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 0
+
+## R5-2021-_ · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=_ PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-_/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 2 reached)
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 0
+
+## R5-2021-_ · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=_ PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-_/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 2 reached)
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 0
+
+## R5-2021-union · rustc (2021)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-union/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## R5-2021-union · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=union PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-union/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  union
+Rule:
+  inline symbol path confined to module
+Found:
+  union::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-union/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2021-union · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=union PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-union/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  union
+Rule:
+  inline symbol path confined to module
+Found:
+  union::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-union/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2021-union · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=union PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-union/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  union
+Rule:
+  inline symbol path confined to module
+Found:
+  union::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-union/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2021-union · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=union PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-union/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  union
+Rule:
+  inline symbol path confined to module
+Found:
+  union::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-union/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2021-union · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=union PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-union/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  union
+Rule:
+  inline symbol path confined to module
+Found:
+  union::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-union/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2021-union · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=union PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-union/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  union
+Rule:
+  inline symbol path confined to module
+Found:
+  union::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2021-union/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2024-gen · rustc (2024)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-gen/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## R5-2024-gen · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=gen PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-gen/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  gen
+Rule:
+  inline symbol path confined to module
+Found:
+  gen::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-gen/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2024-gen · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=gen PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-gen/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  gen
+Rule:
+  inline symbol path confined to module
+Found:
+  gen::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-gen/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2024-gen · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=gen PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-gen/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  gen
+Rule:
+  inline symbol path confined to module
+Found:
+  gen::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-gen/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2024-gen · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=gen PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-gen/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  gen
+Rule:
+  inline symbol path confined to module
+Found:
+  gen::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-gen/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2024-gen · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=gen PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-gen/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names 'gen', which is not `::`-separated identifiers rooted at a crate — write the path from `crate`, `std`, `core`, `alloc` or a dependency
+[exit code] 2
+
+## R5-2024-gen · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=gen PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-gen/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names 'gen', which is not `::`-separated identifiers rooted at a crate — write the path from `crate`, `std`, `core`, `alloc` or a dependency
+[exit code] 2
+
+## R5-2024-async · rustc (2024)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-async/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## R5-2024-async · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=async PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-async/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  async
+Rule:
+  inline symbol path confined to module
+Found:
+  async::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-async/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2024-async · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=async PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-async/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  async
+Rule:
+  inline symbol path confined to module
+Found:
+  async::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-async/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2024-async · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=async PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-async/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  async
+Rule:
+  inline symbol path confined to module
+Found:
+  async::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-async/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2024-async · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=async PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-async/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  async
+Rule:
+  inline symbol path confined to module
+Found:
+  async::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-async/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2024-async · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=async PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-async/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names 'async', which is not `::`-separated identifiers rooted at a crate — write the path from `crate`, `std`, `core`, `alloc` or a dependency
+[exit code] 2
+
+## R5-2024-async · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=async PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-async/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names 'async', which is not `::`-separated identifiers rooted at a crate — write the path from `crate`, `std`, `core`, `alloc` or a dependency
+[exit code] 2
+
+## R5-2024-dyn · rustc (2024)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-dyn/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## R5-2024-dyn · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=dyn PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-dyn/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  dyn
+Rule:
+  inline symbol path confined to module
+Found:
+  dyn::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-dyn/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2024-dyn · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=dyn PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-dyn/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  dyn
+Rule:
+  inline symbol path confined to module
+Found:
+  dyn::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-dyn/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2024-dyn · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=dyn PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-dyn/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  dyn
+Rule:
+  inline symbol path confined to module
+Found:
+  dyn::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-dyn/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2024-dyn · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=dyn PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-dyn/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  dyn
+Rule:
+  inline symbol path confined to module
+Found:
+  dyn::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-dyn/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2024-dyn · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=dyn PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-dyn/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names 'dyn', which is not `::`-separated identifiers rooted at a crate — write the path from `crate`, `std`, `core`, `alloc` or a dependency
+[exit code] 2
+
+## R5-2024-dyn · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=dyn PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-dyn/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names 'dyn', which is not `::`-separated identifiers rooted at a crate — write the path from `crate`, `std`, `core`, `alloc` or a dependency
+[exit code] 2
+
+## R5-2024-try · rustc (2024)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-try/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## R5-2024-try · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=try PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-try/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  try
+Rule:
+  inline symbol path confined to module
+Found:
+  try::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-try/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2024-try · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=try PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-try/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  try
+Rule:
+  inline symbol path confined to module
+Found:
+  try::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-try/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2024-try · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=try PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-try/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  try
+Rule:
+  inline symbol path confined to module
+Found:
+  try::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-try/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2024-try · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=try PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-try/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  try
+Rule:
+  inline symbol path confined to module
+Found:
+  try::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-try/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2024-try · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=try PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-try/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names 'try', which is not `::`-separated identifiers rooted at a crate — write the path from `crate`, `std`, `core`, `alloc` or a dependency
+[exit code] 2
+
+## R5-2024-try · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=try PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-try/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names 'try', which is not `::`-separated identifiers rooted at a crate — write the path from `crate`, `std`, `core`, `alloc` or a dependency
+[exit code] 2
+
+## R5-2024-_ · rustc (2024)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-_/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+error: expected one of `.`, `;`, `?`, `}`, or an operator, found `::`
+ --> src/core.rs:4:29
+  |
+4 |     pub fn call() -> u32 { _::f() }
+  |                             ^^ expected one of `.`, `;`, `?`, `}`, or an operator
+
+error: could not compile `probe` (lib test) due to 1 previous error
+[exit code] 101
+
+## R5-2024-_ · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=_ PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-_/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 2 reached)
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 0
+
+## R5-2024-_ · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=_ PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-_/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 2 reached)
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 0
+
+## R5-2024-_ · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=_ PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-_/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 2 reached)
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 0
+
+## R5-2024-_ · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=_ PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-_/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 2 reached)
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 0
+
+## R5-2024-_ · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=_ PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-_/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 2 reached)
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 0
+
+## R5-2024-_ · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=_ PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-_/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 2 reached)
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 0
+
+## R5-2024-union · rustc (2024)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-union/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## R5-2024-union · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=union PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-union/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  union
+Rule:
+  inline symbol path confined to module
+Found:
+  union::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-union/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2024-union · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=union PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-union/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  union
+Rule:
+  inline symbol path confined to module
+Found:
+  union::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-union/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2024-union · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=union PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-union/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  union
+Rule:
+  inline symbol path confined to module
+Found:
+  union::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-union/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2024-union · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=union PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-union/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  union
+Rule:
+  inline symbol path confined to module
+Found:
+  union::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-union/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2024-union · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=union PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-union/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  union
+Rule:
+  inline symbol path confined to module
+Found:
+  union::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-union/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-2024-union · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=union PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-union/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  union
+Rule:
+  inline symbol path confined to module
+Found:
+  union::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-2024-union/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-raw-2024-gen · rustc (2024)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2024-gen/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## R5-raw-2024-gen · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default 'PREFIX=r#gen' PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2024-gen/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  gen
+Rule:
+  inline symbol path confined to module
+Found:
+  gen::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2024-gen/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-raw-2024-gen · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict 'PREFIX=r#gen' PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2024-gen/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  gen
+Rule:
+  inline symbol path confined to module
+Found:
+  gen::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2024-gen/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-raw-2024-gen · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default 'PREFIX=r#gen' PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2024-gen/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  gen
+Rule:
+  inline symbol path confined to module
+Found:
+  gen::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2024-gen/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-raw-2024-gen · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict 'PREFIX=r#gen' PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2024-gen/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  gen
+Rule:
+  inline symbol path confined to module
+Found:
+  gen::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2024-gen/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-raw-2024-gen · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default 'PREFIX=r#gen' PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2024-gen/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  gen
+Rule:
+  inline symbol path confined to module
+Found:
+  gen::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2024-gen/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-raw-2024-gen · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict 'PREFIX=r#gen' PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2024-gen/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  gen
+Rule:
+  inline symbol path confined to module
+Found:
+  gen::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2024-gen/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-raw-2021-async · rustc (2021)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-async/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## R5-raw-2021-async · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default 'PREFIX=r#async' PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-async/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  async
+Rule:
+  inline symbol path confined to module
+Found:
+  async::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-async/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-raw-2021-async · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict 'PREFIX=r#async' PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-async/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  async
+Rule:
+  inline symbol path confined to module
+Found:
+  async::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-async/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-raw-2021-async · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default 'PREFIX=r#async' PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-async/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  async
+Rule:
+  inline symbol path confined to module
+Found:
+  async::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-async/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-raw-2021-async · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict 'PREFIX=r#async' PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-async/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  async
+Rule:
+  inline symbol path confined to module
+Found:
+  async::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-async/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-raw-2021-async · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default 'PREFIX=r#async' PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-async/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  async
+Rule:
+  inline symbol path confined to module
+Found:
+  async::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-async/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-raw-2021-async · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict 'PREFIX=r#async' PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-async/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  async
+Rule:
+  inline symbol path confined to module
+Found:
+  async::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-async/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-raw-2021-dyn · rustc (2021)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-dyn/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## R5-raw-2021-dyn · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default 'PREFIX=r#dyn' PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-dyn/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  dyn
+Rule:
+  inline symbol path confined to module
+Found:
+  dyn::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-dyn/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-raw-2021-dyn · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict 'PREFIX=r#dyn' PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-dyn/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  dyn
+Rule:
+  inline symbol path confined to module
+Found:
+  dyn::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-dyn/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-raw-2021-dyn · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default 'PREFIX=r#dyn' PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-dyn/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  dyn
+Rule:
+  inline symbol path confined to module
+Found:
+  dyn::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-dyn/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-raw-2021-dyn · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict 'PREFIX=r#dyn' PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-dyn/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  dyn
+Rule:
+  inline symbol path confined to module
+Found:
+  dyn::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-dyn/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-raw-2021-dyn · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default 'PREFIX=r#dyn' PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-dyn/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  dyn
+Rule:
+  inline symbol path confined to module
+Found:
+  dyn::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-dyn/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-raw-2021-dyn · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict 'PREFIX=r#dyn' PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-dyn/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  dyn
+Rule:
+  inline symbol path confined to module
+Found:
+  dyn::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-dyn/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-raw-2021-try · rustc (2021)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-try/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## R5-raw-2021-try · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default 'PREFIX=r#try' PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-try/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  try
+Rule:
+  inline symbol path confined to module
+Found:
+  try::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-try/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-raw-2021-try · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict 'PREFIX=r#try' PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-try/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  try
+Rule:
+  inline symbol path confined to module
+Found:
+  try::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-try/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-raw-2021-try · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default 'PREFIX=r#try' PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-try/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  try
+Rule:
+  inline symbol path confined to module
+Found:
+  try::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-try/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-raw-2021-try · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict 'PREFIX=r#try' PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-try/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  try
+Rule:
+  inline symbol path confined to module
+Found:
+  try::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-try/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-raw-2021-try · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default 'PREFIX=r#try' PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-try/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  try
+Rule:
+  inline symbol path confined to module
+Found:
+  try::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-try/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R5-raw-2021-try · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict 'PREFIX=r#try' PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-try/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  try
+Rule:
+  inline symbol path confined to module
+Found:
+  try::f in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R5-raw-2021-try/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R6-turbofish-close-before-associated-item · rustc (2021)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R6-turbofish-close-before-associated-item/Cargo.toml --target-dir /tmp/tianheng-typed-name-resolution.AdH7r7/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## R6-turbofish-close-before-associated-item · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=md5x PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R6-turbofish-close-before-associated-item/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 4 reached)
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 0
+
+## R6-turbofish-close-before-associated-item · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=md5x PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R6-turbofish-close-before-associated-item/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  md5x
+Rule:
+  inline symbol path confined to module
+Found:
+  md5x in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R6-turbofish-close-before-associated-item/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R6-turbofish-close-before-associated-item · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=md5x PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R6-turbofish-close-before-associated-item/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+Tianheng: clean — no boundary violated (1 declared, 4 reached)
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 0
+
+## R6-turbofish-close-before-associated-item · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=md5x PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R6-turbofish-close-before-associated-item/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  md5x
+Rule:
+  inline symbol path confined to module
+Found:
+  md5x in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R6-turbofish-close-before-associated-item/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R6-turbofish-close-before-associated-item · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=md5x PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R6-turbofish-close-before-associated-item/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  md5x
+Rule:
+  inline symbol path confined to module
+Found:
+  md5x in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R6-turbofish-close-before-associated-item/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R6-turbofish-close-before-associated-item · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=md5x PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R6-turbofish-close-before-associated-item/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  md5x
+Rule:
+  inline symbol path confined to module
+Found:
+  md5x in crate::core
+File:
+  /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R6-turbofish-close-before-associated-item/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — 1 of 2 workspace crate(s) have no boundary
+[exit code] 1
+
+## R2-baseline-create · v0.7.1
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=::std::time PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-relative/Cargo.toml --write-baseline /tmp/tianheng-typed-name-resolution.AdH7r7/baseline-v0.7.1.json
+[stdout]
+<empty>
+[stderr]
+Tianheng: wrote 0 violation(s) to baseline /tmp/tianheng-typed-name-resolution.AdH7r7/baseline-v0.7.1.json
+[exit code] 0
+
+## R2-baseline-cross-spelling · v0.7.1
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=std::time PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-v071/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-relative/Cargo.toml --baseline /tmp/tianheng-typed-name-resolution.AdH7r7/baseline-v0.7.1.json --format json
+[stdout]
+{
+  "coverage": {
+    "uncovered": [],
+    "workspace_crates": 1
+  },
+  "error": null,
+  "exit_code": 1,
+  "format": "tianheng.reaction/structured-facts",
+  "outcome": "violations",
+  "stale_baseline": [],
+  "stale_disallowed": false,
+  "violations": [
+    {
+      "anchor": null,
+      "baselined": false,
+      "fact": {
+        "fields": {
+          "governing_package": "probe",
+          "module": "crate::core",
+          "path": "std::time::SystemTime::now",
+          "unit": "src/lib.rs"
+        },
+        "shape": "path-in-module",
+        "type": "tianheng.fact/guibiao/inline-path"
+      },
+      "file": "/tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-relative/src/core.rs",
+      "finding": "std::time::SystemTime::now in crate::core",
+      "kind": "module",
+      "polarity": "deny_breach",
+      "reason": "probe inline path resolution",
+      "rule": "inline symbol path confined to module",
+      "rule_key": {
+        "fields": {
+          "ending_with": "[]",
+          "prefix": "std::time",
+          "strict": "false"
+        },
+        "type": "tianheng.rule/guibiao/confine-inline-symbol-path"
+      },
+      "severity": "enforce",
+      "target": "std::time"
+    }
+  ]
+}
+[stderr]
+<empty>
+[exit code] 1
+
+## R2-baseline-create · be047d8b^
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=::std::time PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-relative/Cargo.toml --write-baseline '/tmp/tianheng-typed-name-resolution.AdH7r7/baseline-be047d8b^.json'
+[stdout]
+<empty>
+[stderr]
+Tianheng constitution error: a prefix is compared segment by segment, so it has one spelling: `must_not_call_inline` in crate 'probe' names '::std::time', which is not `::`-separated identifiers rooted at a crate — write `std::time`
+refusing to write a baseline from a constitution that could not be evaluated
+[exit code] 2
+
+## R2-baseline-cross-spelling · be047d8b^
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=std::time PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-pre/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-relative/Cargo.toml --baseline '/tmp/tianheng-typed-name-resolution.AdH7r7/baseline-be047d8b^.json' --format json
+[stdout]
+<empty>
+[stderr]
+Tianheng: cannot read baseline /tmp/tianheng-typed-name-resolution.AdH7r7/baseline-be047d8b^.json: No such file or directory (os error 2)
+[exit code] 2
+
+## R2-baseline-create · release/0.8.0
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=::std::time PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-relative/Cargo.toml --write-baseline /tmp/tianheng-typed-name-resolution.AdH7r7/baseline-release-0.8.0.json
+[stdout]
+<empty>
+[stderr]
+Tianheng: wrote 1 violation(s) to baseline /tmp/tianheng-typed-name-resolution.AdH7r7/baseline-release-0.8.0.json
+[exit code] 0
+
+## R2-baseline-cross-spelling · release/0.8.0
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=std::time PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/tianheng-typed-name-resolution.AdH7r7/targets/checker-release/debug/tianheng check --manifest-path /tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-relative/Cargo.toml --baseline /tmp/tianheng-typed-name-resolution.AdH7r7/baseline-release-0.8.0.json --format json
+[stdout]
+{
+  "coverage": {
+    "uncovered": [],
+    "workspace_crates": 1
+  },
+  "error": null,
+  "exit_code": 1,
+  "format": "tianheng.reaction/structured-facts",
+  "outcome": "violations",
+  "stale_baseline": [
+    {
+      "fact": {
+        "fields": {
+          "governing_package": "probe",
+          "module": "crate::core",
+          "path": "std::time::SystemTime::now",
+          "unit": "src/lib.rs"
+        },
+        "shape": "path-in-module",
+        "type": "tianheng.fact/guibiao/inline-path"
+      },
+      "finding": "std::time::SystemTime::now in crate::core",
+      "owner": null,
+      "rule": "inline symbol path confined to module",
+      "rule_key": {
+        "fields": {
+          "ending_with": "[]",
+          "prefix": "::std::time",
+          "strict": "false"
+        },
+        "type": "tianheng.rule/guibiao/confine-inline-symbol-path"
+      },
+      "target": "::std::time",
+      "tracker": null
+    }
+  ],
+  "stale_disallowed": false,
+  "violations": [
+    {
+      "anchor": null,
+      "baselined": false,
+      "fact": {
+        "fields": {
+          "governing_package": "probe",
+          "module": "crate::core",
+          "path": "std::time::SystemTime::now",
+          "unit": "src/lib.rs"
+        },
+        "shape": "path-in-module",
+        "type": "tianheng.fact/guibiao/inline-path"
+      },
+      "file": "/tmp/tianheng-typed-name-resolution.AdH7r7/probes/R2-prefix-relative/src/core.rs",
+      "finding": "std::time::SystemTime::now in crate::core",
+      "kind": "module",
+      "polarity": "deny_breach",
+      "reason": "probe inline path resolution",
+      "rule": "inline symbol path confined to module",
+      "rule_key": {
+        "fields": {
+          "ending_with": "[]",
+          "prefix": "std::time",
+          "strict": "false"
+        },
+        "type": "tianheng.rule/guibiao/confine-inline-symbol-path"
+      },
+      "severity": "enforce",
+      "target": "std::time"
+    }
+  ]
+}
+[stderr]
+<empty>
+[exit code] 1
