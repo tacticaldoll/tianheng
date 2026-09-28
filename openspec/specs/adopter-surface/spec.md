@@ -19,10 +19,11 @@ documented adoption path remains usable and semantically honest across the 0.2 l
 `tianheng::prelude::*` SHALL expose the existing declaration and execution surface: `Constitution`,
 `CrateBoundary`, `ModuleBoundary`, `SignatureBoundary`, `TraitImplBoundary`, `VisibilityBoundary`,
 `ForbiddenMarkerBoundary`, `DynTraitBoundary`, `ImplTraitBoundary`, `AsyncExposureBoundary`,
-`UnsafeBoundary`, `StaticBoundary`, `RuntimeBoundary`, `SansIoPure`, `NoExistentialLeak`, `GovernanceTest`,
+`UnsafeBoundary`, `StaticBoundary`, `ReexportOnlyBoundary`, `RuntimeBoundary`, `SansIoPure`, `NoExistentialLeak`, `GovernanceTest`,
 `ScanDepth`, `DependencyKind`, `SourceKind`, `VisibilityCeiling`, `Severity`, and `run`. An
 external consumer SHALL be able to compose boundaries from all three instruments through one
-`Constitution` without importing dimension crates.
+`Constitution` without importing dimension crates. This named surface is specified here;
+`prelude_promise` checks the prelude against the external compilation contract, not this prose list.
 
 #### Scenario: A consumer declares the composed law from one import
 

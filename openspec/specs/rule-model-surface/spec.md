@@ -97,7 +97,7 @@ changes.
 
 ### Requirement: Specific boundary builders SHALL expose explicit ScanDepth toggles
 
-The public reaction model SHALL provide a strongly-typed `ScanDepth` enum (`Shallow`, `Subtree`) with `#[default]` set to `Shallow`. Supporting boundary builders (`guibiao`: `ModuleBoundary`, `InlineConfinementDraft`; `hunyi`: `AsyncExposureBoundary`, `ImplTraitBoundary`) SHALL expose `.depth(ScanDepth)` to allow explicit configuration of observation depth. Legacy module boundaries SHALL preserve their default `Subtree` evaluation and baseline identity, while `.depth(ScanDepth::Shallow)` restricts observation to the anchored seam. Existing ergonomic builders (such as `.including_submodules()`) SHALL map to `.depth(ScanDepth::Subtree)` and SHALL remain fully compatible.
+The public reaction model SHALL provide a strongly-typed `ScanDepth` enum (`Shallow`, `Subtree`) with `#[default]` set to `Shallow`. Supporting boundary builders (`guibiao`: `ModuleBoundary`, `InlineConfinementDraft`; `hunyi`: `AsyncExposureBoundary`, `ImplTraitBoundary`, `ReexportOnlyBoundary`) SHALL expose `.depth(ScanDepth)` to allow explicit configuration of observation depth. Legacy module boundaries SHALL preserve their default `Subtree` evaluation and baseline identity, while `.depth(ScanDepth::Shallow)` restricts observation to the anchored seam. Existing ergonomic builders (such as `.including_submodules()`) SHALL map to `.depth(ScanDepth::Subtree)` and SHALL remain fully compatible.
 
 #### Scenario: Legacy module boundary construction preserves existing Subtree evaluation and identity
 

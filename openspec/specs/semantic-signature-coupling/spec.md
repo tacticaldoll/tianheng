@@ -105,8 +105,7 @@ For each semantic boundary, the system SHALL resolve the named governed module a
 
 A governed module anchor SHALL be accepted only as `crate`, or as `crate::` followed by
 `::`-separated identifiers, and SHALL be judged before any source is read. This requirement states
-the spelling for every module-anchored semantic capability — signature-coupling, visibility,
-re-export-only, dyn-trait, impl-trait, async-exposure and forbidden-marker — and for the
+the spelling for every module-anchored semantic capability and for the
 allowed-location lists of unsafe-confinement and trait-impl-locality. Any other spelling — a leading,
 trailing or doubled `::`, the empty string, a path not rooted at `crate` such as `domain`, a `self::`
 or `super::` path, a segment carrying whitespace — SHALL be a **constitution error** (exit 2) whose
@@ -120,8 +119,9 @@ under either would not suppress the finding declared under the other.
 One equivalence is folded, because rustc defines it: `r#x` and `x` are the same identifier, so
 `crate::r#domain` is accepted, and its violations carry the target `crate::domain` and the identities
 a `crate::domain` declaration produces. What counts as an identifier is the lexer's set rather than a
-list kept here. A keyword written bare as a segment (`crate::type`) passes the spelling and is refused
-by anchor resolution above, because no module has that name.
+list kept here. A keyword that can be written raw names the same identifier in both forms: a declaration
+`mod r#type;` is reachable by `crate::type` and `crate::r#type`. Segments that Rust cannot
+write raw (`self`, `super`, `crate`, `Self`, `_`) cannot name a module and are refused.
 
 #### Scenario: Each spelling has one answer
 

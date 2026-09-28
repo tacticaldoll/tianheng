@@ -3,8 +3,8 @@
 ## Purpose
 
 The 渾儀 (semantic) dimension's static-item capability: declare in Rust that a module, and every
-module beneath it, declares no `static` item and no `thread_local!` — the layer that holds no
-process or thread state of its own. It governs *declarations*, observed from the local crate's AST
+module beneath it, declares no `static` item and no `thread_local!`. It governs *declarations*,
+observed from the local crate's AST
 (`syn`): a `static` or `static mut` wherever it is written in the subtree, a foreign `static` in an
 `extern` block, and each static a `thread_local!` invocation declares. Anchored at a module, it is
 architectural intent rather than a style check: statics outside the anchored subtree are not governed.

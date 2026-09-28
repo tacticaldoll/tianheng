@@ -3569,12 +3569,13 @@ consumer for an undemonstrated deduplication.
   *Class:* BUILT / HISTORY. *Observed pressure:* one authority, zero current violations — the family adopter
   kengen states in its own `AGENTS.md`, in the brick-contract axiom (an external repository, not reachable from this checkout), that its
   brick contract crates hold "no filesystem, network, clock, or global state", and the global-state half is
-  held only by its review checklist; its seven contract crates declare no `static`. This converts a
+  held only by its review checklist; its contract crates declare no `static`. This converts a
   review-only axiom into a machine check; it is **not** evidence that many modules need it. *Observation
   source:* `syn::ItemStatic` (with `StaticMutability`), `syn::ForeignItemStatic`, `syn::ForeignItem::Verbatim`
   for `safe`/`unsafe`-qualified foreign statics, and item- and statement-position macro invocations whose leaf
   is `thread_local`; measured on rustc 1.96.0 and 1.85.1 over a probe carrying module, fn-body,
-  `thread_local!`, `extern`, `OnceLock` and edition-2024 `safe static` shapes. *Current reaction or bound:*
+  `thread_local!`, `extern`, `OnceLock` and `safe`/`unsafe`-qualified foreign statics in every
+  edition (edition 2024 requires `unsafe` on the enclosing `extern` block). *Current reaction or bound:*
   before it was built, none — `max_visibility(Module)`, `UnsafeBoundary::only_under`, `sans_io_pure` and
   `must_not_call_inline("std::thread")` each exited 0 or reacted on something other than the declaration over
   four private statics. *Risk:* bounded to adopters who declare it; the over-reactions it carries

@@ -319,6 +319,44 @@ fully-qualified path a token scanner would miss, and a `pub use` re-export.
 
 An empty operand set degenerates to shape-only (a loud over-reaction), never a silent no-op.
 
+### Keep a facade to re-exports only
+
+*Intent: a facade crate declares only `use` re-exports.*
+
+```rust
+.reexport_only_boundary(
+    ReexportOnlyBoundary::in_crate("my-app")
+        .module("crate")
+        .must_declare_only_reexports()
+        .because("the facade crate declares only re-exports"),
+)
+```
+
+A direct item other than `use` reacts, including a private function or child `mod`.
+Use `.including_submodules()` to treat child modules as containers and govern their direct items too.
+
+### Forbid selected auto-trait bounds on public returns
+
+*Intent: public functions under `crate::api` do not return `impl Future + Send` or expose `dyn Trait + Send`.*
+
+```rust
+.impl_trait_boundary(
+    ImplTraitBoundary::in_crate("my-app")
+        .module("crate::api")
+        .must_not_expose_impl_trait_bounded_by(["Send"])
+        .because("public returned impl Trait carries no Send bound"),
+)
+.dyn_trait_boundary(
+    DynTraitBoundary::in_crate("my-app")
+        .module("crate::api")
+        .must_not_expose_dyn_bounded_by(["Send"])
+        .because("public dyn Trait exposure carries no Send bound"),
+)
+```
+
+The impl-trait rule observes explicitly returned `impl Trait` bounds, including `impl Future + Send`;
+the dyn rule observes exposed `dyn Trait` bounds. They do not forbid an unbounded return.
+
 ### Register a trait's impls in one place (impl locality)
 
 *Intent: every `Command` impl lives under `crate::commands`.*
@@ -364,6 +402,22 @@ An empty operand set degenerates to shape-only (a loud over-reaction), never a s
 `Super` reacts on anything more visible than `pub(super)`; `Module` reacts on any `pub`-family
 keyword (a fully module-private layer). It governs the **declared** keyword, not crate-reachability —
 the compiler accepts widening a `pub(crate)` to `pub`; this catches that drift.
+
+### Keep contract modules free of static declarations
+
+*Intent: `crate::contract` and its descendants declare no `static` item or `thread_local!`.*
+
+```rust
+.static_boundary(
+    StaticBoundary::in_crate("my-app")
+        .module("crate::contract")
+        .must_not_declare_static()
+        .because("the contract subtree declares no static item or thread_local!"),
+)
+```
+
+Reacts on static declarations in the anchored subtree, including foreign statics and
+`thread_local!` declarations. Calls that change process state are outside this boundary.
 
 ### Confine `unsafe` to one auditable subtree
 

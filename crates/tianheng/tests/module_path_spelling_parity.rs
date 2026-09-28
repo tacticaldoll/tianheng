@@ -270,6 +270,10 @@ fn guibiao_and_hunyi_accept_and_record_a_module_path_alike() {
                 wrong.push(format!(
                     "guibiao {role} {written:?}: {gnomon:?}, expected {expected:?}"
                 ));
+            } else if matches!(expected, Expect::ReadersDiffer) && gnomon == hunyi {
+                wrong.push(format!(
+                    "guibiao {role} {written:?}: reader-specific refusals must differ: {gnomon:?}"
+                ));
             } else if gnomon.kind() == Kind::Misspelled && gnomon != hunyi {
                 wrong.push(format!(
                     "guibiao {role} {written:?} is refused unlike hunyi:\n    {gnomon:?}\n    {hunyi:?}"

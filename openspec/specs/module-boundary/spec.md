@@ -380,7 +380,7 @@ prefix is held to its own, which `inline-symbol-path-confinement` states.
 #### Scenario: 圭表 and 渾儀 answer one module path alike
 
 - **WHEN** one table of module-path spellings is given to 渾儀's module anchor and to each 圭表 builder that takes a module path
-- **THEN** each row is accepted by both and recorded in one form, or refused by both — for its spelling with one message, or as absent — except where the table declares the two identifier readers differ, a non-ASCII segment syn's lexer refuses and 圭表's byte-level lexer passes to its existence check
+- **THEN** each row is accepted by both and recorded in one form, or refused by both — for its spelling with one message, or as absent — except where the table declares the two identifier readers differ: a zero-width space after `kernel` and an emoji segment are refused by both, but syn rejects the segment as a spelling while 圭表's byte-level lexer passes it to the existence check, so their repair messages differ
 - **PINNED-BY** `guibiao_and_hunyi_accept_and_record_a_module_path_alike`
 
 ### Requirement: Imports are attributed to their enclosing inline module

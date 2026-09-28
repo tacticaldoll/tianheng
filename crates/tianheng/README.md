@@ -45,6 +45,9 @@ fn main() -> std::process::ExitCode {
   baselines, boundary/rule model types, the pure static `check`, and `check_constitution` for the
   unified law.
 
+The prelude also exports `ReexportOnlyBoundary` for a module that declares only re-exports and
+`StaticBoundary` for a module subtree that declares no `static` item or `thread_local!`.
+
 Semantic builders are available from the same prelude: use
 `DynTraitBoundary::in_crate(...).module(...).must_not_expose_dyn_bounded_by([...])` or
 `ImplTraitBoundary::in_crate(...).module(...).must_not_expose_impl_trait_bounded_by([...])`

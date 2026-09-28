@@ -25,8 +25,9 @@ use crate::resolve::canonical_path_str;
 /// and keyword spelling, raw forms included, and comparing the token with the written segment
 /// refuses a segment the lexer read past — surrounding whitespace, a comment, a second token. The
 /// comparison keeps the raw prefix, so `r#x` equals only `"r#x"`. Keywords are
-/// not refused at this layer: a path segment naming `self` or `type` names no module, and the
-/// existence check that follows every accepted anchor is what refuses it.
+/// not refused at this layer: `type` and `r#type` name the same identifier when the module is
+/// declared as `mod r#type;`. Segments that cannot be written raw (`self`, `super`, `crate`,
+/// `Self`, `_`) cannot name a module and are refused by the existence check.
 fn is_identifier(segment: &str) -> bool {
     syn::Ident::parse_any
         .parse_str(segment)
