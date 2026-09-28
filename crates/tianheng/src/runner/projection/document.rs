@@ -174,8 +174,9 @@ pub(in crate::runner) fn dyn_trait_boundary_json(boundary: &DynTraitBoundary) ->
         boundary.anchor(),
         boundary.forbidden_operands(),
     );
-    if !boundary.forbidden_auto_bounds().is_empty() {
-        object["forbidden_auto_bounds"] = serde_json::json!(boundary.forbidden_auto_bounds());
+    let auto_bounds = boundary.forbidden_auto_bound_leaves();
+    if !auto_bounds.is_empty() {
+        object["forbidden_auto_bounds"] = serde_json::json!(auto_bounds);
     }
     object
 }
@@ -189,8 +190,9 @@ pub(in crate::runner) fn impl_trait_boundary_json(boundary: &ImplTraitBoundary) 
         boundary.anchor(),
         boundary.forbidden_operands(),
     );
-    if !boundary.forbidden_auto_bounds().is_empty() {
-        object["forbidden_auto_bounds"] = serde_json::json!(boundary.forbidden_auto_bounds());
+    let auto_bounds = boundary.forbidden_auto_bound_leaves();
+    if !auto_bounds.is_empty() {
+        object["forbidden_auto_bounds"] = serde_json::json!(auto_bounds);
     }
     subtree_scoped(object, boundary.scan_depth())
 }

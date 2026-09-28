@@ -131,8 +131,8 @@ pub(crate) fn operand_module_findings(
     validate_exposed_trait_operands(
         forbidden,
         match fact_kind {
-            ExposureKind::DynTrait => "dyn-trait",
-            ExposureKind::ImplTrait => "impl-trait",
+            ExposureKind::DynTrait => crate::resolve::AutoTraitBoundaryKind::Dyn,
+            ExposureKind::ImplTrait => crate::resolve::AutoTraitBoundaryKind::Impl,
             ExposureKind::Signature => {
                 unreachable!("signature exposure has no principal-trait operands")
             }
@@ -188,8 +188,8 @@ pub(crate) fn auto_bound_module_findings(
     ),
 ) -> Result<Vec<(SemanticFact, PathBuf)>, String> {
     let boundary_kind = match fact_kind {
-        ExposureKind::DynTrait => "dyn-trait",
-        ExposureKind::ImplTrait => "impl-trait",
+        ExposureKind::DynTrait => crate::resolve::AutoTraitBoundaryKind::Dyn,
+        ExposureKind::ImplTrait => crate::resolve::AutoTraitBoundaryKind::Impl,
         ExposureKind::Signature => unreachable!(),
     };
     let forbidden_leaves = crate::resolve::auto_bound_leaves(bounds, boundary_kind)?;

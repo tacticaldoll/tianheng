@@ -213,10 +213,10 @@ their relationship or identity.
 ### Requirement: Auto-trait bound governance on returned impl Trait
 
 An auto-trait bound impl-trait boundary SHALL be expressed as Rust code via
-`must_not_expose_impl_trait_bounded_by([...])` on `ImplTraitBoundaryDraft`, targeting a module anchor
+`must_not_expose_impl_trait_bounded_by([...])` on `ImplTraitModuleDraft`, targeting a module anchor
 with a non-empty set of auto-trait bound names. The boundary SHALL accept only the standard auto traits:
-`Send`, `Sync`, `Unpin`, `UnwindSafe`, and `RefUnwindSafe` (bare or qualified with `core::marker` or
-`std::marker`, or raw identifiers). An empty bound set SHALL be rejected as a constitution error (exit 2)
+`Send`, `Sync`, and `Unpin` under `core::marker` or `std::marker`, and `UnwindSafe` and `RefUnwindSafe`
+under `core::panic` or `std::panic` (or any of the five as bare or raw identifiers). An empty bound set SHALL be rejected as a constitution error (exit 2)
 directing the author to use `must_not_expose_impl_trait()`. An unrecognized bound name SHALL be rejected
 as a constitution error (exit 2) directing the author to use `must_not_expose_impl_trait_of(...)`.
 A malformed path (e.g. `::Send` or containing an empty segment) SHALL be rejected as a constitution error.
@@ -237,7 +237,7 @@ The parameter `forbidden_auto_bounds` SHALL be determined by the normalized leaf
 spellings expressing the same forbidden auto-trait bounds (e.g. `["Send"]`, `["std::marker::Send"]`,
 `["core::marker::Send"]`, `["r#Send"]`, and redundant sets such as `["Send", "std::marker::Send"]`) produce
 the identical rule identity, with `forbidden_auto_bounds` carrying the sorted, deduplicated leaf set. Path
-qualifiers other than `std::marker::` or `core::marker::` (e.g. `foo::Send`) SHALL be rejected as a constitution
+qualifiers other than the defining module under `std` or `core` (e.g. `foo::Send`) SHALL be rejected as a constitution
 error (exit 2).
 
 #### Scenario: A returned impl Trait carrying a forbidden auto-trait bound is flagged

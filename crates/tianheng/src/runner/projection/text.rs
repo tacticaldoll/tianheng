@@ -168,7 +168,7 @@ pub(in crate::runner) fn dyn_trait_text(boundaries: &[DynTraitBoundary]) -> Stri
                 rule_line: shape_rule_text(
                     DYN_TRAIT_RULE,
                     b.forbidden_operands(),
-                    b.forbidden_auto_bounds(),
+                    &b.forbidden_auto_bound_leaves(),
                 ),
                 reason: b.reason(),
                 anchor: b.anchor(),
@@ -211,7 +211,7 @@ pub(in crate::runner) fn impl_trait_text(boundaries: &[ImplTraitBoundary]) -> St
                         shape_rule_text(
                             IMPL_TRAIT_RULE,
                             b.forbidden_operands(),
-                            b.forbidden_auto_bounds(),
+                            &b.forbidden_auto_bound_leaves(),
                         ),
                         scope
                     ),

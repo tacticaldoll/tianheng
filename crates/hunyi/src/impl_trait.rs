@@ -189,7 +189,7 @@ pub(crate) fn impl_trait_operand_subtree_findings(
     crate_package: &str,
     dep_names: &[String],
 ) -> Result<Vec<(SemanticFact, String, PathBuf)>, String> {
-    validate_exposed_trait_operands(forbidden, "impl-trait")?;
+    validate_exposed_trait_operands(forbidden, crate::resolve::AutoTraitBoundaryKind::Impl)?;
     let modules = walk_subtree_modules(src_dir, root_file, module, crate_package)?;
     let resolution = extern_resolution(src_dir, root_file, crate_package, dep_names)?;
     let filter = ImplTraitSubtreeFilter::Forbidden {
@@ -209,7 +209,8 @@ pub(crate) fn impl_trait_auto_bound_subtree_findings(
     bounds: &[String],
     crate_package: &str,
 ) -> Result<Vec<(SemanticFact, String, PathBuf)>, String> {
-    let forbidden_leaves = crate::resolve::auto_bound_leaves(bounds, "impl-trait")?;
+    let forbidden_leaves =
+        crate::resolve::auto_bound_leaves(bounds, crate::resolve::AutoTraitBoundaryKind::Impl)?;
     let modules = walk_subtree_modules(src_dir, root_file, module, crate_package)?;
     let filter = ImplTraitSubtreeFilter::AutoBounds(forbidden_leaves);
     collect_impl_trait_subtree_findings(modules, &filter)

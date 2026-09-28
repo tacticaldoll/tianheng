@@ -877,3 +877,71 @@ fn dyn_auto_bound_three_segment_invalid_qualifier_exits_2() {
         2
     );
 }
+
+#[test]
+fn auto_bound_qualified_path_matrix() {
+    let cases = [
+        ("std::panic::UnwindSafe", true),
+        ("core::panic::RefUnwindSafe", true),
+        ("std::marker::Send", true),
+        ("std::marker::UnwindSafe", false),
+        ("std::panic::Send", false),
+    ];
+    for (path, accepted) in cases {
+        for kind in ["impl", "dyn"] {
+            let tree = TempSrcTree::new(&format!("auto-bound-path-{kind}-{path}"));
+            tree.write("lib.rs", "pub mod m;\n");
+            let source = if kind == "impl" {
+                format!(
+                    "pub fn f() -> impl std::future::Future<Output = ()> + {path} {{ todo!() }}\n"
+                )
+            } else {
+                format!(
+                    "pub fn f() -> Box<dyn std::future::Future<Output = ()> + {path}> {{ todo!() }}\n"
+                )
+            };
+            tree.write("m.rs", &source);
+            let exit = if kind == "impl" {
+                let boundary = ImplTraitBoundary::in_crate("x")
+                    .module("crate::m")
+                    .must_not_expose_impl_trait_bounded_by([path])
+                    .because("auto-bound path guard");
+                check_impl_trait(&[boundary], &manifest(&tree)).exit_code()
+            } else {
+                let boundary = DynTraitBoundary::in_crate("x")
+                    .module("crate::m")
+                    .must_not_expose_dyn_bounded_by([path])
+                    .because("auto-bound path guard");
+                check_dyn_trait(&[boundary], &manifest(&tree)).exit_code()
+            };
+            assert_eq!(exit, if accepted { 1 } else { 2 }, "{kind} {path}");
+        }
+    }
+}
+#[test]
+fn auto_trait_operand_error_recommendation_is_executable() {
+    let tree = TempSrcTree::new("auto-operand-recommendation");
+    tree.write("lib.rs", "pub mod m;\n");
+    tree.write(
+        "m.rs",
+        "pub fn f() -> Box<dyn crate::ports::Port + std::panic::UnwindSafe> { todo!() }\n",
+    );
+    let bad = DynTraitBoundary::in_crate("x")
+        .module("crate::m")
+        .must_not_expose_dyn_of(["std::panic::UnwindSafe"])
+        .because("auto-bound recommendation");
+    let outcome = check_dyn_trait(&[bad], &manifest(&tree));
+    let message = match outcome {
+        crate::Outcome::ConstitutionError(message) => message,
+        other => panic!("expected constitution error, got {other:?}"),
+    };
+    assert!(
+        message.contains("must_not_expose_dyn_bounded_by([\"UnwindSafe\"])"),
+        "{message}"
+    );
+    let good = DynTraitBoundary::in_crate("x")
+        .module("crate::m")
+        .must_not_expose_dyn_bounded_by(["UnwindSafe"])
+        .because("auto-bound recommendation");
+    assert_eq!(check_dyn_trait(&[good], &manifest(&tree)).exit_code(), 1);
+}

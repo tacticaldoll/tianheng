@@ -26,6 +26,42 @@ use crate::syn_util::{FlatItem, reexport_externs_for, reexport_renames_for};
 mod shape;
 pub(crate) use shape::*;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AutoTraitBoundaryKind {
+    Dyn,
+    Impl,
+}
+
+impl AutoTraitBoundaryKind {
+    pub(crate) fn display_name(self) -> &'static str {
+        match self {
+            Self::Dyn => "dyn-trait",
+            Self::Impl => "impl-trait",
+        }
+    }
+
+    pub(crate) fn operand_builder(self) -> &'static str {
+        match self {
+            Self::Dyn => "must_not_expose_dyn_of",
+            Self::Impl => "must_not_expose_impl_trait_of",
+        }
+    }
+
+    pub(crate) fn bound_builder(self) -> &'static str {
+        match self {
+            Self::Dyn => "must_not_expose_dyn_bounded_by",
+            Self::Impl => "must_not_expose_impl_trait_bounded_by",
+        }
+    }
+
+    pub(crate) fn shape_builder(self) -> &'static str {
+        match self {
+            Self::Dyn => "must_not_expose_dyn",
+            Self::Impl => "must_not_expose_impl_trait",
+        }
+    }
+}
+
 /// Each name a `use` brings into a module's scope mapped to **every** written full path declared
 /// for that name — almost always exactly one, but two mutually-exclusive `#[cfg]`-gated `use ...
 /// as Name;` declarations in the same file are never compiled together, so both candidate targets
@@ -105,7 +141,7 @@ pub(crate) fn validate_path_operands(operands: &[String]) -> Result<(), String> 
 /// bounds before principal resolution, so a forbidden auto-trait leaf cannot react.
 pub(crate) fn validate_exposed_trait_operands(
     operands: &[String],
-    boundary_kind: &str,
+    boundary_kind: AutoTraitBoundaryKind,
 ) -> Result<(), String> {
     validate_path_operands(operands)?;
     if let Some(bad) = operands.iter().find(|operand| {
@@ -123,13 +159,13 @@ pub(crate) fn validate_exposed_trait_operands(
 ///
 /// An operand set must be non-empty and well-formed (no empty path segments).
 /// Each entry must name one of the five std auto traits (`Send`, `Sync`, `Unpin`,
-/// `UnwindSafe`, `RefUnwindSafe`), either bare, or qualified with `std::marker::` or
-/// `core::marker::`. Any other path is rejected with an exit-2 constitution error.
+/// `UnwindSafe`, `RefUnwindSafe`), either bare, or qualified with its defining module under
+/// `std` or `core`. Any other path is rejected with an exit-2 constitution error.
 ///
 /// Returns the normalized, deduplicated, sorted leaf names (e.g. `["Send"]`).
 pub(crate) fn auto_bound_leaves<'a>(
     bounds: impl IntoIterator<Item = &'a (impl AsRef<str> + 'a)>,
-    boundary_kind: &str,
+    boundary_kind: AutoTraitBoundaryKind,
 ) -> Result<std::collections::BTreeSet<String>, String> {
     let mut leaves = std::collections::BTreeSet::new();
     let mut any = false;
@@ -158,8 +194,7 @@ pub(crate) fn auto_bound_leaves<'a>(
                 let p2 = strip_raw(p2);
                 let stripped_leaf = strip_raw(leaf);
                 if (p1 == "std" || p1 == "core")
-                    && p2 == "marker"
-                    && shape::is_auto_trait_leaf(&stripped_leaf)
+                    && shape::auto_trait_module(&stripped_leaf) == Some(p2.as_str())
                 {
                     stripped_leaf
                 } else {

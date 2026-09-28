@@ -554,6 +554,35 @@ fn operand_scoped_impl_trait_boundary_projects_its_forbidden_operands() {
 }
 
 #[test]
+fn auto_bound_projection_uses_normalized_leaf_set() {
+    let impl_boundary = ImplTraitBoundary::in_crate("app")
+        .module("crate::core")
+        .must_not_expose_impl_trait_bounded_by(["std::marker::Send", "r#Sync", "Send"])
+        .because("the core seam must not return auto-bound existentials");
+    let dyn_boundary = DynTraitBoundary::in_crate("app")
+        .module("crate::core")
+        .must_not_expose_dyn_bounded_by([
+            "std::panic::UnwindSafe",
+            "core::panic::RefUnwindSafe",
+            "UnwindSafe",
+        ])
+        .because("the core seam must not leak auto-bound trait objects");
+    let impl_doc =
+        list_document(&Constitution::new("app").impl_trait_boundary(impl_boundary.clone()));
+    assert_eq!(
+        impl_doc["impl_trait_boundaries"][0]["forbidden_auto_bounds"],
+        serde_json::json!(["Send", "Sync"])
+    );
+    let dyn_doc = list_document(&Constitution::new("app").dyn_trait_boundary(dyn_boundary.clone()));
+    assert_eq!(
+        dyn_doc["dyn_trait_boundaries"][0]["forbidden_auto_bounds"],
+        serde_json::json!(["RefUnwindSafe", "UnwindSafe"])
+    );
+    assert!(impl_trait_text(&[impl_boundary]).contains("bounded by: Send, Sync"));
+    assert!(dyn_trait_text(&[dyn_boundary]).contains("bounded by: RefUnwindSafe, UnwindSafe"));
+}
+
+#[test]
 fn operand_scoped_dyn_boundary_projects_its_forbidden_operands() {
     let c = Constitution::new("app").dyn_trait_boundary(
         DynTraitBoundary::in_crate("app")
