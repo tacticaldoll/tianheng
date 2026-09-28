@@ -27,13 +27,21 @@ pub(super) fn inline_a_verb_outside_the_declared_set_is_a_bound() {
     let (result, violations) = run_module_check(
         "inline-verb-outside",
         &[
-            ("lib.rs", "pub mod core;\n"),
+            ("lib.rs", "pub mod clock;\npub mod core;\n"),
+            (
+                "clock.rs",
+                "pub fn now() -> u64 { 0 }\npub fn current() -> u64 { 0 }\n",
+            ),
             (
                 "core.rs",
-                "fn stamp() { let _ = std::time::SystemTime::current(); }\n",
+                "fn stamp() { let _ = crate::clock::current(); }\n",
             ),
         ],
-        narrowed(),
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("crate::clock")
+            .ending_with(["now"])
+            .because("the clock is injected"),
     );
     assert!(result.is_ok(), "{result:?}");
     assert!(
@@ -241,13 +249,20 @@ pub(super) fn inline_resolves_a_self_prefixed_group_alias() {
     let (result, violations) = run_module_check(
         "inline-self-prefixed-group",
         &[
-            ("lib.rs", "pub mod core;\n"),
+            ("lib.rs", "pub mod clock;\npub mod core;\n"),
+            (
+                "clock.rs",
+                "pub mod self_utc {\n    pub fn now() -> u8 { 0 }\n}\npub struct Duration;\n",
+            ),
             (
                 "core.rs",
-                "use std::time::{self_utc as clk, Duration};\nfn f() { let _ = clk::now(); }\n",
+                "#[allow(unused_imports)]\nuse crate::clock::{self_utc as clk, Duration};\nfn f() { let _ = clk::now(); }\n",
             ),
         ],
-        confine_core_clock(),
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("crate::clock")
+            .because("the clock is injected"),
     );
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(
@@ -256,7 +271,9 @@ pub(super) fn inline_resolves_a_self_prefixed_group_alias() {
         "a self-prefixed group alias resolves and reacts: {violations:?}"
     );
     assert!(
-        violations[0].finding.contains("std::time::self_utc::now"),
+        violations[0]
+            .finding
+            .contains("crate::clock::self_utc::now"),
         "{violations:?}"
     );
 }
@@ -324,17 +341,20 @@ pub(super) fn inline_resolves_a_multi_hop_type_alias() {
 pub(super) fn inline_resolves_a_type_alias_past_a_defaulted_generic_param() {
     // The generic parameter list carries its own `=` (`Tz = LocalTz`); it must not be mistaken for
     // the alias `=`, or the alias resolves to the default (`LocalTz`) instead of its real target
-    // (`std::time::SystemTime`) — a silent miss of the confined clock (a false negative).
+    // (`std::marker::PhantomData`) — a silent miss of the confined path (a false negative).
     let (result, violations) = run_module_check(
         "inline-defaulted-generic-alias",
         &[
             ("lib.rs", "pub mod core;\n"),
             (
                 "core.rs",
-                "type Clock<Tz = LocalTz> = std::time::SystemTime;\nfn f() { let _ = Clock::now(); }\n",
+                "pub struct LocalTz;\ntype Clock<Tz = LocalTz> = std::marker::PhantomData<Tz>;\nfn f() { let _: Clock = Clock::default(); }\n",
             ),
         ],
-        confine_core_clock(),
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("std::marker")
+            .because("no markers are made inline"),
     );
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(
@@ -567,7 +587,7 @@ pub(super) fn inline_scans_a_macro_body() {
             ("lib.rs", "pub mod core;\n"),
             (
                 "core.rs",
-                "fn f() { some_macro! { let _ = std::time::Instant::now(); } }\n",
+                "macro_rules! some_macro { ($($t:tt)*) => { $($t)* }; }\nfn f() { some_macro! { let _ = std::time::Instant::now(); } }\n",
             ),
         ],
         confine_core_clock(),
@@ -1128,6 +1148,9 @@ pub(super) fn inline_reacts_on_a_two_hop_use_realias() {
     );
 }
 
+/// Deliberately source rustc rejects — the nested groups name no module of `std`
+/// (`error[E0433]: cannot find `a` in `std``) — since what is under test is the nesting depth the scanner
+/// refuses past, not an answer about a program.
 #[test]
 pub(super) fn inline_glob_nested_past_the_depth_cap_is_a_scan_error_not_a_silent_drop() {
     // A pathologically brace-nested grouped glob must not silently vanish from the glob-hazard
@@ -1155,10 +1178,12 @@ pub(super) fn inline_glob_nested_past_the_depth_cap_is_a_scan_error_not_a_silent
     );
 }
 
+/// Deliberately source rustc rejects (`error[E0433]`), for the reason the glob sibling above gives: the
+/// subject is the refusal past the nesting cap.
 #[test]
 pub(super) fn inline_alias_chain_nested_past_the_depth_cap_is_a_scan_error_not_a_silent_drop() {
-    // The identical false-negative shape as the glob test above, for `expand_use_leaves`'s inner
-    // `go`: a pathologically nested grouped `use` introducing an alias must not silently drop the
+    // The identical false-negative shape as the glob test above, for the use-tree parser's named
+    // leaves: a pathologically nested grouped `use` introducing an alias must not silently drop the
     // alias from the use-map past the depth cap — an inline call through that alias would
     // otherwise pass unresolved (never even reaching the confinement check).
     let depth = 200;
@@ -1207,18 +1232,21 @@ pub(super) fn inline_grouped_glob_nested_moderately_is_still_observed() {
 
 #[test]
 pub(super) fn inline_reacts_through_a_mid_path_turbofish() {
-    // `Clock::<Utc>::now()` — the mid-path turbofish must not break the path, and the
-    // terminal `now` call must still react (via the resolved `std::time::SystemTime::now`).
+    // `Clock::<u8>::new()` — the mid-path turbofish must not break the path, and the
+    // terminal `new` call must still react (via the resolved `std::vec::Vec::new`).
     let (result, violations) = run_module_check(
         "inline-turbofish",
         &[
             ("lib.rs", "pub mod core;\n"),
             (
                 "core.rs",
-                "type Clock = std::time::SystemTime;\nfn f() { let _ = Clock::<u8>::now(); }\n",
+                "type Clock<T> = std::vec::Vec<T>;\nfn f() { let _ = Clock::<u8>::new(); }\n",
             ),
         ],
-        confine_core_clock(),
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("std::vec")
+            .because("no vectors are made inline"),
     );
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(
@@ -1263,7 +1291,7 @@ pub(super) fn inline_ufcs_is_a_documented_bound_under_the_default() {
             ("lib.rs", "pub mod core;\n"),
             (
                 "core.rs",
-                "trait Now { fn now(); }\nfn f() { <std::time::SystemTime as Now>::now(); }\n",
+                "trait Now { fn now(); }\nimpl Now for std::time::SystemTime { fn now() {} }\nfn f() { <std::time::SystemTime as Now>::now(); }\n",
             ),
         ],
         confine_core_clock(),
@@ -1413,6 +1441,8 @@ pub(super) fn inline_empty_verbs_is_a_constitution_error() {
     );
 }
 
+/// Every body here is deliberately malformed (rustc: `expected type, found `>``, among others); the test asserts
+/// the scan completes, never an answer about a program.
 #[test]
 pub(super) fn inline_scanner_does_not_panic_or_hang_on_odd_input() {
     // Robustness: malformed `use`/brace/self-referential-alias input must never panic or hang.
@@ -1447,7 +1477,7 @@ pub(super) fn inline_in_macro_body_alias_is_a_bound() {
             ("lib.rs", "pub mod core;\n"),
             (
                 "core.rs",
-                "fn f() { some_macro! { use std::time::SystemTime as X; let _ = X::now(); } }\n",
+                "macro_rules! some_macro { ($($t:tt)*) => { $($t)* }; }\nfn f() { some_macro! { use std::time::SystemTime as X; let _ = X::now(); } }\n",
             ),
         ],
         confine_core_clock(),
@@ -1623,7 +1653,10 @@ pub(super) fn inline_strict_external_default_path_module_attribution_unshifted()
 #[test]
 pub(super) fn scan_depth_shallow_vs_subtree_evaluates_submodule_matching() {
     let files = &[
-        ("lib.rs", "pub mod forbidden_on_sub {}\npub mod core;\n"),
+        (
+            "lib.rs",
+            "pub mod forbidden_on_core {}\npub mod forbidden_on_sub {}\npub mod core;\n",
+        ),
         ("core.rs", "pub mod sub;\nuse crate::forbidden_on_core;\n"),
         ("core/sub.rs", "use crate::forbidden_on_sub;\n"),
     ];
@@ -1693,7 +1726,7 @@ pub(super) fn module_boundary_including_submodules_is_a_compatible_subtree_modif
 #[test]
 pub(super) fn shallow_restrict_imports_to_ignores_descendant_imports() {
     let files = &[
-        ("lib.rs", "pub mod core;\n"),
+        ("lib.rs", "pub mod adapter {}\npub mod core;\n"),
         ("core.rs", "pub mod detail;\n"),
         ("core/detail.rs", "use crate::adapter;\n"),
     ];
@@ -1993,8 +2026,12 @@ pub(super) fn shallow_external_confinement_permits_only_the_exact_module() {
         .confine_external_crate("libc")
         .depth(xuanji::ScanDepth::Shallow)
         .because("only the secret seam may import libc");
-    let (shallow_result, shallow_violations) =
-        run_module_check("shallow-external-confinement", files, shallow);
+    let (shallow_result, shallow_violations) = run_module_check_with_deps(
+        "shallow-external-confinement",
+        files,
+        &[("libc", None)],
+        shallow,
+    );
     assert!(shallow_result.is_ok(), "{shallow_result:?}");
     assert_eq!(shallow_violations.len(), 1, "{shallow_violations:?}");
 
@@ -2002,8 +2039,12 @@ pub(super) fn shallow_external_confinement_permits_only_the_exact_module() {
         .module("crate::secret")
         .confine_external_crate("libc")
         .because("the secret subtree may import libc");
-    let (subtree_result, subtree_violations) =
-        run_module_check("subtree-external-confinement", files, subtree);
+    let (subtree_result, subtree_violations) = run_module_check_with_deps(
+        "subtree-external-confinement",
+        files,
+        &[("libc", None)],
+        subtree,
+    );
     assert!(subtree_result.is_ok(), "{subtree_result:?}");
     assert!(subtree_violations.is_empty(), "{subtree_violations:?}");
 }
@@ -2197,6 +2238,9 @@ pub(super) fn two_crates_with_the_identical_module_boundary_stay_distinct_violat
 /// `String::from_utf8_lossy` then *lengthened* (1 byte becomes the 3-byte U+FFFD replacement),
 /// desynchronizing the position map from the string it indexes into and panicking the next
 /// stage's `input_positions[i]` lookup.
+///
+/// Deliberately source rustc rejects (`error[E0758]: unterminated block comment`): the subject is that the
+/// lexer survives it.
 #[test]
 pub(super) fn an_unterminated_block_comment_swallowing_a_multibyte_char_does_not_panic() {
     let (result, violations) = run_module_check(
@@ -2227,6 +2271,8 @@ pub(super) fn an_unterminated_block_comment_swallowing_a_multibyte_char_does_not
 /// than a submodule) with only a single `pub mod` before the unterminated comment, so the
 /// swallowed trailing byte lands at a different absolute offset — exercising the same code path
 /// from a second, independently-chosen position rather than only the sibling test's exact shape.
+///
+/// Deliberately source rustc rejects (`error[E0758]: unterminated block comment`), as its sibling is.
 #[test]
 pub(super) fn an_unterminated_block_comment_at_end_of_file_with_no_trailing_newline_does_not_panic()
 {

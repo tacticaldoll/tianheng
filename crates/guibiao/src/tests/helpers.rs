@@ -67,6 +67,11 @@ impl TempWorkspace {
         pkg_name: &str,
         deps: &[(&str, Option<&str>)],
     ) -> Value {
+        for (name, _) in deps {
+            if let Some((_, lib_rs)) = STUB_CRATES.iter().find(|(stub, _)| stub == name) {
+                self.write_at(&format!("deps/{name}/src/lib.rs"), lib_rs);
+            }
+        }
         let deps_json: Vec<Value> = deps
             .iter()
             .map(|(name, rename)| {
@@ -89,6 +94,23 @@ impl TempWorkspace {
         })
     }
 }
+
+/// The library each fixture dependency stands for, written to `deps/<name>/src/lib.rs` beside the fixture's
+/// `src/`. The check reads the synthetic metadata and never these, so they change no answer; they are what makes
+/// a fixture importing the dependency a program rustc builds, with the surface every fixture calls through.
+const STUB_CRATES: &[(&str, &str)] = &[
+    (
+        "chrono",
+        "pub struct Utc;\nimpl Utc {\n    pub fn now() -> u8 { 0 }\n    pub fn today() -> u8 { 0 }\n}\n",
+    ),
+    ("rand", "pub fn random() -> u8 { 0 }\n"),
+    ("log", "pub fn logger() {}\n"),
+    ("shim", "pub use std::time::SystemTime;\n"),
+    (
+        "libc",
+        "#[allow(non_camel_case_types)]\npub type c_int = i32;\n",
+    ),
+];
 
 impl Drop for TempWorkspace {
     fn drop(&mut self) {
