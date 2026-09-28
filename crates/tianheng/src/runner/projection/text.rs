@@ -1,9 +1,9 @@
 use hunyi::{
     ASYNC_EXPOSURE_RULE, AsyncExposureBoundary, DYN_TRAIT_RULE, DynTraitBoundary,
     FORBIDDEN_MARKER_RULE, ForbiddenMarkerBoundary, IMPL_TRAIT_RULE, ImplTraitBoundary,
-    REEXPORT_ONLY_RULE, ReexportOnlyBoundary, SIGNATURE_RULE, STATIC_ITEM_RULE, SignatureBoundary,
-    StaticBoundary, TRAIT_IMPL_RULE, TraitImplBoundary, UNSAFE_CONFINEMENT_RULE, UnsafeBoundary,
-    VisibilityBoundary,
+    REEXPORT_ONLY_RULE, ReexportOnlyBoundary, SIGNATURE_RULE, STATIC_ITEM_RULE, ScanDepth,
+    SignatureBoundary, StaticBoundary, TRAIT_IMPL_RULE, TraitImplBoundary, UNSAFE_CONFINEMENT_RULE,
+    UnsafeBoundary, VisibilityBoundary,
 };
 use louke::{RuntimeBoundary, runtime_seam_rule_line};
 
@@ -120,6 +120,16 @@ pub(in crate::runner) fn visibility_text(boundaries: &[VisibilityBoundary]) -> S
             .collect::<Vec<_>>(),
     )
 }
+/// The rule-line suffix every semantic module boundary with a depth carries: nothing at the
+/// anchored seam alone, ` (including submodules)` when the whole subtree is observed — the text
+/// face of the JSON projection's `subtree_scoped`.
+fn subtree_suffix(scan_depth: ScanDepth) -> &'static str {
+    if scan_depth.is_shallow() {
+        ""
+    } else {
+        " (including submodules)"
+    }
+}
 /// The text projection of re-export-only module boundaries.
 pub(in crate::runner) fn reexport_only_text(boundaries: &[ReexportOnlyBoundary]) -> String {
     render_section(
@@ -129,11 +139,7 @@ pub(in crate::runner) fn reexport_only_text(boundaries: &[ReexportOnlyBoundary])
             .map(|b| ModuleBlockSpec {
                 severity: b.severity().as_str(),
                 target: format!("module {} in {}", b.module(), b.crate_package()),
-                rule_line: format!(
-                    "{} (scan_depth: {})",
-                    REEXPORT_ONLY_RULE,
-                    b.scan_depth().as_str()
-                ),
+                rule_line: format!("{REEXPORT_ONLY_RULE}{}", subtree_suffix(b.scan_depth())),
                 reason: b.reason(),
                 anchor: b.anchor(),
             })
@@ -197,27 +203,20 @@ pub(in crate::runner) fn impl_trait_text(boundaries: &[ImplTraitBoundary]) -> St
         "Impl-trait",
         &boundaries
             .iter()
-            .map(|b| {
-                let scope = if b.including_submodules() {
-                    " (including submodules)"
-                } else {
-                    ""
-                };
-                ModuleBlockSpec {
-                    severity: b.severity().as_str(),
-                    target: format!("module {} in {}", b.module(), b.crate_package()),
-                    rule_line: format!(
-                        "{}{}",
-                        shape_rule_text(
-                            IMPL_TRAIT_RULE,
-                            b.forbidden_operands(),
-                            &b.forbidden_auto_bound_leaves(),
-                        ),
-                        scope
+            .map(|b| ModuleBlockSpec {
+                severity: b.severity().as_str(),
+                target: format!("module {} in {}", b.module(), b.crate_package()),
+                rule_line: format!(
+                    "{}{}",
+                    shape_rule_text(
+                        IMPL_TRAIT_RULE,
+                        b.forbidden_operands(),
+                        &b.forbidden_auto_bound_leaves(),
                     ),
-                    reason: b.reason(),
-                    anchor: b.anchor(),
-                }
+                    subtree_suffix(b.scan_depth())
+                ),
+                reason: b.reason(),
+                anchor: b.anchor(),
             })
             .collect::<Vec<_>>(),
     )
@@ -227,19 +226,12 @@ pub(in crate::runner) fn async_exposure_text(boundaries: &[AsyncExposureBoundary
         "Async-exposure",
         &boundaries
             .iter()
-            .map(|b| {
-                let scope = if b.including_submodules() {
-                    " (including submodules)"
-                } else {
-                    ""
-                };
-                ModuleBlockSpec {
-                    severity: b.severity().as_str(),
-                    target: format!("module {} in {}", b.module(), b.crate_package()),
-                    rule_line: format!("{}{}", ASYNC_EXPOSURE_RULE, scope),
-                    reason: b.reason(),
-                    anchor: b.anchor(),
-                }
+            .map(|b| ModuleBlockSpec {
+                severity: b.severity().as_str(),
+                target: format!("module {} in {}", b.module(), b.crate_package()),
+                rule_line: format!("{ASYNC_EXPOSURE_RULE}{}", subtree_suffix(b.scan_depth())),
+                reason: b.reason(),
+                anchor: b.anchor(),
             })
             .collect::<Vec<_>>(),
     )
@@ -273,7 +265,7 @@ pub(in crate::runner) fn static_item_text(boundaries: &[StaticBoundary]) -> Stri
             .map(|b| ModuleBlockSpec {
                 severity: b.severity().as_str(),
                 target: format!("module {} in {}", b.module(), b.crate_package()),
-                rule_line: format!("{STATIC_ITEM_RULE} (including submodules)"),
+                rule_line: format!("{STATIC_ITEM_RULE}{}", subtree_suffix(b.scan_depth())),
                 reason: b.reason(),
                 anchor: b.anchor(),
             })

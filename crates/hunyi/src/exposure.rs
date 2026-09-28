@@ -176,8 +176,9 @@ fn collect_all_exposures(
     for (ordinal, (flat, file, branch)) in items_with_files.iter().enumerate() {
         let uses = &scopes[branch].uses;
         let mut buf = Vec::new();
-        collect_item_exposures(&flat.item, module, uses, ordinal, &mut buf)
-            .map_err(|undecodable| undecodable_foreign_item_error(file, &undecodable.seen))?;
+        collect_item_exposures(&flat.item, module, uses, ordinal, &mut buf).map_err(
+            |undecodable| undecodable_foreign_item_error(module, file, &undecodable.seen),
+        )?;
         if include_trait_impls {
             collect_trait_impl_exposures(&flat.item, module, uses, ordinal, &mut buf);
         }

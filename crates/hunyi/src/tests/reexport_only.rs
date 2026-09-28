@@ -332,3 +332,22 @@ fn same_named_child_items_keep_distinct_identities() {
         .collect();
     assert_eq!(names, ["crate::a::helper", "crate::b::helper"]);
 }
+
+/// `.including_submodules()` is the builder every other depth-carrying module boundary offers, and
+/// it is `.depth(ScanDepth::Subtree)`: the boundary it builds is the same, and it reports the depth
+/// through `including_submodules()` as those kinds do.
+#[test]
+fn including_submodules_is_subtree_depth() {
+    let draft = || {
+        ReexportOnlyBoundary::in_crate("x")
+            .module("crate")
+            .must_declare_only_reexports()
+    };
+    let named = draft().including_submodules().because("only re-exports");
+    assert_eq!(
+        named,
+        draft().depth(ScanDepth::Subtree).because("only re-exports")
+    );
+    assert!(named.including_submodules());
+    assert!(!draft().because("only re-exports").including_submodules());
+}

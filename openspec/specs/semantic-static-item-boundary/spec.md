@@ -46,7 +46,10 @@ no knob selecting one. The 渾儀 exposure families default to the anchored modu
 govern a seam — what a module exposes to its callers — and a descendant's seam is its own. A static is
 state the anchored layer holds wherever beneath the anchor it is declared, so a descendant's static is
 the anchor's concern; this is the same default the 圭表 module rules and `must_not_call_inline` take for
-the same reason. Anchoring at `crate` SHALL govern the whole crate. Each fact SHALL be attributed to the
+the same reason. Anchoring at `crate` SHALL govern the whole crate. The boundary SHALL report its depth as
+`ScanDepth::Subtree`, and its `list` projections SHALL read the depth from the boundary and carry it in
+the vocabulary every depth-carrying 渾儀 module boundary shares — `including_submodules: true` and
+`scan_depth: "subtree"` in JSON, a ` (including submodules)` rule-line suffix in text. Each fact SHALL be attributed to the
 module that declares it — an inline child, a `#[path]` child, a module reached through an item-position
 `cfg_if!` arm — exactly once.
 
@@ -55,6 +58,12 @@ module that declares it — an inline child, a `#[path]` child, a module reached
 - **WHEN** a boundary on `crate::kernel` governs a subtree with statics in `crate::kernel` (inside an item-position `cfg_if!` arm), an inline child, a `#[path]` child and a file child, and `crate::other` declares a static too
 - **THEN** each subtree static is one finding carrying its own declaring module, every finding targets `crate::kernel`, and the static in `crate::other` does not react
 - **PINNED-BY** `each_static_is_attributed_once_to_its_declaring_module`
+
+#### Scenario: The projected depth is the boundary's own
+
+- **WHEN** a static-item boundary is projected by `list` as JSON and as text
+- **THEN** the JSON entry's `including_submodules` and `scan_depth` and the text rule line's suffix are those the boundary's `scan_depth()` — `Subtree` — gives every depth-carrying semantic boundary
+- **PINNED-BY** `every_semantic_depth_projects_in_one_vocabulary_read_from_the_boundary`
 
 #### Scenario: A boundary anchored at the crate root governs the whole crate
 
@@ -67,10 +76,12 @@ module that declares it — an inline child, a `#[path]` child, a module reached
 The system SHALL observe a `static` or `static mut` item at module level and in any body the subtree
 holds — a free function, an inherent method, a trait's default method, a trait-impl method, a closure,
 and a `const` or `static` initializer. It SHALL observe a foreign `static` and `static mut` in an
-`extern` block, including an edition-2024 `safe`- or `unsafe`-qualified one, read through the one
+`extern` block, including a `safe`- or `unsafe`-qualified one in an `unsafe extern` block, read through the one
 foreign-item decoder the visibility and signature-coupling capabilities share. It SHALL observe each
 static a `thread_local!` invocation declares, at item and at statement position: the invocation's body
-is read as items, and every `static` in it is its own finding. A `'static` lifetime, a `let` binding
+is read by the macro's own grammar — attributed, visibility-qualified `static NAME: T = init`
+declarations separated by `;`, the last one's `;` optional, as std's `$init:expr $(;)?` makes it — and
+every `static` in it is its own finding. A `'static` lifetime, a `let` binding
 and a `const` item declare no static and SHALL NOT react.
 
 #### Scenario: A body static is owned by its named value items
@@ -85,6 +96,12 @@ and a `const` item declare no static and SHALL NOT react.
 - **THEN** both are findings of kind `thread_local` — the second is the one a reader taking the body's first item would drop
 - **PINNED-BY** `every_static_a_thread_local_declares_reacts`
 
+#### Scenario: A thread_local! whose last static has no `;` reacts
+
+- **WHEN** the governed module writes `thread_local!(static FOO: Cell<u32> = Cell::new(1));`, the form std's own documentation uses, and `thread_local! { static A: Cell<u8> = Cell::new(0); pub static B: Cell<u8> = const { Cell::new(0) } }`
+- **THEN** `FOO`, `A` and `B` each react with kind `thread_local`, never a constitution error
+- **PINNED-BY** `a_thread_local_whose_last_static_has_no_semicolon_reacts`
+
 #### Scenario: A statement-position thread_local! is owned by its fn
 
 - **WHEN** `pub fn bump() { std::thread_local! { static LOCAL: u8 = 0; } }` is declared in the governed module
@@ -93,7 +110,7 @@ and a `const` item declare no static and SHALL NOT react.
 
 #### Scenario: Foreign statics react with their mutability
 
-- **WHEN** an `extern "C"` block declares `static A` and `static mut B`, and an edition-2024 `unsafe extern "C"` block declares `pub safe static C`, `pub unsafe static mut D`, `static E` and a `safe fn`
+- **WHEN** an `extern "C"` block declares `static A` and `static mut B`, and an `unsafe extern "C"` block declares `pub safe static C`, `pub unsafe static mut D`, `static E` and a `safe fn`
 - **THEN** `A`, `C` and `E` react as `foreign_static`, `B` and `D` as `foreign_static_mut`, and the `fn` does not react
 - **PINNED-BY** `foreign_statics_react_with_their_mutability`
 
@@ -219,7 +236,7 @@ read for a rename.
 #### Scenario: An undecodable foreign item refuses to judge
 
 - **WHEN** an `unsafe extern "C"` block in the governed module holds `#[cfg(any())] pub fn with_body() {}`
-- **THEN** the system emits the shared undecodable-foreign-item constitution error (exit 2) naming it
+- **THEN** the system emits the shared undecodable-foreign-item constitution error (exit 2) naming it, the module `crate::kernel`, and deletion as the repair
 - **PINNED-BY** `an_undecodable_foreign_item_refuses_to_judge`
 
 ### Requirement: Observation bounds are stated, not silent

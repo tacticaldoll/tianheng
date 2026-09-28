@@ -1,13 +1,17 @@
-//! Foreign items carrying an edition-2024 `safe` or `unsafe` qualifier, which `syn` 2 leaves as
-//! `ForeignItem::Verbatim`, read through the one decoder both the visibility ceiling and
+//! Foreign items carrying a `safe` or `unsafe` qualifier inside an `unsafe extern` block, which
+//! `syn` 2 leaves as `ForeignItem::Verbatim`, read through the one decoder both the visibility ceiling and
 //! signature-coupling match on.
 
 use super::super::*;
 use super::helpers::TempSrcTree;
 use crate::syn_util::{ForeignDecl, decode_foreign_item};
 
-/// An edition-2024 manifest for crate `x`: `safe` and `unsafe` qualifiers on foreign items are
-/// edition-2024 syntax, so the fixtures carry the edition an adopter writing them has.
+/// An edition-2024 manifest for crate `x`, the edition that requires the `unsafe extern` block the
+/// qualifiers stand in. The qualifiers themselves are not edition-gated: measured under rustc 1.96.1
+/// and 1.85.1, `unsafe extern "C" { pub safe fn h(); pub unsafe static S: u8; }` compiles with
+/// `--edition` 2015, 2021 and 2024 alike, and the same items in a plain `extern` block are refused in
+/// each (`items in \`extern\` blocks without an \`unsafe\` qualifier cannot have safety qualifiers`,
+/// and in 2024 `extern blocks must be unsafe`).
 fn manifest(tree: &TempSrcTree) -> std::path::PathBuf {
     let path = tree.dir.join("Cargo.toml");
     std::fs::write(
@@ -193,33 +197,62 @@ pub(super) fn a_qualified_foreign_item_has_the_identity_of_its_unqualified_form(
 /// A foreign item that stays `Verbatim` with any qualifier removed is refused, never skipped.
 /// Measured under rustc 1.96.1 and 1.85.1, edition 2024: a foreign `fn` with a body behind a
 /// `#[cfg]` that is off compiles, because the item is removed before the body is rejected, and
-/// `syn` 2.0.118 reads it as `ForeignItem::Verbatim`.
+/// `syn` 2.0.118 reads it as `ForeignItem::Verbatim`. A `type` with a definition behind one does too,
+/// measured under the same two toolchains with `--edition 2021`, and both are refused once enabled.
+///
+/// The refusal names the module as well as the file, says what is unknown without claiming the
+/// visibility was unread — it was read — and names the repair: rustc accepts the item only while cfg
+/// removes it, so deleting it changes no build.
 #[test]
 pub(super) fn an_undecodable_foreign_item_is_a_constitution_error() {
-    let tree = kernel_tree(
-        "foreign-undecodable",
-        "unsafe extern \"C\" {\n    #[cfg(any())]\n    pub fn with_body() {}\n}\n",
-    );
-    let manifest = manifest(&tree);
-    let visibility = VisibilityBoundary::in_crate("x")
-        .module("crate::kernel")
-        .must_not_declare_pub()
-        .because("no pub");
-    let exposure = SignatureBoundary::in_crate("x")
-        .module("crate::kernel")
-        .must_not_expose("crate::internal")
-        .because("no internal type");
-    for outcome in [
-        check_visibility(&[visibility], &manifest),
-        check(&[exposure], &manifest),
+    for (label, item, name) in [
+        (
+            "foreign-undecodable-fn",
+            "pub fn with_body() {}",
+            "with_body",
+        ),
+        (
+            "foreign-undecodable-type",
+            "pub type Defined = u8;",
+            "Defined",
+        ),
     ] {
-        assert_eq!(outcome.exit_code(), 2, "{outcome:?}");
-        let Outcome::ConstitutionError(message) = outcome else {
-            panic!("expected a constitution error")
-        };
-        assert!(message.contains("cannot judge a foreign item"), "{message}");
-        assert!(message.contains("with_body"), "{message}");
-        assert!(message.contains("kernel.rs"), "{message}");
+        let tree = kernel_tree(
+            label,
+            &format!("unsafe extern \"C\" {{\n    #[cfg(any())]\n    {item}\n}}\n"),
+        );
+        let manifest = manifest(&tree);
+        let visibility = VisibilityBoundary::in_crate("x")
+            .module("crate::kernel")
+            .must_not_declare_pub()
+            .because("no pub");
+        let exposure = SignatureBoundary::in_crate("x")
+            .module("crate::kernel")
+            .must_not_expose("crate::internal")
+            .because("no internal type");
+        for outcome in [
+            check_visibility(&[visibility], &manifest),
+            check(&[exposure], &manifest),
+        ] {
+            assert_eq!(outcome.exit_code(), 2, "{label}: {outcome:?}");
+            let Outcome::ConstitutionError(message) = outcome else {
+                panic!("{label}: expected a constitution error")
+            };
+            for expected in [
+                "cannot judge a foreign item in module 'crate::kernel'",
+                name,
+                "kernel.rs",
+                "cannot tell what it declares",
+                "only while a `#[cfg]` removes it",
+                "delete it",
+            ] {
+                assert!(
+                    message.contains(expected),
+                    "{label}: `{expected}` in {message}"
+                );
+            }
+            assert!(!message.contains("visibility"), "{label}: {message}");
+        }
     }
 }
 

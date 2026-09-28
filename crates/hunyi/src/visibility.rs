@@ -82,8 +82,9 @@ pub(crate) fn visibility_findings(
         resolve_module_items_with_files(src_dir, root_file, module, crate_package)?;
     let mut findings: Vec<(SemanticFact, PathBuf)> = Vec::new();
     for (item, file, _branch) in &items_with_files {
-        let observed = item_observation(item, ceiling_rank)
-            .map_err(|undecodable| undecodable_foreign_item_error(file, &undecodable.seen))?;
+        let observed = item_observation(item, ceiling_rank).map_err(|undecodable| {
+            undecodable_foreign_item_error(module, file, &undecodable.seen)
+        })?;
         findings.extend(
             observed
                 .into_iter()

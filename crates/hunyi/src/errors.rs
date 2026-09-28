@@ -249,17 +249,21 @@ pub(crate) fn out_of_package_root_error(crate_package: &str, root: &std::path::P
     )
 }
 
-/// A foreign item in `file` that `crate::syn_util::decode_foreign_item` cannot read as a `fn`,
-/// `static`, `type` or macro, with any `safe` or `unsafe` qualifier removed.
+/// A foreign item of `module`, read from `file`, that `crate::syn_util::decode_foreign_item` cannot
+/// read as a `fn`, `static`, `type` or macro, with any `safe` or `unsafe` qualifier removed.
 ///
-/// Its visibility and signature are unread, so neither the visibility ceiling nor an exposure rule
-/// can be judged against it, and passing it would be a silent pass over a declaration.
-pub(crate) fn undecodable_foreign_item_error(file: &Path, seen: &str) -> String {
+/// What it declares is unknown, so no boundary over the module can be judged against it, and passing
+/// it would be a silent pass over a declaration. rustc refuses such an item wherever its `#[cfg]` holds
+/// (`incorrect function inside \`extern\` block`, `incorrect \`type\` inside \`extern\` block`,
+/// measured under rustc 1.96.1 and 1.85.1), so it compiles only where cfg removes it and declares
+/// nothing on any configuration that builds: deleting it changes no build.
+pub(crate) fn undecodable_foreign_item_error(module: &str, file: &Path, seen: &str) -> String {
     format!(
-        "cannot judge a foreign item in {}: {seen} inside an `extern` block does not parse as a \
-         `fn`, `static`, `type` or macro invocation with any leading `safe` or `unsafe` \
-         qualifier removed, so its visibility and signature cannot be read and a boundary over \
-         this module would pass it unobserved",
+        "cannot judge a foreign item in module '{module}' ({}): {seen} inside an `extern` block does \
+         not parse as a `fn`, `static`, `type` or macro invocation with any leading `safe` or `unsafe` \
+         qualifier removed, so this dimension cannot tell what it declares and a boundary over this \
+         module would pass it unobserved; rustc accepts such an item only while a `#[cfg]` removes it, \
+         so it declares nothing in any build — delete it",
         file.display()
     )
 }
