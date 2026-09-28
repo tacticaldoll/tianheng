@@ -4,7 +4,7 @@
 //! reduction and `::`-delimited containment) and the `mod`-keyword boundary test; pure string /
 //! byte processing over [`super::lexer`]'s token primitives, no model type.
 
-use super::lexer::keyword_starts_at;
+use super::lexer::{is_ident_byte, keyword_starts_at};
 
 /// Canonicalize one path segment by stripping a leading raw-identifier marker
 /// (`r#name` -> `name`). Rust resolves `mod r#type;` to the source file `type.rs`,
@@ -23,6 +23,64 @@ pub(crate) fn canonical_module_path(path: &str) -> String {
         .map(canonical_segment)
         .collect::<Vec<_>>()
         .join("::")
+}
+
+/// Whether `segment` is exactly one identifier, written with nothing around it.
+///
+/// Read with the lexer's own [`is_ident_byte`], the byte test every scanner here names an
+/// identifier with: a non-empty run of identifier bytes that does not start with a digit, behind at
+/// most one `r#`. Behind `r#` the five names a raw identifier cannot spell — `crate`, `self`,
+/// `super`, `Self` and `_` — are refused, as rustc refuses them. Every non-ASCII byte is an
+/// identifier byte to the lexer, whatever character it belongs to, so a non-ASCII segment that is
+/// not an identifier passes this layer; it names no module, and the existence check that follows
+/// every accepted path is what refuses it. Keywords pass for the same reason.
+fn is_identifier(segment: &str) -> bool {
+    let (raw, name) = match segment.strip_prefix("r#") {
+        Some(name) => (true, name),
+        None => (false, segment),
+    };
+    let bytes = name.as_bytes();
+    let lexes = bytes.first().is_some_and(|first| !first.is_ascii_digit())
+        && bytes.iter().all(|&byte| is_ident_byte(byte));
+    lexes && !(raw && matches!(name, "crate" | "self" | "super" | "Self" | "_"))
+}
+
+/// `crate`, or `crate::` followed by `::`-separated identifiers.
+fn is_canonical_spelling(written: &str) -> bool {
+    let mut segments = written.split("::");
+    segments.next() == Some("crate") && segments.all(is_identifier)
+}
+
+/// The canonical spelling of a written module path, or the spelling it most plausibly meant.
+///
+/// A module path has exactly one accepted spelling — `crate`, or `crate::` followed by
+/// `::`-separated identifiers — so that one module is one identity: a rule's module paths enter its
+/// [`RuleKey`](xuanji::RuleKey), and a baseline entry recorded under one spelling would not suppress
+/// the same finding declared under another. The one equivalence folded is rustc's own, `r#x` and `x`
+/// being the same identifier, so the accepted form carries no raw prefix. Every other spelling is
+/// refused rather than rewritten, and the refusal carries the suggestion: the written path's
+/// non-empty, trimmed segments rooted at `crate`, or `None` when that is no canonical spelling
+/// either, or when the path starts at `self` or `super` — relative to a module a declaration does
+/// not have.
+pub(crate) fn canonical_module_spelling(written: &str) -> Result<String, Option<String>> {
+    if is_canonical_spelling(written) {
+        return Ok(canonical_module_path(written));
+    }
+    let segments: Vec<&str> = written
+        .split("::")
+        .map(str::trim)
+        .filter(|segment| !segment.is_empty())
+        .collect();
+    let candidate = match segments.first().map(|head| canonical_segment(head)) {
+        None => return Err(Some("crate".to_string())),
+        Some("self" | "super") => return Err(None),
+        Some("crate") => std::iter::once("crate")
+            .chain(segments[1..].iter().copied())
+            .collect::<Vec<_>>()
+            .join("::"),
+        Some(_) => format!("crate::{}", segments.join("::")),
+    };
+    Err(is_canonical_spelling(&candidate).then_some(candidate))
 }
 
 /// Fold a Cargo package name to its Rust import identifier: `-` → `_` (`windows-sys` →

@@ -13,6 +13,7 @@ and the baseline exactly like crate violations.
 
 - `crates/guibiao/src/module_scan/**/*.rs`
 - `crates/guibiao/src/tests/module_boundary.rs`
+- `crates/guibiao/src/tests/module_path.rs`
 
 ## Requirements
 ### Requirement: Module boundary declared in Rust
@@ -325,6 +326,61 @@ field carrying a module path — the governed path, an allowlist's entries, and 
 - **WHEN** a boundary's declared module, allowlist entry, or confined crate name is rewritten from `r#name`
   to `name`, or the reverse
 - **THEN** the rule key is unchanged, so a recorded baseline still describes the tree
+
+### Requirement: A module path has one canonical spelling and names a declared module
+
+Every module path a module boundary carries SHALL be accepted only as `crate`, or `crate::` followed by
+`::`-separated identifiers — the spelling `semantic-signature-coupling` states for a 渾儀 module anchor. That
+covers the governed module passed to `.module(...)`, whatever rule follows it, and each module a rule names:
+the forbidden module of `must_not_import`, the forbidden importer of `must_not_be_imported_by`, and every entry
+of `restrict_imports_to([...])` and `must_only_be_imported_by([...])`. A segment SHALL be an identifier as the
+scanner's lexer reads one: a run of identifier bytes not starting with a digit, behind at most one `r#`, and
+not a raw spelling of `crate`, `self`, `super`, `Self` or `_`. Any other spelling SHALL be a constitution error
+(exit 2), judged before the package is read, quoting what was written and naming the canonical spelling where
+the text determines one; `r#x` and `x` remain one identifier, as the raw-identifier requirement above states.
+A path rooted at `self` or `super` SHALL be refused without a suggestion, because a declaration has no module
+for it to be relative to.
+
+A named module SHALL be one that some compiled root of the package declares via `mod`, file-based or inline.
+One that no root declares SHALL be a constitution error (exit 2) naming the module and the builder that named
+it. A forbidden module or importer that is not declared can never appear in an edge, so without the refusal
+the rule is silently inert; an allowlist entry that is not declared can never match, so without it every edge
+the entry was written to permit is reported. A package's roots are separate module graphs, so a named module
+declared in one root and absent from another SHALL be accepted. The governed module's own existence is the
+file-based-target requirement below.
+
+The inline-symbol-path prefix of `must_not_call_inline` and `confine_inline_call`, and the crate name of
+`confine_external_crate`, name paths outside the crate's module graph and are not held to this spelling.
+
+#### Scenario: A forbidden module written without its crate root is a constitution error
+
+- **WHEN** `crate::other` imports `crate::kernel::K` and a boundary on `crate::other` declares `must_not_import("kernel")`, or `must_not_be_imported_by("kernel")` while `crate::kernel` imports `crate::other`
+- **THEN** the system emits a constitution error (exit 2) quoting `kernel` and suggesting `crate::kernel`, never exit 0 over the edge it was written to forbid
+- **PINNED-BY** `a_forbidden_module_written_without_its_root_is_refused_not_judged_clean`
+
+#### Scenario: Every non-canonical spelling is refused wherever a module path is taken
+
+- **WHEN** the governed module, a forbidden module, a forbidden importer, or any entry of either allowlist is written `crate::kernel::`, `""`, `kernel`, `::crate::kernel`, `crate::::kernel`, `self::kernel`, `super::kernel`, `crate:: kernel`, `crate::kernel `, `crate ::kernel`, `r#crate::kernel` or `crate::kernel::*`
+- **THEN** each is a constitution error (exit 2) quoting the written path and carrying its repair: the canonical spelling to write — `crate::kernel`, or `crate` for the empty path — or, where the text determines none, the instruction to start at `crate::`
+- **PINNED-BY** `every_module_path_role_refuses_a_non_canonical_spelling`
+
+#### Scenario: A named module no root declares is a constitution error
+
+- **WHEN** `must_not_import`, `must_not_be_imported_by`, `restrict_imports_to` or `must_only_be_imported_by` names `crate::nope`, which the crate does not declare
+- **THEN** the system emits a constitution error (exit 2) naming `crate::nope` and the builder, rather than judging a rule no edge can match
+- **PINNED-BY** `every_module_path_role_refuses_a_module_that_does_not_exist`
+
+#### Scenario: A named module declared in one root, or inline, is not absent
+
+- **WHEN** a binary root declares `mod tooling;` that the library does not, a boundary forbids `crate::tooling`, and another forbids the inline `crate::kernel::detail` the library declares
+- **THEN** both are judged, and each reacts to the import its root holds
+- **PINNED-BY** `a_named_module_present_in_one_compilation_unit_or_inline_is_not_absent`
+
+#### Scenario: 圭表 and 渾儀 answer one module path alike
+
+- **WHEN** one table of module-path spellings is given to 渾儀's module anchor and to each 圭表 builder that takes a module path
+- **THEN** each row is accepted by both and recorded in one form, or refused by both — for its spelling with one message, or as absent — except where the table declares the two identifier readers differ, a non-ASCII segment syn's lexer refuses and 圭表's byte-level lexer passes to its existence check
+- **PINNED-BY** `guibiao_and_hunyi_accept_and_record_a_module_path_alike`
 
 ### Requirement: Imports are attributed to their enclosing inline module
 

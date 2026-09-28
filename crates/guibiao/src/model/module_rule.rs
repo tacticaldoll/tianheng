@@ -466,6 +466,11 @@ pub struct ModuleBoundaryBuilder {
 
 impl ModuleBoundaryBuilder {
     /// The module whose imports are governed (e.g. `"crate::kernel"`).
+    ///
+    /// Every module path a module boundary carries — this one, and each module its rule names — is
+    /// written `crate` or `crate::` followed by `::`-separated identifiers (`r#x` is read as `x`). Any
+    /// other spelling is a constitution error suggesting the canonical one, and a named module must be
+    /// one some compiled root of the crate declares.
     pub fn module(self, module: &str) -> ModuleTargetDraft {
         ModuleTargetDraft {
             crate_package: self.crate_package,

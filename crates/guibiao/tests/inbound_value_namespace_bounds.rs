@@ -73,7 +73,10 @@ fn a_real_value_binding_still_reacts() {
     let probe = Probe::new(
         "binding",
         &[
-            ("lib.rs", "pub mod protected;\npub mod consumer;\n"),
+            (
+                "lib.rs",
+                "pub mod protected;\npub mod consumer;\npub mod facade {}\n",
+            ),
             ("protected.rs", "pub mod foo;\npub fn foo() -> u8 { 7 }\n"),
             ("protected/foo.rs", "pub const INSIDE: u8 = 1;\n"),
             ("consumer.rs", "use crate::protected::foo;\n"),
@@ -101,7 +104,10 @@ fn a_glob_import_does_not_bind_a_value_and_does_not_react() {
     let probe = Probe::new(
         "glob",
         &[
-            ("lib.rs", "pub mod protected;\npub mod consumer;\n"),
+            (
+                "lib.rs",
+                "pub mod protected;\npub mod consumer;\npub mod facade {}\n",
+            ),
             ("protected.rs", "pub mod foo;\npub fn foo() -> u8 { 7 }\n"),
             ("protected/foo.rs", "pub const INSIDE: u8 = 1;\n"),
             ("consumer.rs", "use crate::protected::foo::*;\n"),
@@ -140,7 +146,10 @@ fn a_self_brace_import_binds_the_module_only_and_does_not_react() {
         let probe = Probe::new(
             label,
             &[
-                ("lib.rs", "pub mod protected;\npub mod consumer;\n"),
+                (
+                    "lib.rs",
+                    "pub mod protected;\npub mod consumer;\npub mod facade {}\n",
+                ),
                 ("protected.rs", "pub mod foo;\npub fn foo() -> u8 { 7 }\n"),
                 ("protected/foo.rs", "pub const INSIDE: u8 = 1;\n"),
                 ("consumer.rs", consumer),
@@ -181,7 +190,10 @@ fn a_value_declared_in_an_extern_block_reacts() {
         let probe = Probe::new(
             label,
             &[
-                ("lib.rs", "pub mod protected;\npub mod consumer;\n"),
+                (
+                    "lib.rs",
+                    "pub mod protected;\npub mod consumer;\npub mod facade {}\n",
+                ),
                 ("protected.rs", protected),
                 ("protected/foo.rs", "pub const INSIDE: u8 = 1;\n"),
                 ("consumer.rs", "use crate::protected::foo;\n"),
@@ -238,7 +250,10 @@ fn a_value_declared_past_a_modifier_token_reacts() {
         let probe = Probe::new(
             label,
             &[
-                ("lib.rs", "pub mod protected;\npub mod consumer;\n"),
+                (
+                    "lib.rs",
+                    "pub mod protected;\npub mod consumer;\npub mod facade {}\n",
+                ),
                 ("protected.rs", protected),
                 ("protected/foo.rs", "pub const INSIDE: u8 = 1;\n"),
                 ("consumer.rs", "use crate::protected::foo;\n"),
@@ -263,7 +278,10 @@ fn a_value_in_a_nested_scope_is_still_not_the_enclosing_modules() {
     let probe = Probe::new(
         "nested-scope",
         &[
-            ("lib.rs", "pub mod protected;\npub mod consumer;\n"),
+            (
+                "lib.rs",
+                "pub mod protected;\npub mod consumer;\npub mod facade {}\n",
+            ),
             (
                 "protected.rs",
                 "pub mod foo;\npub mod inner { pub fn foo() -> u8 { 7 } }\n",
@@ -301,7 +319,10 @@ fn a_value_named_only_in_text_declares_nothing() {
         let probe = Probe::new(
             label,
             &[
-                ("lib.rs", "pub mod protected;\npub mod consumer;\n"),
+                (
+                    "lib.rs",
+                    "pub mod protected;\npub mod consumer;\npub mod facade {}\n",
+                ),
                 ("protected.rs", protected),
                 ("protected/foo.rs", "pub const INSIDE: u8 = 1;\n"),
                 ("consumer.rs", "use crate::protected::foo;\n"),

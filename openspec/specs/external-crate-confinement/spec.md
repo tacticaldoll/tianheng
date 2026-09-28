@@ -174,7 +174,13 @@ The system SHALL report each distinct confinement violation at most once, dedupl
 
 ### Requirement: The permitted subtree is a reachable file-based module
 
-The permitted subtree `s` SHALL be a reachable, file-based module of the target crate, with the same constitution-error handling as every other module target: a path that is not reachable at all is an unknown-module constitution error (exit 2), and a reachable-but-inline (`mod s { … }`, file-less) path is the self-describing inline-module constitution error (exit 2). Neither is a silent pass.
+The permitted subtree `s` SHALL be a reachable, file-based module of the target crate, with the same constitution-error handling as every other module target: a path that is not reachable at all is an unknown-module constitution error (exit 2), and a reachable-but-inline (`mod s { … }`, file-less) path is the self-describing inline-module constitution error (exit 2). Neither is a silent pass. The subtree SHALL be written in the canonical module-path spelling `module-boundary` states; any other spelling is a constitution error (exit 2) suggesting the canonical one, before reachability is consulted.
+
+#### Scenario: A non-canonical permitted subtree is a constitution error
+
+- **WHEN** a confinement's permitted subtree is written `ffi`, `crate::ffi::` or `r#crate::ffi` over a crate declaring `crate::ffi`
+- **THEN** the system reports a constitution error (exit 2) quoting the written path and suggesting `crate::ffi`
+- **PINNED-BY** `every_module_path_role_refuses_a_non_canonical_spelling`
 
 #### Scenario: An unknown permitted subtree is a constitution error
 

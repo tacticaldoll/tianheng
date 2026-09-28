@@ -901,7 +901,7 @@ pub(super) fn an_anchored_boundary_stamps_its_violations_with_the_anchor() {
     let (result, violations) = run_module_check(
         "anchored",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod secret {}\npub mod kernel;\n"),
             ("kernel.rs", "use crate::secret::Thing;\n"),
         ],
         ModuleBoundary::in_crate("x")
@@ -923,7 +923,7 @@ pub(super) fn an_anchorless_boundary_leaves_its_violations_unanchored() {
     let (result, violations) = run_module_check(
         "unanchored",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod secret {}\npub mod kernel;\n"),
             ("kernel.rs", "use crate::secret::Thing;\n"),
         ],
         ModuleBoundary::in_crate("x")
@@ -943,7 +943,7 @@ pub(super) fn a_module_violation_carries_its_rule_repair_polarity() {
     let (_r, deny) = run_module_check(
         "polarity-deny",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod secret {}\npub mod kernel;\n"),
             ("kernel.rs", "use crate::secret::Thing;\n"),
         ],
         ModuleBoundary::in_crate("x")
@@ -956,7 +956,7 @@ pub(super) fn a_module_violation_carries_its_rule_repair_polarity() {
     let (_r, allow) = run_module_check(
         "polarity-allow",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod types {}\npub mod kernel;\n"),
             ("kernel.rs", "use crate::infra::Thing;\n"),
         ],
         ModuleBoundary::in_crate("x")

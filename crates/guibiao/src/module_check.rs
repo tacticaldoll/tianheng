@@ -10,14 +10,16 @@ use crate::errors::{
     confine_inline_call_shallow_error, crate_not_found_error, inline_empty_prefix_error,
     inline_empty_verbs_error, inline_module_target_error, inline_narrow_and_strict_error,
     missing_src_error, must_not_be_imported_by_on_crate_error,
-    must_only_be_imported_by_on_crate_error, no_compiled_root_error, out_of_package_root_error,
-    restrict_imports_to_on_crate_error, unknown_module_error, unreadable_governed_file_error,
+    must_only_be_imported_by_on_crate_error, no_compiled_root_error,
+    non_canonical_module_path_error, out_of_package_root_error, restrict_imports_to_on_crate_error,
+    unknown_allowed_module_error, unknown_forbidden_module_error, unknown_module_error,
+    unreadable_governed_file_error,
 };
 use crate::finding::ModuleFact;
 use crate::model::module_rule::Perimeter;
 use crate::module_scan::{
-    ImportedPath, InlineFinding, canonical_module_path, declaration_text,
-    external_imports_with_importers, governed_files, imports_with_importers,
+    ImportedPath, InlineFinding, canonical_module_path, canonical_module_spelling,
+    declaration_text, external_imports_with_importers, governed_files, imports_with_importers,
     inline_symbol_findings, names_crate_by_path_alone, package_name_to_import_ident, path_within,
     reachable_modules, rust_files, value_namespace_item_names,
 };
@@ -210,6 +212,81 @@ fn also_binds_a_value_of_the_governed_module(
     Ok(cache
         .as_ref()
         .is_some_and(|items| items.contains(&format!("{governed_module}::{leaf}"))))
+}
+
+/// `written` in its canonical module spelling, or the constitution error naming it and the spelling
+/// it most plausibly meant.
+fn canonical_spelling_or_error(written: &str, crate_package: &str) -> Result<String, String> {
+    canonical_module_spelling(written).map_err(|suggestion| {
+        non_canonical_module_path_error(written, crate_package, suggestion.as_deref())
+    })
+}
+
+/// The modules a rule names besides the governed module, each in its canonical spelling, with the
+/// builder that names them and whether they are an allowlist. Every module path a boundary carries
+/// passes through here or through the governed module's own check in [`check_module_boundary`], so
+/// none is matched against the module graph in a spelling the graph never produces.
+struct NamedModules {
+    rule_method: &'static str,
+    allowlist: bool,
+    modules: Vec<String>,
+}
+
+impl NamedModules {
+    fn of(boundary: &ModuleBoundary) -> Result<Self, String> {
+        let (rule_method, allowlist, written): (&'static str, bool, Vec<&String>) =
+            match &boundary.rule {
+                ModuleRule::MustNotImport { module } => ("must_not_import", false, vec![module]),
+                ModuleRule::MustNotBeImportedBy { importer } => {
+                    ("must_not_be_imported_by", false, vec![importer])
+                }
+                ModuleRule::RestrictImportsTo { allowed } => {
+                    ("restrict_imports_to", true, allowed.iter().collect())
+                }
+                ModuleRule::MustOnlyBeImportedBy { allowed } => {
+                    ("must_only_be_imported_by", true, allowed.iter().collect())
+                }
+                ModuleRule::ConfineExternalCrate { .. }
+                | ModuleRule::ConfineInlineSymbolPath { .. }
+                | ModuleRule::ConfineInlineCall { .. } => ("", false, Vec::new()),
+            };
+        let modules = written
+            .into_iter()
+            .map(|module| canonical_spelling_or_error(module, &boundary.crate_package))
+            .collect::<Result<_, _>>()?;
+        Ok(Self {
+            rule_method,
+            allowlist,
+            modules,
+        })
+    }
+
+    /// Refuse the first named module that no compiled root declares. A package's roots are separate
+    /// module graphs, so a module present in one root and absent from another is a real module; it
+    /// is refused only when it is present in none — the policy the governed module is held to.
+    fn require_exist(
+        &self,
+        declared: &std::collections::BTreeSet<String>,
+        crate_package: &str,
+    ) -> Result<(), String> {
+        match self
+            .modules
+            .iter()
+            .find(|module| !declared.contains(*module))
+        {
+            None => Ok(()),
+            Some(module) if self.allowlist => Err(unknown_allowed_module_error(
+                module,
+                crate_package,
+                self.rule_method,
+            )),
+            Some(module) => Err(unknown_forbidden_module_error(
+                module,
+                crate_package,
+                self.rule_method,
+            )),
+        }
+    }
 }
 
 /// The crate-wide scan state every rule family below reads from — resolved once in
@@ -605,20 +682,29 @@ fn check_outbound_rule(
 /// Only missing-module errors are deferred; an inline target, unreadable files and other scan failures
 /// propagate immediately. A package whose every target is an example, a test, a bench or a build script is
 /// refused before any root is read: no compiled root reads its `src/`, so a boundary over it could never react.
+///
+/// Every module path the boundary carries — the governed module and each module its rule names — is held
+/// to its canonical spelling before the package is read. The named modules are held to existence after the
+/// governed module is: each must be declared in some root's graph, by the same deferral, or the boundary is
+/// refused rather than judged against a module no import can reach.
 pub(crate) fn check_module_boundary(
     metadata: &Value,
     boundary: &ModuleBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
+    canonical_spelling_or_error(&boundary.module, &boundary.crate_package)?;
+    let named = NamedModules::of(boundary)?;
     let package = find_package(metadata, &boundary.crate_package)
         .ok_or_else(|| crate_not_found_error(&boundary.crate_package))?;
+    let mut declared = std::collections::BTreeSet::new();
     let compiled = match crate_roots(package) {
         CrateRoots::Compiled(roots) => roots,
         CrateRoots::NoneCompiled => return Err(no_compiled_root_error(&boundary.crate_package)),
         CrateRoots::Unreported => {
             let mut found = Vec::new();
-            return match check_one_root(package, None, None, boundary, &mut found)? {
+            return match check_one_root(package, None, None, boundary, &mut declared, &mut found)? {
                 RootOutcome::Governed => {
+                    named.require_exist(&declared, &boundary.crate_package)?;
                     violations.append(&mut found);
                     Ok(())
                 }
@@ -636,6 +722,7 @@ pub(crate) fn check_module_boundary(
             Some(root.as_path()),
             Some(roots),
             boundary,
+            &mut declared,
             &mut found,
         )? {
             RootOutcome::Governed => governed_somewhere = true,
@@ -649,6 +736,7 @@ pub(crate) fn check_module_boundary(
     match deferred {
         Some(reason) if !governed_somewhere => Err(reason),
         _ => {
+            named.require_exist(&declared, &boundary.crate_package)?;
             violations.append(&mut found);
             Ok(())
         }
@@ -694,6 +782,7 @@ fn check_one_root(
     root_file: Option<&Path>,
     sibling_roots: Option<&[PathBuf]>,
     boundary: &ModuleBoundary,
+    declared: &mut std::collections::BTreeSet<String>,
     violations: &mut Vec<Violation>,
 ) -> Result<RootOutcome, String> {
     let src_dir = match root_file.and_then(Path::parent) {
@@ -721,6 +810,7 @@ fn check_one_root(
     files.retain(|f| !names_crate_by_path_alone(f, &src_dir, root_relative.as_deref()));
     let (reachable, inline_only, remapped, remap_shadowed) =
         reachable_modules(&src_dir, &files, root_relative.as_deref())?;
+    declared.extend(reachable.iter().cloned());
     let root_modules: Vec<String> = reachable
         .iter()
         .filter_map(|module| {
