@@ -82,7 +82,7 @@ pub(super) fn a_module_level_static_and_static_mut_react_with_their_kind() {
     );
     let violation = &violations[0];
     assert_eq!(violation.target(), "crate::kernel");
-    assert_eq!(violation.rule, "must_not_declare_static");
+    assert_eq!(violation.rule, "must not declare static items");
     assert_eq!(violation.polarity, Some(Polarity::DenyBreach));
     assert_eq!(
         violation.fact().fact_type(),
@@ -539,4 +539,79 @@ pub(super) fn an_undecodable_foreign_item_refuses_to_judge() {
     )
     .unwrap_err();
     assert!(error.contains("with_body"), "{error}");
+}
+
+/// A `mod` written in a function body is not a module of the crate's graph, so a static inside it
+/// belongs to the module holding the function, owned by the function.
+#[test]
+pub(super) fn a_static_in_a_body_module_is_owned_by_its_fn() {
+    let violations = kernel_statics(
+        "static-body-mod",
+        "pub fn f() { mod m { pub static X: u8 = 0; } }\n",
+    )
+    .unwrap();
+    assert_eq!(
+        rows(&violations),
+        [row("static", "crate::kernel", "X", "f")]
+    );
+}
+
+/// An associated const's initializer is owned as `const` of its qualified name, in an impl and in a
+/// trait default alike.
+#[test]
+pub(super) fn a_static_in_an_associated_const_is_owned_by_it() {
+    let violations = kernel_statics(
+        "static-assoc-const",
+        "pub struct Foo;\nimpl Foo { pub const NAME: u8 = { static IN_IMPL: u8 = 0; 1 }; }\n\
+         pub trait Tr { const N: u8 = { static IN_TRAIT: u8 = 0; 1 }; }\n",
+    )
+    .unwrap();
+    let mut observed = rows(&violations);
+    observed.sort();
+    assert_eq!(
+        observed,
+        [
+            row("static", "crate::kernel", "IN_IMPL", "const Foo::NAME"),
+            row("static", "crate::kernel", "IN_TRAIT", "const Tr::N"),
+        ]
+    );
+}
+
+/// A static nested in a `thread_local!` static's initializer is owned by that static.
+#[test]
+pub(super) fn a_static_in_a_thread_local_initializer_is_owned_by_it() {
+    let violations = kernel_statics(
+        "static-tl-initializer",
+        "thread_local! { static T: u8 = { static INNER: u8 = 0; 1 }; }\n",
+    )
+    .unwrap();
+    let mut observed = rows(&violations);
+    observed.sort();
+    assert_eq!(
+        observed,
+        [
+            row("static", "crate::kernel", "INNER", "static T"),
+            row("thread_local", "crate::kernel", "T", ""),
+        ]
+    );
+}
+
+/// A rename is looked for in every file of the governed crate, so a file outside the anchor that does
+/// not parse leaves the rename undecided and the boundary is refused, never judged over the rest.
+#[test]
+pub(super) fn an_unparseable_file_outside_the_anchor_refuses_to_judge() {
+    let error = statics(
+        "static-unparseable-outside",
+        &[
+            ("lib.rs", "pub mod kernel;\npub mod other;\n"),
+            ("kernel.rs", "pub static IN_KERNEL: u8 = 0;\n"),
+            ("other.rs", "pub fn broken( {\n"),
+        ],
+        "crate::kernel",
+    )
+    .unwrap_err();
+    assert!(
+        error.contains("other.rs"),
+        "the refusal names the unparseable file: {error}"
+    );
 }

@@ -31,4 +31,4 @@ pub const FORBIDDEN_MARKER_RULE: &str = "must not acquire trait";
 /// Unsafe-confinement: `unsafe` is confined to the declared subtree(s).
 pub const UNSAFE_CONFINEMENT_RULE: &str = "unsafe is confined to the declared subtree(s)";
 /// Static-item: a subtree declares no `static` item or `thread_local!`.
-pub const STATIC_ITEM_RULE: &str = "must_not_declare_static";
+pub const STATIC_ITEM_RULE: &str = "must not declare static items";

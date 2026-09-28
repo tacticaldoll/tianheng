@@ -76,14 +76,14 @@ fn uncovered_public_families_react_through_the_composed_evaluator() {
         ),
         (
             "semantic",
-            "must_not_declare_static",
+            "must not declare static items",
             "tianheng.fact/hunyi/static-item",
             "static",
             "the stateful module declares no static item or thread_local!",
         ),
         (
             "semantic",
-            "must_not_declare_static",
+            "must not declare static items",
             "tianheng.fact/hunyi/static-item",
             "thread_local",
             "the stateful module declares no static item or thread_local!",

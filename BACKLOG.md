@@ -527,17 +527,25 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH
 
-- **The dyn-trait, impl-trait and async-exposure collectors do not read an `extern` block's foreign items.**
-  *Class:* WATCH. *Observed pressure:* none measured — no reachable instance, only the absence of a branch.
-  *Observation source:* in `crates/hunyi/src/collect/`, `collect_item_dyn_exposures`,
-  `collect_item_return_impl_traits` and `collect_item_async_exposures` have no `Item::ForeignMod` arm, so a
-  foreign item's signature is not read by them with or without a `safe` or `unsafe` qualifier, where
-  `collect_item_exposures` reads it through the shared foreign-item decoder. *Current reaction or bound:*
-  none. *Risk:* a `dyn` or `impl` shape exposed only in an FFI signature passes those boundaries unobserved.
-  *Promotion trigger:* an adopter exposing a `dyn` or `impl` shape in an FFI signature who needs it governed.
-  *Version class:* minor if it closes a false negative an adopter's baseline would have to absorb.
-  *Authority:* `semantic-dyn-trait-boundary`, `semantic-impl-trait-boundary`,
-  `semantic-async-exposure-boundary`.
+- **The dyn-trait collector does not read an `extern` block's foreign items.**
+  *Class:* WATCH. *Observed pressure:* none — the shape compiles and nothing governs it, but no adopter has
+  needed it governed. *Observation source:* in `crates/hunyi/src/collect/`, `collect_item_dyn_exposures` has
+  no `Item::ForeignMod` arm, so a foreign `fn`'s signature is not read by it with or without a `safe` or
+  `unsafe` qualifier, where `collect_item_exposures` reads it through the shared foreign-item decoder.
+  Measured on rustc 1.96 and 1.85, edition 2024:
+
+  ```text
+  pub trait T {} unsafe extern "C" { pub fn a(x: &dyn T); }   → compiles
+  pub trait T {} unsafe extern "C" { pub fn b() -> impl T; }  → error[E0562]: `impl Trait` is not allowed in `extern fn` return types
+  unsafe extern "C" { pub async fn c(); }                     → error: functions in `extern` blocks cannot have `async` qualifier
+  ```
+
+  `collect_item_return_impl_traits` and `collect_item_async_exposures` have no `ForeignMod` arm either, and
+  there that is no gap: rustc does not allow either shape in an `extern` block, so there is nothing to observe.
+  *Current reaction or bound:* none for `dyn`. *Risk:* a `dyn` exposed only in an FFI signature passes a
+  dyn-trait boundary unobserved. *Promotion trigger:* an adopter exposing a `dyn` in an FFI signature who
+  needs it governed. *Version class:* minor, since it closes a false negative an adopter's baseline would have
+  to absorb. *Authority:* `semantic-dyn-trait-boundary`.
 
 - **Two fixture shapes in the test infrastructure are written more than once, and the shared form is new
   published surface.** *Class:* WATCH. *Observed pressure:* a static review of the window rooted at the

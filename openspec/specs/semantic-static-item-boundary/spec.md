@@ -29,14 +29,14 @@ A static-item boundary SHALL be expressed as Rust code and is part of the single
 `StaticBoundary::in_crate(package).module(module).must_not_declare_static().because(reason)`, with the
 shared `.warn()` and `.with_anchor(..)`, composed through `Constitution::static_boundary(..)` and
 exported in the prelude. Its rule key SHALL be `tianheng.rule/hunyi/static-item` with no parameter,
-its rule label `must_not_declare_static`, its polarity `DenyBreach`, and its violation target the
+its rule label `must not declare static items`, its polarity `DenyBreach`, and its violation target the
 boundary's module in its canonical spelling. The system MUST NOT require TOML, YAML, Markdown, or any
 generated policy file.
 
 #### Scenario: A module-level static and static mut react with their kind
 
 - **WHEN** a boundary on `crate::kernel` governs a module declaring `pub static COUNTER: u8 = 0;` and `static mut LEGACY: u8 = 0;`
-- **THEN** each is one violation targeting `crate::kernel` under the rule label `must_not_declare_static` with `DenyBreach` polarity, whose fact is `tianheng.fact/hunyi/static-item` of kind `static` and `static_mut` respectively
+- **THEN** each is one violation targeting `crate::kernel` under the rule label `must not declare static items` with `DenyBreach` polarity, whose fact is `tianheng.fact/hunyi/static-item` of kind `static` and `static_mut` respectively
 - **PINNED-BY** `a_module_level_static_and_static_mut_react_with_their_kind`
 
 ### Requirement: The whole anchored subtree is governed, and nothing outside it
@@ -160,13 +160,22 @@ macro's body is sound only for a macro known by name. A crate governed by a stat
 renames it — `use … thread_local as X` with `X` neither `thread_local` nor `_`, anywhere in the crate, a
 function body included — SHALL be a constitution error (exit 2) naming the new name and asking for the
 macro to be written by its name, because an invocation under the new name would escape the name gate.
-Only the governed crate's own source is read for a rename.
+Only the governed crate's own source is read for a rename, and all of it is: every file of a
+compilation unit that holds the anchor is parsed, so a file outside the anchored subtree that cannot be
+read or parsed SHALL make the whole boundary a constitution error (exit 2), since the rename it might
+hold is undecided.
 
 #### Scenario: A crate renaming thread_local! refuses to judge — a stated bound
 
 - **WHEN** the governed crate writes `use std::thread_local as tls;` at module level, or inside a function body outside the anchored module, or re-exports `pub(crate) use std::thread_local as tlq;` from a module another one globs in
 - **THEN** the system emits a constitution error (exit 2) saying the crate renames `thread_local` and asking for `thread_local!` to be written directly
 - **PINNED-BY** `a_renamed_thread_local_refuses_to_judge`
+
+#### Scenario: An unparseable file outside the anchor refuses to judge
+
+- **WHEN** a boundary on `crate::kernel` governs a crate whose `crate::other` file does not parse
+- **THEN** the system emits a constitution error (exit 2) naming that file, rather than judging `crate::kernel` alone
+- **PINNED-BY** `an_unparseable_file_outside_the_anchor_refuses_to_judge`
 
 #### Scenario: A rename bringing no new name is not refused
 
