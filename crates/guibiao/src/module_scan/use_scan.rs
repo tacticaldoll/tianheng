@@ -9,11 +9,12 @@
 //! on [`super::lexer`] (hygiene / token boundaries) and [`super::path_vocab`] (segment
 //! canonicalization, the `mod`-keyword test); pure string processing, no model type.
 
-use super::lexer::{keyword_starts_at, strip_comments_and_strings, strip_macro_bodies};
+use super::lexer::{strip_comments_and_strings, strip_macro_bodies};
 use super::path_vocab::{
-    brace_content, canonical_segment, fold_canonical_segments, is_crate_root_shadow,
-    resolve_self_super, scan_inline_modules, split_top_commas,
+    canonical_segment, fold_canonical_segments, is_crate_root_shadow, resolve_self_super,
+    scan_inline_modules,
 };
+use super::scope_graph::{UseLeaf, use_statements, use_tree_leaves};
 
 /// One normalized internal import path, retaining **which form** the source wrote: a glob so boundary
 /// evaluation can distinguish a direct import from an ancestor-glob hazard, and a `{self}` leaf so it
@@ -143,49 +144,38 @@ pub(crate) fn external_imports_with_importers(
     Ok(pairs)
 }
 
-/// Each `use … ;` statement paired with the module that lexically encloses it. The
-/// walk tracks inline `mod name { … }` nesting by brace depth, so a `use` inside an
-/// inline submodule is attributed to that submodule (e.g. `crate::a::inner`) rather
-/// than the file's module (`crate::a`); `self`/`super` then resolve against the real
-/// enclosing module, and a bare first segment inside an inline submodule is external
-/// even when the file is the crate root. A `mod name;` with no inline body encloses
-/// nothing. The text is already comment/string/macro-stripped, so every brace is
-/// structural; a `use … ;` is consumed whole, so its own group braces
-/// (`use a::{b, c};`) never perturb the depth.
+/// Each `use … ;` statement paired with the module that lexically encloses it, read from the one statement
+/// enumeration the scanner shares. Inline `mod name { … }` nesting is tracked by brace depth, so a `use`
+/// inside an inline submodule is attributed to that submodule (e.g. `crate::a::inner`) rather than the
+/// file's module (`crate::a`); `self`/`super` then resolve against the real enclosing module, and a bare
+/// first segment inside an inline submodule is external even when the file is the crate root. A `mod
+/// name;` with no inline body encloses nothing.
 fn use_trees_with_modules(source: &str, base_module: &str) -> Vec<(String, String)> {
-    let bytes = source.as_bytes();
     let inline_modules = scan_inline_modules(source, base_module);
-    let mut trees = Vec::new();
-    let mut i = 0;
-    while i < bytes.len() {
-        if keyword_starts_at(bytes, i, b"use") {
-            match super::lexer::scan_use_statement(bytes, source, i) {
-                super::lexer::UseStatementScan::Statement { body, next } => {
-                    let module =
-                        inline_modules.modules[inline_modules.contexts[i] as usize].clone();
-                    trees.push((module, body));
-                    i = next;
-                    continue;
-                }
-                super::lexer::UseStatementScan::NotAStatement { resume_at } => {
-                    i = resume_at;
-                    continue;
-                }
-                super::lexer::UseStatementScan::Unterminated => break,
-            }
-        }
-        i += 1;
-    }
-    trees
+    use_statements(source)
+        .into_iter()
+        .map(|statement| {
+            (
+                inline_modules.modules[inline_modules.contexts[statement.at] as usize].clone(),
+                statement.body,
+            )
+        })
+        .collect()
 }
 
-/// Expand a use tree into leaf paths: `a::{b, c::d}` -> `a::b`, `a::c::d`; drop
-/// `::*` and ` as alias`; `{self}` resolves to the prefix module.
-///
-/// Strips a trailing ` as <alias>` so `{self as cfg}` resolves to the prefix module.
-/// Records `{self}` leaves since they bind the prefix module rather than a child item.
+/// Expand a use tree into leaf paths, each with whether it is a glob base and whether it is a `{self}`
+/// leaf: `a::{b, c::d}` → `a::b`, `a::c::d`; `a::b::*` → the glob base `a::b`; a ` as alias` is dropped
+/// and `{self}` resolves to the prefix module. Read through the scanner's one use-tree parser, with this
+/// scan's own nesting cap.
 fn expand_use_tree(tree: &str) -> Result<Vec<(String, bool, bool)>, String> {
-    expand_use_tree_depth(tree, 0)
+    Ok(use_tree_leaves(tree, MAX_USE_NEST_DEPTH)?
+        .into_iter()
+        .map(|leaf| match leaf {
+            UseLeaf::Name { path, .. } => (path, false, false),
+            UseLeaf::Glob(base) => (base, true, false),
+            UseLeaf::SelfLeaf(module) => (module, false, true),
+        })
+        .collect())
 }
 
 /// A brace-nesting depth cap so a pathologically nested `use a::{b::{c::{ … }}}` cannot overflow
@@ -194,60 +184,6 @@ fn expand_use_tree(tree: &str) -> Result<Vec<(String, bool, bool)>, String> {
 /// dropping the sub-tree: a real, compilable `use` nested past this depth would otherwise vanish
 /// from observation with no report — the false negative PROJECT.md's core contract forbids.
 const MAX_USE_NEST_DEPTH: usize = 128;
-
-fn expand_use_tree_depth(tree: &str, depth: usize) -> Result<Vec<(String, bool, bool)>, String> {
-    if depth >= MAX_USE_NEST_DEPTH {
-        return Err(format!(
-            "cannot judge a `use` tree nested past {MAX_USE_NEST_DEPTH} brace levels: '{tree}'"
-        ));
-    }
-    let tree = tree.trim();
-    match tree.find('{') {
-        Some(open) => {
-            let prefix = tree[..open].trim();
-            let inner = brace_content(&tree[open..]);
-            let mut out = Vec::new();
-            for part in split_top_commas(&inner) {
-                let part = part.trim();
-                if part.is_empty() {
-                    continue;
-                }
-                let head = match part.find(" as ") {
-                    Some(idx) => part[..idx].trim(),
-                    None => part,
-                };
-                if head == "self" {
-                    let module = prefix.trim_end_matches(':').trim();
-                    if !module.is_empty() {
-                        out.push((module.to_string(), false, true));
-                    }
-                } else {
-                    out.extend(expand_use_tree_depth(
-                        &format!("{prefix}{part}"),
-                        depth + 1,
-                    )?);
-                }
-            }
-            Ok(out)
-        }
-        None => {
-            let leaf = match tree.find(" as ") {
-                Some(idx) => &tree[..idx],
-                None => tree,
-            };
-            let (leaf_path, is_glob) = match leaf.trim().strip_suffix("::*") {
-                Some(stripped) => (stripped, true),
-                None => (leaf.trim(), false),
-            };
-            let leaf_path = leaf_path.trim_end_matches(':');
-            if leaf_path.is_empty() {
-                Ok(Vec::new())
-            } else {
-                Ok(vec![(leaf_path.to_string(), is_glob, false)])
-            }
-        }
-    }
-}
 
 /// Resolve a use path to an absolute `crate::…` module path, or `None` if it refers
 /// to an external crate. A first segment of `crate`/`self`/`super` resolves as usual.

@@ -33,12 +33,10 @@ use super::path_vocab::{
     inline_mod_at, is_crate_root_shadow, path_within, resolve_self_super, split_top_commas,
 };
 
-/// A brace-nesting depth cap for the hand-rolled `use`-tree walkers ([`expand_use_leaves`] and
-/// [`glob_bases`]), so a pathologically nested `use` cannot overflow the stack — a DoS backstop set
-/// far beyond any real or lint-clean source. Past the cap, fail loud (a scan error) rather than
-/// silently dropping the sub-tree: a real, compilable `use` nested past this depth would otherwise
-/// vanish from observation with no report — the false negative PROJECT.md's core contract forbids.
-/// Mirrors `use_scan::MAX_USE_NEST_DEPTH`'s identical rationale for the same shape of walker.
+/// The inline-path scan's brace-nesting cap for [`use_tree_leaves`], so a pathologically nested `use`
+/// cannot overflow the stack — a DoS backstop set far beyond any real or lint-clean source, refused
+/// past as a scan error. The module scan's import reports carry their own cap,
+/// `use_scan::MAX_USE_NEST_DEPTH`, through the same parser.
 pub(super) const MAX_SYMBOL_NEST_DEPTH: usize = 64;
 
 /// What a written `use` path, or a path beginning with `::`, is resolved against: the crate-root
@@ -568,49 +566,36 @@ impl ScopeTable {
         record_at: &[u32],
         roots: PathRoots<'_>,
     ) -> Result<(), String> {
-        let bytes = declarations.as_bytes();
-        let mut i = 0;
-        while i < bytes.len() {
-            if keyword_starts_at(bytes, i, b"use") {
-                match scan_use_statement(bytes, declarations, i) {
-                    UseStatementScan::Statement { body, next } => {
-                        let scope = record_at[positions[i]];
-                        if scope != MEMBER {
-                            let visibility = visibility_before(bytes, i);
-                            let module = self.scopes[scope as usize].module.clone();
-                            for (name, path) in expand_use_leaves(&body)? {
-                                if let Some(target) = resolve_written_path(&path, &module, roots) {
-                                    self.scopes[scope as usize]
-                                        .bindings
-                                        .entry(name)
-                                        .or_default()
-                                        .push(Binding::Import {
-                                            target,
-                                            visibility: visibility.clone(),
-                                        });
-                                }
-                            }
-                            let mut bases = Vec::new();
-                            glob_bases(&body, &mut bases, 0)?;
-                            for base in bases {
-                                if let Some(target) = resolve_written_path(&base, &module, roots) {
-                                    self.scopes[scope as usize]
-                                        .globs
-                                        .push((target, visibility.clone()));
-                                }
-                            }
+        for statement in use_statements(declarations) {
+            let scope = record_at[positions[statement.at]];
+            if scope == MEMBER {
+                continue;
+            }
+            let module = self.scopes[scope as usize].module.clone();
+            for leaf in use_tree_leaves(&statement.body, MAX_SYMBOL_NEST_DEPTH)? {
+                match leaf {
+                    UseLeaf::Name { path, binds } => {
+                        if let Some(target) = resolve_written_path(&path, &module, roots) {
+                            self.scopes[scope as usize]
+                                .bindings
+                                .entry(binds)
+                                .or_default()
+                                .push(Binding::Import {
+                                    target,
+                                    visibility: statement.visibility.clone(),
+                                });
                         }
-                        i = next;
-                        continue;
                     }
-                    UseStatementScan::NotAStatement { resume_at } => {
-                        i = resume_at;
-                        continue;
+                    UseLeaf::Glob(base) => {
+                        if let Some(target) = resolve_written_path(&base, &module, roots) {
+                            self.scopes[scope as usize]
+                                .globs
+                                .push((target, statement.visibility.clone()));
+                        }
                     }
-                    UseStatementScan::Unterminated => break,
+                    UseLeaf::SelfLeaf(_) => {}
                 }
             }
-            i += 1;
         }
         Ok(())
     }
@@ -970,96 +955,133 @@ pub(super) fn extern_block_brace_at(bytes: &[u8], i: usize) -> Option<usize> {
     (bytes.get(cursor) == Some(&b'{')).then_some(cursor)
 }
 
-/// Expand a use tree into `(introduced-head-identifier, written-path)` leaves. `a::{b, c as d}` →
-/// `(b, a::b)`, `(d, a::c)`. A `self`/glob leaf introduces no simple head and is skipped.
-pub(super) fn expand_use_leaves(tree: &str) -> Result<Vec<(String, String)>, String> {
-    fn go(tree: &str, out: &mut Vec<(String, String)>, depth: usize) -> Result<(), String> {
-        if depth > MAX_SYMBOL_NEST_DEPTH {
+/// One `use … ;` statement in declaration-cleaned text: where its `use` keyword stands, its tree, and
+/// whether a `pub` qualifier makes it a re-export.
+pub(super) struct UseStatement {
+    pub at: usize,
+    pub body: String,
+    visibility: Visibility,
+}
+
+impl UseStatement {
+    /// Whether the statement carries any `pub` qualifier — what makes it part of the re-export closure.
+    pub(super) fn is_pub(&self) -> bool {
+        self.visibility != Visibility::Private
+    }
+}
+
+/// Every `use … ;` statement in declaration-cleaned `source`, in order: the one enumeration every reader of
+/// imports in this scanner starts from. A precise-capturing `use<…>` bound is not a statement, and an
+/// unterminated statement ends the enumeration, as [`scan_use_statement`] decides.
+pub(super) fn use_statements(source: &str) -> Vec<UseStatement> {
+    let bytes = source.as_bytes();
+    let mut statements = Vec::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        if keyword_starts_at(bytes, i, b"use") {
+            match scan_use_statement(bytes, source, i) {
+                UseStatementScan::Statement { body, next } => {
+                    statements.push(UseStatement {
+                        at: i,
+                        body,
+                        visibility: visibility_before(bytes, i),
+                    });
+                    i = next;
+                    continue;
+                }
+                UseStatementScan::NotAStatement { resume_at } => {
+                    i = resume_at;
+                    continue;
+                }
+                UseStatementScan::Unterminated => break,
+            }
+        }
+        i += 1;
+    }
+    statements
+}
+
+/// One leaf of a use tree.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum UseLeaf {
+    /// A path the tree imports, and the name it binds: its ` as ` alias, or else its last segment.
+    Name { path: String, binds: String },
+    /// A glob, by its base path: `a::b::*` and the `*` of `a::b::{*}` are both `a::b`.
+    Glob(String),
+    /// A `{self}` leaf, `{self as x}` included: the group's prefix module itself.
+    SelfLeaf(String),
+}
+
+/// Every leaf of a use tree — the one parser every reader of imports in this scanner shares. Groups are
+/// expanded, a ` as ` alias is read as the name bound, and brace handling goes through [`brace_content`] /
+/// [`split_top_commas`] (char-based, never a byte slice), so a malformed `}`-before-`{` cannot panic.
+///
+/// `cap` is the caller's measured stack-safety bound on group nesting: past it the tree is refused as a scan
+/// error rather than read partially, since a real, compilable `use` nested that deep would otherwise vanish
+/// from observation with no report — the false negative PROJECT.md's core contract forbids.
+pub(super) fn use_tree_leaves(tree: &str, cap: usize) -> Result<Vec<UseLeaf>, String> {
+    fn go(tree: &str, out: &mut Vec<UseLeaf>, depth: usize, cap: usize) -> Result<(), String> {
+        if depth > cap {
             return Err(format!(
-                "cannot judge a `use` tree nested past {MAX_SYMBOL_NEST_DEPTH} brace levels: '{tree}'"
+                "cannot judge a `use` tree nested past {cap} brace levels: '{tree}'"
             ));
         }
         let tree = tree.trim();
         match tree.find('{') {
             Some(open) => {
                 let prefix = tree[..open].trim();
-                let inner = brace_content(&tree[open..]);
-                for part in split_top_commas(&inner) {
+                let base = prefix.trim_end_matches(':').trim();
+                for part in split_top_commas(&brace_content(&tree[open..])) {
                     let part = part.trim();
-                    let head = match part.find(" as ") {
-                        Some(idx) => part[..idx].trim(),
-                        None => part,
-                    };
-                    if part.is_empty() || part == "*" || head == "self" {
+                    let head = part.find(" as ").map_or(part, |idx| part[..idx].trim());
+                    if part.is_empty() {
                         continue;
+                    } else if part == "*" {
+                        if !base.is_empty() {
+                            out.push(UseLeaf::Glob(base.to_string()));
+                        }
+                    } else if head == "self" {
+                        if !base.is_empty() {
+                            out.push(UseLeaf::SelfLeaf(base.to_string()));
+                        }
+                    } else {
+                        go(&format!("{prefix}{part}"), out, depth + 1, cap)?;
                     }
-                    go(&format!("{prefix}{part}"), out, depth + 1)?;
                 }
             }
             None => {
-                if tree.ends_with("::*") || tree.is_empty() {
+                let (path, alias) = match tree.split_once(" as ") {
+                    Some((path, alias)) => (path.trim(), Some(alias.trim())),
+                    None => (tree, None),
+                };
+                if let Some(base) = path.strip_suffix("::*") {
+                    let base = base.trim();
+                    if !base.is_empty() {
+                        out.push(UseLeaf::Glob(base.to_string()));
+                    }
                     return Ok(());
                 }
-                let (path, alias) = match tree.split_once(" as ") {
-                    Some((p, a)) => (p.trim().to_string(), a.trim().to_string()),
-                    None => {
-                        let leaf = tree.rsplit_once("::").map_or(tree, |(_, leaf)| leaf).trim();
-                        (tree.to_string(), leaf.to_string())
-                    }
-                };
-                let alias = canonical_module_path(&alias);
-                if !alias.is_empty() {
-                    out.push((alias, path));
+                let path = path.trim_end_matches(':');
+                if path.is_empty() {
+                    return Ok(());
+                }
+                let named = alias.unwrap_or_else(|| {
+                    path.rsplit_once("::").map_or(path, |(_, leaf)| leaf).trim()
+                });
+                let binds = canonical_module_path(named);
+                if !binds.is_empty() {
+                    out.push(UseLeaf::Name {
+                        path: path.to_string(),
+                        binds,
+                    });
                 }
             }
         }
         Ok(())
     }
     let mut out = Vec::new();
-    go(tree, &mut out, 0)?;
+    go(tree, &mut out, 0, cap)?;
     Ok(out)
-}
-
-/// Collect every glob base path in a use tree, recursing into groups (so a **nested** glob member
-/// `use std::{time::*, io::Write}` yields `std::time`, not just a top-level `use std::time::*`).
-/// A bare tail `a::b::*` → `a::b`; a group member `*` → the group prefix. Brace handling goes
-/// through [`brace_content`] / [`split_top_commas`] (char-based, never a byte slice), so a malformed
-/// `}`-before-`{` cannot panic.
-pub(super) fn glob_bases(tree: &str, out: &mut Vec<String>, depth: usize) -> Result<(), String> {
-    if depth > MAX_SYMBOL_NEST_DEPTH {
-        return Err(format!(
-            "cannot judge a `use` tree nested past {MAX_SYMBOL_NEST_DEPTH} brace levels: '{tree}'"
-        ));
-    }
-    let tree = tree.trim();
-    match tree.find('{') {
-        Some(open) => {
-            let prefix = tree[..open].trim();
-            for part in split_top_commas(&brace_content(&tree[open..])) {
-                let part = part.trim();
-                if part.is_empty() {
-                    continue;
-                }
-                if part == "*" {
-                    let base = prefix.trim_end_matches(':').trim();
-                    if !base.is_empty() {
-                        out.push(base.to_string());
-                    }
-                } else {
-                    glob_bases(&format!("{prefix}{part}"), out, depth + 1)?;
-                }
-            }
-        }
-        None => {
-            if let Some(base) = tree.strip_suffix("::*") {
-                let base = base.trim();
-                if !base.is_empty() {
-                    out.push(base.to_string());
-                }
-            }
-        }
-    }
-    Ok(())
 }
 
 /// Resolve a *written* module path (from a `use` / `type` / `pub use`) to a canonical absolute

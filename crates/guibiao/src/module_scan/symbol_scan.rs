@@ -18,8 +18,9 @@ use super::path_vocab::{
     is_crate_root_shadow, path_within, resolve_self_super, scan_inline_modules,
 };
 use super::scope_graph::{
-    CrateScopes, Head, Namespace, PathRoots, ScopeTable, expand_use_leaves, extern_block_brace_at,
-    glob_bases, resolve_written_path, skip_angles, skip_ws,
+    CrateScopes, Head, MAX_SYMBOL_NEST_DEPTH, Namespace, PathRoots, ScopeTable, UseLeaf,
+    UseStatement, extern_block_brace_at, resolve_written_path, skip_angles, skip_ws,
+    use_statements, use_tree_leaves,
 };
 
 /// The crate-wide resolution context, built once from every reachable file: the local definition
@@ -385,31 +386,15 @@ fn is_call_application(bytes: &[u8], end: usize) -> bool {
 /// grouped `use <path>::{ … * … };` (the `*` among the group members). Returns the module-path
 /// `<path>` (without the trailing `::*`) and the true inline module enclosing the `use`.
 fn glob_import_paths(source: &str, base_module: &str) -> Result<Vec<(String, String)>, String> {
-    use super::lexer::UseStatementScan;
-    let bytes = source.as_bytes();
     let inline_modules = scan_inline_modules(source, base_module);
     let mut paths = Vec::new();
-    let mut i = 0;
-    while i < bytes.len() {
-        if super::lexer::keyword_starts_at(bytes, i, b"use") {
-            match super::lexer::scan_use_statement(bytes, source, i) {
-                UseStatementScan::Statement { body, next } => {
-                    let mut bases = Vec::new();
-                    glob_bases(&body, &mut bases, 0)?;
-                    let module =
-                        inline_modules.modules[inline_modules.contexts[i] as usize].clone();
-                    paths.extend(bases.into_iter().map(|path| (path, module.clone())));
-                    i = next;
-                    continue;
-                }
-                UseStatementScan::NotAStatement { resume_at } => {
-                    i = resume_at;
-                    continue;
-                }
-                UseStatementScan::Unterminated => break,
+    for statement in use_statements(source) {
+        let module = &inline_modules.modules[inline_modules.contexts[statement.at] as usize];
+        for leaf in use_tree_leaves(&statement.body, MAX_SYMBOL_NEST_DEPTH)? {
+            if let UseLeaf::Glob(base) = leaf {
+                paths.push((base, module.clone()));
             }
         }
-        i += 1;
     }
     Ok(paths)
 }
@@ -438,16 +423,19 @@ fn collect_defs(
         }
     }
     for (def_module, tree) in pub_use_statements(source, module) {
-        let mut globs = Vec::new();
-        glob_bases(&tree, &mut globs, 0)?;
-        for base in globs {
-            if let Some(canonical) = resolve_written_path(&base, &def_module, roots) {
-                ctx.glob_reexports.push((def_module.clone(), canonical));
-            }
-        }
-        for (alias, path) in expand_use_leaves(&tree)? {
-            if let Some(canonical) = resolve_written_path(&path, &def_module, roots) {
-                ctx.defs.insert(format!("{def_module}::{alias}"), canonical);
+        for leaf in use_tree_leaves(&tree, MAX_SYMBOL_NEST_DEPTH)? {
+            match leaf {
+                UseLeaf::Glob(base) => {
+                    if let Some(canonical) = resolve_written_path(&base, &def_module, roots) {
+                        ctx.glob_reexports.push((def_module.clone(), canonical));
+                    }
+                }
+                UseLeaf::Name { path, binds } => {
+                    if let Some(canonical) = resolve_written_path(&path, &def_module, roots) {
+                        ctx.defs.insert(format!("{def_module}::{binds}"), canonical);
+                    }
+                }
+                UseLeaf::SelfLeaf(_) => {}
             }
         }
     }
@@ -641,66 +629,22 @@ fn collect_definition_names(
     }
 }
 
-/// The `pub use …` statement bodies (only `pub` re-exports feed the crate-wide closure; a private
-/// `use` is local to its file and already handled per-file by the use-map).
-///
-/// **The body is read by [`super::lexer::scan_use_statement`], which is the declared single home for that
-/// question.** This loop re-spelled it — `start = j + 3`, then `find(';')` — and so did not carry the
-/// guard that home has: a `use` followed by `<` is a precise-capturing bound rather than an import, and
-/// scanning to the next `;` there swallows the following real `use`. The extraction that made the reader
-/// shared converged two of the three sites and walked past this one, which is the twin-drift class this
-/// module's own siblings record. What differs here is the surrounding `pub` and visibility-qualifier
-/// walk, and that is what this function keeps.
+/// The `pub use …` statement bodies, each with the module that declares it: only a re-export feeds the
+/// crate-wide closure, since a private `use` binds in its own scope and the [`ScopeTable`] reads it there.
+/// Read from the one statement enumeration every import reader shares, so a `use` a precise-capturing
+/// bound would otherwise swallow is excluded here exactly as it is everywhere else.
 fn pub_use_statements(source: &str, base_module: &str) -> Vec<(String, String)> {
-    let bytes = source.as_bytes();
     let inline_modules = scan_inline_modules(source, base_module);
-    let mut trees = Vec::new();
-    let mut i = 0;
-    while i < bytes.len() {
-        if super::lexer::keyword_starts_at(bytes, i, b"pub") {
-            let module = inline_modules.modules[inline_modules.contexts[i] as usize].clone();
-            let mut j = i + 3;
-            while j < bytes.len() && bytes[j].is_ascii_whitespace() {
-                j += 1;
-            }
-            if bytes.get(j) == Some(&b'(') {
-                let mut depth = 0usize;
-                while j < bytes.len() {
-                    match bytes[j] {
-                        b'(' => depth += 1,
-                        b')' => {
-                            depth -= 1;
-                            if depth == 0 {
-                                j += 1;
-                                break;
-                            }
-                        }
-                        _ => {}
-                    }
-                    j += 1;
-                }
-                while j < bytes.len() && bytes[j].is_ascii_whitespace() {
-                    j += 1;
-                }
-            }
-            if super::lexer::keyword_starts_at(bytes, j, b"use") {
-                match super::lexer::scan_use_statement(bytes, source, j) {
-                    super::lexer::UseStatementScan::Statement { body, next } => {
-                        trees.push((module, body));
-                        i = next;
-                        continue;
-                    }
-                    super::lexer::UseStatementScan::NotAStatement { resume_at } => {
-                        i = resume_at;
-                        continue;
-                    }
-                    super::lexer::UseStatementScan::Unterminated => break,
-                }
-            }
-        }
-        i += 1;
-    }
-    trees
+    use_statements(source)
+        .into_iter()
+        .filter(UseStatement::is_pub)
+        .map(|statement| {
+            (
+                inline_modules.modules[inline_modules.contexts[statement.at] as usize].clone(),
+                statement.body,
+            )
+        })
+        .collect()
 }
 
 /// The extra crate vocabulary [`resolve_head`] consults ONLY under `.strict_external()`: the
