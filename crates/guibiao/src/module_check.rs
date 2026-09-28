@@ -19,11 +19,12 @@ use crate::errors::{
 use crate::finding::ModuleFact;
 use crate::model::module_rule::Perimeter;
 use crate::module_scan::{
-    ImportedPath, InlineFinding, canonical_module_path, canonical_module_spelling,
-    canonical_symbol_path_spelling, declaration_text, external_imports_with_importers,
-    governed_files, imports_with_importers, inline_symbol_findings, local_item_definitions,
-    names_crate_by_path_alone, package_name_to_import_ident, path_within, reachable_modules,
-    rust_files, value_namespace_item_names,
+    ImportedPath, InlineFinding, PrefixRoot, SymbolPrefix, canonical_module_path,
+    canonical_module_spelling, canonical_symbol_path_spelling, declaration_text,
+    external_imports_with_importers, governed_files, imports_with_importers,
+    inline_symbol_findings, local_item_definitions, names_crate_by_path_alone,
+    package_name_to_import_ident, path_within, reachable_modules, rust_files,
+    value_namespace_item_names,
 };
 use crate::{BoundaryKind, ModuleBoundary, ModuleRule, Violation, ViolationId};
 
@@ -300,7 +301,7 @@ impl NamedModules {
 struct InlinePrefix {
     rule_method: &'static str,
     written: String,
-    canonical: String,
+    prefix: SymbolPrefix,
 }
 
 impl InlinePrefix {
@@ -329,7 +330,7 @@ impl InlinePrefix {
         Ok(Some(Self {
             rule_method,
             written: prefix.to_string(),
-            canonical,
+            prefix: canonical,
         }))
     }
 
@@ -350,12 +351,11 @@ impl InlinePrefix {
         external_crates: &[String],
         crate_package: &str,
     ) -> Result<(), String> {
-        let is_global = self.canonical.starts_with("::");
-        let raw = self.canonical.trim_start_matches("::");
-        let head = raw.split_once("::").map_or(raw, |(head, _)| head);
+        let path = self.prefix.path.as_str();
+        let head = path.split_once("::").map_or(path, |(head, _)| head);
         match head {
-            _ if is_global => Ok(()),
-            "crate" if names_a_local_path(&self.canonical, modules, items) => Ok(()),
+            _ if self.prefix.root == PrefixRoot::Global => Ok(()),
+            "crate" if names_a_local_path(path, modules, items) => Ok(()),
             "crate" => Err(unknown_inline_prefix_error(
                 &self.written,
                 crate_package,
@@ -364,7 +364,7 @@ impl InlinePrefix {
             "std" | "core" | "alloc" | "proc_macro" | "test" => Ok(()),
             _ if external_crates.iter().any(|name| name == head) => Ok(()),
             _ => {
-                let rooted = format!("crate::{}", self.canonical);
+                let rooted = format!("crate::{path}");
                 if names_a_local_path(&rooted, modules, items) {
                     Err(unknown_inline_prefix_head_error(
                         &self.written,
@@ -641,19 +641,19 @@ fn check_inline_confinement(
     package: &Value,
     governed: &[(PathBuf, String)],
     rule: &str,
-    prefix: &str,
+    prefix: Option<&SymbolPrefix>,
     ending_with: Option<&[String]>,
     strict: bool,
     external: bool,
     declared_as: &str,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
-    if prefix.trim().is_empty() {
+    let Some(prefix) = prefix else {
         return Err(inline_empty_prefix_error(
             &boundary.crate_package,
             declared_as,
         ));
-    }
+    };
     if ending_with.is_some() && strict {
         return Err(inline_narrow_and_strict_error(
             &boundary.crate_package,
@@ -672,7 +672,6 @@ fn check_inline_confinement(
     } else {
         Vec::new()
     };
-    let confined_prefix = canonical_module_path(prefix.trim_start_matches("::"));
     let findings = inline_symbol_findings(
         &all_files,
         governed,
@@ -687,7 +686,7 @@ fn check_inline_confinement(
     for InlineFinding { fact, file } in findings {
         push_module_violation(
             violations,
-            &confined_prefix,
+            &prefix.path,
             rule,
             fact,
             file,
@@ -834,6 +833,7 @@ pub(crate) fn check_module_boundary(
                 None,
                 None,
                 boundary,
+                inline_prefix.as_ref().map(|p| &p.prefix),
                 &mut declared,
                 &mut items,
                 &mut found,
@@ -857,6 +857,7 @@ pub(crate) fn check_module_boundary(
             Some(root.as_path()),
             Some(roots),
             boundary,
+            inline_prefix.as_ref().map(|p| &p.prefix),
             &mut declared,
             &mut items,
             &mut found,
@@ -913,11 +914,13 @@ fn suggested_module_path(package: &Value, candidate: &Path) -> String {
 /// a file lies within that file's module's subtree, so excluding a file by its module is exact under the subtree
 /// depth. It is not under `ScanDepth::Shallow`, where the permitted region is the anchored module alone and the
 /// permitted file's inline children fall outside it, so a shallow declaration is refused rather than judged.
+#[allow(clippy::too_many_arguments)]
 fn check_one_root(
     package: &Value,
     root_file: Option<&Path>,
     sibling_roots: Option<&[PathBuf]>,
     boundary: &ModuleBoundary,
+    inline_prefix: Option<&SymbolPrefix>,
     declared: &mut std::collections::BTreeSet<String>,
     items: &mut std::collections::BTreeSet<String>,
     violations: &mut Vec<Violation>,
@@ -1035,7 +1038,7 @@ fn check_one_root(
         )?;
         return Ok(outcome);
     }
-    if let Some((prefix, ending_with, strict, external)) = boundary.rule.inline_payload() {
+    if let Some((_, ending_with, strict, external)) = boundary.rule.inline_payload() {
         let permitting = matches!(boundary.rule, ModuleRule::ConfineInlineCall { .. });
         if permitting && governed_module == "crate" {
             return Err(confine_inline_call_on_crate_error(&boundary.crate_package));
@@ -1057,7 +1060,7 @@ fn check_one_root(
             package,
             &judged,
             rule,
-            prefix,
+            inline_prefix,
             ending_with,
             strict,
             external,

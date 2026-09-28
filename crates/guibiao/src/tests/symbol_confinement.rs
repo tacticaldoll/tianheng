@@ -2464,7 +2464,13 @@ pub(super) fn an_inline_prefix_is_accepted_only_in_its_canonical_spelling() {
     let wrong: Vec<_> = INLINE_PREFIX_SPELLINGS
         .iter()
         .filter_map(|(written, expected)| {
-            let answer = crate::module_scan::canonical_symbol_path_spelling(written);
+            let answer =
+                crate::module_scan::canonical_symbol_path_spelling(written).map(|prefix| {
+                    match prefix.root {
+                        crate::module_scan::PrefixRoot::Global => format!("::{}", prefix.path),
+                        crate::module_scan::PrefixRoot::Bare => prefix.path,
+                    }
+                });
             let expected = expected
                 .map(str::to_string)
                 .map_err(|s| s.map(str::to_string));

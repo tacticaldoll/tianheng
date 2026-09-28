@@ -121,6 +121,42 @@ fn is_symbol_path_spelling(written: &str) -> bool {
         && segments.all(is_identifier)
 }
 
+/// Whether an inline-call prefix was written from the extern-crate root (`::std::time`) or bare
+/// (`std::time`). Both name one crate, so the root form is not part of a prefix's identity; it is kept
+/// for the readers that judge what the written first segment may name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PrefixRoot {
+    Bare,
+    Global,
+}
+
+/// An inline-call prefix in its one canonical form: `::`-separated segments with no leading `::` and
+/// no `r#`, and the root form it was written in. `std::time` and `::std::time` are one `path`, which is
+/// what a prefix's rule key, its violations' target and the call matcher all read, so the three cannot
+/// disagree about which prefix a finding belongs to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SymbolPrefix {
+    pub path: String,
+    pub root: PrefixRoot,
+}
+
+impl SymbolPrefix {
+    /// The canonical form of any written prefix. Total, so the model can key a rule on it before the
+    /// spelling is judged; [`canonical_symbol_path_spelling`] is what refuses a spelling.
+    pub(crate) fn of(written: &str) -> Self {
+        match written.strip_prefix("::") {
+            Some(rest) => SymbolPrefix {
+                path: canonical_module_path(rest),
+                root: PrefixRoot::Global,
+            },
+            None => SymbolPrefix {
+                path: canonical_module_path(written),
+                root: PrefixRoot::Bare,
+            },
+        }
+    }
+}
+
 /// The canonical spelling of a written symbol path, or the spelling it most plausibly meant.
 ///
 /// A symbol path — an inline-call prefix — is compared with resolved paths segment by segment, so it
@@ -129,19 +165,14 @@ fn is_symbol_path_spelling(written: &str) -> bool {
 /// segment outside the finite set that can never name a crate or module
 /// ([`is_disallowed_symbol_head`]). Which of the remaining first segments name something is the
 /// caller's question, since it needs what the crate declares. `r#x` and `x` are one identifier, so the
-/// accepted form carries no raw prefix. Every other spelling is refused, and the refusal carries the
-/// written path's non-empty, trimmed segments, raw prefixes removed, as the suggestion — or `None`
-/// when that is no accepted spelling either.
-pub(crate) fn canonical_symbol_path_spelling(written: &str) -> Result<String, Option<String>> {
+/// accepted form is a [`SymbolPrefix`], raw prefixes and the leading `::` removed. Every other spelling
+/// is refused, and the refusal carries the written path's non-empty, trimmed segments, raw prefixes
+/// removed, as the suggestion — or `None` when that is no accepted spelling either.
+pub(crate) fn canonical_symbol_path_spelling(
+    written: &str,
+) -> Result<SymbolPrefix, Option<String>> {
     if is_symbol_path_spelling(written) {
-        let is_global = written.starts_with("::");
-        let raw = written.strip_prefix("::").unwrap_or(written);
-        let canonical = canonical_module_path(raw);
-        return Ok(if is_global {
-            format!("::{canonical}")
-        } else {
-            canonical
-        });
+        return Ok(SymbolPrefix::of(written));
     }
     let is_global = written.trim().starts_with("::");
     let segments: Vec<&str> = written

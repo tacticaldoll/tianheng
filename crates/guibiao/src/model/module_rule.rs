@@ -1,5 +1,5 @@
 use super::constitution::*;
-use crate::module_scan::{canonical_module_path, package_name_to_import_ident};
+use crate::module_scan::{SymbolPrefix, canonical_module_path, package_name_to_import_ident};
 use serde_json::Value;
 use xuanji::{Polarity, RuleKey, ScanDepth, Severity};
 
@@ -276,10 +276,7 @@ impl ModuleRule {
                                 .map(|verb| canonical_module_path(verb)),
                         ),
                     ),
-                    (
-                        "prefix",
-                        canonical_module_path(prefix.trim_start_matches("::")),
-                    ),
+                    ("prefix", SymbolPrefix::of(prefix).path),
                     ("strict", strict.to_string()),
                 ],
             ),
@@ -300,10 +297,7 @@ impl ModuleRule {
                                 .map(|verb| canonical_module_path(verb)),
                         ),
                     ),
-                    (
-                        "prefix",
-                        canonical_module_path(prefix.trim_start_matches("::")),
-                    ),
+                    ("prefix", SymbolPrefix::of(prefix).path),
                     ("strict", strict.to_string()),
                 ],
             ),

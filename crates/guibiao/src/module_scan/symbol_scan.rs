@@ -14,8 +14,8 @@ use crate::finding::ModuleFact;
 
 use super::lexer::{is_ident_byte, strip_comments_and_strings, strip_macro_bodies};
 use super::path_vocab::{
-    canonical_module_path, canonical_segment, fold_canonical_segments, is_crate_root_shadow,
-    path_within, resolve_self_super, scan_inline_modules,
+    SymbolPrefix, canonical_module_path, canonical_segment, fold_canonical_segments,
+    is_crate_root_shadow, path_within, resolve_self_super, scan_inline_modules,
 };
 use super::scope_graph::{
     CrateScopes, Head, Namespace, PathRoots, ScopeTable, expand_use_leaves, extern_block_brace_at,
@@ -46,7 +46,7 @@ pub(crate) struct InlineFinding {
 /// its default and strict-external forms both route here via `inline_payload`.
 /// `all_files` is every reachable `(file, module)` pair (crate-wide, for the def closure);
 /// `governed` is the subset whose module is within the governed subtree (where calls are
-/// forbidden). `prefix` is the confined module-path prefix; `ending_with` narrows to read verbs;
+/// forbidden). `prefix` is the confined prefix in its one canonical form; `ending_with` narrows to read verbs;
 /// `strict` reacts on any mention, not only calls; `external` opts in the strict-external head
 /// ladder (a fully-qualified un-`use`d head matching a declared dependency reclassifies as
 /// external); `dependency_names` are the rename-aware declared-dependency import identifiers that
@@ -57,7 +57,7 @@ pub(crate) fn inline_symbol_findings(
     all_files: &[(std::path::PathBuf, String)],
     governed: &[(std::path::PathBuf, String)],
     root_modules: &[String],
-    prefix: &str,
+    prefix: &SymbolPrefix,
     ending_with: Option<&[String]>,
     strict: bool,
     external: bool,
@@ -68,7 +68,7 @@ pub(crate) fn inline_symbol_findings(
         root_modules,
         edition_2015,
     };
-    let prefix = canonical_module_path(prefix.trim_start_matches("::"));
+    let prefix = prefix.path.as_str();
     let verbs: Option<Vec<String>> =
         ending_with.map(|vs| vs.iter().map(|v| canonical_module_path(v)).collect());
 
@@ -131,7 +131,7 @@ pub(crate) fn inline_symbol_findings(
                 external_vocab.as_ref(),
             )
             .iter()
-            .any(|resolved| glob_reaches_prefix(resolved, &prefix, &ctx, &mut HashSet::new()));
+            .any(|resolved| glob_reaches_prefix(resolved, prefix, &ctx, &mut HashSet::new()));
             if reaches {
                 findings.push(InlineFinding {
                     fact: ModuleFact::InlineGlob {
@@ -154,7 +154,7 @@ pub(crate) fn inline_symbol_findings(
                 external_vocab.as_ref(),
             ) {
                 let resolved = chase_closure(&resolved, &chase_defs, &mut HashSet::new());
-                if !path_within(&resolved, &prefix) {
+                if !path_within(&resolved, prefix) {
                     continue;
                 }
                 if should_react_on_occurrence(

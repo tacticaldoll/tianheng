@@ -20,8 +20,8 @@ mod use_scan;
 pub(crate) use fs_walk::rust_files;
 pub(crate) use lexer::declaration_text;
 pub(crate) use path_vocab::{
-    canonical_module_path, canonical_module_spelling, canonical_symbol_path_spelling,
-    package_name_to_import_ident, path_within,
+    PrefixRoot, SymbolPrefix, canonical_module_path, canonical_module_spelling,
+    canonical_symbol_path_spelling, package_name_to_import_ident, path_within,
 };
 pub(crate) use reachability::{governed_files, names_crate_by_path_alone, reachable_modules};
 pub(crate) use symbol_scan::{
