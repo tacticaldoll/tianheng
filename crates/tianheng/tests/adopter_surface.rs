@@ -152,7 +152,7 @@ fn wildcard_prelude_is_the_external_adopter_contract() {
     let static_boundary = StaticBoundary::in_crate("consumer-core")
         .module("crate::domain")
         .must_not_declare_static()
-        .because("the domain holds no process or thread state");
+        .because("the domain declares no `static` item or `thread_local!`");
     let runtime_boundary = RuntimeBoundary::at("domain-entry")
         .only_origins(["consumer::adapter"])
         .because("only the declared adapter crosses the seam");

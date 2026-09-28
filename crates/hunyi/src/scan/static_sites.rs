@@ -112,27 +112,18 @@ impl<'a> StaticCollector<'a> {
 
     /// The statics one `thread_local!` invocation declares, each recorded under the enclosing owner.
     fn thread_local(&mut self, mac: &syn::Macro) {
-        let body = match mac.parse_body::<syn::File>() {
-            Ok(body) => body,
+        let statics = match mac.parse_body_with(thread_local_statics) {
+            Ok(statics) => statics,
             Err(error) => {
                 let error = thread_local_body_error(self.module, self.file, &error.to_string());
                 self.fail(error);
                 return;
             }
         };
-        for item in &body.items {
-            let syn::Item::Static(item) = item else {
-                let error = thread_local_body_error(
-                    self.module,
-                    self.file,
-                    "it holds an item that is not a `static`",
-                );
-                self.fail(error);
-                return;
-            };
-            self.record(StaticKind::ThreadLocal, &item.ident);
-            let segment = Ok(format!("static {}", strip_raw(&item.ident.to_string())));
-            self.within(segment, |this| this.visit_expr(&item.expr));
+        for (ident, expr) in &statics {
+            self.record(StaticKind::ThreadLocal, ident);
+            let segment = Ok(format!("static {}", strip_raw(&ident.to_string())));
+            self.within(segment, |this| this.visit_expr(expr));
         }
     }
 
@@ -264,7 +255,8 @@ impl<'ast> Visit<'ast> for StaticCollector<'_> {
             }
             Ok(ForeignDecl::Fn { .. } | ForeignDecl::Type { .. } | ForeignDecl::Macro) => {}
             Err(undecodable) => {
-                let error = undecodable_foreign_item_error(self.file, &undecodable.seen);
+                let error =
+                    undecodable_foreign_item_error(self.module, self.file, &undecodable.seen);
                 self.fail(error);
             }
         }
@@ -285,6 +277,36 @@ impl<'ast> Visit<'ast> for StaticCollector<'_> {
     fn visit_item_use(&mut self, node: &'ast syn::ItemUse) {
         self.note_rename(&node.tree);
     }
+}
+
+/// The statics a `thread_local!` body declares, read by the macro's own grammar: attributed,
+/// visibility-qualified `static NAME: T = init` declarations separated by `;`, where the last one's
+/// `;` is optional.
+///
+/// std's `thread_local!` matches a declaration's initializer as `$init:expr $(; $($rest:tt)*)?`, and
+/// its own documentation writes `thread_local!(static FOO: Cell<u32> = Cell::new(1));`, so a reader
+/// requiring every declaration to end in `;` would refuse a body std accepts. Only `static`
+/// declarations are read, because std's grammar admits nothing else.
+fn thread_local_statics(
+    input: syn::parse::ParseStream,
+) -> syn::Result<Vec<(syn::Ident, syn::Expr)>> {
+    let mut statics = Vec::new();
+    while !input.is_empty() {
+        input.call(syn::Attribute::parse_outer)?;
+        input.parse::<syn::Visibility>()?;
+        input.parse::<syn::Token![static]>()?;
+        let ident = input.parse::<syn::Ident>()?;
+        input.parse::<syn::Token![:]>()?;
+        input.parse::<syn::Type>()?;
+        input.parse::<syn::Token![=]>()?;
+        let expr = input.parse::<syn::Expr>()?;
+        statics.push((ident, expr));
+        if input.is_empty() {
+            break;
+        }
+        input.parse::<syn::Token![;]>()?;
+    }
+    Ok(statics)
 }
 
 /// What one compilation unit declares: every static site, and the first rename of `thread_local`

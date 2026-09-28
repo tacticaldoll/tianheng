@@ -1,10 +1,11 @@
 use super::render::{coverage_report, report_sarif, violations_text, violations_text_styled};
 use super::term_color::Style;
 use super::{
-    BaselineWriteError, Coverage, boundary_params, check_constitution, constitution_markdown,
-    create_baseline_file, dispatch, dyn_trait_text, impl_trait_text, list_document, list_markdown,
-    merge_outcomes, nearest_manifest_from, projection_gate, report_json, runtime_text,
-    semantic_text, trait_impl_text, visibility_text,
+    BaselineWriteError, Coverage, async_exposure_text, boundary_params, check_constitution,
+    constitution_markdown, create_baseline_file, dispatch, dyn_trait_text, impl_trait_text,
+    list_document, list_markdown, merge_outcomes, nearest_manifest_from, projection_gate,
+    reexport_only_text, report_json, runtime_text, semantic_text, static_item_text,
+    trait_impl_text, visibility_text,
 };
 use crate::prelude::*;
 use guibiao::Subject;
@@ -1018,6 +1019,115 @@ fn composed_runtime_audit_uses_custom_roots_and_rejects_orphan_only_coverage() {
     let _ = std::fs::remove_dir_all(base);
 }
 
+/// Every semantic module boundary carrying a depth projects it in one vocabulary, read from the
+/// boundary: the JSON carries `including_submodules: true` and `scan_depth: "subtree"` for a subtree
+/// boundary and neither field for a shallow one, and the text rule line ends in
+/// ` (including submodules)` exactly when the subtree is observed. Re-export-only is the kind that
+/// spoke its own dialect, `(scan_depth: shallow)` in text and `scan_depth` on every JSON entry;
+/// static-item is the kind whose depth the shell supplied instead of asking the boundary.
+#[test]
+fn every_semantic_depth_projects_in_one_vocabulary_read_from_the_boundary() {
+    let reexport = |depth| {
+        ReexportOnlyBoundary::in_crate("app")
+            .module("crate::facade")
+            .must_declare_only_reexports()
+            .depth(depth)
+            .because("facade carries only re-exports")
+    };
+    let asynchronous = |depth| {
+        AsyncExposureBoundary::in_crate("app")
+            .module("crate::core")
+            .must_not_expose_async_fn()
+            .depth(depth)
+            .because("the core seam is synchronous")
+    };
+    let existential = |depth| {
+        ImplTraitBoundary::in_crate("app")
+            .module("crate::core")
+            .must_not_expose_impl_trait()
+            .depth(depth)
+            .because("the core seam returns named types")
+    };
+    let statics = StaticBoundary::in_crate("app")
+        .module("crate::kernel")
+        .must_not_declare_static()
+        .because("the kernel declares no `static` item or `thread_local!`");
+    let expected_json = |depth: ScanDepth| {
+        if depth.is_shallow() {
+            (None, None)
+        } else {
+            (Some(Value::Bool(true)), Some(Value::from("subtree")))
+        }
+    };
+    let json_depth = |entry: &Value| {
+        (
+            entry.get("including_submodules").cloned(),
+            entry.get("scan_depth").cloned(),
+        )
+    };
+    let text_suffix = |text: &str, rule: &str| {
+        let line = text
+            .lines()
+            .find(|line| line.contains(rule))
+            .unwrap_or_else(|| panic!("a rule line naming {rule} in {text}"))
+            .to_string();
+        assert!(!line.contains("scan_depth"), "{line}");
+        line.ends_with(&format!("{rule} (including submodules)"))
+    };
+    for depth in [ScanDepth::Shallow, ScanDepth::Subtree] {
+        let constitution = Constitution::new("app")
+            .reexport_only_boundary(reexport(depth))
+            .async_exposure_boundary(asynchronous(depth))
+            .impl_trait_boundary(existential(depth));
+        let doc = list_document(&constitution);
+        let semantic = constitution.semantic_boundaries();
+        for (key, text, rule) in [
+            (
+                "reexport_only_boundaries",
+                reexport_only_text(&semantic.reexport_only),
+                hunyi::REEXPORT_ONLY_RULE,
+            ),
+            (
+                "async_exposure_boundaries",
+                async_exposure_text(&semantic.async_exposure),
+                hunyi::ASYNC_EXPOSURE_RULE,
+            ),
+            (
+                "impl_trait_boundaries",
+                impl_trait_text(&semantic.impl_trait),
+                hunyi::IMPL_TRAIT_RULE,
+            ),
+        ] {
+            assert_eq!(
+                json_depth(&doc[key][0]),
+                expected_json(depth),
+                "{key} at {depth:?}: {}",
+                doc[key][0]
+            );
+            assert_eq!(
+                text_suffix(&text, rule),
+                depth == ScanDepth::Subtree,
+                "{key} at {depth:?}: {text}"
+            );
+        }
+    }
+    let constitution = Constitution::new("app").static_boundary(statics.clone());
+    let doc = list_document(&constitution);
+    assert_eq!(
+        json_depth(&doc["static_item_boundaries"][0]),
+        expected_json(statics.scan_depth()),
+        "{}",
+        doc["static_item_boundaries"][0]
+    );
+    assert_eq!(
+        text_suffix(
+            &static_item_text(&constitution.semantic_boundaries().static_item),
+            hunyi::STATIC_ITEM_RULE
+        ),
+        statics.scan_depth() == ScanDepth::Subtree
+    );
+}
+
 #[test]
 fn list_document_covers_every_populated_dimension() {
     // The previous json-list test ran only an empty SemanticBoundaries, so the projection's
@@ -1070,7 +1180,7 @@ fn list_document_covers_every_populated_dimension() {
             StaticBoundary::in_crate("app")
                 .module("crate::kernel")
                 .must_not_declare_static()
-                .because("the kernel holds no process or thread state"),
+                .because("the kernel declares no `static` item or `thread_local!`"),
         )
         .forbidden_marker_boundary(
             ForbiddenMarkerBoundary::in_crate("app")
@@ -1180,7 +1290,7 @@ fn markdown_projection_covers_every_dimension_the_json_document_emits() {
             StaticBoundary::in_crate("app")
                 .module("crate::kernel")
                 .must_not_declare_static()
-                .because("the kernel holds no process or thread state"),
+                .because("the kernel declares no `static` item or `thread_local!`"),
         )
         .forbidden_marker_boundary(
             ForbiddenMarkerBoundary::in_crate("app")
@@ -1315,7 +1425,7 @@ fn full_constitution() -> Constitution {
             StaticBoundary::in_crate("app")
                 .module("crate::kernel")
                 .must_not_declare_static()
-                .because("the kernel holds no process or thread state"),
+                .because("the kernel declares no `static` item or `thread_local!`"),
         )
         .forbidden_marker_boundary(
             ForbiddenMarkerBoundary::in_crate("app")

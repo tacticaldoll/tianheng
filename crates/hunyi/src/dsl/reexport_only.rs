@@ -39,6 +39,11 @@ impl ReexportOnlyBoundary {
     pub fn scan_depth(&self) -> ScanDepth {
         self.depth
     }
+    /// Whether each descended module is judged by the same rule (`true`), or only the anchored
+    /// module's own items are (`false`, the default).
+    pub fn including_submodules(&self) -> bool {
+        self.depth == ScanDepth::Subtree
+    }
 }
 
 crate::dsl::boundary_common!(ReexportOnlyBoundary, ReexportOnlyBoundaryDraft);
@@ -91,6 +96,11 @@ impl ReexportOnlyBoundaryDraft {
     pub fn depth(mut self, depth: ScanDepth) -> Self {
         self.depth = depth;
         self
+    }
+    /// Descend the anchored module's whole subtree: a child `mod` is a container rather than a
+    /// finding, and each descended module is judged by the same rule. Off by default.
+    pub fn including_submodules(self) -> Self {
+        self.depth(ScanDepth::Subtree)
     }
     /// Finish the boundary with its repair direction.
     pub fn because(self, reason: &str) -> ReexportOnlyBoundary {

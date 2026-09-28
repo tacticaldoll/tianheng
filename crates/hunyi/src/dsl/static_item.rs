@@ -1,6 +1,6 @@
 //! Static-item boundary declaration DSL.
 
-use xuanji::{RuleKey, Severity};
+use xuanji::{RuleKey, ScanDepth, Severity};
 
 /// A static-item boundary: a module, and every module beneath it, declares no `static` item and no
 /// `thread_local!`. Declared in Rust (the single source of truth), composed at the gate.
@@ -44,6 +44,12 @@ impl StaticBoundary {
     /// The human-readable reason recorded with the boundary (the repair hint).
     pub fn reason(&self) -> &str {
         &self.reason
+    }
+
+    /// The observation scan depth: [`ScanDepth::Subtree`], always, since the boundary has no
+    /// seam-only depth.
+    pub fn scan_depth(&self) -> ScanDepth {
+        ScanDepth::Subtree
     }
 }
 

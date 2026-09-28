@@ -33,15 +33,16 @@ them.
 
 ### Semantic
 
-- **BREAKING** — **渾儀 observes `safe`- and `unsafe`-qualified foreign items.** Inside an edition-2024
-  `unsafe extern` block, `pub safe static`, `pub safe fn` and `pub unsafe static` passed every visibility
+- **BREAKING** — **渾儀 observes `safe`- and `unsafe`-qualified foreign items.** Inside an `unsafe extern`
+  block, where these qualifiers are legal in every edition, `pub safe static`, `pub safe fn` and `pub unsafe static` passed every visibility
   ceiling, `must_not_declare_pub` and `must_not_expose` boundary, because `syn` 2 leaves those qualifiers
   unparsed and the item was skipped; the same declaration without a qualifier reacted. They now react
   exactly as their unqualified forms do, with the same finding and identity — `pub safe static X` is
   `pub static X` to a baseline. Declarations that passed before may now report violations to repair or
   baseline. A foreign item 渾儀 cannot read as a `fn`, `static`, `type` or macro invocation, with any
-  qualifier removed, is now a constitution error (exit 2) naming the tokens and the file, where it was
-  skipped: a `#[cfg]`-disabled foreign `fn` with a body compiles and is such an item.
+  qualifier removed, is now a constitution error (exit 2) naming the module, the tokens and the file, where
+  it was skipped: a `#[cfg]`-disabled foreign `fn` with a body, or `type` with a definition, compiles and is
+  such an item. rustc accepts one only while a `#[cfg]` removes it, so the refusal asks for it to be deleted.
 
 - **BREAKING** — **Dyn-trait and impl-trait operand boundaries reject auto-trait operands as constitution errors.** `must_not_expose_dyn_of` and `must_not_expose_impl_trait_of` now exit 2 when any forbidden operand has an auto-trait leaf, including a qualified spelling or an entry beside valid operands. These entries could not match: the observer removes auto-trait bounds before principal-trait resolution. The error message directs the author to `must_not_expose_dyn_bounded_by` or `must_not_expose_impl_trait_bounded_by` (or to remove the entry). The impl-trait rule applies equally with `including_submodules()`; `must_not_acquire("Send")` remains legal and reacts to an acquisition.
 
@@ -53,8 +54,10 @@ them.
   .must_declare_only_reexports()` makes every direct item of `m` that is not a `use`, of any visibility or
   use-tree form, one finding under `tianheng.rule/hunyi/reexport-only-module`: a function, type, constant,
   trait, `impl`, `extern` block, `macro_rules!`, an item-position macro invocation, and an item it cannot
-  render. At `Shallow` depth a child `mod` is itself a finding; at `Subtree` depth it is a container and each
-  descended module is judged by the same rule. Items inside a transparent `cfg_if!` arm are observed; an item
+  render. By default a child `mod` is itself a finding; with `.including_submodules()` (or
+  `.depth(ScanDepth::Subtree)`) it is a container and each descended module is judged by the same rule, and
+  `list` projects that depth as every semantic boundary does, `(including submodules)` in text and
+  `including_submodules` with `scan_depth` in JSON. Items inside a transparent `cfg_if!` arm are observed; an item
   inside a function body is not a direct item, and items produced only by a macro's expansion are not read.
   Existing visibility-ceiling and `must_not_declare_pub` rule keys and identities are unchanged. The
   new field requires the construction migration below.
@@ -102,18 +105,18 @@ them.
   `tianheng.rule/hunyi/static-item`, naming its kind (`static`, `static_mut`, `foreign_static`,
   `foreign_static_mut`, `thread_local`), declaring module, name and enclosing owner. `thread_local!` is
   recognized by its name, however it is qualified; a crate renaming it (`use std::thread_local as tls;`) is a
-  constitution error asking for the macro by name. A `thread_local!` body that is not `static` declarations
-  is refused too. Statics produced by other macros are a stated bound, and cfg is observed as written.
+  constitution error asking for the macro by name. A `thread_local!` body is read by std's own grammar, so its
+  last static may omit the `;`; a body that is not `static` declarations is refused. Statics produced by other macros are a stated bound, and cfg is observed as written.
   Calls with process-global effects, such as `std::env::set_var`, are `must_not_call_inline`'s, not this
-  boundary's. `SemanticBoundaries` gains the `static_item` field; it is non-exhaustive, so nothing that
-  compiled stops compiling.
+  boundary's. `SemanticBoundaries` gains the `static_item` field, which needs no migration beyond the
+  `SemanticBoundaries` construction step below.
 
 ### Migration
 
 - Repair or baseline a public `safe`- or `unsafe`-qualified foreign item that now reports under a
-  visibility or signature-coupling boundary. A foreign item reported as undecodable, such as a
-  `#[cfg]`-disabled foreign `fn` with a body, is rewritten as a declaration or moved out of the
-  `extern` block.
+  visibility or signature-coupling boundary. Delete a foreign item reported as undecodable, such as a
+  `#[cfg]`-disabled foreign `fn` with a body: rustc accepts it only while the `#[cfg]` removes it, so it
+  declares nothing in any build.
 
 - Remove auto-trait entries such as `Send` from `must_not_expose_dyn_of` and `must_not_expose_impl_trait_of` operand sets, or migrate to `must_not_expose_dyn_bounded_by` / `must_not_expose_impl_trait_bounded_by`.
 

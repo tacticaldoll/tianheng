@@ -107,16 +107,17 @@ pub(in crate::runner) fn visibility_boundary_json(boundary: &VisibilityBoundary)
 }
 /// The JSON projection of one re-export-only module boundary.
 pub(in crate::runner) fn reexport_only_boundary_json(boundary: &ReexportOnlyBoundary) -> Value {
-    let mut object = semantic_module_json(
-        boundary.module(),
-        boundary.crate_package(),
-        REEXPORT_ONLY_RULE,
-        boundary.severity().as_str(),
-        boundary.reason(),
-        boundary.anchor(),
-    );
-    object["scan_depth"] = serde_json::json!(boundary.scan_depth().as_str());
-    object
+    subtree_scoped(
+        semantic_module_json(
+            boundary.module(),
+            boundary.crate_package(),
+            REEXPORT_ONLY_RULE,
+            boundary.severity().as_str(),
+            boundary.reason(),
+            boundary.anchor(),
+        ),
+        boundary.scan_depth(),
+    )
 }
 /// The JSON projection of one forbidden-marker boundary (`kind`, `target` = the subtree,
 /// `crate`, `rule`, `severity`, `reason`) plus the `forbidden` trait set.
@@ -225,7 +226,7 @@ pub(in crate::runner) fn unsafe_boundary_json(boundary: &UnsafeBoundary) -> Valu
     object
 }
 /// The JSON projection of one static-item boundary. Its scope is the anchored subtree, always, and
-/// the projection says so rather than leaving a reader to assume the semantic default.
+/// the projection says so, read from the boundary rather than assumed here.
 pub(in crate::runner) fn static_item_boundary_json(boundary: &StaticBoundary) -> Value {
     subtree_scoped(
         semantic_module_json(
@@ -236,7 +237,7 @@ pub(in crate::runner) fn static_item_boundary_json(boundary: &StaticBoundary) ->
             boundary.reason(),
             boundary.anchor(),
         ),
-        ScanDepth::Subtree,
+        boundary.scan_depth(),
     )
 }
 fn append_array<T>(document: &mut Value, key: &str, items: &[T], project: impl Fn(&T) -> Value) {

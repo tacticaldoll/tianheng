@@ -741,8 +741,13 @@ pub(crate) struct UndecodableForeignItem {
 
 /// Decode one foreign item, or refuse it.
 ///
-/// `syn` 2 leaves an edition-2024 `safe` or `unsafe` qualifier on a foreign `static`, and `safe`
-/// on a foreign `fn`, as `ForeignItem::Verbatim`. Measured under `syn` 2.0.118 and 2.0.119:
+/// A `safe` or `unsafe` qualifier on an item of an `unsafe extern` block is not edition-gated.
+/// Measured under rustc 1.96.1 and 1.85.1: `unsafe extern "C" { pub safe fn h(); pub unsafe static
+/// S: u8; }` compiles with `--edition` 2015, 2021 and 2024 alike, and edition 2024 adds only that
+/// an `extern` block must itself be written `unsafe`.
+///
+/// `syn` 2 leaves a `safe` or `unsafe` qualifier on a foreign `static`, and `safe` on a foreign
+/// `fn`, as `ForeignItem::Verbatim`. Measured under `syn` 2.0.118 and 2.0.119:
 /// `pub safe static`, `pub safe fn` and `pub unsafe static` parse as `Verbatim`, while
 /// `pub unsafe fn` parses as `ForeignItem::Fn`. The qualifier standing after the attributes and
 /// visibility is removed and the rest is parsed again as a `ForeignItem`, so which shapes are

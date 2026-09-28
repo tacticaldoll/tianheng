@@ -8,7 +8,7 @@ fn boundary(module: &str) -> StaticBoundary {
     StaticBoundary::in_crate("x")
         .module(module)
         .must_not_declare_static()
-        .because("the kernel holds no process or thread state")
+        .because("the kernel declares no `static` item or `thread_local!`")
 }
 
 /// Every violation a boundary on `module` produces over a fixture, or its refusal.
@@ -145,6 +145,30 @@ pub(super) fn every_static_a_thread_local_declares_reacts() {
         [
             row("thread_local", "crate::kernel", "DEPTH", ""),
             row("thread_local", "crate::kernel", "SCRATCH", ""),
+        ]
+    );
+}
+
+/// std's grammar makes the last declaration's `;` optional, and its own documentation writes
+/// `thread_local!(static FOO: Cell<u32> = Cell::new(1));`. So a body whose last static carries no `;`
+/// is observed, and so is every static before it in the same body.
+#[test]
+pub(super) fn a_thread_local_whose_last_static_has_no_semicolon_reacts() {
+    let violations = kernel_statics(
+        "static-thread-local-unterminated",
+        "use std::cell::Cell;\nthread_local!(static FOO: Cell<u32> = Cell::new(1));\n\
+         thread_local! {\n    static A: Cell<u8> = Cell::new(0);\n    \
+         pub static B: Cell<u8> = const { Cell::new(0) }\n}\n",
+    )
+    .unwrap();
+    let mut observed = rows(&violations);
+    observed.sort();
+    assert_eq!(
+        observed,
+        [
+            row("thread_local", "crate::kernel", "A", ""),
+            row("thread_local", "crate::kernel", "B", ""),
+            row("thread_local", "crate::kernel", "FOO", ""),
         ]
     );
 }
@@ -538,7 +562,12 @@ pub(super) fn an_undecodable_foreign_item_refuses_to_judge() {
         "unsafe extern \"C\" {\n    #[cfg(any())]\n    pub fn with_body() {}\n}\n",
     )
     .unwrap_err();
-    assert!(error.contains("with_body"), "{error}");
+    assert!(
+        error.contains("cannot judge a foreign item in module 'crate::kernel'")
+            && error.contains("with_body")
+            && error.contains("delete it"),
+        "{error}"
+    );
 }
 
 /// A `mod` written in a function body is not a module of the crate's graph, so a static inside it

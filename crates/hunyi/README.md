@@ -62,13 +62,20 @@ Built capabilities (each passing Tianheng's capability-admission test — declar
   so two same-named async fns never collide under the baseline. Declarative = "this seam is
   synchronous" by anchor scoping (a sync-core/async-edges layering), not a blanket "no async".
 - **Static-item** — a module's whole subtree declares no `static` item, foreign `static` or
-  `thread_local!` (`StaticBoundary::…::must_not_declare_static()`): the layer holds no process or thread
-  state of its own. `thread_local!` is recognized by name, and a crate renaming it is refused.
+  `thread_local!` (`StaticBoundary::…::must_not_declare_static()`). Unlike the exposure families it
+  always governs every module at or beneath its anchor, and a static in a function, method, closure or
+  initializer body reacts as one at module level does. Each finding names its kind (`static`,
+  `static_mut`, `foreign_static`, `foreign_static_mut`, `thread_local`), declaring module, name and the
+  named value item enclosing it. `thread_local!` is recognized by name, and a crate renaming it is
+  refused. It governs *declarations*: a call with process-global effects, such as
+  `std::env::set_var`, is `must_not_call_inline`'s, so its reason says what it observes —
+  *declares no `static` item or `thread_local!`* — never *has no global state*. A static produced by a
+  macro other than `thread_local!` is not observed, and a `#[cfg]`-gated static is observed as written.
 
 ```rust
 use hunyi::{
     SignatureBoundary, TraitImplBoundary, VisibilityBoundary, ReexportOnlyBoundary, ForbiddenMarkerBoundary,
-    DynTraitBoundary, ImplTraitBoundary, AsyncExposureBoundary,
+    DynTraitBoundary, ImplTraitBoundary, AsyncExposureBoundary, StaticBoundary,
 };
 
 // exposure: my-app's public API must not leak crate::infra::DbPool
@@ -130,6 +137,12 @@ let async_boundary = AsyncExposureBoundary::in_crate("my-app")
     .module("crate::core")
     .must_not_expose_async_fn()
     .because("the core seam is synchronous; async lives at the adapter edges");
+
+// static-item: nothing under crate::core declares a static or a thread_local!
+let static_boundary = StaticBoundary::in_crate("my-app")
+    .module("crate::core")
+    .must_not_declare_static()
+    .because("the core declares no `static` item or `thread_local!`");
 ```
 
 **Stated bounds** (never silently passed): local `pub use` re-export chains — including
