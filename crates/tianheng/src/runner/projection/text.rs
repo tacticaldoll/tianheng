@@ -1,8 +1,9 @@
 use hunyi::{
     ASYNC_EXPOSURE_RULE, AsyncExposureBoundary, DYN_TRAIT_RULE, DynTraitBoundary,
     FORBIDDEN_MARKER_RULE, ForbiddenMarkerBoundary, IMPL_TRAIT_RULE, ImplTraitBoundary,
-    REEXPORT_ONLY_RULE, ReexportOnlyBoundary, SIGNATURE_RULE, SignatureBoundary, TRAIT_IMPL_RULE,
-    TraitImplBoundary, UNSAFE_CONFINEMENT_RULE, UnsafeBoundary, VisibilityBoundary,
+    REEXPORT_ONLY_RULE, ReexportOnlyBoundary, SIGNATURE_RULE, STATIC_ITEM_RULE, SignatureBoundary,
+    StaticBoundary, TRAIT_IMPL_RULE, TraitImplBoundary, UNSAFE_CONFINEMENT_RULE, UnsafeBoundary,
+    VisibilityBoundary,
 };
 use louke::{RuntimeBoundary, runtime_seam_rule_line};
 
@@ -257,6 +258,22 @@ pub(in crate::runner) fn unsafe_text(boundaries: &[UnsafeBoundary]) -> String {
                     UNSAFE_CONFINEMENT_RULE,
                     b.allowed_locations().join(", ")
                 ),
+                reason: b.reason(),
+                anchor: b.anchor(),
+            })
+            .collect::<Vec<_>>(),
+    )
+}
+/// The text projection of the static-item boundaries, whose scope is always the anchored subtree.
+pub(in crate::runner) fn static_item_text(boundaries: &[StaticBoundary]) -> String {
+    render_section(
+        "Static-item",
+        &boundaries
+            .iter()
+            .map(|b| ModuleBlockSpec {
+                severity: b.severity().as_str(),
+                target: format!("module {} in {}", b.module(), b.crate_package()),
+                rule_line: format!("{STATIC_ITEM_RULE} (including submodules)"),
                 reason: b.reason(),
                 anchor: b.anchor(),
             })

@@ -5,6 +5,7 @@ pub mod governance;
 pub mod marked;
 pub mod misplaced;
 pub mod shapes;
+pub mod stateful;
 
 /// A local architectural command whose implementations are confined by the catalog law.
 pub trait Command {}

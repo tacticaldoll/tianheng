@@ -76,6 +76,20 @@ fn uncovered_public_families_react_through_the_composed_evaluator() {
         ),
         (
             "semantic",
+            "must not declare static items",
+            "tianheng.fact/hunyi/static-item",
+            "static",
+            "the stateful module declares no static item or thread_local!",
+        ),
+        (
+            "semantic",
+            "must not declare static items",
+            "tianheng.fact/hunyi/static-item",
+            "thread_local",
+            "the stateful module declares no static item or thread_local!",
+        ),
+        (
+            "semantic",
             "must not expose async fn",
             "tianheng.fact/hunyi/async-exposure",
             "async-free-function",

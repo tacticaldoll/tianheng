@@ -62,6 +62,7 @@ mod exposure;
 mod forbidden_marker;
 mod impl_trait;
 mod reexport_only;
+mod static_item;
 mod trait_impl;
 mod unsafe_confinement;
 mod visibility;
@@ -72,6 +73,7 @@ pub use exposure::check;
 pub use forbidden_marker::check_forbidden_marker;
 pub use impl_trait::check_impl_trait;
 pub use reexport_only::check_reexport_only;
+pub use static_item::check_static_item;
 pub use trait_impl::check_trait_impl_locality;
 pub use unsafe_confinement::check_unsafe_confinement;
 pub use visibility::check_visibility;
@@ -103,6 +105,7 @@ use crate::exposure::check_boundary;
 use crate::forbidden_marker::check_forbidden_marker_boundary;
 use crate::impl_trait::check_impl_trait_boundary;
 use crate::reexport_only::check_reexport_only_boundary;
+use crate::static_item::check_static_boundary;
 use crate::trait_impl::check_trait_impl_boundary;
 use crate::unsafe_confinement::check_unsafe_boundary;
 use crate::visibility::check_visibility_boundary;
@@ -151,6 +154,8 @@ pub struct SemanticBoundaries {
     pub async_exposure: Vec<AsyncExposureBoundary>,
     /// Unsafe-confinement boundaries (`semantic-unsafe-confinement`).
     pub unsafe_confinement: Vec<UnsafeBoundary>,
+    /// Static-item boundaries (`semantic-static-item-boundary`).
+    pub static_item: Vec<StaticBoundary>,
 }
 
 /// One capability's boundaries, its `crate_package` accessor, and its `check_*_boundary`
@@ -248,6 +253,11 @@ impl SemanticBoundaries {
                 boundaries: &self.unsafe_confinement,
                 crate_package: UnsafeBoundary::crate_package,
                 check: check_unsafe_boundary,
+            }),
+            Box::new(Capability {
+                boundaries: &self.static_item,
+                crate_package: StaticBoundary::crate_package,
+                check: check_static_boundary,
             }),
         ]
     }

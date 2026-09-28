@@ -527,6 +527,26 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH
 
+- **The dyn-trait collector does not read an `extern` block's foreign items.**
+  *Class:* WATCH. *Observed pressure:* none — the shape compiles and nothing governs it, but no adopter has
+  needed it governed. *Observation source:* in `crates/hunyi/src/collect/`, `collect_item_dyn_exposures` has
+  no `Item::ForeignMod` arm, so a foreign `fn`'s signature is not read by it with or without a `safe` or
+  `unsafe` qualifier, where `collect_item_exposures` reads it through the shared foreign-item decoder.
+  Measured on rustc 1.96 and 1.85, edition 2024:
+
+  ```text
+  pub trait T {} unsafe extern "C" { pub fn a(x: &dyn T); }   → compiles
+  pub trait T {} unsafe extern "C" { pub fn b() -> impl T; }  → error[E0562]: `impl Trait` is not allowed in `extern fn` return types
+  unsafe extern "C" { pub async fn c(); }                     → error: functions in `extern` blocks cannot have `async` qualifier
+  ```
+
+  `collect_item_return_impl_traits` and `collect_item_async_exposures` have no `ForeignMod` arm either, and
+  there that is no gap: rustc does not allow either shape in an `extern` block, so there is nothing to observe.
+  *Current reaction or bound:* none for `dyn`. *Risk:* a `dyn` exposed only in an FFI signature passes a
+  dyn-trait boundary unobserved. *Promotion trigger:* an adopter exposing a `dyn` in an FFI signature who
+  needs it governed. *Version class:* minor, since it closes a false negative an adopter's baseline would have
+  to absorb. *Authority:* `semantic-dyn-trait-boundary`.
+
 - **Two fixture shapes in the test infrastructure are written more than once, and the shared form is new
   published surface.** *Class:* WATCH. *Observed pressure:* a static review of the window rooted at the
   `v0.6.1` snapshot found `crates/tianheng/tests/baseline_cli.rs`'s `Restore` re-implementing
@@ -3440,6 +3460,32 @@ consumer for an undemonstrated deduplication.
   acquisition sweep reads a `|| {` block past its opener: the block's first command must stop or assign the
   acquired name, so `x=$(tool) || { true; }` is refused. The twin the extraction surfaced — the region's
   token-start comment rule beside the lexer's exact one — is filed under WATCH above.
+
+- **A module can be declared to hold no `static` item or `thread_local!`, and nothing observed one.**
+  *Class:* BUILT / HISTORY. *Observed pressure:* one authority, zero current violations — the family adopter
+  kengen states in its own `AGENTS.md`, in the brick-contract axiom (an external repository, not reachable from this checkout), that its
+  brick contract crates hold "no filesystem, network, clock, or global state", and the global-state half is
+  held only by its review checklist; its seven contract crates declare no `static`. This converts a
+  review-only axiom into a machine check; it is **not** evidence that many modules need it. *Observation
+  source:* `syn::ItemStatic` (with `StaticMutability`), `syn::ForeignItemStatic`, `syn::ForeignItem::Verbatim`
+  for `safe`/`unsafe`-qualified foreign statics, and item- and statement-position macro invocations whose leaf
+  is `thread_local`; measured on rustc 1.96.0 and 1.85.1 over a probe carrying module, fn-body,
+  `thread_local!`, `extern`, `OnceLock` and edition-2024 `safe static` shapes. *Current reaction or bound:*
+  before it was built, none — `max_visibility(Module)`, `UnsafeBoundary::only_under`, `sans_io_pure` and
+  `must_not_call_inline("std::thread")` each exited 0 or reacted on something other than the declaration over
+  four private statics. *Risk:* bounded to adopters who declare it; the over-reactions it carries
+  (host-inactive `cfg`, a local macro named `thread_local`) are loud, and the one silent class is the
+  dimension's inherited macro-expansion bound. *Promotion trigger:* a maintainer decision to build it.
+  *Version class:* patch — `SemanticBoundaries` is `#[non_exhaustive]`, the rule key
+  `tianheng.rule/hunyi/static-item` is new, and no composed profile gains it. *Authority:* kengen's
+  `AGENTS.md` brick-contract axiom (external); the semantic capability-admission test in `PROJECT.md`;
+  `semantic-static-item-boundary`.
+
+  **Built 2026-09-28.** `StaticBoundary::in_crate(p).module(m).must_not_declare_static()` governs the whole
+  anchored subtree. A crate that renames `thread_local` is refused rather than followed through an alias
+  set, so the name gate stays one name. **Not built, with its trigger:** `.including_macros([...])` for
+  `lazy_static!`- or `once_cell`-shaped declarations; reopen when an adopter measures such a declaration it
+  must govern. The capability joins no composed profile, `sans_io_pure` included.
 
 - **BUILT / HISTORY:**
   - Opt-in gate flag `--disallow-stale` enforcing zero stale baseline entries in CI gate mode.

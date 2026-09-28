@@ -408,6 +408,7 @@ fn dispatch_list(constitution: &Constitution, parsed: &ParsedArgs) -> u8 {
             print!("{}", impl_trait_text(&semantic.impl_trait));
             print!("{}", async_exposure_text(&semantic.async_exposure));
             print!("{}", unsafe_text(&semantic.unsafe_confinement));
+            print!("{}", static_item_text(&semantic.static_item));
             print!("{}", runtime_text(runtime));
         }
         Format::Sarif => {

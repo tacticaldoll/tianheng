@@ -5,7 +5,8 @@ focused examples small by collecting the published boundary families that otherw
 adopter-shaped reaction owner.
 
 The crate is deliberately red: its dependency-source declaration, external import placement, trait
-impl, marker impl, `dyn Trait` API, and `impl Trait` API each violate the Constitution in
+impl, marker impl, `dyn Trait` API, `impl Trait` API, and module-held `static` and `thread_local!`
+each violate the Constitution in
 `src/governance.rs`. Tests identify those reactions by structured identity rather than human
 wording. Start with the standalone or composed examples when learning Tianheng.
 

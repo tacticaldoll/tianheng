@@ -26,6 +26,7 @@ pub(in crate::runner) fn list_markdown(document: &Value) -> String {
             "unsafe_confinement_boundaries",
             "Unsafe-confinement boundaries",
         ),
+        ("static_item_boundaries", "Static-item boundaries"),
         ("runtime_boundaries", "Runtime boundaries"),
     ] {
         let Some(Value::Array(items)) = document.get(key) else {

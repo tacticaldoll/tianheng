@@ -360,5 +360,98 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "a_pub_in_narrow_path_over_reacts_under_a_module_ceiling",
         ),
+        BoundDecl::pinned(
+            BoundId::new("semantic-static-item-boundary/a-macro-generated-static-is-a-documented-bound"),
+            "a `static` appearing only in a macro's expansion — a `macro_rules!` that declares one, a \
+             `lazy_static!`-shaped invocation, or a `thread_local!` wrapped in another macro",
+            Extent::OutOfReach {
+                because: "macros other than `thread_local!` are not expanded, so the declaration never \
+                          enters the observed AST".into(),
+            },
+            "a_macro_generated_static_is_a_documented_bound",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "semantic-static-item-boundary/a-local-macro-sharing-the-thread-local-name-over-reacts-a-stated-bound",
+            ),
+            "a local `macro_rules! thread_local` invoked in the governed subtree",
+            Extent::Reached(Reached::OverReacts {
+                because: "`thread_local!` is recognized by its name, so a local macro of that name is read \
+                          as the std one and the statics its body spells react".into(),
+            }),
+            "a_local_thread_local_macro_over_reacts_is_a_bound",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "semantic-static-item-boundary/cfg-gated-statics-are-observed-as-written-a-stated-bound",
+            ),
+            "a `static` whose `#[cfg]` predicate is false on the host, such as `#[cfg(test)]`",
+            Extent::Reached(Reached::OverReacts {
+                because: "the AST reader observes the declaration as written without evaluating cfg, so a \
+                          host-inactive static reacts".into(),
+            }),
+            "static_cfg_is_observed_as_written",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "semantic-static-item-boundary/an-interior-mutable-const-is-not-a-static-a-stated-bound",
+            ),
+            "a `const` whose type has interior mutability, such as `const C: Cell<u8>`",
+            Extent::Reached(Reached::NotAViolation {
+                because: "a `const` is a value inlined at each use, never one shared location, so it declares \
+                          no state for the module to hold".into(),
+            }),
+            "an_interior_mutable_const_is_not_a_static",
+        ),
+        BoundDecl::pinned_by_many(
+            BoundId::new(
+                "semantic-static-item-boundary/same-named-statics-under-one-owner-share-one-identity-a-stated-bound",
+            ),
+            "two statics of one name under one owner: in two nested blocks of one fn, in two `const _` \
+             initializers, or in two closures of one fn",
+            Extent::Reached(Reached::AsIntended {
+                bounded: FactGranularity::Identity,
+                because: "identity is kind, declaring module, name and the chain of named value items, never \
+                          scan position, and a block, a `const _` or a closure adds no name to the chain".into(),
+            }),
+            "nested_block_statics_share_one_identity",
+            [
+                "anonymous_const_statics_share_one_identity",
+                "closure_statics_share_one_identity",
+            ],
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "semantic-static-item-boundary/a-thread-local-body-that-is-not-static-declarations-refuses-to-judge-a-stated-bound",
+            ),
+            "a `thread_local!` whose body does not parse as `static` declarations",
+            Extent::Reached(Reached::RefusesToJudge {
+                because: "the statics it declares cannot be named, and passing it would be a silent pass over \
+                          a declaration".into(),
+            }),
+            "an_unparseable_thread_local_body_refuses_to_judge",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "semantic-static-item-boundary/a-foreign-crate-rename-of-thread-local-is-a-documented-bound",
+            ),
+            "a `thread_local!` invoked under a name another crate re-exported it as",
+            Extent::OutOfReach {
+                because: "another crate's source is not parsed, so its rename is never seen and the renamed \
+                          invocation is not recognized by name".into(),
+            },
+            "a_foreign_crate_rename_of_thread_local_is_a_documented_bound",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "semantic-static-item-boundary/a-crate-renaming-thread-local-refuses-to-judge-a-stated-bound",
+            ),
+            "`use std::thread_local as tls;` anywhere in the governed crate, a function body included",
+            Extent::Reached(Reached::RefusesToJudge {
+                because: "a `thread_local!` is recognized by its name, so an invocation under the new name \
+                          would escape it; the boundary asks for the macro to be written by its name".into(),
+            }),
+            "a_renamed_thread_local_refuses_to_judge",
+        ),
     ]
 }

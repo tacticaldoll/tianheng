@@ -86,7 +86,8 @@ fn anchor_fixture(name: &str) -> (Value, TempSrcTree) {
                  pub struct K;\n\
                  impl crate::other::Tr for K {}\n\
                  impl crate::other::Marker for K {}\n\
-                 pub fn u() { unsafe {} }\n",
+                 pub fn u() { unsafe {} }\n\
+                 static STATE: u8 = 0;\n",
             ),
             (
                 "other.rs",
@@ -152,6 +153,13 @@ fn anchored_capabilities() -> Vec<(&'static str, Checker)> {
                 .must_not_acquire("crate::other::Marker")
                 .because("r");
             check_forbidden_marker_boundary(m, &b, v)
+        }),
+        ("static-item", |m, a, v| {
+            let b = StaticBoundary::in_crate("x")
+                .module(a)
+                .must_not_declare_static()
+                .because("r");
+            crate::static_item::check_static_boundary(m, &b, v)
         }),
         ("unsafe only_under", |m, a, v| {
             let b = UnsafeBoundary::in_crate("x").only_under([a]).because("r");

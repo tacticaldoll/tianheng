@@ -11,6 +11,7 @@ mod module_anchor;
 mod reexport_only;
 mod resolver_fidelity;
 mod signature;
+mod static_item;
 mod trait_impl;
 mod unsafe_confinement;
 mod visibility;
