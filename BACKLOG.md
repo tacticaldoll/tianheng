@@ -928,6 +928,99 @@ consumer for an undemonstrated deduplication.
   design step past the repair that surfaced the twin. *Version class:* patch; `kanhe` is `publish = false`.
   *Authority:* `AGENTS.md`'s *An extraction's corpus is the pair of modules*.
 
+- **A facade crate's public surface equal to its contract crate's, leaf for leaf, has no observation source.**
+  *Class:* WATCH, deferred because it cannot be observed. *Observed pressure:* several family facade crates
+  declare their surface as glob re-exports of a contract crate, measured on `v0.7.0` by the family capability
+  sweep; none has asked for the equality to be governed. *Observation source:* none that reaches the leaves.
+  A facade written as `pub use contract::*;` re-exports every public item of `contract` by construction, so
+  rustc already holds the equality for a single-glob facade, and a `ReexportOnlyBoundary` already refuses a
+  direct item standing beside the glob. What is left is a set comparison between the facade's leaves
+  and the contract's, and 渾儀 does not enumerate a glob's leaves. *Current reaction or bound:* the two
+  declared bounds `semantic-reexport-exposure/a-sibling-root-glob-is-a-documented-bound` and
+  `semantic-reexport-exposure/a-non-forbidden-root-external-glob-is-a-documented-bound`, each stating that a
+  glob's leaves are not observed rather than claimed clean. *Risk:* a facade assembled from several globs, or
+  from globs and explicit lists, can drop or add a leaf without any reaction; the single-glob facade cannot.
+  *Promotion trigger:* an observation source that enumerates a glob's leaves — the same one either bound
+  above would retire on. *Version class:* patch, as an opt-in rule. *Authority:*
+  `semantic-reexport-exposure`, `semantic-visibility-boundary`.
+
+- **A re-export-only facade restricted by shape to a single `pub use c::*` has not been shown feasible.**
+  *Class:* WATCH, deferred because its feasibility is unconfirmed. *Observed pressure:* the same sweep, which
+  evaluated a modifier on `ReexportOnlyBoundary` requiring every direct item to be one glob re-export of a
+  named crate; no adopter has found `ReexportOnlyBoundary` insufficient. *Observation source:* the governed
+  module's direct `use` items, which `ReexportOnlyBoundary` already reads regardless of visibility or use-tree
+  form. What is unconfirmed is whether the named crate can be matched from the written path alone: a crate-root
+  `extern crate` rename, a leading `::`, and a grouped `pub use c::{*}` each spell the same glob differently.
+  *Current reaction or bound:* `ReexportOnlyBoundary` refuses every non-`use` direct item and reads nothing
+  inside a `use`. *Risk:* a facade meant to be one glob can gain an explicit or renamed re-export with no
+  reaction. *Promotion trigger:* an adopter needing its facade restricted to a single glob re-export, and
+  `ReexportOnlyBoundary` failing to express it. *Version class:* patch, as an opt-in modifier. *Authority:*
+  `semantic-visibility-boundary`'s re-export-only requirement.
+
+- **A generic or `where` bound pairing a `Future` principal with an auto trait is outside the auto-trait
+  bound rules.** *Class:* WATCH. *Observed pressure:* a family adopter's async registry, in pacta (an external
+  repository), carries the shape `F: Future<Output = ()> + Send`, measured on `v0.7.0` by the family
+  capability sweep; nobody has asked for it governed. *Observation source:* the generic parameters and `where`
+  clauses of a public item, which the shape-only dyn-trait boundary already reads for `dyn` nodes. *Current
+  reaction or bound:* the requirements behind `must_not_expose_impl_trait_bounded_by` and
+  `must_not_expose_dyn_bounded_by` each state that generic type parameters and `where` clauses are outside
+  the claim, so the shape is excluded by declaration rather than missed. *Risk:* a module forbidden to expose a
+  `Send` future through a returned `impl Future` can still require one through a bound on a caller's type,
+  which is the same commitment spelled as a constraint. *Promotion trigger:* an adopter asking for that bound
+  governed. *Version class:* minor if the existing rules widen, since new depth that reacts by default leaves
+  a baseline behind; patch as a separate opt-in rule. *Authority:* `semantic-impl-trait-operand-boundary`,
+  `semantic-dyn-trait-operand-boundary`.
+
+- **A module declared under `#[cfg(test)]` is not observed as gated.** *Class:* WATCH, low value.
+  *Observed pressure:* the family capability sweep on `v0.7.0` evaluated a rule that test scaffolding is
+  never public API. It found the main case already held by rustc: an item inside a private
+  `#[cfg(test)] mod tests` is private whatever it declares, and nothing under `#[cfg(test)]` is compiled into
+  the build an adopter consumes. *Observation source:* the module declaration's own attributes, which 渾儀
+  reads as written. *Current reaction or bound:* `semantic-visibility-boundary/cfg-gated-items-are-observed-as-written-a-stated-bound`
+  — a visibility boundary reacts to a gated item as if it were compiled, so a `pub` scaffold under
+  `#[cfg(test)]` over-reports rather than passes. *Risk:* over-inclusion only: an adopter cannot tell a gated
+  `pub` scaffold from an ungated one, and an ungated `pub` scaffold is already refused by a visibility ceiling
+  on its module. *Why WATCH rather than DECLINED:* the distinction is real and not refuted, only unpressured,
+  and the reaction it would add is not one an existing rule already enforces. *Promotion trigger:* an adopter
+  baselining a gated scaffold's finding because the ceiling cannot say that gated is fine. *Version class:*
+  patch, as an opt-in rule. *Authority:* `semantic-visibility-boundary`.
+
+- **Whether a `pub` item is public API — its effective visibility — is not observed.** *Class:* WATCH,
+  deferred because its feasibility is unconfirmed. *Observed pressure:* the same `v0.7.0` sweep, as the
+  general form of the scaffolding rule above; no adopter has asked for it. *Observation source:* none yet.
+  An item is reachable by a consumer only through a chain of public modules from the crate root or through a
+  re-export, so the reaction needs the crate's whole module reachability and the closure of its re-exports,
+  globs included — and a glob's leaves are the bound the facade-equality entry above already records.
+  *Current reaction or bound:* visibility boundaries judge the written `pub`, cfg included as written.
+  *Risk:* a `pub` item that no consumer can reach reacts as if exposed, and one re-exported from a private
+  module is judged at its declaration rather than where it surfaces. *Promotion trigger:* an observation
+  source for the re-export closure, and an adopter whose boundary the written visibility cannot express.
+  *Version class:* minor if an existing visibility rule changes what it reacts to, since its baselines stop
+  describing the tree; patch as a new rule. *Authority:* `semantic-visibility-boundary`,
+  `semantic-reexport-exposure`.
+
+- **The `list` projection prints an operand as written, while a finding carries its canonical target.**
+  *Class:* WATCH. *Observed pressure:* an anchor written `crate::r#kernel` is projected by `list` as
+  `crate::r#kernel`, while the findings it produces carry the target `crate::kernel`; a misspelled anchor
+  lists normally, exit 0, and is refused only by `check`, exit 2. Both halves were observed when the
+  canonical-anchor rule landed, in the squash "fix(hunyi)!: anchor module boundaries to one canonical,
+  existing module", and the guibiao module-path squash "fix(guibiao)!: accept a module path only in its
+  canonical spelling, naming a module that exists" behaves the same. Before the hunyi squash a 渾儀 finding's
+  target was the anchor as written, so `list` and `check` agreed there; a 圭表 module target already folded
+  `r#`, so for 圭表 the disagreement already held at `v0.7.1`. Re-measured 2026-09-28 through `tianheng::prelude`,
+  with a `StaticBoundary` over a crate whose `kernel` module declares one `static`: `list --format json`
+  printed `"target": "crate::r#kernel"`, `check --format json` printed `"target": "crate::kernel"`, and the
+  anchor `crate::kernle` listed with exit 0 and checked with exit 2. No adopter or agent has misread a
+  boundary because of it. *Observation source:* the `list` projection and a `check` finding for the same
+  boundary. *Current reaction or bound:* `list` observes nothing and reads no
+  workspace by requirement, so whether an operand names something that exists is undecidable there by
+  construction; the canonical spelling, which is textual, is not. *Risk:* an agent reading the law from
+  `list` keys on a spelling that no finding carries, and can take an operand `check` will refuse as accepted
+  law. *Promotion trigger:* an adopter or agent misreading a boundary because its `list` spelling and its
+  finding target disagree. *Version class:* minor if the JSON projection's target string changes, since that
+  is an emitted document; patch if the canonical form is added beside the written one. *Authority:*
+  `constitution-projection`.
+
 ### READY-PATCH
 
 - **The ambient-ignore guard reads files where its property belongs to call sites, and says something false
@@ -3436,6 +3529,17 @@ consumer for an undemonstrated deduplication.
     un-auditable probes into one finding" (0.4.0 sweep, `crates/louke/src/audit/scan/lexer.rs`).
     Mechanics reproduce at the byte-scanner level, but the trigger is not reachable from
     compilable adopter input — refuted on the reproduction lens.
+  - A reaction requiring a type to implement named traits — *Retainer derives `Eq` and `Hash`* — evaluated
+    on `v0.7.0` by the family capability sweep. *Observed pressure:* one adopter-stated requirement.
+    *Observation source:* the type's derive list, read by `hunyi`'s `extract_derives`. *Current reaction or
+    bound:* rustc, through a `const` assertion calling a function bounded by the traits on the type, which
+    holds the requirement exactly. *Risk of building it:* a strictly weaker copy of that assertion.
+    `extract_derives` reads a `cfg_attr` derive without evaluating its predicate, so a derive gated off would
+    be reported present, and a blanket impl, a macro-generated impl or a hand-written impl elsewhere is not
+    a derive, so a trait the type does implement would be reported missing. *Reopening:* a requirement over
+    a set of types the adopter cannot enumerate in a `const` assertion, such as every public type a module
+    declares. *Version class:* patch, as an opt-in rule. *Authority:* `AGENTS.md`'s *Drift law &
+    minimalism*.
 - **Three wrapper readers still join lines by `gate_identity::logical_lines`, which reads no quotes.**
   *Class:* BUILT / HISTORY. *Observed pressure:* the acquisition sweep and the gate-call reader in
   `gate_exit_classes` search joined statements for tokens; `kanhe::gate_identity::citations` also reads each
