@@ -69,7 +69,30 @@ impl RootProbe {
     fn dir(&self) -> &Path {
         &self.dir
     }
+
+    /// Declare a path dependency keyed `key`, written beneath the probe with `lib_rs` as its library, so a
+    /// fixture importing a crate names one that exists.
+    fn with_path_dependency(self, key: &str, lib_rs: &str) -> Self {
+        let crate_dir = self.dir.join(key);
+        std::fs::create_dir_all(crate_dir.join("src")).expect("create dependency dir");
+        std::fs::write(
+            crate_dir.join("Cargo.toml"),
+            format!("[package]\nname = \"{key}\"\nversion = \"0.1.0\"\nedition = \"2021\"\n"),
+        )
+        .expect("write dependency manifest");
+        std::fs::write(crate_dir.join("src/lib.rs"), lib_rs).expect("write dependency source");
+        let manifest = std::fs::read_to_string(&self.manifest).expect("read Cargo.toml");
+        std::fs::write(
+            &self.manifest,
+            format!("{manifest}\n[dependencies.{key}]\npath = \"{key}\"\n"),
+        )
+        .expect("write Cargo.toml");
+        self
+    }
 }
+
+/// The crate the external-confinement fixtures confine: a unit struct `B` and a function `helper`.
+const BRICK: &str = "pub struct B;\npub fn helper() {}\n";
 
 impl Drop for RootProbe {
     fn drop(&mut self) {
@@ -340,7 +363,8 @@ fn a_confined_import_in_a_root_without_the_permitted_module_reacts() {
                 "use brick::B;\nfn main() {\n    let _ = B;\n}\n",
             ),
         ],
-    );
+    )
+    .with_path_dependency("brick", BRICK);
 
     let outcome = check(&confined_to_seam("confinebin"), probe.manifest());
     let Outcome::Violations(report) = &outcome else {
@@ -392,7 +416,7 @@ fn an_inline_target_in_one_root_is_refused_even_when_another_root_backs_it_with_
             ("library", INLINE_IN_THE_LIBRARY),
         ] {
             let package = format!("{package}{side}");
-            let probe = RootProbe::new(&package, "", files);
+            let probe = RootProbe::new(&package, "", files).with_path_dependency("brick", BRICK);
             match check(&law(&package), probe.manifest()) {
                 Outcome::ConstitutionError(message) => {
                     assert!(
@@ -478,7 +502,8 @@ fn an_inline_target_refusal_names_its_root_and_a_path_rustc_resolves() {
         ),
     ] {
         let package = format!("inlinerefusal{package_suffix}");
-        let probe = RootProbe::new(&package, manifest_extra, files);
+        let probe =
+            RootProbe::new(&package, manifest_extra, files).with_path_dependency("brick", BRICK);
         match check(&confined_to(&package, target_module), probe.manifest()) {
             Outcome::ConstitutionError(message) => {
                 assert!(
@@ -521,7 +546,8 @@ fn a_package_whose_targets_compile_no_root_is_refused() {
             ("src/lib.rs", "pub mod seam;\nuse brick::B;\n"),
             ("src/seam.rs", "\n"),
         ],
-    );
+    )
+    .with_path_dependency("brick", BRICK);
     match check(&confined_to_seam("noncompiled"), probe.manifest()) {
         Outcome::ConstitutionError(message) => assert!(
             message.contains("has none: no target Cargo reports for it is a library or a binary"),
@@ -553,7 +579,7 @@ fn an_example_root_is_not_governed() {
 }
 
 fn confinement_report(package: &str, manifest_extra: &str, files: &[(&str, &str)]) -> Outcome {
-    let probe = RootProbe::new(package, manifest_extra, files);
+    let probe = RootProbe::new(package, manifest_extra, files).with_path_dependency("brick", BRICK);
     check(&confined_to_seam(package), probe.manifest())
 }
 
@@ -655,7 +681,8 @@ fn a_warn_confinement_reports_a_binary_root_import_without_failing() {
             ("src/seam.rs", "\n"),
             ("src/main.rs", "use brick::B;\nfn main() {}\n"),
         ],
-    );
+    )
+    .with_path_dependency("brick", BRICK);
     let law = Constitution::new("root-scope").boundary(
         ModuleBoundary::in_crate("confinewarn")
             .module("crate::seam")
@@ -683,7 +710,8 @@ fn a_baselined_binary_root_finding_does_not_mask_a_new_root() {
             ("src/seam.rs", "\n"),
             ("src/main.rs", "use brick::B;\nfn main() {}\n"),
         ],
-    );
+    )
+    .with_path_dependency("brick", BRICK);
     let law = confined_to_seam("confinebase");
     let Outcome::Violations(accepted) = check(&law, probe.manifest()) else {
         panic!("the binary root's import must react before it can be baselined");
@@ -719,7 +747,7 @@ fn a_baselined_binary_root_finding_does_not_mask_a_new_root() {
 #[test]
 fn a_root_without_the_permitted_module_stays_clean_without_a_confined_import() {
     for (package, main, extra) in [
-        ("cleanother", "use other::X;\nfn main() {}\n", None),
+        ("cleanother", "use std::fmt::Write;\nfn main() {}\n", None),
         (
             "cleanownlib",
             "use cleanownlib::seam::B;\nfn main() {}\n",
@@ -783,7 +811,8 @@ fn a_root_declaring_a_remapped_permitted_module_is_clean_by_module_path() {
             ("src/bin_seam.rs", "use brick::B;\n"),
             ("src/cli.rs", "use brick::B;\n"),
         ],
-    );
+    )
+    .with_path_dependency("brick", BRICK);
     let outcome = check(&confined_to_seam("confineremapped"), probe.manifest());
     let Outcome::Violations(report) = outcome else {
         panic!("the remapped seam is permitted but cli must react: {outcome:?}");
@@ -839,7 +868,8 @@ fn an_unreadable_file_in_a_root_without_the_permitted_module_is_refused() {
             ("src/main.rs", "mod cli;\nfn main() {}\n"),
             ("src/cli.rs", "use brick::B;\n"),
         ],
-    );
+    )
+    .with_path_dependency("brick", BRICK);
     let cli = probe.dir.join("src/cli.rs");
     let Some(_unreadable) = xingbiao::Unreadable::try_new(&cli) else {
         return;
@@ -1571,7 +1601,8 @@ fn a_nested_inline_glob_resolves_to_its_true_ancestor() {
     assert_eq!(violations[0].finding, "glob super::super in crate::agent");
 }
 
-/// File-module `self`/`super` globs retain their existing file-module resolution contract.
+/// File-module `self`/`super` globs retain their existing file-module resolution contract. The `self` glob names
+/// a child, since `use self::*;` cannot glob-import a module into itself (E0432).
 #[test]
 fn file_module_self_and_super_globs_keep_their_resolution() {
     let probe = RootProbe::new(
@@ -1582,7 +1613,7 @@ fn file_module_self_and_super_globs_keep_their_resolution() {
             ("src/exec.rs", "pub fn run() {}\n"),
             (
                 "src/agent.rs",
-                "type Spawner = std::process::Command;\nuse self::*;\nuse super::*;\npub fn act() {}\n",
+                "type Spawner = std::process::Command;\nmod tools {\n    pub type Spawner = std::process::Command;\n}\nuse self::tools::*;\nuse super::*;\npub fn act() {}\n",
             ),
         ],
     );
@@ -1593,7 +1624,7 @@ fn file_module_self_and_super_globs_keep_their_resolution() {
     assert!(
         violations
             .iter()
-            .any(|v| v.finding == "glob self in crate::agent")
+            .any(|v| v.finding == "glob self::tools in crate::agent")
     );
     assert!(
         violations
@@ -2218,6 +2249,9 @@ fn inline_qualified_path_is_the_type_directed_bound() {
 /// E1, E2, E4, E5: two globs that can each bring `X` into scope — used or not, cfg-exclusive, or one item reached
 /// twice — react through the glob hazard, naming each glob that reaches the prefix. Where `X::f()` is called, the
 /// globs are also followed to the modules they name, so the call reports under each candidate the prefix reaches.
+///
+/// E1 is deliberately source rustc rejects — `X::f()` through two globs of `X` is `error[E0659]: `X` is ambiguous`
+/// — kept because the scanner reads the glob hazard and both candidates before any compiler would stop it.
 #[test]
 fn a_glob_that_can_bring_the_prefix_reacts_however_the_name_is_used() {
     let two_globs = "use crate::a::*;\nuse crate::b::*;\npub fn g() { let _ = X::f(); }\n";
