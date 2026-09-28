@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**60 of 125 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**60 of 126 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -180,7 +180,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `an_interior_mutable_const_is_not_a_static`
 
-## out of reach (30)
+## out of reach (31)
 
 ### `external-crate-confinement/a-confined-crate-use-inside-a-string-or-macro-body-is-not-observed-a-stated-bound`
 
@@ -189,6 +189,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: comments, string literals and macro bodies are stripped before scanning
 - **its defence must show**: does not react
 - **pinned by**: `confine_ignores_a_use_inside_a_string_literal`
+
+### `inline-symbol-path-confinement/a-prefix-segment-past-what-guibiao-reads-is-not-verified-a-stated-bound`
+
+> an inline-call prefix misspelled after a sysroot or dependency head, or after an item of the crate
+
+- **because**: a sysroot crate's or a dependency's contents are another crate's source, and associated items are not collected, so what those segments name is never compared with anything
+- **its defence must show**: does not react
+- **pinned by**: `a_prefix_past_what_guibiao_reads_is_not_verified`
 
 ### `inline-symbol-path-confinement/a-receiver-method-read-is-a-documented-bound`
 

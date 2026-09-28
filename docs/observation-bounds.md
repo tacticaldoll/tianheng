@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**27 of 125 declared bounds have no pinning test.** That figure is the register's
+**27 of 126 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -120,6 +120,12 @@ fallback used where no manifest exists, which the register spec describes.
 > the system does not claim to observe the call through the `chr` alias head (the use-map reads `use` only; the `extern crate … as` rename is a stated bound even under strict-external), never a silent assertion of cleanliness
 
 - **pinned by**: `inline_strict_external_extern_crate_rename_is_a_stated_bound`
+
+### `inline-symbol-path-confinement/a-prefix-segment-past-what-guibiao-reads-is-not-verified-a-stated-bound`
+
+> the system accepts the prefix and reports no violation: a sysroot crate's or a dependency's contents are another crate's source, and associated items are not collected, so a misspelling there matches nothing and is not refused
+
+- **pinned by**: `a_prefix_past_what_guibiao_reads_is_not_verified`
 
 ### `inline-symbol-path-confinement/the-fully-qualified-external-call-is-a-stated-bound-under-the-default`
 

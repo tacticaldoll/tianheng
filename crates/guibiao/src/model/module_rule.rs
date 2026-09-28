@@ -574,6 +574,12 @@ impl ModuleTargetDraft {
     /// aliases, fragment/proc-macro construction, external-crate re-exports, value-position
     /// captures under the default, and the inherited file-scope scanner bounds) are declared
     /// non-observations, never silent passes.
+    ///
+    /// The prefix of this and of [`confine_inline_call`](Self::confine_inline_call) is written as
+    /// `::`-separated identifiers (`r#x` is read as `x`) starting at `crate`, `std`, `core`, `alloc`, or
+    /// a dependency's local name, and a `crate::` prefix must name a module some compiled root declares
+    /// or an item one defines. Anything else is a constitution error suggesting the spelling to write.
+    /// Segments past a sysroot or dependency head, or past an item of the crate, are not verified.
     pub fn must_not_call_inline(self, prefix: &str) -> InlineConfinementDraft {
         InlineConfinementDraft {
             crate_package: self.crate_package,

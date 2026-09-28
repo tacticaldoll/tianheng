@@ -64,3 +64,7 @@ anonymous_const_statics_share_one_identity	crates/hunyi/src/scan/static_sites.rs
 closure_statics_share_one_identity	crates/hunyi/src/scan/static_sites.rs	            owner: owner.join("::"),	            owner: format!("{}{}", owner.join("::"), self.sites.len()),
 an_unparseable_thread_local_body_refuses_to_judge	crates/hunyi/src/scan/static_sites.rs	                let error = thread_local_body_error(self.module, self.file, &error.to_string());\n                self.fail(error);\n	                let _ = error;\n
 a_renamed_thread_local_refuses_to_judge	crates/hunyi/src/scan/static_sites.rs	                    self.rename = Some(renamed);	                    let _ = renamed;
+# The inline-call prefix bound is out of reach and carries none, for the reason the static-item bounds'
+# out-of-reach pair does: no single-point engine change makes the engine read another crate's contents or
+# collect a type's associated items, and a perturbation that refused the unread segments instead would
+# be a new rule rather than the bound read differently.

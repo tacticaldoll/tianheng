@@ -217,6 +217,59 @@ pub(crate) fn inline_empty_prefix_error(crate_package: &str, rule: &str) -> Stri
     )
 }
 
+/// An inline confinement (`must_not_call_inline` or `confine_inline_call`, named by `rule`) declares a
+/// prefix in a spelling other than `::`-separated identifiers. `suggestion` is the spelling it most
+/// plausibly meant, when there is one.
+pub(crate) fn non_canonical_inline_prefix_error(
+    written: &str,
+    crate_package: &str,
+    rule: &str,
+    suggestion: Option<&str>,
+) -> String {
+    let repair = match suggestion {
+        Some(spelling) => format!("write `{spelling}`"),
+        None => "write the path from `crate`, `std`, `core`, `alloc` or a dependency".to_string(),
+    };
+    format!(
+        "a prefix is compared segment by segment, so it has one spelling: `{rule}` in crate \
+         '{crate_package}' names '{written}', which is not `::`-separated identifiers rooted at a crate — {repair}"
+    )
+}
+
+/// An inline confinement (`must_not_call_inline` or `confine_inline_call`, named by `rule`) declares a
+/// prefix whose first segment is neither `crate`, a sysroot crate, nor a dependency the crate declares.
+/// `suggestion` is the path rooted at `crate` when that names something the crate declares.
+pub(crate) fn unknown_inline_prefix_head_error(
+    written: &str,
+    crate_package: &str,
+    rule: &str,
+    suggestion: Option<&str>,
+) -> String {
+    let repair = match suggestion {
+        Some(spelling) => format!("write `{spelling}`"),
+        None => "write the path from `crate`, `std`, `core`, `alloc` or a dependency".to_string(),
+    };
+    format!(
+        "a prefix must start where a call's path can, or the rule silently never reacts: `{rule}` in \
+         crate '{crate_package}' names '{written}', whose first segment is not `crate`, `std`, \
+         `core`, `alloc`, or a dependency the crate declares — {repair}"
+    )
+}
+
+/// An inline confinement (`must_not_call_inline` or `confine_inline_call`, named by `rule`) declares a
+/// `crate::` prefix naming neither a module some compiled root declares nor an item one defines.
+pub(crate) fn unknown_inline_prefix_error(
+    written: &str,
+    crate_package: &str,
+    rule: &str,
+) -> String {
+    format!(
+        "a prefix must name something or the rule silently never reacts: `{rule}` names \
+         '{written}', which is neither a reachable module of crate '{crate_package}' (declared via \
+         `mod`) nor an item one defines — check the path"
+    )
+}
+
 /// An inline confinement (`must_not_call_inline` or `confine_inline_call`, named by `rule`) declares
 /// `.ending_with([])` with an empty verb set, which would narrow the reaction to nothing — a silent no-op, resolved
 /// loudly (exit 2).

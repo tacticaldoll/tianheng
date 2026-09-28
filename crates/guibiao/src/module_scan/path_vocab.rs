@@ -83,6 +83,38 @@ pub(crate) fn canonical_module_spelling(written: &str) -> Result<String, Option<
     Err(is_canonical_spelling(&candidate).then_some(candidate))
 }
 
+/// Whether `written` is `::`-separated identifiers not starting at `self` or `super`.
+fn is_symbol_path_spelling(written: &str) -> bool {
+    let mut segments = written.split("::");
+    segments
+        .next()
+        .is_some_and(|head| is_identifier(head) && !matches!(head, "self" | "super"))
+        && segments.all(is_identifier)
+}
+
+/// The canonical spelling of a written symbol path, or the spelling it most plausibly meant.
+///
+/// A symbol path — an inline-call prefix — is compared with resolved paths segment by segment, so it
+/// has one accepted spelling: `::`-separated identifiers, each read by the [`is_identifier`] a module
+/// path is read by, not starting at `self` or `super`, which are relative to a module a declaration
+/// does not have. Which first segments name something is the caller's question, since it needs what
+/// the crate declares. `r#x` and `x` are one identifier, so the accepted form carries no raw prefix.
+/// Every other spelling is refused, and the refusal carries the written path's non-empty, trimmed
+/// segments, raw prefixes removed, as the suggestion — or `None` when that is no accepted spelling
+/// either.
+pub(crate) fn canonical_symbol_path_spelling(written: &str) -> Result<String, Option<String>> {
+    if is_symbol_path_spelling(written) {
+        return Ok(canonical_module_path(written));
+    }
+    let candidate = written
+        .split("::")
+        .map(|segment| canonical_segment(segment.trim()))
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>()
+        .join("::");
+    Err(is_symbol_path_spelling(&candidate).then_some(candidate))
+}
+
 /// Fold a Cargo package name to its Rust import identifier: `-` → `_` (`windows-sys` →
 /// `windows_sys`). Cargo maps a hyphenated package name to an underscore identifier in source, and
 /// a `use` path can never contain `-`, so every site matching a declared package name against an

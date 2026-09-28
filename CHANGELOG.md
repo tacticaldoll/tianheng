@@ -130,6 +130,10 @@ them.
   repaired `must_not_import` or `must_not_be_imported_by` now reports, and regenerate a baseline entry recorded
   under an allowlist that named no module.
 
+- Write every `must_not_call_inline` and `confine_inline_call` prefix as `::`-separated identifiers from `crate`,
+  `std`, `core`, `alloc` or a dependency's local name, and make a `crate::` prefix name a module or item the crate
+  declares. Address or baseline what a repaired prefix now reports.
+
 ### Static
 
 - **BREAKING** — **圭表 resolves `self` and `super` from their inline module for glob imports and ordinary
@@ -160,7 +164,24 @@ them.
 
   `crate::r#kernel` and `crate::kernel` remain one module and one identity. The inline-call prefix of
   `must_not_call_inline` and `confine_inline_call`, and the crate name of `confine_external_crate`, are not
-  module paths of the crate and are unchanged.
+  module paths of the crate and are not held to this rule; the prefix is held to its own, in the next entry.
+
+- **BREAKING** — **圭表 accepts an inline-call prefix only in its canonical spelling, naming something that
+  exists.** The prefix of `must_not_call_inline` and `confine_inline_call` was compared with resolved call paths
+  as written and never checked, so over a `crate::core` that calls `crate::clock::now()`, `crate::clcok`,
+  `clock` and `crate::clock::` each exited 0 with the call unobserved. Each is now a constitution error
+  (exit 2) quoting the prefix, and suggesting a spelling where one is determined. Three rules apply, through one
+  implementation both builders share:
+  - **Spelling.** `::`-separated identifiers, not starting at `self` or `super`; `r#x` is `x`. An empty
+    segment, a leading or trailing `::`, or whitespace is exit 2, suggesting the trimmed segments.
+  - **First segment.** `crate`, `std`, `core`, `alloc`, or a dependency the package declares, under the local
+    name a rename gives it. Any other is exit 2, suggesting the path rooted at `crate` when that names something.
+  - **Existence.** A `crate::` prefix must name a module some compiled root declares, or an item one defines.
+
+  What a prefix names past a sysroot or dependency head, or past an item of the crate, is not read, so
+  `std::tiem` is accepted and matches nothing — declared as the bound
+  `inline-symbol-path-confinement/a-prefix-segment-past-what-guibiao-reads-is-not-verified-a-stated-bound`.
+  A blank prefix keeps its own refusal.
 
 ## [0.7.1] - 2026-09-27
 

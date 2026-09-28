@@ -130,6 +130,18 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
+                "inline-symbol-path-confinement/a-prefix-segment-past-what-guibiao-reads-is-not-verified-a-stated-bound",
+            ),
+            "an inline-call prefix misspelled after a sysroot or dependency head, or after an item of the crate",
+            Extent::OutOfReach {
+                because: "a sysroot crate's or a dependency's contents are another crate's source, and associated \
+                          items are not collected, so what those segments name is never compared with anything"
+                    .into(),
+            },
+            "a_prefix_past_what_guibiao_reads_is_not_verified",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
                 "inline-symbol-path-confinement/the-fully-qualified-external-call-is-a-stated-bound-under-the-default",
             ),
             "a fully-qualified call into an external crate with no `use`",
