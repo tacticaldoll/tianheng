@@ -2738,3 +2738,34 @@ fn inline_associated_path_after_angle_close_is_not_global_root() {
     let probe = RootProbe::new("anglecloseroot", &manifest, &borrowed(&files));
     assert_inline_answers(&probe, "anglecloseroot", "crate::core", "md5x", &[], &[]);
 }
+
+/// A `fn` item's own name is its definition, never a call: under a single-segment `md5x` prefix with strict
+/// external on, a nested `fn md5x()`, an associated `fn md5x()` and a trait's `fn md5x();` react to nothing. The
+/// nested one is also a block-local item; the associated and trait ones sit in bodies that record no member, so
+/// only the definition reading keeps their `md5x(` from resolving to the dependency.
+#[test]
+fn a_fn_name_is_its_definition_not_a_call() {
+    let mut mismatches = Vec::new();
+    for (package, core) in [
+        ("fndefnested", "pub fn g() { fn md5x() {} }\n"),
+        (
+            "fndefassociated",
+            "pub struct W;\nimpl W { pub fn md5x() -> u8 { 0 } }\n",
+        ),
+        ("fndeftrait", "pub trait T { fn md5x(); }\n"),
+    ] {
+        let (manifest, mut files) = renamed_dependency("md5x");
+        files.push(("src/lib.rs".to_string(), "pub mod core;\n".to_string()));
+        files.push(("src/core.rs".to_string(), core.to_string()));
+        let probe = RootProbe::new(package, &manifest, &borrowed(&files));
+        for strict_external in [false, true] {
+            let found = inline_findings(&probe, package, "crate::core", "md5x", strict_external);
+            if !found.is_empty() {
+                mismatches.push(format!(
+                    "{package}, strict_external = {strict_external}: {found:?}"
+                ));
+            }
+        }
+    }
+    assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+}
