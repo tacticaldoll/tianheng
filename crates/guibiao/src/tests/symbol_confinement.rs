@@ -1046,9 +1046,8 @@ pub(super) fn inline_strict_external_block_local_item_does_not_mask() {
     // `const log` (brace depth ≥ 1) is NOT reachable as a bare head, so it must NOT suppress a real
     // external `log::logger()` call in the same module. Pre-fix (capture-all depth), the nested name
     // was captured and silently masked the call (a false negative); this guard reacts.
-    // (A colliding *method*/nested `fn log` is instead a stated over-reaction bound — its definition
-    // site `log(` reads as a call under a single-segment prefix — so this uses a non-call-shaped
-    // `const` to isolate the depth-exclusion behaviour.)
+    // (A `const` keeps the case to the depth exclusion alone; a colliding `fn log`'s own name is its
+    // definition and is never read as a call.)
     let (result, violations) = run_module_check_with_deps(
         "inline-strict-ext-blocklocal",
         &[
@@ -1154,7 +1153,7 @@ pub(super) fn inline_reacts_on_a_two_hop_use_realias() {
 #[test]
 pub(super) fn inline_glob_nested_past_the_depth_cap_is_a_scan_error_not_a_silent_drop() {
     // A pathologically brace-nested grouped glob must not silently vanish from the glob-hazard
-    // observation past `glob_bases`'s depth cap — a real, compilable glob nested that deep would
+    // observation past the use-tree parser's depth cap — a real, compilable glob nested that deep would
     // otherwise pass unobserved with no report, the false negative PROJECT.md's core contract
     // forbids. Past the cap, this must be a scan error, never a silent truncation (mirrors
     // `use_scan.rs`'s identical fix for the same shape of walker).

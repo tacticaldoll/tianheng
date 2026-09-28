@@ -408,10 +408,8 @@ pub(super) fn resolve_self_super(current_module: &str, parts: &[&str]) -> Option
     fold_canonical_segments(&full)
 }
 
-/// Content inside the first `{ … }` of `s` (which must start with `{`), honoring nesting. The single
-/// home of the brace-body extractor the `use`-scan ([`super::use_scan`]) and symbol-scan
-/// ([`super::symbol_scan`]) use-tree parsers share, so the two cannot drift (the twin-drift bug
-/// class).
+/// Content inside the first `{ … }` of `s` (which must start with `{`), honoring nesting. The
+/// brace-body extractor of the scanner's one use-tree parser, `scope_graph::use_tree_leaves`.
 pub(super) fn brace_content(s: &str) -> String {
     let mut depth = 0i32;
     let mut out = String::new();
@@ -436,7 +434,7 @@ pub(super) fn brace_content(s: &str) -> String {
     out
 }
 
-/// Split on commas at brace depth 0 — the use-tree group splitter both scanners share (see
+/// Split on commas at brace depth 0 — the use-tree group splitter of the one use-tree parser (see
 /// [`brace_content`]).
 pub(super) fn split_top_commas(s: &str) -> Vec<String> {
     let mut parts = Vec::new();

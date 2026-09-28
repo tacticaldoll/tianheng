@@ -1,9 +1,9 @@
 //! The inline-symbol-path scan: the observation source for `ConfineInlineSymbolPath`
 //! (`must_not_call_inline`). Unlike the `use`-scan, it observes **call expressions** (and, under
 //! strict, any path mention) in function bodies — INCLUDING macro-invocation bodies — resolving a
-//! path's head through an alias-carrying use-map, local `type` aliases, and the local `pub use`
-//! re-export closure to a fixpoint. A glob that can bring a prefix-resolving name into scope reacts
-//! fail-closed. Pure string / path processing over [`super::lexer`] and [`super::path_vocab`]; no
+//! path's head from its lexical scope through [`super::scope_graph`], then through the local `type`
+//! alias and `pub use` re-export closure to a fixpoint. A glob that can bring a prefix-resolving name
+//! into scope reacts fail-closed. Pure string / path processing over [`super::lexer`] and [`super::path_vocab`]; no
 //! model type. The declared stated bounds (receiver-method reads, in-macro-body aliases,
 //! fragment/proc-macro construction, external-crate re-exports, value-position captures under the
 //! default, and the inherited file-scope scanner bounds) are non-observations, never silent passes.

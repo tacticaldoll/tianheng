@@ -266,8 +266,8 @@ flag (**any** prefix): an `extern crate dep as alias;` rename (it catches extern
 crate's *real* name, not a local alias — so `chr::Utc::now()` via `extern crate chrono as chr;` is
 not observed), a glob-brought name *except via the glob-hazard reaction*, and a `mod` token inside a
 macro body. One additional **over-reaction** bound applies **only** under a single-segment bare-crate
-prefix (`"rand"`, never a multi-segment `chrono::Utc`): a local `let`/parameter/closure binding, or
-the definition site of an associated/nested `fn` named like the crate, may false-positive.
+prefix (`"rand"`, never a multi-segment `chrono::Utc`): a local `let`/parameter/closure binding named
+like the crate may false-positive. A `fn` item's own name is its definition, never a call.
 
 ---
 

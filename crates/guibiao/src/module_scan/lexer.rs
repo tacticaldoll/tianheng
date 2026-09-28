@@ -515,10 +515,8 @@ pub(super) enum UseStatementScan {
 }
 
 /// Classify what follows a keyword-confirmed `use` at `bytes[i]` (see [`keyword_starts_at`]).
-/// Shared by `use_statements` and `pub_use_statements` (symbol_scan.rs, flat glob detection and the
-/// re-export closure's feed) and `use_trees_with_modules` (use_scan.rs's inline-module-aware walk) — the
-/// one place all three interpret "what is a `use` statement's body" identically; each still owns its own
-/// surrounding loop, since their module/brace and visibility tracking around this scan genuinely differ.
+/// Called by `scope_graph::use_statements`, the one enumeration of `use` statements every import reader in
+/// this scanner starts from, so "what is a `use` statement's body" has one answer.
 ///
 /// A precise-capturing bound `-> impl Trait + use<'a, T>` (stable Rust) puts a `use` token inside
 /// a type bound: it is followed by `<`, whereas a `use` statement is always followed by a path. So

@@ -568,9 +568,9 @@ impl ModuleTargetDraft {
     /// returned [`InlineConfinementDraft`] is a dedicated draft — its `.ending_with` /
     /// `.strict_prefix_only` modifiers cannot be applied to the other module rules.
     ///
-    /// Resolution follows the alias-carrying use-map, local `type` aliases, and the local
-    /// `pub use` re-export closure to a fixpoint, and reacts fail-closed on a glob that can bring
-    /// a prefix-resolving name into scope. The stated bounds (receiver-method reads, in-macro-body
+    /// A path's head resolves from its lexical scope — the nearest block or module binding, glob
+    /// edges followed to a fixed point, and the local `type`-alias and `pub use` re-export closure —
+    /// and a glob that can bring a prefix-resolving name into scope reacts fail-closed. The stated bounds (receiver-method reads, in-macro-body
     /// aliases, fragment/proc-macro construction, external-crate re-exports, value-position
     /// captures under the default, and the inherited file-scope scanner bounds) are declared
     /// non-observations, never silent passes.

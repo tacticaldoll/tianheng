@@ -26,6 +26,7 @@ The complete per-scenario measurements and raw commands/output are in [measureme
 - `inline-symbol-path-confinement` — modified: its path heads resolve from the scope table, its prefix-head refusal becomes the finite set, and it gains the bounds this change declares.
 - `external-crate-confinement`, `crate-dependency-boundary`, `crate-source-boundary` — their subjects include the guibiao scanner files this change edits (`path_vocab.rs`, the scanner module), but their requirements do not change: import reports are read by the existing `use_scan` walk, which this change leaves byte-identical.
 - `rule-model-surface` — `module_rule.rs` now keys an inline rule on the prefix's canonical path; the requirement that a parameter enters the key exactly when changing it changes what the boundary forbids does not change, and a prefix's root form (`::std::time` beside `std::time`) is such a parameter it keeps out.
+- `observation-bound-model`, `observation-bound-register` — the change declares one bound and gives another a second pin through `bounds.rs` and the capability spec, and regenerates the two projections; their requirements on how a bound is declared, classified and projected do not change.
 - `release-coherence` — `CHANGELOG.md` gains this change's `[Unreleased]` and Migration entries; the release-coherence requirements on that file do not change.
 
 ## Compatibility direction
