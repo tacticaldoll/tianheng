@@ -153,15 +153,16 @@ No revision reports or refuses any of these; each is a call Rust makes into the 
 
 ### Braces that open no name scope, and a generic parameter
 
-Measured 2026-09-29 with `rustc 1.96.0` / `cargo 1.96.0` against the same three revisions, by the script's `H` section: the script with its `K` through `E` sections removed (`awk '/^# --- K:/{skip=1} /^# --- H:/{skip=0} !skip'`), so the checker builds and helpers are the ones every other row used. Each row is one edition-2021 package; `crate::core` holds the source shown, the prefix is `std::process`, and the finding in every reacting cell is `std::process::Command::new in crate::core` (H1, H3) or `std::process::Command::default in crate::core` (H2). The sections are appended to [measurements.revision.raw.log](measurements.revision.raw.log) under the same `## {row} · …` headings.
+Measured 2026-09-29 with `rustc 1.96.0` / `cargo 1.96.0` against the same three revisions, by the script's `H` section (H4 by that section's last row alone): the script with its `K` through `E` sections removed (`awk '/^# --- K:/{skip=1} /^# --- H:/{skip=0} !skip'`), so the checker builds and helpers are the ones every other row used. Each row is one edition-2021 package; `crate::core` holds the source shown, the prefix is `std::process`, and the finding in every reacting cell is `std::process::Command::new in crate::core` (H1, H3) or `std::process::Command::default in crate::core` (H2). The sections are appended to [measurements.revision.raw.log](measurements.revision.raw.log) under the same `## {row} · …` headings.
 
 | Row | Rust | v0.7.1 | `be047d8b^` | release/0.8.0 | Target |
 |---|---|---:|---:|---:|---:|
 | H1 `use std::process::Command; pub struct S; impl S { const Command: u8 = 0; pub fn f() { let _ = Command::new("x"); } }` | Build 0; an associated item is reached only through `Self::`, so the bare `Command` is the import | 1/1 | 1/1 | 1/1 | 1/1 |
 | H2 `#[allow(unused_imports)] use std::process::Command; pub fn f<Command: Default>() -> Command { Command::default() }` | Build 0; `Command` is the generic parameter | 1/1 | 1/1 | 1/1 | 1/1, declared over-reaction (design g) |
 | H3 `use std::process::Command; pub enum E { Command } pub fn f() { let _ = Command::new("x"); }` | Build 0; a variant is reached only through `E::` | 1/1 | 1/1 | 1/1 | 1/1 |
+| H4 `use std::process::Command; pub struct S; pub trait T { type Command; fn f(); } impl T for S { type Command = u8; fn f() { let _ = Command::new("x"); } }` | Build 0; an associated type is reached only through `Self::` or the type | 1/1 | 1/1 | 1/1 | 1/1 |
 
-H1 and H3 are what a scope walk that opened a scope at every brace would get wrong: it would record `const Command` or the variant as a binding and lose a finding Rust says is real. H2 is the one row here whose target is not Rust's answer.
+H1, H3 and H4 are what a scope walk that opened a scope at every brace could get wrong: it would record `const Command`, the variant, or the associated type as a binding and lose a finding Rust says is real. H4 is the one of the three a namespace-aware lookup alone does not hold: `const Command` is a value and a variant has no item keyword, so neither can shadow the type-namespace head of `Command::new`, while `type Command` is a type. H4 was added when an `impl` body that opened a scope left H1 green. H2 is the one row here whose target is not Rust's answer.
 
 ### Script
 
@@ -348,5 +349,8 @@ w $p core.rs '#[allow(unused_imports)] use std::process::Command; pub fn f<Comma
 build $p 2021 > /dev/null; row "$p" $p std::process crate::core
 p=H3-2021-enum-variant-does-not-shadow; new $p 2021; w $p lib.rs 'pub mod core;'
 w $p core.rs 'use std::process::Command; pub enum E { Command } pub fn f() { let _ = Command::new("x"); }'
+build $p 2021 > /dev/null; row "$p" $p std::process crate::core
+p=H4-2021-associated-type-does-not-shadow; new $p 2021; w $p lib.rs 'pub mod core;'
+w $p core.rs 'use std::process::Command; pub struct S; pub trait T { type Command; fn f(); } impl T for S { type Command = u8; fn f() { let _ = Command::new("x"); } }'
 build $p 2021 > /dev/null; row "$p" $p std::process crate::core
 ```

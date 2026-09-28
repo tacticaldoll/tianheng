@@ -1923,7 +1923,7 @@ fn assert_inline_answers(
         assert_eq!(
             inline_findings(probe, package, module, prefix, strict_external),
             expected,
-            "{prefix} over {module}, strict_external = {strict_external}"
+            "{prefix} over {module} in {package}, strict_external = {strict_external}"
         );
     }
 }
@@ -2291,8 +2291,9 @@ fn an_explicit_import_beside_a_glob_reacts_through_each() {
     assert_inline_answers(&probe, "frozene3", "crate::core", "crate::b", &call, &call);
 }
 
-/// H1, H3: an associated `const` and an enum variant named like an import are reached only through a path, so
-/// neither shadows the import.
+/// H1, H3, H4: an associated `const`, an enum variant and an associated type named like an import are reached
+/// only through a path, so none shadows the import. H4 is the type-namespace member, the one a lookup keyed by
+/// namespace alone would not hold.
 #[test]
 fn inline_associated_item_or_variant_does_not_shadow_an_import() {
     for (package, core) in [
@@ -2310,6 +2311,14 @@ fn inline_associated_item_or_variant_does_not_shadow_an_import() {
                 "use std::process::Command; pub enum E { Command } pub fn f() { let _ = ",
                 command_new!(),
                 "; }\n"
+            ),
+        ),
+        (
+            "frozenh4",
+            concat!(
+                "use std::process::Command; pub struct S; pub trait T { type Command; fn f(); } impl T for S { type Command = u8; fn f() { let _ = ",
+                command_new!(),
+                "; } }\n"
             ),
         ),
     ] {
