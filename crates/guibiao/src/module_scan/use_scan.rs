@@ -11,8 +11,8 @@
 
 use super::lexer::{keyword_starts_at, strip_comments_and_strings, strip_macro_bodies};
 use super::path_vocab::{
-    brace_content, canonical_segment, effective_module, fold_canonical_segments, inline_mod_at,
-    is_crate_root_shadow, resolve_self_super, split_top_commas,
+    brace_content, canonical_segment, fold_canonical_segments, is_crate_root_shadow,
+    resolve_self_super, scan_inline_modules, split_top_commas,
 };
 
 /// One normalized internal import path, retaining **which form** the source wrote: a glob so boundary
@@ -154,15 +154,16 @@ pub(crate) fn external_imports_with_importers(
 /// (`use a::{b, c};`) never perturb the depth.
 fn use_trees_with_modules(source: &str, base_module: &str) -> Vec<(String, String)> {
     let bytes = source.as_bytes();
+    let inline_modules = scan_inline_modules(source, base_module);
     let mut trees = Vec::new();
-    let mut mod_stack: Vec<(String, usize)> = Vec::new();
-    let mut depth = 0usize;
     let mut i = 0;
     while i < bytes.len() {
         if keyword_starts_at(bytes, i, b"use") {
             match super::lexer::scan_use_statement(bytes, source, i) {
                 super::lexer::UseStatementScan::Statement { body, next } => {
-                    trees.push((effective_module(base_module, &mod_stack), body));
+                    let module =
+                        inline_modules.modules[inline_modules.contexts[i] as usize].clone();
+                    trees.push((module, body));
                     i = next;
                     continue;
                 }
@@ -172,24 +173,6 @@ fn use_trees_with_modules(source: &str, base_module: &str) -> Vec<(String, Strin
                 }
                 super::lexer::UseStatementScan::Unterminated => break,
             }
-        }
-        if let Some((name_start, name_end, brace)) = inline_mod_at(bytes, i) {
-            mod_stack.push((
-                canonical_segment(source[name_start..name_end].trim()).to_string(),
-                depth,
-            ));
-            i = brace;
-            continue;
-        }
-        match bytes[i] {
-            b'{' => depth += 1,
-            b'}' => {
-                depth = depth.saturating_sub(1);
-                while mod_stack.last().is_some_and(|(_, d)| *d == depth) {
-                    mod_stack.pop();
-                }
-            }
-            _ => {}
         }
         i += 1;
     }

@@ -83,35 +83,87 @@ pub(crate) fn canonical_module_spelling(written: &str) -> Result<String, Option<
     Err(is_canonical_spelling(&candidate).then_some(candidate))
 }
 
-/// Whether `written` is `::`-separated identifiers not starting at `self` or `super`.
+fn is_disallowed_symbol_head(head: &str, is_global: bool) -> bool {
+    if is_global && head == "crate" {
+        return true;
+    }
+    if head == "crate" {
+        return false;
+    }
+    if head.starts_with("r#") {
+        return false;
+    }
+    super::lexer::is_rust_keyword(head.as_bytes())
+}
+
+/// Whether `written` is `::`-separated identifiers (optionally starting with `::` for external
+/// crates) not starting at a keyword (`Self`, `self`, `super`, etc.).
 fn is_symbol_path_spelling(written: &str) -> bool {
-    let mut segments = written.split("::");
+    let is_global = written.starts_with("::");
+    let raw = if is_global {
+        let after = &written[2..];
+        if after.is_empty() || after.starts_with(':') {
+            return false;
+        }
+        after
+    } else {
+        written
+    };
+    if raw.ends_with(':') {
+        return false;
+    }
+    let mut segments = raw.split("::");
     segments
         .next()
-        .is_some_and(|head| is_identifier(head) && !matches!(head, "self" | "super"))
+        .is_some_and(|head| is_identifier(head) && !is_disallowed_symbol_head(head, is_global))
         && segments.all(is_identifier)
 }
 
 /// The canonical spelling of a written symbol path, or the spelling it most plausibly meant.
 ///
 /// A symbol path — an inline-call prefix — is compared with resolved paths segment by segment, so it
-/// has one accepted spelling: `::`-separated identifiers, each read by the [`is_identifier`] a module
-/// path is read by, not starting at `self` or `super`, which are relative to a module a declaration
-/// does not have. Which first segments name something is the caller's question, since it needs what
-/// the crate declares. `r#x` and `x` are one identifier, so the accepted form carries no raw prefix.
-/// Every other spelling is refused, and the refusal carries the written path's non-empty, trimmed
-/// segments, raw prefixes removed, as the suggestion — or `None` when that is no accepted spelling
-/// either.
+/// has one accepted spelling: `::`-separated identifiers, optionally starting with `::` to explicitly
+/// name an external crate, each read by the [`is_identifier`] a module path is read by, not starting
+/// at a keyword (`Self`, `self`, `super`, etc.). Which first segments name something is the caller's
+/// question, since it needs what the crate declares. `r#x` and `x` are one identifier, so the
+/// accepted form carries no raw prefix. Every other spelling is refused, and the refusal carries the
+/// written path's non-empty, trimmed segments, raw prefixes removed, as the suggestion — or `None`
+/// when that is no accepted spelling either.
 pub(crate) fn canonical_symbol_path_spelling(written: &str) -> Result<String, Option<String>> {
     if is_symbol_path_spelling(written) {
-        return Ok(canonical_module_path(written));
+        let is_global = written.starts_with("::");
+        let raw = written.strip_prefix("::").unwrap_or(written);
+        let canonical = canonical_module_path(raw);
+        return Ok(if is_global {
+            format!("::{canonical}")
+        } else {
+            canonical
+        });
     }
-    let candidate = written
+    let is_global = written.trim().starts_with("::");
+    let segments: Vec<&str> = written
         .split("::")
-        .map(|segment| canonical_segment(segment.trim()))
+        .map(str::trim)
         .filter(|segment| !segment.is_empty())
+        .collect();
+    if segments.is_empty() {
+        return Err(None);
+    }
+    let first = segments[0];
+    let head = canonical_segment(first);
+    if is_disallowed_symbol_head(head, is_global) {
+        return Err(None);
+    }
+    let candidate_path = segments
+        .iter()
+        .map(|segment| canonical_segment(segment))
         .collect::<Vec<_>>()
         .join("::");
+    let candidate = if is_global {
+        format!("::{candidate_path}")
+    } else {
+        candidate_path
+    };
     Err(is_symbol_path_spelling(&candidate).then_some(candidate))
 }
 
@@ -173,19 +225,6 @@ pub(super) fn inline_mod_at(bytes: &[u8], i: usize) -> Option<(usize, usize, usi
     } else {
         None
     }
-}
-
-/// The module path enclosing a lexical position, formed from the file's `base` module and the names
-/// of the inline `mod`s currently open around it (each `mod_stack` entry is `(name,
-/// enclosing brace depth)`; only the names are joined). The shared home backing every walk that
-/// attributes a `use` / item / call to its true inline submodule.
-pub(super) fn effective_module(base: &str, mod_stack: &[(String, usize)]) -> String {
-    let mut module = base.to_string();
-    for (name, _) in mod_stack {
-        module.push_str("::");
-        module.push_str(name);
-    }
-    module
 }
 
 /// The one lexical walk shared by symbol readers that need the module enclosing a byte position.

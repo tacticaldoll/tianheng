@@ -2447,12 +2447,14 @@ const INLINE_PREFIX_SPELLINGS: &[(&str, Result<&str, Option<&str>>)] = &[
     ("r#std::time", Ok("std::time")),
     ("clock", Ok("clock")),
     ("crate::clock::", Err(Some("crate::clock"))),
-    ("::std::time", Err(Some("std::time"))),
+    ("::std::time", Ok("::std::time")),
+    ("::std::time::", Err(Some("::std::time"))),
     ("crate::::clock", Err(Some("crate::clock"))),
     ("std :: time", Err(Some("std::time"))),
     (" crate::clock", Err(Some("crate::clock"))),
     ("r#crate::clock", Err(Some("crate::clock"))),
     ("self::clock", Err(None)),
+    ("Self::clock", Err(None)),
     ("super::clock", Err(None)),
     ("std::time::*", Err(None)),
 ];
@@ -2595,7 +2597,8 @@ pub(super) fn a_prefix_with_a_trailing_separator_is_refused() {
     let (_ws, metadata) = inline_prefix_fixture("inline-prefix-trailing");
     let suggestion = |prefix: &str| match prefix {
         "crate::clock::" => Some("crate::clock"),
-        "std::time::" | "::std::time" => Some("std::time"),
+        "::std::time::" => Some("::std::time"),
+        "std::time::" => Some("std::time"),
         "extdep::api::" => Some("extdep::api"),
         _ => None,
     };
@@ -2604,10 +2607,11 @@ pub(super) fn a_prefix_with_a_trailing_separator_is_refused() {
         &[
             "crate::clock::",
             "std::time::",
+            "::std::time::",
             "extdep::api::",
             "my-dep",
-            "::std::time",
             "self::clock",
+            "Self::clock",
         ],
         |rule, prefix| {
             Err(crate::errors::non_canonical_inline_prefix_error(
@@ -2631,6 +2635,7 @@ pub(super) fn an_inline_prefix_naming_something_that_exists_is_accepted() {
         "crate::r#clock",
         "crate::clock::Clock",
         "crate",
+        "::std::time",
         "std::time",
         "core::time",
         "alloc::vec",
