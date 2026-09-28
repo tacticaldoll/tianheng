@@ -1614,3 +1614,161 @@ fn an_inline_call_confinement_at_shallow_depth_is_refused() {
         "{outcome:?}"
     );
 }
+
+#[test]
+fn an_inline_module_use_resolves_from_its_enclosing_module() {
+    let probe = RootProbe::new(
+        "inlineusemod",
+        "",
+        &[
+            ("src/lib.rs", "pub mod clock;\npub mod core;\n"),
+            ("src/clock.rs", "pub fn now() -> u64 { 0 }\n"),
+            (
+                "src/core.rs",
+                concat!(
+                    "mod inner {\n",
+                    "    use super::super::clock::now;\n",
+                    "    pub fn f() -> u64 { now() }\n",
+                    "}\n",
+                ),
+            ),
+        ],
+    );
+    let law = Constitution::new("inline-use-mod").boundary(
+        ModuleBoundary::in_crate("inlineusemod")
+            .module("crate::core")
+            .must_not_call_inline("crate::clock")
+            .because("clock is forbidden"),
+    );
+    let outcome = check(&law, probe.manifest());
+    assert_eq!(outcome.exit_code(), 1, "{outcome:?}");
+    let violations = confined_violations(&outcome);
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].finding, "crate::clock::now in crate::core");
+}
+
+#[test]
+fn an_inline_module_use_does_not_leak_to_sibling_modules() {
+    let probe = RootProbe::new(
+        "inlineuseleak",
+        "",
+        &[
+            ("src/lib.rs", "pub mod clock;\npub mod core;\n"),
+            ("src/clock.rs", "pub fn now() -> u64 { 0 }\n"),
+            (
+                "src/core.rs",
+                concat!(
+                    "mod inner {\n",
+                    "    use super::super::clock::now;\n",
+                    "    pub fn f() -> u64 { 0 }\n",
+                    "}\n",
+                    "mod sibling {\n",
+                    "    fn now() -> u64 { 1 }\n",
+                    "    pub fn h() -> u64 { now() }\n",
+                    "}\n",
+                ),
+            ),
+        ],
+    );
+    let law = Constitution::new("inline-use-leak").boundary(
+        ModuleBoundary::in_crate("inlineuseleak")
+            .module("crate::core")
+            .must_not_call_inline("crate::clock")
+            .because("clock is forbidden"),
+    );
+    assert_clean(&check(&law, probe.manifest()));
+}
+
+#[test]
+fn an_inline_module_type_alias_resolves_under_its_inline_path() {
+    let probe = RootProbe::new(
+        "inlinealiasmod",
+        "",
+        &[
+            ("src/lib.rs", "pub mod core;\n"),
+            (
+                "src/core.rs",
+                concat!(
+                    "mod hidden {\n",
+                    "    pub type Spawner = std::process::Command;\n",
+                    "}\n",
+                    "pub fn g() { let _ = hidden::Spawner::new(\"true\"); }\n",
+                ),
+            ),
+        ],
+    );
+    let law = Constitution::new("inline-alias-mod").boundary(
+        ModuleBoundary::in_crate("inlinealiasmod")
+            .module("crate::core")
+            .must_not_call_inline("std::process::Command")
+            .because("spawning is forbidden"),
+    );
+    let outcome = check(&law, probe.manifest());
+    assert_eq!(outcome.exit_code(), 1, "{outcome:?}");
+    let violations = confined_violations(&outcome);
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(
+        violations[0].finding,
+        "std::process::Command::new in crate::core"
+    );
+}
+
+#[test]
+fn an_external_prefix_disambiguates_with_leading_colons() {
+    let probe = RootProbe::new(
+        "inlinedisambiguate",
+        "[dependencies]\nmd5x_pkg = { path = \"../md5x_dep\", package = \"md5x_pkg\" }\n",
+        &[
+            ("src/lib.rs", "pub mod md5x;\npub mod core;\n"),
+            ("src/md5x.rs", "pub fn compute() -> u32 { 1 }\n"),
+            (
+                "src/core.rs",
+                concat!(
+                    "pub fn run() {\n",
+                    "    let _ = ::md5x::compute();\n",
+                    "}\n",
+                ),
+            ),
+            (
+                "../md5x_dep/Cargo.toml",
+                "[package]\nname = \"md5x_pkg\"\nversion = \"0.1.0\"\nedition = \"2021\"\n[lib]\nname = \"md5x\"\n",
+            ),
+            ("../md5x_dep/src/lib.rs", "pub fn compute() -> u32 { 0 }\n"),
+        ],
+    );
+    let law = Constitution::new("inline-disambiguate").boundary(
+        ModuleBoundary::in_crate("inlinedisambiguate")
+            .module("crate::core")
+            .must_not_call_inline("::md5x::compute")
+            .because("external md5x is forbidden"),
+    );
+    let outcome = check(&law, probe.manifest());
+    assert_eq!(outcome.exit_code(), 1, "{outcome:?}");
+    let violations = confined_violations(&outcome);
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].finding, "md5x::compute in crate::core");
+}
+
+#[test]
+fn a_prefix_starting_with_a_keyword_is_refused() {
+    let probe = RootProbe::new(
+        "inlinekwprefix",
+        "",
+        &[
+            ("src/lib.rs", "pub mod core;\n"),
+            ("src/core.rs", "pub fn run() {}\n"),
+        ],
+    );
+    let law = Constitution::new("inline-kw-prefix").boundary(
+        ModuleBoundary::in_crate("inlinekwprefix")
+            .module("crate::core")
+            .must_not_call_inline("Self::now")
+            .because("keyword prefix is meaningless"),
+    );
+    let outcome = check(&law, probe.manifest());
+    assert_eq!(outcome.exit_code(), 2, "{outcome:?}");
+    assert!(
+        constitution_error(&outcome).contains("Self::now"),
+        "error quotes the written prefix: {outcome:?}"
+    );
+}

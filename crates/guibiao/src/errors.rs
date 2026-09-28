@@ -249,7 +249,7 @@ pub(crate) fn unknown_inline_prefix_head_error(
         "a prefix of the crate's own path starts at `crate`, or the rule silently never reacts: `{rule}` \
          in crate '{crate_package}' names '{written}', whose first segment is not a sysroot crate, a \
          dependency or the package's library, while `{rooted}` names something the crate declares — \
-         write `{rooted}`"
+         write `{rooted}`, or `::{written}` for an external crate"
     )
 }
 

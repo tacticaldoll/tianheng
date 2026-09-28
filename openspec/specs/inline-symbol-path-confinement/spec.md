@@ -126,8 +126,7 @@ a glob introduces no forbidden read, so the glob itself is the violation — one
 flood, never a silent pass. The hazard test is wider than what a glob can bring into scope, and that width SHALL
 be declared by the over-reaction scenario below rather than claimed as precision: it asks whether any alias or
 re-export **beneath** the glob's resolved module resolves under the prefix, not whether the glob brings that name
-into scope, and a glob's `self` or `super` is resolved against the file's module rather than the inline module it
-stands in.
+into scope.
 
 #### Scenario: A glob of the confined prefix reacts
 - **WHEN** `crate::core` declares `use std::time::*;` under a boundary confining `std::time`
@@ -334,9 +333,10 @@ findings is a passing reaction, exactly as a never-imported confined crate is cl
 The confined prefix of either builder SHALL be held to one spelling and to naming something, through one
 implementation both share, because a prefix is compared with resolved call paths segment by segment and one
 that matches no spelling a resolved path takes never reacts. Its spelling SHALL be `::`-separated identifiers,
-read by the identifier test module paths are read by, not starting at `self` or `super`; `r#x` and `x` SHALL be
-one identifier, recorded without the raw prefix. Any other spelling — an empty segment, a leading or trailing
-`::`, whitespace — SHALL be exit 2, quoting the written prefix and suggesting its trimmed, non-empty segments
+read by the identifier test module paths are read by, optionally starting with a leading `::` for explicit
+external crate disambiguation, and not starting with a keyword (`Self`, `self`, `super`, etc.); `r#x` and `x` SHALL be
+one identifier, recorded without the raw prefix. Any other spelling — an empty segment, a trailing
+`::`, whitespace, or a keyword head — SHALL be exit 2, quoting the written prefix and suggesting its trimmed, non-empty segments
 when those are a valid spelling. A blank prefix SHALL keep the empty-prefix refusal above. A first segment
 that is not `crate` names a crate, whose contents the scanner does not read. A sysroot crate (`std`, `core`,
 `alloc`, `proc_macro`, `test`), a dependency the package declares under the local name a rename gives it, and the
@@ -349,18 +349,18 @@ past its first segment when that is not `crate`, or past an item of the crate, i
 
 #### Scenario: A prefix naming nothing, or written without its root, is a constitution error
 - **WHEN** a crate declares `crate::clock` with `fn now`, `crate::core` calls `crate::clock::now()`, and a boundary declares `.must_not_call_inline(p)` on `crate::core`, or `.module("crate::clock").confine_inline_call(p)`, for `p` of `crate::clcok` or `clock`
-- **THEN** the system exits 2 — naming the written prefix, and for `clock` suggesting `crate::clock`, which names a module the crate declares — where it previously exited 0 with the call unobserved
+- **THEN** the system exits 2 — naming the written prefix, and for `clock` suggesting `crate::clock`, which names a module the crate declares
 - **PINNED-BY** `a_misspelled_crate_prefix_is_refused_not_judged_clean`
 - **PINNED-BY** `a_prefix_written_without_its_crate_root_is_refused_with_the_rooted_spelling`
 
 #### Scenario: A non-canonical prefix is a constitution error
-- **WHEN** either builder is given `crate::clock::`, `std::time::`, `::std::time` or `self::clock`
-- **THEN** the system exits 2, quoting the written prefix and suggesting `crate::clock` or `std::time` where the trimmed segments are a valid spelling
+- **WHEN** either builder is given `crate::clock::`, `std::time::`, `::std::time::`, `self::clock`, or `Self::clock`
+- **THEN** the system exits 2, quoting the written prefix and suggesting `crate::clock`, `std::time`, or `::std::time` where the trimmed segments are a valid spelling
 - **PINNED-BY** `a_prefix_with_a_trailing_separator_is_refused`
 - **PINNED-BY** `an_inline_prefix_is_accepted_only_in_its_canonical_spelling`
 
 #### Scenario: A prefix naming something that exists is accepted
-- **WHEN** either builder is given `crate::clock`, `crate::clock::now`, `crate::r#clock`, `std::time`, a dependency's local name, a renamed dependency's local name, or a module only the binary root declares
+- **WHEN** either builder is given `crate::clock`, `crate::clock::now`, `crate::r#clock`, `std::time`, `::std::time`, a dependency's local name, a renamed dependency's local name, or a module only the binary root declares
 - **THEN** the system accepts it, and `crate::clock` and `crate::clock::now` react on the call exactly as before
 - **PINNED-BY** `an_inline_prefix_naming_a_module_reacts_on_its_call`
 - **PINNED-BY** `an_inline_prefix_naming_something_that_exists_is_accepted`

@@ -350,11 +350,11 @@ impl InlinePrefix {
         external_crates: &[String],
         crate_package: &str,
     ) -> Result<(), String> {
-        let head = self
-            .canonical
-            .split_once("::")
-            .map_or(self.canonical.as_str(), |(head, _)| head);
+        let is_global = self.canonical.starts_with("::");
+        let raw = self.canonical.trim_start_matches("::");
+        let head = raw.split_once("::").map_or(raw, |(head, _)| head);
         match head {
+            _ if is_global => Ok(()),
             "crate" if names_a_local_path(&self.canonical, modules, items) => Ok(()),
             "crate" => Err(unknown_inline_prefix_error(
                 &self.written,

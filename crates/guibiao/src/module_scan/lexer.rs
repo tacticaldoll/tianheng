@@ -199,7 +199,7 @@ pub(super) fn transparent_macro_body_at(bytes: &[u8], bang: usize) -> Option<(us
 /// 三儀 ⊥ 三儀 forbids sharing it, so the two scanners keep parallel copies until the deferred
 /// judgment-neutral-scanner extraction unifies them. `macro_rules` is deliberately absent (its
 /// definition is consumed by [`macro_rules_body_end`] before this is reached).
-fn is_rust_keyword(word: &[u8]) -> bool {
+pub(super) fn is_rust_keyword(word: &[u8]) -> bool {
     let Ok(word) = std::str::from_utf8(word) else {
         return false;
     };

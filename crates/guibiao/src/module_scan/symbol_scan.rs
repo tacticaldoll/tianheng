@@ -59,7 +59,7 @@ pub(crate) fn inline_symbol_findings(
     external: bool,
     dependency_names: &[String],
 ) -> Result<Vec<InlineFinding>, String> {
-    let prefix = canonical_module_path(prefix);
+    let prefix = canonical_module_path(prefix.trim_start_matches("::"));
     let verbs: Option<Vec<String>> =
         ending_with.map(|vs| vs.iter().map(|v| canonical_module_path(v)).collect());
 
@@ -68,7 +68,8 @@ pub(crate) fn inline_symbol_findings(
         glob_reexports: Vec::new(),
     };
     let mut file_text: HashMap<std::path::PathBuf, String> = HashMap::new();
-    let mut use_maps: HashMap<std::path::PathBuf, HashMap<String, String>> = HashMap::new();
+    let mut use_maps: HashMap<std::path::PathBuf, HashMap<(String, String), String>> =
+        HashMap::new();
     let mut module_paths: HashSet<String> = HashSet::new();
     let mut item_defs: HashSet<String> = HashSet::new();
     for (file, module) in all_files {
@@ -101,9 +102,9 @@ pub(crate) fn inline_symbol_findings(
         let use_map = &use_maps[file];
         let decl_text = strip_macro_bodies(&strip_comments_and_strings(raw));
         let mut chase_defs = ctx.defs.clone();
-        for (alias, target) in use_map {
+        for ((use_module, alias), target) in use_map {
             chase_defs
-                .entry(format!("{module}::{alias}"))
+                .entry(format!("{use_module}::{alias}"))
                 .or_insert_with(|| target.clone());
         }
 
@@ -217,7 +218,24 @@ fn path_occurrences(source: &str, base_module: &str) -> Vec<PathOccurrence> {
             }
             break;
         }
-        let segments = normalize_segments(&bytes[start..end]);
+        let mut segments = normalize_segments(&bytes[start..end]);
+        let mut p = i;
+        while p > 0 && bytes[p - 1].is_ascii_whitespace() {
+            p -= 1;
+        }
+        let is_leading_colons = p >= 2
+            && bytes[p - 1] == b':'
+            && bytes[p - 2] == b':'
+            && (p == 2 || {
+                let mut before_colons = p - 2;
+                while before_colons > 0 && bytes[before_colons - 1].is_ascii_whitespace() {
+                    before_colons -= 1;
+                }
+                before_colons == 0 || !is_ident_byte(bytes[before_colons - 1])
+            });
+        if is_leading_colons {
+            segments = format!("::{segments}");
+        }
         let is_call = is_call_application(bytes, end);
         if segments.contains("::") || is_call {
             let module = inline_modules.modules[inline_modules.contexts[i] as usize].clone();
@@ -394,16 +412,19 @@ fn glob_bases(tree: &str, out: &mut Vec<String>, depth: usize) -> Result<(), Str
 
 /// The raw `use …` statement bodies (the text between `use` and `;`), from declaration-cleaned
 /// source. A lightweight cousin of the `use`-scan's walk, sufficient for glob detection.
-fn use_statements(source: &str) -> Vec<String> {
+fn use_statements(source: &str, base_module: &str) -> Vec<(String, String)> {
     use super::lexer::UseStatementScan;
     let bytes = source.as_bytes();
+    let inline_modules = scan_inline_modules(source, base_module);
     let mut trees = Vec::new();
     let mut i = 0;
     while i < bytes.len() {
         if super::lexer::keyword_starts_at(bytes, i, b"use") {
             match super::lexer::scan_use_statement(bytes, source, i) {
                 UseStatementScan::Statement { body, next } => {
-                    trees.push(body);
+                    let module =
+                        inline_modules.modules[inline_modules.contexts[i] as usize].clone();
+                    trees.push((module, body));
                     i = next;
                     continue;
                 }
@@ -426,14 +447,14 @@ fn use_statements(source: &str) -> Vec<String> {
 /// no head, so they are skipped here (the glob-hazard rule handles them).
 fn collect_use_map(
     source: &str,
-    current_module: &str,
+    base_module: &str,
     root_modules: &[String],
-) -> Result<HashMap<String, String>, String> {
+) -> Result<HashMap<(String, String), String>, String> {
     let mut map = HashMap::new();
-    for tree in use_statements(source) {
+    for (module, tree) in use_statements(source, base_module) {
         for (alias, path) in expand_use_leaves(&tree)? {
-            if let Some(canonical) = resolve_written_path(&path, current_module, root_modules) {
-                map.insert(alias, canonical);
+            if let Some(canonical) = resolve_written_path(&path, &module, root_modules) {
+                map.insert((module.clone(), alias), canonical);
             }
         }
     }
@@ -498,28 +519,28 @@ fn collect_defs(
     source: &str,
     module: &str,
     root_modules: &[String],
-    use_map: &HashMap<String, String>,
+    use_map: &HashMap<(String, String), String>,
     ctx: &mut ResolveCtx,
 ) -> Result<(), String> {
-    for (name, target) in type_aliases(source) {
-        if let Some(canonical) = resolve_target(&target, module, use_map, root_modules) {
+    for (name, target, def_module) in type_aliases(source, module) {
+        if let Some(canonical) = resolve_target(&target, &def_module, use_map, root_modules) {
             ctx.defs.insert(
-                format!("{module}::{}", canonical_module_path(&name)),
+                format!("{def_module}::{}", canonical_module_path(&name)),
                 canonical,
             );
         }
     }
-    for tree in pub_use_statements(source) {
+    for (def_module, tree) in pub_use_statements(source, module) {
         let mut globs = Vec::new();
         glob_bases(&tree, &mut globs, 0)?;
         for base in globs {
-            if let Some(canonical) = resolve_written_path(&base, module, root_modules) {
-                ctx.glob_reexports.push((module.to_string(), canonical));
+            if let Some(canonical) = resolve_written_path(&base, &def_module, root_modules) {
+                ctx.glob_reexports.push((def_module.clone(), canonical));
             }
         }
         for (alias, path) in expand_use_leaves(&tree)? {
-            if let Some(canonical) = resolve_written_path(&path, module, root_modules) {
-                ctx.defs.insert(format!("{module}::{alias}"), canonical);
+            if let Some(canonical) = resolve_written_path(&path, &def_module, root_modules) {
+                ctx.defs.insert(format!("{def_module}::{alias}"), canonical);
             }
         }
     }
@@ -737,12 +758,14 @@ fn collect_definition_names(
 }
 
 /// Every `type Name = Target;` in declaration-cleaned source, as `(Name, Target)`.
-fn type_aliases(source: &str) -> Vec<(String, String)> {
+fn type_aliases(source: &str, base_module: &str) -> Vec<(String, String, String)> {
     let bytes = source.as_bytes();
+    let inline_modules = scan_inline_modules(source, base_module);
     let mut out = Vec::new();
     let mut i = 0;
     while i < bytes.len() {
         if super::lexer::keyword_starts_at(bytes, i, b"type") {
+            let module = inline_modules.modules[inline_modules.contexts[i] as usize].clone();
             let mut j = i + 4;
             while j < bytes.len() && bytes[j].is_ascii_whitespace() {
                 j += 1;
@@ -764,7 +787,7 @@ fn type_aliases(source: &str) -> Vec<(String, String)> {
                     let target = source[j + 1..end].trim();
                     let target_path = leading_path(target);
                     if !target_path.is_empty() {
-                        out.push((name, target_path));
+                        out.push((name, target_path, module));
                     }
                     i = end + 1;
                     continue;
@@ -823,12 +846,14 @@ fn leading_path(expr: &str) -> String {
 /// shared converged two of the three sites and walked past this one, which is the twin-drift class this
 /// module's own siblings record. What differs here is the surrounding `pub` and visibility-qualifier
 /// walk, and that is what this function keeps.
-fn pub_use_statements(source: &str) -> Vec<String> {
+fn pub_use_statements(source: &str, base_module: &str) -> Vec<(String, String)> {
     let bytes = source.as_bytes();
+    let inline_modules = scan_inline_modules(source, base_module);
     let mut trees = Vec::new();
     let mut i = 0;
     while i < bytes.len() {
         if super::lexer::keyword_starts_at(bytes, i, b"pub") {
+            let module = inline_modules.modules[inline_modules.contexts[i] as usize].clone();
             let mut j = i + 3;
             while j < bytes.len() && bytes[j].is_ascii_whitespace() {
                 j += 1;
@@ -856,7 +881,7 @@ fn pub_use_statements(source: &str) -> Vec<String> {
             if super::lexer::keyword_starts_at(bytes, j, b"use") {
                 match super::lexer::scan_use_statement(bytes, source, j) {
                     super::lexer::UseStatementScan::Statement { body, next } => {
-                        trees.push(body);
+                        trees.push((module, body));
                         i = next;
                         continue;
                     }
@@ -930,13 +955,15 @@ fn head_is_external_dependency(
 /// and the finding's module continue to use the FILE module `current_module`.
 fn resolve_head(
     segments: &str,
-    current_module: &str,
+    _current_module: &str,
     occurrence_module: &str,
-    use_map: &HashMap<String, String>,
+    use_map: &HashMap<(String, String), String>,
     root_modules: &[String],
     external: Option<&ExternalVocab>,
 ) -> Option<String> {
-    let raw = segments.trim().trim_start_matches("::");
+    let raw = segments.trim();
+    let global = raw.starts_with("::");
+    let raw = raw.trim_start_matches("::");
     let parts: Vec<String> = raw
         .split("::")
         .map(|s| canonical_module_path(s.trim()))
@@ -948,8 +975,9 @@ fn resolve_head(
         "std" | "core" | "alloc" => parts.join("::"),
         "crate" => fold_canonical_segments(&parts_str)?,
         "self" | "super" => resolve_self_super(occurrence_module, &parts_str)?,
+        _ if global => parts.join("::"),
         other => {
-            if let Some(target) = use_map.get(other) {
+            if let Some(target) = use_map.get(&(occurrence_module.to_string(), other.to_string())) {
                 let mut base = target.clone();
                 for seg in rest {
                     base.push_str("::");
@@ -961,7 +989,7 @@ fn resolve_head(
             }) {
                 parts.join("::")
             } else {
-                format!("{current_module}::{}", parts.join("::"))
+                format!("{occurrence_module}::{}", parts.join("::"))
             }
         }
     };
@@ -1087,7 +1115,7 @@ fn resolve_written_path(
 fn resolve_target(
     target: &str,
     module: &str,
-    use_map: &HashMap<String, String>,
+    use_map: &HashMap<(String, String), String>,
     root_modules: &[String],
 ) -> Option<String> {
     let raw = target.trim();
@@ -1100,7 +1128,7 @@ fn resolve_target(
         .filter(|s| !s.is_empty())
         .collect();
     let (head, rest) = parts.split_first()?;
-    if let Some(mapped) = use_map.get(head) {
+    if let Some(mapped) = use_map.get(&(module.to_string(), head.to_string())) {
         let mut base = mapped.clone();
         for seg in rest {
             base.push_str("::");

@@ -136,12 +136,16 @@ them.
 
 ### Static
 
-- **BREAKING** — **圭表 resolves `self` and `super` from their inline module for glob imports and ordinary
-  paths.** A sibling `mod tests { use super::*; }` no longer reacts merely because another file declares a
-  confined-prefix alias; nested `super::super::*` reaches the correct ancestor, and ordinary `super::Cmd`
-  paths now reach the alias in their actual inline parent. These corrections may add findings that adopters
-  must address or baseline, while findings removed by corrected resolution may leave redundant baseline entries.
-  The bound registered in 0.7.1 as
+- **BREAKING** — **圭表 resolves `use` imports, `type` aliases, glob imports, and relative `self`/`super`
+  paths from their enclosing inline module.** Previously, use-maps and definitions were indexed only by the
+  outer file module, causing `use` imports and `type` aliases declared inside inline modules to misattribute or
+  fail to resolve during call and alias analysis. An inline module's `use` now resolves from its own scope,
+  type aliases are attributed to their inline path (`{module}::inner::Alias`), and relative paths (`self::` and
+  `super::`) in globs and ordinary paths resolve from their true inline module. A sibling `mod tests { use super::*; }`
+  no longer reacts merely because another file declares a confined-prefix alias; nested `super::super::*` reaches
+  the correct ancestor, and ordinary `super::Cmd` paths now reach the alias in their actual inline parent. These
+  corrections may add findings that adopters must address or baseline, while findings removed by corrected resolution
+  may leave redundant baseline entries. The bound registered in 0.7.1 as
   `inline-symbol-path-confinement/a-glob-reacts-to-any-alias-or-re-export-beneath-its-resolved-module-a-stated-bound`
   keeps its id and is narrowed to the remaining glob over-reaction: the glob may react to an alias beneath its
   resolved module even when it does not bring that alias name into scope.
@@ -172,12 +176,15 @@ them.
   `clock` and `crate::clock::` each exited 0 with the call unobserved. Each is now a constitution error
   (exit 2) quoting the prefix, and suggesting a spelling where one is determined. Three rules apply, through one
   implementation both builders share:
-  - **Spelling.** `::`-separated identifiers, not starting at `self` or `super`; `r#x` is `x`. An empty
-    segment, a leading or trailing `::`, or whitespace is exit 2, suggesting the trimmed segments.
+  - **Spelling.** `::`-separated identifiers, optionally starting with a leading `::` for explicit
+    external crate disambiguation, and not starting with a keyword (`Self`, `self`, `super`, etc.); `r#x` is `x`.
+    An empty segment, a trailing `::`, interior whitespace, or a keyword head is exit 2, suggesting the trimmed
+    segments where valid.
   - **Existence.** A `crate::` prefix must name a module some compiled root declares, or an item one defines.
   - **Missing root.** A first segment that is not `crate`, a sysroot crate (`std`, `core`, `alloc`,
     `proc_macro`, `test`), a declared dependency under its local name, or the package's own library is
-    exit 2 only when the same path rooted at `crate` names something, suggesting that spelling.
+    exit 2 only when the same path rooted at `crate` names something, suggesting `crate::{prefix}` or explicit
+    external crate disambiguation `::{prefix}`.
 
   Any other first segment names a crate whose contents are not read, and is accepted: a dependency's crate name
   can differ from its package name, as with `[lib] name`, and `--no-deps` metadata does not report it. So
