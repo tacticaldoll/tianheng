@@ -22,6 +22,17 @@ struct RootProbe {
 
 impl RootProbe {
     fn new(name: &str, manifest_extra: &str, files: &[(&str, &str)]) -> Self {
+        Self::with_edition(name, "2021", manifest_extra, files)
+    }
+
+    /// Every file a probe writes, a path dependency's included, lands beneath its own `dir`, so the one
+    /// `remove_dir_all` in `Drop` removes all of it.
+    fn with_edition(
+        name: &str,
+        edition: &str,
+        manifest_extra: &str,
+        files: &[(&str, &str)],
+    ) -> Self {
         use std::sync::atomic::{AtomicU32, Ordering};
         static COUNTER: AtomicU32 = AtomicU32::new(0);
         let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -36,7 +47,7 @@ impl RootProbe {
         std::fs::write(
             &manifest,
             format!(
-                "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\
+                "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"{edition}\"\n\
                  {manifest_extra}\n[workspace]\n"
             ),
         )
@@ -53,6 +64,10 @@ impl RootProbe {
 
     fn manifest(&self) -> &Path {
         &self.manifest
+    }
+
+    fn dir(&self) -> &Path {
+        &self.dir
     }
 }
 
@@ -1717,7 +1732,7 @@ fn an_inline_module_type_alias_resolves_under_its_inline_path() {
 fn an_external_prefix_disambiguates_with_leading_colons() {
     let probe = RootProbe::new(
         "inlinedisambiguate",
-        "[dependencies]\nmd5x_pkg = { path = \"../md5x_dep\", package = \"md5x_pkg\" }\n",
+        "[dependencies]\nmd5x_pkg = { path = \"md5x_dep\", package = \"md5x_pkg\" }\n",
         &[
             ("src/lib.rs", "pub mod md5x;\npub mod core;\n"),
             ("src/md5x.rs", "pub fn compute() -> u32 { 1 }\n"),
@@ -1730,10 +1745,10 @@ fn an_external_prefix_disambiguates_with_leading_colons() {
                 ),
             ),
             (
-                "../md5x_dep/Cargo.toml",
+                "md5x_dep/Cargo.toml",
                 "[package]\nname = \"md5x_pkg\"\nversion = \"0.1.0\"\nedition = \"2021\"\n[lib]\nname = \"md5x\"\n",
             ),
-            ("../md5x_dep/src/lib.rs", "pub fn compute() -> u32 { 0 }\n"),
+            ("md5x_dep/src/lib.rs", "pub fn compute() -> u32 { 0 }\n"),
         ],
     );
     let law = Constitution::new("inline-disambiguate").boundary(
@@ -1747,6 +1762,13 @@ fn an_external_prefix_disambiguates_with_leading_colons() {
     let violations = confined_violations(&outcome);
     assert_eq!(violations.len(), 1, "{violations:?}");
     assert_eq!(violations[0].finding, "md5x::compute in crate::core");
+    let root = probe.dir().to_path_buf();
+    drop(probe);
+    assert!(
+        !root.exists(),
+        "the probe removes its root, dependency included: {}",
+        root.display()
+    );
 }
 
 #[test]
@@ -1770,5 +1792,457 @@ fn a_prefix_starting_with_a_keyword_is_refused() {
     assert!(
         constitution_error(&outcome).contains("Self::now"),
         "error quotes the written prefix: {outcome:?}"
+    );
+}
+
+/// One inline confinement's findings over a probe, sorted: empty for a clean run, and anything but a clean run or
+/// violations fails the test.
+fn inline_findings(
+    probe: &RootProbe,
+    package: &str,
+    module: &str,
+    prefix: &str,
+    strict_external: bool,
+) -> Vec<String> {
+    let draft = ModuleBoundary::in_crate(package)
+        .module(module)
+        .must_not_call_inline(prefix);
+    let draft = if strict_external {
+        draft.strict_external()
+    } else {
+        draft
+    };
+    let law = Constitution::new("inline-answers").boundary(draft.because("inline path resolution"));
+    let outcome = check(&law, probe.manifest());
+    match &outcome {
+        Outcome::Clean(_) => Vec::new(),
+        Outcome::Violations(report) => {
+            let mut found: Vec<String> = report
+                .violations
+                .iter()
+                .map(|v| v.finding.clone())
+                .collect();
+            found.sort();
+            found
+        }
+        other => {
+            panic!("{prefix} over {module}: expected a clean run or violations, got {other:?}")
+        }
+    }
+}
+
+/// The default and strict-external answers of one prefix over a probe, each as its sorted findings.
+fn assert_inline_answers(
+    probe: &RootProbe,
+    package: &str,
+    module: &str,
+    prefix: &str,
+    default: &[&str],
+    strict: &[&str],
+) {
+    for (strict_external, expected) in [(false, default), (true, strict)] {
+        assert_eq!(
+            inline_findings(probe, package, module, prefix, strict_external),
+            expected,
+            "{prefix} over {module}, strict_external = {strict_external}"
+        );
+    }
+}
+
+/// A path dependency written beneath the probe, keyed `key` in the manifest and packaged as `dep_<key>`, whose
+/// library defines `f` and `compute`.
+fn renamed_dependency(key: &str) -> (String, Vec<(String, String)>) {
+    let package = format!("dep_{key}");
+    let manifest =
+        format!("[dependencies]\n{key} = {{ package = \"{package}\", path = \"{package}\" }}\n");
+    let files = vec![
+        (
+            format!("{package}/Cargo.toml"),
+            format!("[package]\nname = \"{package}\"\nversion = \"0.1.0\"\nedition = \"2015\"\n"),
+        ),
+        (
+            format!("{package}/src/lib.rs"),
+            "pub fn f() {}\npub fn compute() -> u32 { 0 }\n".to_string(),
+        ),
+    ];
+    (manifest, files)
+}
+
+fn borrowed(files: &[(String, String)]) -> Vec<(&str, &str)> {
+    files
+        .iter()
+        .map(|(p, c)| (p.as_str(), c.as_str()))
+        .collect()
+}
+
+/// R2: a sysroot call written in full reacts under the relative prefix and under the `::`-rooted one.
+#[test]
+fn inline_relative_and_root_sysroot_prefixes_react_on_a_qualified_call() {
+    let probe = RootProbe::new(
+        "frozenr2",
+        "",
+        &[
+            ("src/lib.rs", "pub mod core;\n"),
+            (
+                "src/core.rs",
+                "pub fn g() -> std::time::SystemTime { std::time::SystemTime::now() }\n",
+            ),
+        ],
+    );
+    let found = ["std::time::SystemTime::now in crate::core"];
+    for prefix in ["std::time", "::std::time"] {
+        assert_inline_answers(&probe, "frozenr2", "crate::core", prefix, &found, &found);
+    }
+}
+
+/// R3: an un-`use`d dependency call written with a bare head is outside the default and inside strict-external.
+#[test]
+fn inline_bare_dependency_call_is_default_clean_and_strict_reported() {
+    let (manifest, mut files) = renamed_dependency("md5x");
+    files.push(("src/lib.rs".to_string(), "pub mod core;\n".to_string()));
+    files.push((
+        "src/core.rs".to_string(),
+        "pub fn g() -> u32 { md5x::compute() }\n".to_string(),
+    ));
+    let probe = RootProbe::new("frozenr3", &manifest, &borrowed(&files));
+    assert_inline_answers(
+        &probe,
+        "frozenr3",
+        "crate::core",
+        "md5x",
+        &[],
+        &["md5x::compute in crate::core"],
+    );
+}
+
+/// R4: a crate-root `mod md5x` shadows the same-named dependency for a bare head, so an external-only prefix
+/// matches nothing in either mode.
+#[test]
+fn inline_bare_local_module_shadows_same_named_dependency() {
+    let (manifest, mut files) = renamed_dependency("md5x");
+    files.push((
+        "src/lib.rs".to_string(),
+        "pub mod md5x {\n    pub struct Local;\n    pub fn compute() -> Local { Local }\n}\npub fn g() -> md5x::Local { md5x::compute() }\n"
+            .to_string(),
+    ));
+    let probe = RootProbe::new("frozenr4", &manifest, &borrowed(&files));
+    assert_inline_answers(&probe, "frozenr4", "crate", "::md5x", &[], &[]);
+}
+
+/// K: a dependency renamed to a keyword, imported with the spelling each edition requires, reacts under the raw
+/// prefix in every edition; `union`, a weak keyword, reacts bare or raw.
+#[test]
+fn a_raw_or_weak_keyword_prefix_head_is_accepted_in_every_edition() {
+    for edition in ["2018", "2021", "2024"] {
+        for head in ["gen", "async", "dyn", "try", "union"] {
+            let raw_in_source = match head {
+                "async" | "dyn" | "try" => true,
+                "gen" => edition == "2024",
+                _ => false,
+            };
+            let written = if raw_in_source {
+                format!("r#{head}")
+            } else {
+                head.to_string()
+            };
+            let package = format!("frozenk{edition}{head}");
+            let (manifest, mut files) = renamed_dependency(head);
+            files.push(("src/lib.rs".to_string(), "pub mod core;\n".to_string()));
+            files.push((
+                "src/core.rs".to_string(),
+                format!("use {written}::f;\npub fn g() {{ f(); }}\n"),
+            ));
+            let probe = RootProbe::with_edition(&package, edition, &manifest, &borrowed(&files));
+            let found = format!("{head}::f in crate::core");
+            let mut prefixes = vec![format!("r#{head}")];
+            if head == "union" {
+                prefixes.push(head.to_string());
+            }
+            for prefix in prefixes {
+                assert_inline_answers(
+                    &probe,
+                    &package,
+                    "crate::core",
+                    &prefix,
+                    &[found.as_str()],
+                    &[found.as_str()],
+                );
+            }
+        }
+    }
+}
+
+/// A, A2: a `use` inside a function body, or inside a block nested in one, resolves the calls in that block.
+#[test]
+fn a_block_local_use_resolves_inside_its_block() {
+    for (package, core) in [
+        (
+            "frozena",
+            "pub fn g() { use std::process::Command; let _ = Command::new(\"x\"); }\n",
+        ),
+        (
+            "frozena2",
+            "pub fn g() { { use std::process::Command; let _ = Command::new(\"x\"); } }\n",
+        ),
+    ] {
+        let probe = RootProbe::new(
+            package,
+            "",
+            &[("src/lib.rs", "pub mod core;\n"), ("src/core.rs", core)],
+        );
+        let found = ["std::process::Command::new in crate::core"];
+        assert_inline_answers(
+            &probe,
+            package,
+            "crate::core",
+            "std::process",
+            &found,
+            &found,
+        );
+    }
+}
+
+/// Two modules each defining `X`, with an associated `f` returning a different type in each, as the B and E rows
+/// use them.
+const SAME_NAMED_X: [(&str, &str); 2] = [
+    (
+        "src/a.rs",
+        "pub struct X;\nimpl X { pub fn f() -> u8 { 0 } }\n",
+    ),
+    (
+        "src/b.rs",
+        "pub struct X;\nimpl X { pub fn f() -> u16 { 0 } }\n",
+    ),
+];
+
+fn with_same_named_x(core: &str) -> Vec<(&str, &str)> {
+    let mut files = vec![
+        ("src/lib.rs", "pub mod a;\npub mod b;\npub mod core;\n"),
+        ("src/core.rs", core),
+    ];
+    files.extend(SAME_NAMED_X);
+    files
+}
+
+/// B: a function-local `use crate::b::X` shadows the module's `use crate::a::X` inside that function.
+#[test]
+fn a_fn_local_use_shadows_a_module_use_of_the_same_name() {
+    let probe = RootProbe::new(
+        "frozenb",
+        "",
+        &with_same_named_x(
+            "#[allow(unused_imports)]\nuse crate::a::X;\npub fn g() -> u16 { use crate::b::X; X::f() }\n",
+        ),
+    );
+    assert_inline_answers(&probe, "frozenb", "crate::core", "crate::a", &[], &[]);
+    let found = ["crate::b::X::f in crate::core"];
+    assert_inline_answers(&probe, "frozenb", "crate::core", "crate::b", &found, &found);
+}
+
+/// G: a block's `use` covers the whole block, including a call written before it.
+#[test]
+fn a_block_local_use_covers_text_before_it() {
+    let probe = RootProbe::new(
+        "frozeng",
+        "",
+        &[
+            ("src/lib.rs", "pub mod core;\n"),
+            (
+                "src/core.rs",
+                "pub fn g() { let _ = Command::new(\"x\"); use std::process::Command; }\n",
+            ),
+        ],
+    );
+    let found = ["std::process::Command::new in crate::core"];
+    assert_inline_answers(
+        &probe,
+        "frozeng",
+        "crate::core",
+        "std::process",
+        &found,
+        &found,
+    );
+}
+
+/// C1–C4: a path beginning with `<` names its associated item through a type, which needs inference the scanner
+/// does not perform, so none of these calls is observed — the receiver-method bound's qualified form.
+#[test]
+fn inline_qualified_path_is_the_type_directed_bound() {
+    const CLOCK: &str = "pub trait Clock { fn now() -> u64; }\npub struct S;\nimpl Clock for S { fn now() -> u64 { 0 } }\n";
+    let rows: [(&str, &str, &[&str]); 4] = [
+        (
+            "frozenc1",
+            "pub fn g() -> std::time::SystemTime { <std::time::SystemTime>::now() }\n",
+            &["std::time"],
+        ),
+        (
+            "frozenc2",
+            "pub fn g() -> u64 { <crate::clock::S as crate::clock::Clock>::now() }\n",
+            &["crate::clock::Clock", "crate::clock"],
+        ),
+        (
+            "frozenc3",
+            "use crate::clock::{Clock, S};\npub fn g() -> u64 { <S as Clock>::now() }\n",
+            &["crate::clock::Clock", "crate::clock"],
+        ),
+        (
+            "frozenc4",
+            "use std::time::SystemTime;\npub fn g(t: &SystemTime) -> SystemTime { <SystemTime as Clone>::clone(t) }\n",
+            &["std::time"],
+        ),
+    ];
+    for (package, core, prefixes) in rows {
+        let probe = RootProbe::new(
+            package,
+            "",
+            &[
+                ("src/lib.rs", "pub mod clock;\npub mod core;\n"),
+                ("src/clock.rs", CLOCK),
+                ("src/core.rs", core),
+            ],
+        );
+        for prefix in prefixes {
+            assert_inline_answers(&probe, package, "crate::core", prefix, &[], &[]);
+        }
+    }
+}
+
+/// E1, E2, E4, E5: two globs that can each bring `X` into scope — used or not, cfg-exclusive, or one item reached
+/// twice — react through the glob hazard, naming each glob that reaches the prefix.
+#[test]
+fn a_glob_that_can_bring_the_prefix_reacts_however_the_name_is_used() {
+    let two_globs = "use crate::a::*;\nuse crate::b::*;\npub fn g() { let _ = X::f(); }\n";
+    let unused = "#[allow(unused_imports)]\nuse crate::a::*;\n#[allow(unused_imports)]\nuse crate::b::*;\npub fn g() {}\n";
+    let cfg_globs = "#[cfg(unix)]\nuse crate::a::*;\n#[cfg(not(unix))]\nuse crate::b::*;\npub fn g() { let _ = X::f(); }\n";
+    for (package, core, prefix, found) in [
+        (
+            "frozene1",
+            two_globs,
+            "crate::a",
+            "glob crate::a in crate::core",
+        ),
+        (
+            "frozene2",
+            unused,
+            "crate::a",
+            "glob crate::a in crate::core",
+        ),
+        (
+            "frozene4",
+            cfg_globs,
+            "crate::a",
+            "glob crate::a in crate::core",
+        ),
+        (
+            "frozene4",
+            cfg_globs,
+            "crate::b",
+            "glob crate::b in crate::core",
+        ),
+    ] {
+        let probe = RootProbe::new(package, "", &with_same_named_x(core));
+        assert_inline_answers(&probe, package, "crate::core", prefix, &[found], &[found]);
+    }
+    let probe = RootProbe::new(
+        "frozene5",
+        "",
+        &[
+            ("src/lib.rs", "pub mod a;\npub mod b;\npub mod core;\n"),
+            (
+                "src/a.rs",
+                "pub struct X;\nimpl X { pub fn f() -> u8 { 0 } }\n",
+            ),
+            ("src/b.rs", "pub use crate::a::X;\n"),
+            (
+                "src/core.rs",
+                "use crate::a::*;\nuse crate::b::*;\npub fn g() -> u8 { X::f() }\n",
+            ),
+        ],
+    );
+    let found = [
+        "glob crate::a in crate::core",
+        "glob crate::b in crate::core",
+    ];
+    assert_inline_answers(
+        &probe,
+        "frozene5",
+        "crate::core",
+        "crate::a",
+        &found,
+        &found,
+    );
+}
+
+/// E3: a named import beside a glob wins the name, and the glob still reacts as a hazard under the prefix it
+/// reaches — the stated over-reaction.
+#[test]
+fn an_explicit_import_beside_a_glob_reacts_through_each() {
+    let probe = RootProbe::new(
+        "frozene3",
+        "",
+        &with_same_named_x(
+            "#[allow(unused_imports)]\nuse crate::a::*;\nuse crate::b::X;\npub fn g() -> u16 { X::f() }\n",
+        ),
+    );
+    let glob = ["glob crate::a in crate::core"];
+    assert_inline_answers(&probe, "frozene3", "crate::core", "crate::a", &glob, &glob);
+    let call = ["crate::b::X::f in crate::core"];
+    assert_inline_answers(&probe, "frozene3", "crate::core", "crate::b", &call, &call);
+}
+
+/// H1, H3: an associated `const` and an enum variant named like an import are reached only through a path, so
+/// neither shadows the import.
+#[test]
+fn inline_associated_item_or_variant_does_not_shadow_an_import() {
+    for (package, core) in [
+        (
+            "frozenh1",
+            "use std::process::Command; pub struct S; impl S { const Command: u8 = 0; pub fn f() { let _ = Command::new(\"x\"); } }\n",
+        ),
+        (
+            "frozenh3",
+            "use std::process::Command; pub enum E { Command } pub fn f() { let _ = Command::new(\"x\"); }\n",
+        ),
+    ] {
+        let probe = RootProbe::new(
+            package,
+            "",
+            &[("src/lib.rs", "pub mod core;\n"), ("src/core.rs", core)],
+        );
+        let found = ["std::process::Command::new in crate::core"];
+        assert_inline_answers(
+            &probe,
+            package,
+            "crate::core",
+            "std::process",
+            &found,
+            &found,
+        );
+    }
+}
+
+/// H2: Rust resolves `Command` to the generic parameter; the scanner does not read parameter lists and reads the
+/// module's import — the declared over-reaction.
+#[test]
+fn inline_generic_parameter_named_like_an_import_is_read_as_the_import() {
+    let probe = RootProbe::new(
+        "frozenh2",
+        "",
+        &[
+            ("src/lib.rs", "pub mod core;\n"),
+            (
+                "src/core.rs",
+                "#[allow(unused_imports)] use std::process::Command; pub fn f<Command: Default>() -> Command { Command::default() }\n",
+            ),
+        ],
+    );
+    let found = ["std::process::Command::default in crate::core"];
+    assert_inline_answers(
+        &probe,
+        "frozenh2",
+        "crate::core",
+        "std::process",
+        &found,
+        &found,
     );
 }
