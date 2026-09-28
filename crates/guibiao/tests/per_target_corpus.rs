@@ -2613,6 +2613,7 @@ fn a_brace_in_a_literal_or_beside_a_lifetime_opens_no_scope() {
             &["crate::b::X::fb in crate::core"],
         ),
     ];
+    let mut mismatches = Vec::new();
     for (package, core, under_a, under_b) in rows {
         let probe = RootProbe::new(
             package,
@@ -2624,7 +2625,17 @@ fn a_brace_in_a_literal_or_beside_a_lifetime_opens_no_scope() {
                 ("src/core.rs", &core),
             ],
         );
-        assert_inline_answers(&probe, package, "crate::core", "crate::a", under_a, under_a);
-        assert_inline_answers(&probe, package, "crate::core", "crate::b", under_b, under_b);
+        for (prefix, expected) in [("crate::a", under_a), ("crate::b", under_b)] {
+            for strict_external in [false, true] {
+                let found =
+                    inline_findings(&probe, package, "crate::core", prefix, strict_external);
+                if found != expected {
+                    mismatches.push(format!(
+                        "{package}: {prefix}, strict_external = {strict_external}: {found:?}, expected {expected:?}"
+                    ));
+                }
+            }
+        }
     }
+    assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
 }
