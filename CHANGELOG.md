@@ -193,9 +193,12 @@ them.
   (exit 2) quoting the prefix, and suggesting a spelling where one is determined. Three rules apply, through one
   implementation both builders share:
   - **Spelling.** `::`-separated identifiers, optionally starting with a leading `::` for explicit
-    external crate disambiguation, and not starting with a keyword (`Self`, `self`, `super`, etc.); `r#x` is `x`.
-    An empty segment, a trailing `::`, interior whitespace, or a keyword head is exit 2, suggesting the trimmed
-    segments where valid.
+    external crate disambiguation; `r#x` is `x`. An empty segment, a trailing `::`, or interior whitespace is
+    exit 2, suggesting the trimmed segments where valid. So is a first segment that can never name a crate or
+    module — `_` or `r#_`; `r#crate`, `r#self`, `r#super` or `r#Self`; bare `self`, `super` or `Self`; or
+    `crate` after a leading `::` — suggesting the unraw spelling where that is valid (`r#crate::clock` →
+    `crate::clock`). Every other first segment, a keyword in some edition or not, is accepted bare or raw:
+    `async` and `r#async` are one prefix and one identity.
   - **Existence.** A `crate::` prefix must name a module some compiled root declares, or an item one defines.
   - **Missing root.** A first segment that is not `crate`, a sysroot crate (`std`, `core`, `alloc`,
     `proc_macro`, `test`), a declared dependency under its local name, or the package's own library is

@@ -1771,27 +1771,77 @@ fn an_external_prefix_disambiguates_with_leading_colons() {
     );
 }
 
+/// N: a prefix head that can never name a crate or module — `_`, a raw `crate`/`self`/`super`/`Self`/`_`, a bare
+/// `self`/`super`/`Self`, or `crate` after a leading `::` — is refused by either builder, quoting the written
+/// prefix, and suggesting the unraw spelling only where that is a valid prefix.
 #[test]
-fn a_prefix_starting_with_a_keyword_is_refused() {
+fn a_prefix_head_naming_no_crate_or_module_is_refused() {
     let probe = RootProbe::new(
-        "inlinekwprefix",
+        "inlinenohead",
         "",
         &[
-            ("src/lib.rs", "pub mod core;\n"),
-            ("src/core.rs", "pub fn run() {}\n"),
+            ("src/lib.rs", "pub mod clock;\npub mod core;\n"),
+            ("src/clock.rs", "pub fn now() -> u64 { 0 }\n"),
+            ("src/core.rs", "pub fn g() -> u64 { crate::clock::now() }\n"),
         ],
     );
-    let law = Constitution::new("inline-kw-prefix").boundary(
-        ModuleBoundary::in_crate("inlinekwprefix")
-            .module("crate::core")
-            .must_not_call_inline("Self::now")
-            .because("keyword prefix is meaningless"),
-    );
-    let outcome = check(&law, probe.manifest());
-    assert_eq!(outcome.exit_code(), 2, "{outcome:?}");
-    assert!(
-        constitution_error(&outcome).contains("Self::now"),
-        "error quotes the written prefix: {outcome:?}"
+    let refused: [(&str, Option<&str>); 13] = [
+        ("_", None),
+        ("_::clock", None),
+        ("r#_::clock", None),
+        ("Self::now", None),
+        ("Self::clock", None),
+        ("r#Self::clock", None),
+        ("self::clock", None),
+        ("r#self::clock", None),
+        ("super::clock", None),
+        ("r#super::clock", None),
+        ("::crate::clock", None),
+        ("r#crate::clock", Some("crate::clock")),
+        ("r#crate", Some("crate")),
+    ];
+    for (prefix, suggestion) in refused {
+        for (module, draft) in [
+            (
+                "must_not_call_inline",
+                ModuleBoundary::in_crate("inlinenohead")
+                    .module("crate::core")
+                    .must_not_call_inline(prefix),
+            ),
+            (
+                "confine_inline_call",
+                ModuleBoundary::in_crate("inlinenohead")
+                    .module("crate::clock")
+                    .confine_inline_call(prefix),
+            ),
+        ] {
+            let law =
+                Constitution::new("inline-no-head").boundary(draft.because("a head names nothing"));
+            let outcome = check(&law, probe.manifest());
+            assert_eq!(outcome.exit_code(), 2, "{module}({prefix}): {outcome:?}");
+            let message = constitution_error(&outcome);
+            assert!(
+                message.contains(&format!("names '{prefix}'")),
+                "{module}({prefix}) quotes the written prefix: {message}"
+            );
+            let repair = match suggestion {
+                Some(spelling) => format!("write `{spelling}`"),
+                None => "write the path from `crate`".to_string(),
+            };
+            assert!(
+                message.contains(&repair),
+                "{module}({prefix}) repairs with {repair:?}: {message}"
+            );
+        }
+    }
+    let found = ["crate::clock::now in crate::core"];
+    assert_inline_answers(
+        &probe,
+        "inlinenohead",
+        "crate::core",
+        "crate::clock",
+        &found,
+        &found,
     );
 }
 
@@ -1804,6 +1854,25 @@ fn inline_findings(
     prefix: &str,
     strict_external: bool,
 ) -> Vec<String> {
+    inline_findings_and_ids(
+        probe,
+        package,
+        module,
+        prefix,
+        strict_external,
+        &mut Vec::new(),
+    )
+}
+
+/// [`inline_findings`], also collecting each violation's baseline identity into `ids`.
+fn inline_findings_and_ids(
+    probe: &RootProbe,
+    package: &str,
+    module: &str,
+    prefix: &str,
+    strict_external: bool,
+    ids: &mut Vec<xuanji::ViolationId>,
+) -> Vec<String> {
     let draft = ModuleBoundary::in_crate(package)
         .module(module)
         .must_not_call_inline(prefix);
@@ -1814,6 +1883,9 @@ fn inline_findings(
     };
     let law = Constitution::new("inline-answers").boundary(draft.because("inline path resolution"));
     let outcome = check(&law, probe.manifest());
+    if let Outcome::Violations(report) = &outcome {
+        ids.extend(report.violations.iter().map(xuanji::Violation::id));
+    }
     match &outcome {
         Outcome::Clean(_) => Vec::new(),
         Outcome::Violations(report) => {
@@ -1929,10 +2001,11 @@ fn inline_bare_local_module_shadows_same_named_dependency() {
     assert_inline_answers(&probe, "frozenr4", "crate", "::md5x", &[], &[]);
 }
 
-/// K: a dependency renamed to a keyword, imported with the spelling each edition requires, reacts under the raw
-/// prefix in every edition; `union`, a weak keyword, reacts bare or raw.
+/// K: a boundary prefix is a name, not source, so a head that is a keyword in some edition is accepted bare or
+/// raw. A dependency renamed to the head, imported with the spelling each edition requires, reacts under both
+/// prefixes in every edition, and the two spellings carry one baseline identity.
 #[test]
-fn a_raw_or_weak_keyword_prefix_head_is_accepted_in_every_edition() {
+fn a_keyword_prefix_head_is_accepted_bare_or_raw() {
     for edition in ["2018", "2021", "2024"] {
         for head in ["gen", "async", "dyn", "try", "union"] {
             let raw_in_source = match head {
@@ -1954,18 +2027,27 @@ fn a_raw_or_weak_keyword_prefix_head_is_accepted_in_every_edition() {
             ));
             let probe = RootProbe::with_edition(&package, edition, &manifest, &borrowed(&files));
             let found = format!("{head}::f in crate::core");
-            let mut prefixes = vec![format!("r#{head}")];
-            if head == "union" {
-                prefixes.push(head.to_string());
-            }
-            for prefix in prefixes {
-                assert_inline_answers(
-                    &probe,
-                    &package,
-                    "crate::core",
-                    &prefix,
-                    &[found.as_str()],
-                    &[found.as_str()],
+            for strict_external in [false, true] {
+                let mut identities = Vec::new();
+                for prefix in [head.to_string(), format!("r#{head}")] {
+                    let mut ids = Vec::new();
+                    assert_eq!(
+                        inline_findings_and_ids(
+                            &probe,
+                            &package,
+                            "crate::core",
+                            &prefix,
+                            strict_external,
+                            &mut ids,
+                        ),
+                        [found.as_str()],
+                        "{prefix} in {edition}, strict_external = {strict_external}"
+                    );
+                    identities.push(ids);
+                }
+                assert_eq!(
+                    identities[0], identities[1],
+                    "`{head}` and `r#{head}` are one identity in {edition}"
                 );
             }
         }

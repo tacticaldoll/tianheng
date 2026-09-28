@@ -83,21 +83,23 @@ pub(crate) fn canonical_module_spelling(written: &str) -> Result<String, Option<
     Err(is_canonical_spelling(&candidate).then_some(candidate))
 }
 
+/// Whether a symbol path's first segment, as written, can never name a crate or module.
+///
+/// The set is the Rust Reference's identifier grammar rather than a keyword list: `_` is not an
+/// identifier, so neither `_` nor `r#_` names anything; `crate`, `self`, `super` and `Self` cannot be
+/// written raw; bare `self`, `super` and `Self` are relative to a module or type a declaration does not
+/// have; and `crate` stands only at the start of a path, so after a leading `::` it names nothing. Bare
+/// `crate` is the crate-root form. Every other head — a keyword in some edition or not — names the crate
+/// or module of that name, written bare or raw.
 fn is_disallowed_symbol_head(head: &str, is_global: bool) -> bool {
-    if is_global && head == "crate" {
-        return true;
+    match head.strip_prefix("r#") {
+        Some(name) => matches!(name, "_" | "crate" | "self" | "super" | "Self"),
+        None => matches!(head, "_" | "self" | "super" | "Self") || (is_global && head == "crate"),
     }
-    if head == "crate" {
-        return false;
-    }
-    if head.starts_with("r#") {
-        return false;
-    }
-    super::lexer::is_rust_keyword(head.as_bytes())
 }
 
 /// Whether `written` is `::`-separated identifiers (optionally starting with `::` for external
-/// crates) not starting at a keyword (`Self`, `self`, `super`, etc.).
+/// crates) whose first segment can name a crate or module ([`is_disallowed_symbol_head`]).
 fn is_symbol_path_spelling(written: &str) -> bool {
     let is_global = written.starts_with("::");
     let raw = if is_global {
@@ -123,9 +125,10 @@ fn is_symbol_path_spelling(written: &str) -> bool {
 ///
 /// A symbol path — an inline-call prefix — is compared with resolved paths segment by segment, so it
 /// has one accepted spelling: `::`-separated identifiers, optionally starting with `::` to explicitly
-/// name an external crate, each read by the [`is_identifier`] a module path is read by, not starting
-/// at a keyword (`Self`, `self`, `super`, etc.). Which first segments name something is the caller's
-/// question, since it needs what the crate declares. `r#x` and `x` are one identifier, so the
+/// name an external crate, each read by the [`is_identifier`] a module path is read by, with a first
+/// segment outside the finite set that can never name a crate or module
+/// ([`is_disallowed_symbol_head`]). Which of the remaining first segments name something is the
+/// caller's question, since it needs what the crate declares. `r#x` and `x` are one identifier, so the
 /// accepted form carries no raw prefix. Every other spelling is refused, and the refusal carries the
 /// written path's non-empty, trimmed segments, raw prefixes removed, as the suggestion — or `None`
 /// when that is no accepted spelling either.
