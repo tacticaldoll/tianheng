@@ -1,5 +1,5 @@
-//! The lexical scope table an inline path head is resolved from: which binding a first identifier
-//! names at the place it is written.
+//! The lexical scope table an inline path head is resolved from: which bindings a first identifier
+//! can name at the place it is written.
 //!
 //! Two kinds of brace open a scope, and only two. A **module body** — the file, or an inline
 //! `mod name { … }` — and a **block**: a fn body (a method body inside an `impl` or `trait` included),
@@ -11,14 +11,18 @@
 //!
 //! A `use` or an item written directly in a scope binds for that whole scope, text before it
 //! included, and ends at its closing brace; a lookup walks the occurrence's chain of blocks up to the
-//! nearest module scope and stops there, since a module sees no binding of its parent's without a
-//! `use`. The table is built from comment- and string-stripped text, the text the call scan reads;
-//! declarations are read from that text with macro bodies stripped, placed by position, so a `use`
-//! written inside an unexpanded macro body stays unobserved, the existing stated bound.
+//! nearest module scope. A glob is an edge to the module it names, followed at lookup time through
+//! [`CrateScopes`] with a visited set, so a chain of globs across modules reaches a fixed point and
+//! `use super::*` carries a parent's private imports to its child. Where one scope binds a name more
+//! than once — cfg-exclusive imports, which the scanner reads cfg-blind — every binding is a
+//! candidate, never the last one written. The table is built from comment- and string-stripped text,
+//! the text the call scan reads; declarations are read from that text with macro bodies stripped,
+//! placed by position, so a `use` written inside an unexpanded macro body stays unobserved, the
+//! existing stated bound.
 //!
 //! Pure string processing over [`super::lexer`] and [`super::path_vocab`]; it imports no consumer.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use super::lexer::{
     UseStatementScan, is_ident_byte, keyword_starts_at, scan_use_statement,
@@ -26,16 +30,38 @@ use super::lexer::{
 };
 use super::path_vocab::{
     brace_content, canonical_module_path, canonical_segment, fold_canonical_segments,
-    inline_mod_at, is_crate_root_shadow, resolve_self_super, split_top_commas,
+    inline_mod_at, is_crate_root_shadow, path_within, resolve_self_super, split_top_commas,
 };
 
-/// A brace-nesting depth cap for the hand-rolled `use`-tree walkers ([`expand_use_leaves`] here, and
-/// the symbol scan's glob-base walk), so a pathologically nested `use` cannot overflow the stack — a
-/// DoS backstop set far beyond any real or lint-clean source. Past the cap, fail loud (a scan error)
-/// rather than silently dropping the sub-tree: a real, compilable `use` nested past this depth would
-/// otherwise vanish from observation with no report — the false negative PROJECT.md's core contract
-/// forbids. Mirrors `use_scan::MAX_USE_NEST_DEPTH`'s identical rationale for the same shape of walker.
+/// A brace-nesting depth cap for the hand-rolled `use`-tree walkers ([`expand_use_leaves`] and
+/// [`glob_bases`]), so a pathologically nested `use` cannot overflow the stack — a DoS backstop set
+/// far beyond any real or lint-clean source. Past the cap, fail loud (a scan error) rather than
+/// silently dropping the sub-tree: a real, compilable `use` nested past this depth would otherwise
+/// vanish from observation with no report — the false negative PROJECT.md's core contract forbids.
+/// Mirrors `use_scan::MAX_USE_NEST_DEPTH`'s identical rationale for the same shape of walker.
 pub(super) const MAX_SYMBOL_NEST_DEPTH: usize = 64;
+
+/// What a written `use` path, or a path beginning with `::`, is resolved against: the crate-root
+/// modules, and whether the package is edition 2015, where both resolve from the crate root rather
+/// than from the extern prelude.
+#[derive(Clone, Copy)]
+pub(super) struct PathRoots<'a> {
+    pub root_modules: &'a [String],
+    pub edition_2015: bool,
+}
+
+impl PathRoots<'_> {
+    /// Whether a bare or `::`-rooted head of a `use` path, written in `module`, names a crate-root
+    /// module: at the crate root in any edition (a sibling `mod` shadows the extern prelude there), and
+    /// from any module in edition 2015, where such a path starts at the crate root.
+    pub(super) fn names_root_module(&self, module: &str, head: &str) -> bool {
+        if self.edition_2015 {
+            self.root_modules.iter().any(|m| m == head)
+        } else {
+            is_crate_root_shadow(module, head, self.root_modules)
+        }
+    }
+}
 
 /// Which Rust namespace a path head is looked up in: a head followed by `::` names a module or type,
 /// a bare call names a value.
@@ -47,9 +73,10 @@ pub(super) enum Namespace {
 
 /// What a head resolves to from one scope.
 pub(super) enum Head {
-    /// A `use` binding or a block-local `type` alias: the path it names, to be chased through the
-    /// crate-wide alias and re-export closure like any other.
-    Path(String),
+    /// Every path the head can name there — each `use` binding of it in the nearest scope that binds
+    /// it, a block-local `type` alias's target, or what the scope's globs bring — each to be chased
+    /// through the crate-wide alias and re-export closure like any other.
+    Paths(Vec<String>),
     /// A block-local item. It is named by no path outside its block, so no prefix reaches it.
     Local,
     /// No scope between the occurrence and its module binds the head.
@@ -63,8 +90,8 @@ enum ScopeKind {
 }
 
 enum Binding {
-    /// A `use` leaf, resolved from its scope's module.
-    Import(String),
+    /// A `use` leaf, resolved from its scope's module, and whether it is a `pub` import.
+    Import { target: String, public: bool },
     /// A block-local `type Name = Target;`, resolved from its own scope when looked up.
     Alias(String),
 }
@@ -81,12 +108,19 @@ struct Scope {
     module: String,
     bindings: HashMap<String, Vec<Binding>>,
     items: HashMap<String, ItemNamespaces>,
+    /// Each glob written in this scope: the module it names, and whether it is a `pub use`.
+    globs: Vec<(String, bool)>,
 }
+
+/// A `type Name = Target;` written directly in a module body, not in a block and not as an
+/// associated type: `(name, written target, module)`.
+pub(super) type ModuleAlias = (String, String, String);
 
 /// One file's scopes, with the innermost scope of every byte of the text it was built from.
 pub(super) struct ScopeTable {
     scopes: Vec<Scope>,
     scope_at: Vec<u32>,
+    module_aliases: Vec<ModuleAlias>,
 }
 
 /// Where a declaration at a byte is recorded: in a scope, or nowhere because it is a member of an
@@ -106,23 +140,112 @@ enum Brace {
     CfgArms,
 }
 
+/// What every module of a compilation unit binds at module scope, read from each file's
+/// [`ScopeTable`]: what a glob of that module can bring into another.
+pub(super) struct CrateScopes {
+    bindings: HashMap<String, HashMap<String, Vec<(String, bool)>>>,
+    globs: HashMap<String, Vec<(String, bool)>>,
+    /// `{module}::{name}` for every item a module declares at its own top level.
+    items: HashSet<String>,
+}
+
+impl CrateScopes {
+    pub(super) fn new<'a>(
+        tables: impl IntoIterator<Item = &'a ScopeTable>,
+        items: HashSet<String>,
+    ) -> Self {
+        let mut bindings: HashMap<String, HashMap<String, Vec<(String, bool)>>> = HashMap::new();
+        let mut globs: HashMap<String, Vec<(String, bool)>> = HashMap::new();
+        for table in tables {
+            for scope in table.scopes.iter().filter(|s| s.kind == ScopeKind::Module) {
+                let names = bindings.entry(scope.module.clone()).or_default();
+                for (name, all) in &scope.bindings {
+                    for binding in all {
+                        if let Binding::Import { target, public } = binding {
+                            names
+                                .entry(name.clone())
+                                .or_default()
+                                .push((target.clone(), *public));
+                        }
+                    }
+                }
+                globs
+                    .entry(scope.module.clone())
+                    .or_default()
+                    .extend(scope.globs.iter().cloned());
+            }
+        }
+        CrateScopes {
+            bindings,
+            globs,
+            items,
+        }
+    }
+
+    /// Every path `name` can name in `module` as a glob of it, written in `from`, brings it: `module`'s
+    /// own imports and items, or else what its own globs bring, to a fixed point. A private import or
+    /// glob of `module` is visible only from `module`'s own subtree, as `use super::*` sees it.
+    fn glob_candidates(
+        &self,
+        module: &str,
+        name: &str,
+        from: &str,
+        visited: &mut HashSet<String>,
+    ) -> Vec<String> {
+        if !module.starts_with("crate") || !visited.insert(module.to_string()) {
+            return Vec::new();
+        }
+        let visible = |public: bool| public || path_within(from, module);
+        let mut found: Vec<String> = self
+            .bindings
+            .get(module)
+            .and_then(|names| names.get(name))
+            .into_iter()
+            .flatten()
+            .filter(|(_, public)| visible(*public))
+            .map(|(target, _)| target.clone())
+            .collect();
+        let item = format!("{module}::{name}");
+        if self.items.contains(&item) {
+            found.push(item);
+        }
+        if !found.is_empty() {
+            return found;
+        }
+        for (glob, public) in self.globs.get(module).into_iter().flatten() {
+            if visible(*public) {
+                found.extend(self.glob_candidates(glob, name, from, visited));
+            }
+        }
+        found
+    }
+}
+
+fn with_rest(mut path: String, rest: &[String]) -> String {
+    for segment in rest {
+        path.push_str("::");
+        path.push_str(segment);
+    }
+    path
+}
+
 impl ScopeTable {
     /// Build the table for one file from its comment- and string-stripped `text`, whose module is
     /// `file_module`.
     pub(super) fn build(
         text: &str,
         file_module: &str,
-        root_modules: &[String],
+        roots: PathRoots<'_>,
     ) -> Result<Self, String> {
         let bytes = text.as_bytes();
         let braces = classify_braces(bytes);
-        let mut scopes = vec![Scope {
-            parent: None,
-            kind: ScopeKind::Module,
-            module: file_module.to_string(),
-            bindings: HashMap::new(),
-            items: HashMap::new(),
-        }];
+        let mut scopes = Vec::new();
+        push_scope(
+            &mut scopes,
+            None,
+            ScopeKind::Module,
+            file_module.to_string(),
+        );
         let mut scope_at = vec![0u32; bytes.len() + 1];
         let mut record_at = vec![0u32; bytes.len() + 1];
         let mut frames: Vec<(u32, u32, bool)> = Vec::new();
@@ -140,12 +263,13 @@ impl ScopeTable {
                     let (next_scope, next_record, next_cfg) = match brace {
                         Brace::Module(name) => {
                             let module = format!("{}::{name}", scopes[scope as usize].module);
-                            let id = push_scope(&mut scopes, scope, ScopeKind::Module, module);
+                            let id =
+                                push_scope(&mut scopes, Some(scope), ScopeKind::Module, module);
                             (id, id, false)
                         }
                         Brace::Block => {
                             let module = scopes[scope as usize].module.clone();
-                            let id = push_scope(&mut scopes, scope, ScopeKind::Block, module);
+                            let id = push_scope(&mut scopes, Some(scope), ScopeKind::Block, module);
                             (id, id, false)
                         }
                         Brace::Members => (scope, MEMBER, false),
@@ -168,9 +292,13 @@ impl ScopeTable {
 
         let identity: Vec<usize> = (0..bytes.len()).collect();
         let (declarations, positions) = strip_macro_bodies_tracked(text, &identity);
-        let mut table = ScopeTable { scopes, scope_at };
-        table.record_uses(&declarations, &positions, &record_at, root_modules)?;
-        table.record_block_items(&declarations, &positions, &record_at);
+        let mut table = ScopeTable {
+            scopes,
+            scope_at,
+            module_aliases: Vec::new(),
+        };
+        table.record_uses(&declarations, &positions, &record_at, roots)?;
+        table.record_items(&declarations, &positions, &record_at);
         Ok(table)
     }
 
@@ -179,10 +307,18 @@ impl ScopeTable {
         self.scope_at[at.min(self.scope_at.len() - 1)]
     }
 
-    /// Resolve `head`, followed by `rest`, from `scope`: the nearest binding or block-local item on the
-    /// chain of blocks up to the nearest module scope.
-    pub(super) fn resolve(&self, scope: u32, head: &str, rest: &[String], ns: Namespace) -> Head {
-        self.resolve_at_depth(scope, head, rest, ns, 0)
+    /// Resolve `head`, followed by `rest`, from `scope`: the bindings of the nearest scope on the chain
+    /// of blocks up to the nearest module scope that binds it, a block-local item, or what that chain's
+    /// globs bring.
+    pub(super) fn resolve(
+        &self,
+        scope: u32,
+        head: &str,
+        rest: &[String],
+        ns: Namespace,
+        crate_scopes: &CrateScopes,
+    ) -> Head {
+        self.resolve_at_depth(scope, head, rest, ns, crate_scopes, 0)
     }
 
     fn resolve_at_depth(
@@ -191,35 +327,57 @@ impl ScopeTable {
         head: &str,
         rest: &[String],
         ns: Namespace,
+        crate_scopes: &CrateScopes,
         depth: usize,
     ) -> Head {
         let mut current = Some(scope);
         while let Some(id) = current {
             let entry = &self.scopes[id as usize];
-            if let Some(binding) = entry.bindings.get(head).and_then(|all| all.last()) {
-                let base = match binding {
-                    Binding::Import(target) => Head::Path(target.clone()),
-                    Binding::Alias(written) => self.resolve_alias(id, written, depth),
-                };
-                return match base {
-                    Head::Path(mut path) => {
-                        for segment in rest {
-                            path.push_str("::");
-                            path.push_str(segment);
+            if let Some(all) = entry.bindings.get(head).filter(|all| !all.is_empty()) {
+                let mut paths = Vec::new();
+                for binding in all {
+                    match binding {
+                        Binding::Import { target, .. } => paths.push(target.clone()),
+                        Binding::Alias(written) => {
+                            match self.resolve_alias(id, written, crate_scopes, depth) {
+                                Head::Paths(found) => paths.extend(found),
+                                Head::Local => return Head::Local,
+                                Head::Unbound => {}
+                            }
                         }
-                        Head::Path(path)
                     }
-                    other => other,
-                };
+                }
+                return Head::Paths(paths.into_iter().map(|p| with_rest(p, rest)).collect());
+            }
+            if entry.kind == ScopeKind::Block
+                && entry.items.get(head).is_some_and(|item| match ns {
+                    Namespace::Type => item.type_ns,
+                    Namespace::Value => item.value_ns,
+                })
+            {
+                return Head::Local;
+            }
+            if entry.kind == ScopeKind::Module
+                && crate_scopes
+                    .items
+                    .contains(&format!("{}::{head}", entry.module))
+            {
+                return Head::Unbound;
+            }
+            let mut brought = Vec::new();
+            for (glob, _) in &entry.globs {
+                brought.extend(crate_scopes.glob_candidates(
+                    glob,
+                    head,
+                    &entry.module,
+                    &mut HashSet::new(),
+                ));
+            }
+            if !brought.is_empty() {
+                return Head::Paths(brought.into_iter().map(|p| with_rest(p, rest)).collect());
             }
             if entry.kind == ScopeKind::Module {
                 return Head::Unbound;
-            }
-            if entry.items.get(head).is_some_and(|item| match ns {
-                Namespace::Type => item.type_ns,
-                Namespace::Value => item.value_ns,
-            }) {
-                return Head::Local;
             }
             current = entry.parent;
         }
@@ -227,7 +385,13 @@ impl ScopeTable {
     }
 
     /// A block-local alias's target, read from the alias's own scope as its written path says.
-    fn resolve_alias(&self, scope: u32, written: &str, depth: usize) -> Head {
+    fn resolve_alias(
+        &self,
+        scope: u32,
+        written: &str,
+        crate_scopes: &CrateScopes,
+        depth: usize,
+    ) -> Head {
         let module = &self.scopes[scope as usize].module;
         if written.starts_with("::") || depth > MAX_SYMBOL_NEST_DEPTH {
             return Head::Unbound;
@@ -241,14 +405,20 @@ impl ScopeTable {
             return Head::Unbound;
         };
         let parts_str: Vec<&str> = parts.iter().map(String::as_str).collect();
+        let single = |path: Option<String>| path.map_or(Head::Unbound, |p| Head::Paths(vec![p]));
         match head.as_str() {
-            "std" | "core" | "alloc" => Head::Path(parts.join("::")),
-            "crate" => fold_canonical_segments(&parts_str).map_or(Head::Unbound, Head::Path),
-            "self" | "super" => {
-                resolve_self_super(module, &parts_str).map_or(Head::Unbound, Head::Path)
-            }
-            _ => match self.resolve_at_depth(scope, head, rest, Namespace::Type, depth + 1) {
-                Head::Unbound => Head::Path(format!("{module}::{}", parts.join("::"))),
+            "std" | "core" | "alloc" => Head::Paths(vec![parts.join("::")]),
+            "crate" => single(fold_canonical_segments(&parts_str)),
+            "self" | "super" => single(resolve_self_super(module, &parts_str)),
+            _ => match self.resolve_at_depth(
+                scope,
+                head,
+                rest,
+                Namespace::Type,
+                crate_scopes,
+                depth + 1,
+            ) {
+                Head::Unbound => Head::Paths(vec![format!("{module}::{}", parts.join("::"))]),
                 resolved => resolved,
             },
         }
@@ -260,10 +430,10 @@ impl ScopeTable {
         let mut map = HashMap::new();
         for scope in self.scopes.iter().filter(|s| s.kind == ScopeKind::Module) {
             for (name, bindings) in &scope.bindings {
-                if let Some(Binding::Import(target)) = bindings
+                if let Some(Binding::Import { target, .. }) = bindings
                     .iter()
                     .rev()
-                    .find(|b| matches!(b, Binding::Import(_)))
+                    .find(|b| matches!(b, Binding::Import { .. }))
                 {
                     map.insert((scope.module.clone(), name.clone()), target.clone());
                 }
@@ -272,12 +442,17 @@ impl ScopeTable {
         map
     }
 
+    /// Every `type` alias written directly in a module body — the ones a path outside a block can name.
+    pub(super) fn module_aliases(&self) -> &[ModuleAlias] {
+        &self.module_aliases
+    }
+
     fn record_uses(
         &mut self,
         declarations: &str,
         positions: &[usize],
         record_at: &[u32],
-        root_modules: &[String],
+        roots: PathRoots<'_>,
     ) -> Result<(), String> {
         let bytes = declarations.as_bytes();
         let mut i = 0;
@@ -287,16 +462,22 @@ impl ScopeTable {
                     UseStatementScan::Statement { body, next } => {
                         let scope = record_at[positions[i]];
                         if scope != MEMBER {
+                            let public = follows_pub(bytes, i);
                             let module = self.scopes[scope as usize].module.clone();
                             for (name, path) in expand_use_leaves(&body)? {
-                                if let Some(target) =
-                                    resolve_written_path(&path, &module, root_modules)
-                                {
+                                if let Some(target) = resolve_written_path(&path, &module, roots) {
                                     self.scopes[scope as usize]
                                         .bindings
                                         .entry(name)
                                         .or_default()
-                                        .push(Binding::Import(target));
+                                        .push(Binding::Import { target, public });
+                                }
+                            }
+                            let mut bases = Vec::new();
+                            glob_bases(&body, &mut bases, 0)?;
+                            for base in bases {
+                                if let Some(target) = resolve_written_path(&base, &module, roots) {
+                                    self.scopes[scope as usize].globs.push((target, public));
                                 }
                             }
                         }
@@ -315,10 +496,11 @@ impl ScopeTable {
         Ok(())
     }
 
-    /// Record every item declared directly in a block: its name and namespaces, or, for a `type`
-    /// alias, a binding to its written target. A module scope's own items are not recorded; the
-    /// crate-wide closure reads those.
-    fn record_block_items(&mut self, declarations: &str, positions: &[usize], record_at: &[u32]) {
+    /// Record every item declared directly in a block — its name and namespaces, or, for a `type`
+    /// alias, a binding to its written target — and every `type` alias written directly in a module
+    /// body. A module's other items are read crate-wide into [`CrateScopes`]; a member of a body that
+    /// opens no scope is not recorded at all.
+    fn record_items(&mut self, declarations: &str, positions: &[usize], record_at: &[u32]) {
         const KEYWORDS: [&[u8]; 9] = [
             b"struct", b"enum", b"union", b"trait", b"type", b"mod", b"fn", b"const", b"static",
         ];
@@ -335,7 +517,7 @@ impl ScopeTable {
             let scope = record_at[positions[i]];
             let after = i + keyword.len();
             i = after;
-            if scope == MEMBER || self.scopes[scope as usize].kind != ScopeKind::Block {
+            if scope == MEMBER {
                 continue;
             }
             let mut name_at = skip_ws(bytes, after);
@@ -349,6 +531,15 @@ impl ScopeTable {
                 continue;
             }
             let entry = &mut self.scopes[scope as usize];
+            if entry.kind == ScopeKind::Module {
+                if *keyword == b"type" {
+                    if let Some(target) = alias_target(declarations, name_end) {
+                        self.module_aliases
+                            .push((name, target, entry.module.clone()));
+                    }
+                }
+                continue;
+            }
             let (type_ns, value_ns) = match *keyword {
                 b"type" => {
                     if let Some(target) = alias_target(declarations, name_end) {
@@ -374,14 +565,38 @@ impl ScopeTable {
     }
 }
 
-fn push_scope(scopes: &mut Vec<Scope>, parent: u32, kind: ScopeKind, module: String) -> u32 {
+/// Whether the `use` keyword at `i` is qualified `pub` or `pub(…)`.
+fn follows_pub(bytes: &[u8], i: usize) -> bool {
+    let mut j = i;
+    while j > 0 && bytes[j - 1].is_ascii_whitespace() {
+        j -= 1;
+    }
+    if j > 0 && bytes[j - 1] == b')' {
+        while j > 0 && bytes[j - 1] != b'(' {
+            j -= 1;
+        }
+        j = j.saturating_sub(1);
+        while j > 0 && bytes[j - 1].is_ascii_whitespace() {
+            j -= 1;
+        }
+    }
+    j >= 3 && keyword_starts_at(bytes, j - 3, b"pub")
+}
+
+fn push_scope(
+    scopes: &mut Vec<Scope>,
+    parent: Option<u32>,
+    kind: ScopeKind,
+    module: String,
+) -> u32 {
     let id = u32::try_from(scopes.len()).expect("scope table exceeds u32");
     scopes.push(Scope {
-        parent: Some(parent),
+        parent,
         kind,
         module,
         bindings: HashMap::new(),
         items: HashMap::new(),
+        globs: Vec::new(),
     });
     id
 }
@@ -700,14 +915,58 @@ pub(super) fn expand_use_leaves(tree: &str) -> Result<Vec<(String, String)>, Str
     Ok(out)
 }
 
+/// Collect every glob base path in a use tree, recursing into groups (so a **nested** glob member
+/// `use std::{time::*, io::Write}` yields `std::time`, not just a top-level `use std::time::*`).
+/// A bare tail `a::b::*` → `a::b`; a group member `*` → the group prefix. Brace handling goes
+/// through [`brace_content`] / [`split_top_commas`] (char-based, never a byte slice), so a malformed
+/// `}`-before-`{` cannot panic.
+pub(super) fn glob_bases(tree: &str, out: &mut Vec<String>, depth: usize) -> Result<(), String> {
+    if depth > MAX_SYMBOL_NEST_DEPTH {
+        return Err(format!(
+            "cannot judge a `use` tree nested past {MAX_SYMBOL_NEST_DEPTH} brace levels: '{tree}'"
+        ));
+    }
+    let tree = tree.trim();
+    match tree.find('{') {
+        Some(open) => {
+            let prefix = tree[..open].trim();
+            for part in split_top_commas(&brace_content(&tree[open..])) {
+                let part = part.trim();
+                if part.is_empty() {
+                    continue;
+                }
+                if part == "*" {
+                    let base = prefix.trim_end_matches(':').trim();
+                    if !base.is_empty() {
+                        out.push(base.to_string());
+                    }
+                } else {
+                    glob_bases(&format!("{prefix}{part}"), out, depth + 1)?;
+                }
+            }
+        }
+        None => {
+            if let Some(base) = tree.strip_suffix("::*") {
+                let base = base.trim();
+                if !base.is_empty() {
+                    out.push(base.to_string());
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Resolve a *written* module path (from a `use` / `type` / `pub use`) to a canonical absolute
 /// form, for the def closure and the scope table. A `std`/`core`/`alloc` head or any external head
-/// stays as written (canonicalized); `crate`/`self`/`super` resolve against `current_module`; a bare
-/// head naming a crate-root module resolves to `crate::…` only at the crate root (the shadow rule).
+/// stays as written (canonicalized); `crate`/`self`/`super` resolve against `current_module`. A head
+/// naming a crate-root module resolves to `crate::…` where [`PathRoots::names_root_module`] says the
+/// path starts at the crate root: bare at the crate root in any edition, and bare or `::`-rooted
+/// anywhere in edition 2015.
 pub(super) fn resolve_written_path(
     path: &str,
     current_module: &str,
-    root_modules: &[String],
+    roots: PathRoots<'_>,
 ) -> Option<String> {
     let raw = path.trim();
     let global = raw.starts_with("::");
@@ -722,10 +981,10 @@ pub(super) fn resolve_written_path(
     match head.as_str() {
         "std" | "core" | "alloc" => Some(parts.join("::")),
         "crate" => fold_canonical_segments(&parts_str),
-        _ if global => Some(parts.join("::")),
-        "self" | "super" => resolve_self_super(current_module, &parts_str),
+        _ if global && !roots.edition_2015 => Some(parts.join("::")),
+        "self" | "super" if !global => resolve_self_super(current_module, &parts_str),
         other => {
-            if is_crate_root_shadow(current_module, other, root_modules) {
+            if roots.names_root_module(current_module, other) {
                 let mut out = vec!["crate".to_string()];
                 out.extend(parts.iter().cloned());
                 Some(out.join("::"))
@@ -741,10 +1000,15 @@ mod tests {
     use super::*;
 
     fn resolved(source: &str, at: &str, head: &str, ns: Namespace) -> Option<String> {
-        let table = ScopeTable::build(source, "crate::core", &[]).unwrap();
+        let roots = PathRoots {
+            root_modules: &[],
+            edition_2015: false,
+        };
+        let table = ScopeTable::build(source, "crate::core", roots).unwrap();
+        let crate_scopes = CrateScopes::new([&table], HashSet::new());
         let offset = source.find(at).unwrap();
-        match table.resolve(table.scope_at(offset), head, &[], ns) {
-            Head::Path(path) => Some(path),
+        match table.resolve(table.scope_at(offset), head, &[], ns, &crate_scopes) {
+            Head::Paths(paths) => Some(paths.join(" | ")),
             Head::Local => Some("<local>".to_string()),
             Head::Unbound => None,
         }
@@ -795,8 +1059,8 @@ mod tests {
         );
         assert_eq!(
             resolved(source, "Y::b", "Y", Namespace::Type).as_deref(),
-            Some("crate::w::Y"),
-            "a cfg_if arm's use binds at module scope"
+            Some("crate::u::Y | crate::w::Y"),
+            "each cfg_if arm's use binds at module scope, and both are candidates"
         );
     }
 

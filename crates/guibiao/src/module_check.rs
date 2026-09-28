@@ -682,6 +682,7 @@ fn check_inline_confinement(
         strict,
         external,
         &dependency_names,
+        package["edition"].as_str() == Some("2015"),
     )?;
     for InlineFinding { fact, file } in findings {
         push_module_violation(

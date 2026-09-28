@@ -2209,40 +2209,51 @@ fn inline_qualified_path_is_the_type_directed_bound() {
 }
 
 /// E1, E2, E4, E5: two globs that can each bring `X` into scope — used or not, cfg-exclusive, or one item reached
-/// twice — react through the glob hazard, naming each glob that reaches the prefix.
+/// twice — react through the glob hazard, naming each glob that reaches the prefix. Where `X::f()` is called, the
+/// globs are also followed to the modules they name, so the call reports under each candidate the prefix reaches.
 #[test]
 fn a_glob_that_can_bring_the_prefix_reacts_however_the_name_is_used() {
     let two_globs = "use crate::a::*;\nuse crate::b::*;\npub fn g() { let _ = X::f(); }\n";
     let unused = "#[allow(unused_imports)]\nuse crate::a::*;\n#[allow(unused_imports)]\nuse crate::b::*;\npub fn g() {}\n";
     let cfg_globs = "#[cfg(unix)]\nuse crate::a::*;\n#[cfg(not(unix))]\nuse crate::b::*;\npub fn g() { let _ = X::f(); }\n";
-    for (package, core, prefix, found) in [
+    let rows: [(&str, &str, &str, &[&str]); 4] = [
         (
             "frozene1",
             two_globs,
             "crate::a",
-            "glob crate::a in crate::core",
+            &[
+                "crate::a::X::f in crate::core",
+                "glob crate::a in crate::core",
+            ],
         ),
         (
             "frozene2",
             unused,
             "crate::a",
-            "glob crate::a in crate::core",
+            &["glob crate::a in crate::core"],
         ),
         (
             "frozene4",
             cfg_globs,
             "crate::a",
-            "glob crate::a in crate::core",
+            &[
+                "crate::a::X::f in crate::core",
+                "glob crate::a in crate::core",
+            ],
         ),
         (
             "frozene4",
             cfg_globs,
             "crate::b",
-            "glob crate::b in crate::core",
+            &[
+                "crate::b::X::f in crate::core",
+                "glob crate::b in crate::core",
+            ],
         ),
-    ] {
+    ];
+    for (package, core, prefix, found) in rows {
         let probe = RootProbe::new(package, "", &with_same_named_x(core));
-        assert_inline_answers(&probe, package, "crate::core", prefix, &[found], &[found]);
+        assert_inline_answers(&probe, package, "crate::core", prefix, found, found);
     }
     let probe = RootProbe::new(
         "frozene5",
@@ -2261,6 +2272,7 @@ fn a_glob_that_can_bring_the_prefix_reacts_however_the_name_is_used() {
         ],
     );
     let found = [
+        "crate::a::X::f in crate::core",
         "glob crate::a in crate::core",
         "glob crate::b in crate::core",
     ];
@@ -2434,4 +2446,185 @@ fn inline_block_local_item_shadows_a_module_import() {
         &[],
         &[],
     );
+}
+
+/// R1: `crate::clock` privately imports `std::time::SystemTime`, and its inline test module, through `use super::*`
+/// — directly or two levels down through `use super::super::*` — calls `SystemTime::now()`. A glob of an ancestor
+/// carries that ancestor's private imports, so the call resolves to `std::time`.
+#[test]
+fn inline_private_use_inherited_through_super_glob_resolves() {
+    for (package, clock) in [
+        (
+            "superglob",
+            "use std::time::SystemTime;\npub fn epoch() -> SystemTime { SystemTime::UNIX_EPOCH }\n#[cfg(test)]\nmod tests {\n    use super::*;\n    #[test]\n    fn stamps() { let _ = SystemTime::now(); }\n}\n",
+        ),
+        (
+            "supersuperglob",
+            "use std::time::SystemTime;\npub fn epoch() -> SystemTime { SystemTime::UNIX_EPOCH }\n#[cfg(test)]\nmod outer {\n    mod tests {\n        use super::super::*;\n        #[test]\n        fn stamps() { let _ = SystemTime::now(); }\n    }\n}\n",
+        ),
+    ] {
+        let probe = RootProbe::new(
+            package,
+            "",
+            &[("src/lib.rs", "pub mod clock;\n"), ("src/clock.rs", clock)],
+        );
+        let found = ["std::time::SystemTime::now in crate::clock"];
+        assert_inline_answers(&probe, package, "crate::clock", "std::time", &found, &found);
+    }
+}
+
+/// E6: `#[cfg(unix)] use crate::a::X;` beside `#[cfg(not(unix))] use crate::b::X;` — the scanner reads source
+/// cfg-blind, so both bindings are candidates and the call reports under either prefix.
+#[test]
+fn inline_cfg_alternative_uses_are_both_observed() {
+    let probe = RootProbe::new(
+        "cfgnameduses",
+        "",
+        &with_same_named_x(
+            "#[cfg(unix)]\nuse crate::a::X;\n#[cfg(not(unix))]\nuse crate::b::X;\npub fn g() { let _ = X::f(); }\n",
+        ),
+    );
+    let a = ["crate::a::X::f in crate::core"];
+    assert_inline_answers(&probe, "cfgnameduses", "crate::core", "crate::a", &a, &a);
+    let b = ["crate::b::X::f in crate::core"];
+    assert_inline_answers(&probe, "cfgnameduses", "crate::core", "crate::b", &b, &b);
+}
+
+/// D: in an edition-2015 package, a path beginning with `::` and a `use` path both start at the crate root, so
+/// `::clock::now()` in `crate::core` and `use clock::now; now()` in `crate::use2015` both call `crate::clock::now`.
+#[test]
+fn inline_edition_2015_root_paths_resolve_from_the_crate_root() {
+    let (manifest, mut files) = renamed_dependency("md5x");
+    for (path, contents) in [
+        (
+            "src/lib.rs",
+            "extern crate md5x;\npub mod clock;\npub mod core;\npub mod use2015;\n",
+        ),
+        ("src/clock.rs", "pub fn now() -> u64 { 0 }\n"),
+        (
+            "src/core.rs",
+            "pub fn g() -> u64 { ::clock::now() }\npub fn h() -> u32 { ::md5x::compute() }\npub fn i() -> u32 { md5x::compute() }\n",
+        ),
+        (
+            "src/use2015.rs",
+            "use clock::now;\npub fn j() -> u64 { now() }\n",
+        ),
+    ] {
+        files.push((path.to_string(), contents.to_string()));
+    }
+    let probe = RootProbe::with_edition("edition2015", "2015", &manifest, &borrowed(&files));
+    for module in ["crate::core", "crate::use2015"] {
+        let found = [format!("crate::clock::now in {module}")];
+        let found = [found[0].as_str()];
+        assert_inline_answers(
+            &probe,
+            "edition2015",
+            module,
+            "crate::clock",
+            &found,
+            &found,
+        );
+    }
+}
+
+/// A `type` alias written in a function body binds only inside it: the module's own `Clock` outside that body is
+/// not read through the alias.
+#[test]
+fn a_block_local_type_alias_does_not_bind_outside_its_block() {
+    let probe = RootProbe::new(
+        "blockalias",
+        "",
+        &[
+            ("src/lib.rs", "pub mod core;\n"),
+            (
+                "src/core.rs",
+                "pub struct Clock;\nimpl Clock { pub fn tick() -> u8 { 0 } }\npub fn a() -> std::time::SystemTime { type Clock = std::time::SystemTime; Clock::now() }\npub fn b() -> u8 { Clock::tick() }\n",
+            ),
+        ],
+    );
+    let found = ["std::time::SystemTime::now in crate::core"];
+    assert_inline_answers(
+        &probe,
+        "blockalias",
+        "crate::core",
+        "std::time",
+        &found,
+        &found,
+    );
+}
+
+/// An associated type is named through its type or `Self::`, never bare: the module's own `Item` is not read
+/// through an `impl`'s `type Item`.
+#[test]
+fn an_associated_type_does_not_bind_a_bare_head() {
+    let probe = RootProbe::new(
+        "associatedtype",
+        "",
+        &[
+            ("src/lib.rs", "pub mod core;\n"),
+            (
+                "src/core.rs",
+                "pub struct Item;\nimpl Item { pub fn tick() -> u8 { 0 } }\npub struct S;\nimpl Iterator for S { type Item = std::time::SystemTime; fn next(&mut self) -> Option<Self::Item> { None } }\npub fn b() -> u8 { Item::tick() }\n",
+            ),
+        ],
+    );
+    assert_inline_answers(
+        &probe,
+        "associatedtype",
+        "crate::core",
+        "std::time",
+        &[],
+        &[],
+    );
+}
+
+/// P1–P4: a brace inside a char or byte literal or a raw string, or beside a lifetime, opens and closes no scope.
+/// Each fixture puts the module-level `use crate::a::X` call after a function rebinding `X` to `crate::b::X`, so a
+/// scope left open by a literal brace would read that call through the wrong binding; P3's block tuple struct
+/// shadows an imported function in the value namespace.
+#[test]
+fn a_brace_in_a_literal_or_beside_a_lifetime_opens_no_scope() {
+    const A: &str = "pub struct X;\nimpl X { pub fn fa() -> u8 { 0 } }\npub fn mk(_: u8) {}\n";
+    const B: &str = "pub struct X;\nimpl X { pub fn fb() -> u16 { 0 } }\n";
+    const H: &str = "pub fn h() -> u8 { X::fa() }\n";
+    let rows: [(&str, String, &[&str], &[&str]); 4] = [
+        (
+            "literalp1",
+            format!("use crate::a::X;\npub fn g() -> u16 {{ use crate::b::X; let _ = '{{'; X::fb() }}\n{H}"),
+            &["crate::a::X::fa in crate::core"],
+            &["crate::b::X::fb in crate::core"],
+        ),
+        (
+            "literalp2",
+            format!("use crate::a::X;\npub fn g() -> u16 {{ let _ = r#\"}}\"#; use crate::b::X; X::fb() }}\n{H}"),
+            &["crate::a::X::fa in crate::core"],
+            &["crate::b::X::fb in crate::core"],
+        ),
+        (
+            "literalp3",
+            "#[allow(unused_imports)]\nuse crate::a::mk;\n#[allow(non_camel_case_types)]\npub fn g() { struct mk(u8); let _ = mk(0); }\n".to_string(),
+            &[],
+            &[],
+        ),
+        (
+            "literalp4",
+            format!("use crate::a::X;\npub fn g<'q>(s: &'q str) -> u16 {{ use crate::b::X; let _ = b'}}'; let _ = s; X::fb() }}\n{H}"),
+            &["crate::a::X::fa in crate::core"],
+            &["crate::b::X::fb in crate::core"],
+        ),
+    ];
+    for (package, core, under_a, under_b) in rows {
+        let probe = RootProbe::new(
+            package,
+            "",
+            &[
+                ("src/lib.rs", "pub mod a;\npub mod b;\npub mod core;\n"),
+                ("src/a.rs", A),
+                ("src/b.rs", B),
+                ("src/core.rs", &core),
+            ],
+        );
+        assert_inline_answers(&probe, package, "crate::core", "crate::a", under_a, under_a);
+        assert_inline_answers(&probe, package, "crate::core", "crate::b", under_b, under_b);
+    }
 }

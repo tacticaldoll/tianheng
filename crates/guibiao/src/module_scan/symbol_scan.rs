@@ -14,12 +14,12 @@ use crate::finding::ModuleFact;
 
 use super::lexer::{is_ident_byte, strip_comments_and_strings, strip_macro_bodies};
 use super::path_vocab::{
-    brace_content, canonical_module_path, canonical_segment, fold_canonical_segments,
-    is_crate_root_shadow, path_within, resolve_self_super, scan_inline_modules, split_top_commas,
+    canonical_module_path, canonical_segment, fold_canonical_segments, is_crate_root_shadow,
+    path_within, resolve_self_super, scan_inline_modules,
 };
 use super::scope_graph::{
-    Head, MAX_SYMBOL_NEST_DEPTH, Namespace, ScopeTable, alias_target_end, expand_use_leaves,
-    extern_block_brace_at, leading_path, resolve_written_path, skip_angles, skip_ws,
+    CrateScopes, Head, Namespace, PathRoots, ScopeTable, expand_use_leaves, extern_block_brace_at,
+    glob_bases, resolve_written_path, skip_angles, skip_ws,
 };
 
 /// The crate-wide resolution context, built once from every reachable file: the local definition
@@ -50,8 +50,8 @@ pub(crate) struct InlineFinding {
 /// `strict` reacts on any mention, not only calls; `external` opts in the strict-external head
 /// ladder (a fully-qualified un-`use`d head matching a declared dependency reclassifies as
 /// external); `dependency_names` are the rename-aware declared-dependency import identifiers that
-/// ladder matches against (unused when `external` is false). Returns findings sorted + deduped by
-/// `finding`.
+/// ladder matches against (unused when `external` is false); `edition_2015` makes a `use` path and a
+/// `::`-rooted path start at the crate root. Returns findings sorted + deduped by `finding`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn inline_symbol_findings(
     all_files: &[(std::path::PathBuf, String)],
@@ -62,7 +62,12 @@ pub(crate) fn inline_symbol_findings(
     strict: bool,
     external: bool,
     dependency_names: &[String],
+    edition_2015: bool,
 ) -> Result<Vec<InlineFinding>, String> {
+    let roots = PathRoots {
+        root_modules,
+        edition_2015,
+    };
     let prefix = canonical_module_path(prefix.trim_start_matches("::"));
     let verbs: Option<Vec<String>> =
         ending_with.map(|vs| vs.iter().map(|v| canonical_module_path(v)).collect());
@@ -82,13 +87,11 @@ pub(crate) fn inline_symbol_findings(
             .map_err(|err| crate::errors::unreadable_governed_file_error(file, &err.to_string()))?;
         let call_text = strip_comments_and_strings(&raw);
         let decl_text = strip_macro_bodies(&call_text);
-        let table = ScopeTable::build(&call_text, module, root_modules)?;
+        let table = ScopeTable::build(&call_text, module, roots)?;
         let use_map = table.module_bindings();
-        collect_defs(&decl_text, module, root_modules, &use_map, &mut ctx)?;
-        if external {
-            module_paths.insert(module.clone());
-            collect_item_definition_names(module, &decl_text, &mut item_defs);
-        }
+        collect_defs(&decl_text, module, &table, roots, &use_map, &mut ctx)?;
+        module_paths.insert(module.clone());
+        collect_item_definition_names(module, &decl_text, &mut item_defs);
         use_maps.insert(file.clone(), use_map);
         tables.insert(file.clone(), table);
         file_text.insert(file.clone(), raw);
@@ -103,6 +106,7 @@ pub(crate) fn inline_symbol_findings(
         item_defs: &item_defs,
         dep_names: &dep_names,
     });
+    let crate_scopes = CrateScopes::new(tables.values(), item_defs.clone());
 
     let mut findings: Vec<InlineFinding> = Vec::new();
     for (file, module) in governed {
@@ -118,50 +122,55 @@ pub(crate) fn inline_symbol_findings(
         }
 
         for (glob_path, occurrence_module) in glob_import_paths(&decl_text, module)? {
-            if let Some(resolved) = resolve_head(
+            let reaches = resolve_head(
                 &glob_path,
                 &occurrence_module,
                 None,
                 use_map,
-                root_modules,
+                roots,
                 external_vocab.as_ref(),
-            ) {
-                if glob_reaches_prefix(&resolved, &prefix, &ctx, &mut HashSet::new()) {
-                    findings.push(InlineFinding {
-                        fact: ModuleFact::InlineGlob {
-                            path: glob_path,
-                            module: module.clone(),
-                        },
-                        file: file.display().to_string(),
-                    });
-                }
+            )
+            .iter()
+            .any(|resolved| glob_reaches_prefix(resolved, &prefix, &ctx, &mut HashSet::new()));
+            if reaches {
+                findings.push(InlineFinding {
+                    fact: ModuleFact::InlineGlob {
+                        path: glob_path,
+                        module: module.clone(),
+                    },
+                    file: file.display().to_string(),
+                });
             }
         }
 
         let call_text = strip_comments_and_strings(raw);
         for occurrence in path_occurrences(&call_text, module) {
-            let Some(resolved) = resolve_head(
+            for resolved in resolve_head(
                 &occurrence.segments,
                 &occurrence.module,
-                Some((table, table.scope_at(occurrence.at))),
+                Some((table, table.scope_at(occurrence.at), &crate_scopes)),
                 use_map,
-                root_modules,
+                roots,
                 external_vocab.as_ref(),
-            ) else {
-                continue;
-            };
-            let resolved = chase_closure(&resolved, &chase_defs, &mut HashSet::new());
-            if !path_within(&resolved, &prefix) {
-                continue;
-            }
-            if should_react_on_occurrence(strict, occurrence.is_call, verbs.as_deref(), &resolved) {
-                findings.push(InlineFinding {
-                    fact: ModuleFact::InlinePath {
-                        path: resolved,
-                        module: module.clone(),
-                    },
-                    file: file.display().to_string(),
-                });
+            ) {
+                let resolved = chase_closure(&resolved, &chase_defs, &mut HashSet::new());
+                if !path_within(&resolved, &prefix) {
+                    continue;
+                }
+                if should_react_on_occurrence(
+                    strict,
+                    occurrence.is_call,
+                    verbs.as_deref(),
+                    &resolved,
+                ) {
+                    findings.push(InlineFinding {
+                        fact: ModuleFact::InlinePath {
+                            path: resolved,
+                            module: module.clone(),
+                        },
+                        file: file.display().to_string(),
+                    });
+                }
             }
         }
     }
@@ -341,63 +350,25 @@ fn glob_import_paths(source: &str, base_module: &str) -> Result<Vec<(String, Str
     Ok(paths)
 }
 
-/// Collect every glob base path in a use tree, recursing into groups (so a **nested** glob member
-/// `use std::{time::*, io::Write}` yields `std::time`, not just a top-level `use std::time::*`).
-/// A bare tail `a::b::*` → `a::b`; a group member `*` → the group prefix. Brace handling goes
-/// through [`brace_content`] / [`split_top_commas`] (char-based, never a byte slice), so a malformed
-/// `}`-before-`{` cannot panic.
-fn glob_bases(tree: &str, out: &mut Vec<String>, depth: usize) -> Result<(), String> {
-    if depth > MAX_SYMBOL_NEST_DEPTH {
-        return Err(format!(
-            "cannot judge a `use` tree nested past {MAX_SYMBOL_NEST_DEPTH} brace levels: '{tree}'"
-        ));
-    }
-    let tree = tree.trim();
-    match tree.find('{') {
-        Some(open) => {
-            let prefix = tree[..open].trim();
-            for part in split_top_commas(&brace_content(&tree[open..])) {
-                let part = part.trim();
-                if part.is_empty() {
-                    continue;
-                }
-                if part == "*" {
-                    let base = prefix.trim_end_matches(':').trim();
-                    if !base.is_empty() {
-                        out.push(base.to_string());
-                    }
-                } else {
-                    glob_bases(&format!("{prefix}{part}"), out, depth + 1)?;
-                }
-            }
-        }
-        None => {
-            if let Some(base) = tree.strip_suffix("::*") {
-                let base = base.trim();
-                if !base.is_empty() {
-                    out.push(base.to_string());
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
 /// Collect the `type`-alias and `pub use` re-export definitions of a file into the crate-wide
-/// context, keyed by their fully-qualified local name. Targets are resolved module-relative
-/// (through the file's `use_map`), so `type B = A;` targets the sibling `crate::mod::A` and
-/// `use std::time::SystemTime; type Clock = SystemTime;` targets `std::time::SystemTime`.
+/// context, keyed by their fully-qualified local name. Only a `type` alias written directly in a
+/// module body enters it — the table's [`ScopeTable::module_aliases`] — since one written in a block
+/// or as an associated type is named by no path outside its block or its type. Targets are resolved
+/// module-relative (through the file's `use_map`), so `type B = A;` targets the sibling
+/// `crate::mod::A` and `use std::time::SystemTime; type Clock = SystemTime;` targets
+/// `std::time::SystemTime`.
 fn collect_defs(
     source: &str,
     module: &str,
-    root_modules: &[String],
+    table: &ScopeTable,
+    roots: PathRoots<'_>,
     use_map: &HashMap<(String, String), String>,
     ctx: &mut ResolveCtx,
 ) -> Result<(), String> {
-    for (name, target, def_module) in type_aliases(source, module) {
-        if let Some(canonical) = resolve_target(&target, &def_module, use_map, root_modules) {
+    for (name, target, def_module) in table.module_aliases() {
+        if let Some(canonical) = resolve_target(target, def_module, use_map, roots) {
             ctx.defs.insert(
-                format!("{def_module}::{}", canonical_module_path(&name)),
+                format!("{def_module}::{}", canonical_module_path(name)),
                 canonical,
             );
         }
@@ -406,12 +377,12 @@ fn collect_defs(
         let mut globs = Vec::new();
         glob_bases(&tree, &mut globs, 0)?;
         for base in globs {
-            if let Some(canonical) = resolve_written_path(&base, &def_module, root_modules) {
+            if let Some(canonical) = resolve_written_path(&base, &def_module, roots) {
                 ctx.glob_reexports.push((def_module.clone(), canonical));
             }
         }
         for (alias, path) in expand_use_leaves(&tree)? {
-            if let Some(canonical) = resolve_written_path(&path, &def_module, root_modules) {
+            if let Some(canonical) = resolve_written_path(&path, &def_module, roots) {
                 ctx.defs.insert(format!("{def_module}::{alias}"), canonical);
             }
         }
@@ -607,50 +578,6 @@ fn collect_definition_names(
     }
 }
 
-/// Every `type Name = Target;` in declaration-cleaned source, as `(Name, Target)`.
-fn type_aliases(source: &str, base_module: &str) -> Vec<(String, String, String)> {
-    let bytes = source.as_bytes();
-    let inline_modules = scan_inline_modules(source, base_module);
-    let mut out = Vec::new();
-    let mut i = 0;
-    while i < bytes.len() {
-        if super::lexer::keyword_starts_at(bytes, i, b"type") {
-            let module = inline_modules.modules[inline_modules.contexts[i] as usize].clone();
-            let mut j = i + 4;
-            while j < bytes.len() && bytes[j].is_ascii_whitespace() {
-                j += 1;
-            }
-            let name_start = j;
-            while j < bytes.len() && is_ident_byte(bytes[j]) {
-                j += 1;
-            }
-            let name = source[name_start..j].to_string();
-            while j < bytes.len() && bytes[j] != b'=' && bytes[j] != b';' {
-                if bytes[j] == b'<' {
-                    j = skip_angles(bytes, j);
-                } else {
-                    j += 1;
-                }
-            }
-            if !name.is_empty() && bytes.get(j) == Some(&b'=') {
-                if let Some(end) = alias_target_end(bytes, j + 1) {
-                    let target = source[j + 1..end].trim();
-                    let target_path = leading_path(target);
-                    if !target_path.is_empty() {
-                        out.push((name, target_path, module));
-                    }
-                    i = end + 1;
-                    continue;
-                }
-            }
-            i = j.max(i + 1);
-            continue;
-        }
-        i += 1;
-    }
-    out
-}
-
 /// The `pub use …` statement bodies (only `pub` re-exports feed the crate-wide closure; a private
 /// `use` is local to its file and already handled per-file by the use-map).
 ///
@@ -750,12 +677,15 @@ fn head_is_external_dependency(
     !locally_shadowed && vocab.dep_names.contains(head)
 }
 
-/// Resolve the head of a written path occurrence (its `::`-joined `segments`) to a canonical path.
+/// Resolve the head of a written path occurrence (its `::`-joined `segments`) to every canonical path
+/// it can name — empty when it names none a prefix can reach.
 ///
-/// A `std`/`core`/`alloc` head is literal and a `crate`/`self`/`super` head is local. Any other head
-/// is looked up first in `scoped` — the file's [`ScopeTable`] and the scope the occurrence stands in
-/// — which answers from the nearest `use` or block-local item between the occurrence and its module;
-/// a block-local item is named by no path a prefix can reach, so it resolves to `None`. A head the
+/// A `std`/`core`/`alloc` head is literal and a `crate`/`self`/`super` head is local. A `::`-rooted head
+/// names an external crate, except in edition 2015, where it starts at the crate root. Any other head
+/// is looked up first in `scoped` — the file's [`ScopeTable`], the scope the occurrence stands in, and
+/// the crate's [`CrateScopes`] its globs are followed through — which answers with every binding of
+/// the nearest scope that binds it; a block-local item is named by no path a prefix can reach, so it
+/// resolves to nothing. A head the
 /// table leaves unbound, or one read without a scope (a glob's own path, read from its module), is
 /// looked up in `use_map`, the module-scope `use` bindings, and otherwise treated as a local item of
 /// the occurrence's module (so a `type`/`pub use` closure can then rewrite it). Leaf-only matching of
@@ -775,11 +705,11 @@ fn head_is_external_dependency(
 fn resolve_head(
     segments: &str,
     occurrence_module: &str,
-    scoped: Option<(&ScopeTable, u32)>,
+    scoped: Option<(&ScopeTable, u32, &CrateScopes)>,
     use_map: &HashMap<(String, String), String>,
-    root_modules: &[String],
+    roots: PathRoots<'_>,
     external: Option<&ExternalVocab>,
-) -> Option<String> {
+) -> Vec<String> {
     let raw = segments.trim();
     let global = raw.starts_with("::");
     let raw = raw.trim_start_matches("::");
@@ -788,26 +718,34 @@ fn resolve_head(
         .map(|s| canonical_module_path(s.trim()))
         .filter(|s| !s.is_empty())
         .collect();
-    let (head, rest) = parts.split_first()?;
+    let Some((head, rest)) = parts.split_first() else {
+        return Vec::new();
+    };
     let parts_str: Vec<&str> = parts.iter().map(String::as_str).collect();
-    let base: String = match head.as_str() {
-        "std" | "core" | "alloc" => parts.join("::"),
-        "crate" => fold_canonical_segments(&parts_str)?,
-        "self" | "super" => resolve_self_super(occurrence_module, &parts_str)?,
-        _ if global => parts.join("::"),
+    let base: Option<String> = match head.as_str() {
+        "std" | "core" | "alloc" => Some(parts.join("::")),
+        "crate" => fold_canonical_segments(&parts_str),
+        "self" | "super" if !global => resolve_self_super(occurrence_module, &parts_str),
+        other if global => Some(
+            if roots.edition_2015 && roots.names_root_module("crate", other) {
+                format!("crate::{}", parts.join("::"))
+            } else {
+                parts.join("::")
+            },
+        ),
         other => {
             let namespace = if rest.is_empty() {
                 Namespace::Value
             } else {
                 Namespace::Type
             };
-            let lexical = scoped.map_or(Head::Unbound, |(table, scope)| {
-                table.resolve(scope, other, rest, namespace)
+            let lexical = scoped.map_or(Head::Unbound, |(table, scope, crate_scopes)| {
+                table.resolve(scope, other, rest, namespace, crate_scopes)
             });
             match lexical {
-                Head::Path(path) => path,
-                Head::Local => return None,
-                Head::Unbound => {
+                Head::Paths(paths) => return paths,
+                Head::Local => None,
+                Head::Unbound => Some(
                     if let Some(target) =
                         use_map.get(&(occurrence_module.to_string(), other.to_string()))
                     {
@@ -818,17 +756,17 @@ fn resolve_head(
                         }
                         base
                     } else if external.is_some_and(|v| {
-                        head_is_external_dependency(other, occurrence_module, root_modules, v)
+                        head_is_external_dependency(other, occurrence_module, roots.root_modules, v)
                     }) {
                         parts.join("::")
                     } else {
                         format!("{occurrence_module}::{}", parts.join("::"))
-                    }
-                }
+                    },
+                ),
             }
         }
     };
-    Some(base)
+    base.into_iter().collect()
 }
 
 /// Chase a candidate path through the `type`-alias / `pub use` closure to a fixpoint: repeatedly
@@ -915,11 +853,11 @@ fn resolve_target(
     target: &str,
     module: &str,
     use_map: &HashMap<(String, String), String>,
-    root_modules: &[String],
+    roots: PathRoots<'_>,
 ) -> Option<String> {
     let raw = target.trim();
     if raw.starts_with("::") {
-        return resolve_written_path(raw, module, root_modules);
+        return resolve_written_path(raw, module, roots);
     }
     let parts: Vec<String> = raw
         .split("::")
@@ -937,7 +875,7 @@ fn resolve_target(
     }
     match head.as_str() {
         "std" | "core" | "alloc" | "crate" => Some(parts.join("::")),
-        "self" | "super" => resolve_written_path(raw, module, root_modules),
+        "self" | "super" => resolve_written_path(raw, module, roots),
         _ => Some(format!("{module}::{}", parts.join("::"))),
     }
 }
