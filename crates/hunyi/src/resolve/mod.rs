@@ -177,51 +177,40 @@ pub(crate) fn auto_bound_leaves<'a>(
             return Err(crate::errors::malformed_path_operand_error(s));
         }
         let segs: Vec<&str> = s.split("::").collect();
-        let leaf = match segs.as_slice() {
-            [bare] => {
-                let stripped = strip_raw(bare);
-                if shape::is_auto_trait_leaf(&stripped) {
-                    stripped
-                } else {
-                    return Err(crate::errors::unrecognized_auto_trait_error(
-                        s,
-                        boundary_kind,
-                    ));
-                }
-            }
-            [p1, p2, leaf] => {
-                let p1 = strip_raw(p1);
-                let p2 = strip_raw(p2);
-                let stripped_leaf = strip_raw(leaf);
-                if let Some(module) = shape::auto_trait_module(&stripped_leaf) {
-                    if p2 != module {
-                        return Err(crate::errors::wrong_auto_trait_module_error(
-                            s,
-                            &stripped_leaf,
-                            module,
-                            shape::auto_trait_standard_path(&stripped_leaf)
-                                .expect("auto-trait table supplies its standard path"),
-                            boundary_kind,
-                        ));
-                    }
-                }
-                if (p1 == "std" || p1 == "core")
-                    && shape::auto_trait_module(&stripped_leaf) == Some(p2.as_str())
+        let leaf_raw = *segs
+            .last()
+            .expect("split always yields at least one segment");
+        let stripped_leaf = strip_raw(leaf_raw);
+        let leaf = if shape::is_auto_trait_leaf(&stripped_leaf) {
+            let correct_module =
+                shape::auto_trait_module(&stripped_leaf).expect("auto-trait leaf has module");
+            if segs.len() == 1 {
+                stripped_leaf
+            } else {
+                let p1 = strip_raw(segs[0]);
+                let root = if p1 == "core" { "core" } else { "std" };
+                if segs.len() == 3
+                    && (p1 == "std" || p1 == "core")
+                    && strip_raw(segs[1]) == correct_module
                 {
                     stripped_leaf
                 } else {
-                    return Err(crate::errors::unrecognized_auto_trait_error(
+                    let standard_path = format!("{}::{}::{}", root, correct_module, stripped_leaf);
+                    return Err(crate::errors::wrong_auto_trait_module_error(
                         s,
+                        &stripped_leaf,
+                        correct_module,
+                        root,
+                        standard_path,
                         boundary_kind,
                     ));
                 }
             }
-            _ => {
-                return Err(crate::errors::unrecognized_auto_trait_error(
-                    s,
-                    boundary_kind,
-                ));
-            }
+        } else {
+            return Err(crate::errors::unrecognized_auto_trait_error(
+                s,
+                boundary_kind,
+            ));
         };
         leaves.insert(leaf);
     }
@@ -231,6 +220,34 @@ pub(crate) fn auto_bound_leaves<'a>(
     }
 
     Ok(leaves)
+}
+
+/// A typed result of auto-bound resolution: the normalized leaf set, or the original syntax if invalid.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ResolvedAutoBounds {
+    Normalized(std::collections::BTreeSet<String>),
+    InvalidSyntax(Vec<String>),
+}
+
+impl ResolvedAutoBounds {
+    pub fn into_vec(self) -> Vec<String> {
+        match self {
+            Self::Normalized(leaves) => leaves.into_iter().collect(),
+            Self::InvalidSyntax(original) => original,
+        }
+    }
+}
+
+/// Resolve auto-trait bounds into a typed result for both the rule key and the projection.
+pub(crate) fn resolved_auto_bounds<'a>(
+    bounds: impl IntoIterator<Item = &'a String>,
+    boundary_kind: AutoTraitBoundaryKind,
+) -> ResolvedAutoBounds {
+    let bounds_vec: Vec<String> = bounds.into_iter().cloned().collect();
+    match auto_bound_leaves(&bounds_vec, boundary_kind) {
+        Ok(leaves) => ResolvedAutoBounds::Normalized(leaves),
+        Err(_) => ResolvedAutoBounds::InvalidSyntax(bounds_vec),
+    }
 }
 
 /// Whether an exposure's auto traits contain any of the forbidden auto bound leaves.

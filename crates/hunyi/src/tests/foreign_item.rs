@@ -202,7 +202,7 @@ pub(super) fn a_qualified_foreign_item_has_the_identity_of_its_unqualified_form(
 ///
 /// The refusal names the module as well as the file, says what is unknown without claiming the
 /// visibility was unread — it was read — and names the repair: rustc accepts the item only while cfg
-/// removes it, so deleting it changes no build.
+/// removes it (delete it) or an attribute macro rewrites it (write the expanded declaration directly).
 #[test]
 pub(super) fn an_undecodable_foreign_item_is_a_constitution_error() {
     for (label, item, name) in [
@@ -245,6 +245,8 @@ pub(super) fn an_undecodable_foreign_item_is_a_constitution_error() {
                 "cannot tell what it declares",
                 "only while a `#[cfg]` removes it",
                 "delete it",
+                "attribute macro",
+                "write the expanded declaration directly",
             ] {
                 assert!(
                     message.contains(expected),

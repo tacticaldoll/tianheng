@@ -128,16 +128,7 @@ pub(crate) fn operand_module_findings(
         impl Fn(&syn::Item, &str, &UseMap, usize, &mut Vec<ShapeExposure>),
     ),
 ) -> Result<Vec<(SemanticFact, PathBuf)>, String> {
-    validate_exposed_trait_operands(
-        forbidden,
-        match fact_kind {
-            ExposureKind::DynTrait => crate::resolve::AutoTraitBoundaryKind::Dyn,
-            ExposureKind::ImplTrait => crate::resolve::AutoTraitBoundaryKind::Impl,
-            ExposureKind::Signature => {
-                unreachable!("signature exposure has no principal-trait operands")
-            }
-        },
-    )?;
+    validate_exposed_trait_operands(forbidden, fact_kind.auto_trait_boundary_kind())?;
     let items_with_files =
         resolve_module_items_with_files(src_dir, root_file, module, crate_package)?;
     let uses_by_branch = uses_by_branch(&items_with_files);
@@ -187,31 +178,24 @@ pub(crate) fn auto_bound_module_findings(
         impl Fn(&syn::Item, &str, &UseMap, usize, &mut Vec<ShapeExposure>),
     ),
 ) -> Result<Vec<(SemanticFact, PathBuf)>, String> {
-    let boundary_kind = match fact_kind {
-        ExposureKind::DynTrait => crate::resolve::AutoTraitBoundaryKind::Dyn,
-        ExposureKind::ImplTrait => crate::resolve::AutoTraitBoundaryKind::Impl,
-        ExposureKind::Signature => unreachable!(),
-    };
+    let boundary_kind = fact_kind.auto_trait_boundary_kind();
     let forbidden_leaves = crate::resolve::auto_bound_leaves(bounds, boundary_kind)?;
-    let items_with_files =
-        resolve_module_items_with_files(src_dir, root_file, module, crate_package)?;
-    let uses_by_branch = uses_by_branch(&items_with_files);
 
-    let mut exposures: Vec<(ShapeExposure, PathBuf)> = Vec::new();
-    for (ordinal, (item, file, branch)) in items_with_files.iter().enumerate() {
-        let uses = &uses_by_branch[branch];
-        let mut buf = Vec::new();
-        collect(item, module, uses, ordinal, &mut buf);
-        exposures.extend(buf.into_iter().map(|exposure| (exposure, file.clone())));
-    }
-
-    let mut findings: Vec<(SemanticFact, PathBuf)> = exposures
-        .into_iter()
-        .filter(|(exposure, _file)| {
-            crate::resolve::exposure_matches_auto_bounds(exposure, &forbidden_leaves)
-        })
-        .map(|(exposure, file)| (shape_finding(exposure, fact_kind), file))
-        .collect();
-    sort_faceted_facts(&mut findings)?;
-    Ok(findings)
+    shape_module_findings(
+        src_dir,
+        root_file,
+        module,
+        crate_package,
+        |item, module, uses, ordinal, buf| {
+            let mut inner_buf = Vec::new();
+            collect(item, module, uses, ordinal, &mut inner_buf);
+            for exposure in inner_buf {
+                if crate::resolve::exposure_matches_auto_bounds(&exposure, &forbidden_leaves) {
+                    buf.push(exposure);
+                }
+            }
+            Ok(())
+        },
+        |exposure| shape_finding(exposure, fact_kind),
+    )
 }

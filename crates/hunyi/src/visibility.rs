@@ -10,8 +10,8 @@ use crate::anchor::canonical_module_anchor;
 use crate::driver::run_boundaries;
 use crate::dsl::VisibilityBoundary;
 use crate::emit::{SingleModuleViolationContext, push_single_module_violations};
-use crate::errors::{undecodable_foreign_item_error, unknown_module_error};
-use crate::file_scope::{over_each_unit, resolve_crate_units};
+use crate::errors::undecodable_foreign_item_error;
+use crate::file_scope::{UnitAnchor, over_each_unit, resolve_crate_units};
 use crate::finding::{SemanticFact, sort_faceted_facts};
 use crate::module_resolve::resolve_module_items_with_files;
 use crate::syn_util::item_observation;
@@ -34,35 +34,36 @@ pub(crate) fn check_visibility_boundary(
 ) -> Result<(), String> {
     let module = canonical_module_anchor(&boundary.module, &boundary.crate_package)?;
     let (_package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
-    over_each_unit(
-        &units,
-        &unknown_module_error(&module, &boundary.crate_package),
-        |root_file, src_dir, unit| {
-            let findings = visibility_findings(
-                src_dir,
-                root_file,
-                &module,
-                &boundary.crate_package,
-                boundary.ceiling().rank(),
-            )?;
+    let anchor = UnitAnchor::Module {
+        module: &module,
+        crate_package: &boundary.crate_package,
+    };
+    over_each_unit(&units, anchor, |root_file, src_dir, unit| {
+        let findings = visibility_findings(
+            src_dir,
+            root_file,
+            &module,
+            &boundary.crate_package,
+            boundary.ceiling().rank(),
+        )
+        .map_err(crate::errors::ResolveError::Other)?;
 
-            push_single_module_violations(
-                violations,
-                SingleModuleViolationContext {
-                    module: &module,
-                    rule: boundary.ceiling().rule(),
-                    rule_key: boundary.rule_key(),
-                    reason: &boundary.reason,
-                    severity: boundary.severity,
-                    anchor: boundary.anchor(),
-                    crate_package: &boundary.crate_package,
-                    unit,
-                },
-                findings,
-            );
-            Ok(())
-        },
-    )
+        push_single_module_violations(
+            violations,
+            SingleModuleViolationContext {
+                module: &module,
+                rule: boundary.ceiling().rule(),
+                rule_key: boundary.rule_key(),
+                reason: &boundary.reason,
+                severity: boundary.severity,
+                anchor: boundary.anchor(),
+                crate_package: &boundary.crate_package,
+                unit,
+            },
+            findings,
+        );
+        Ok(())
+    })
 }
 
 /// The pure heart, testable without spawning `cargo`: resolve the module's direct items and

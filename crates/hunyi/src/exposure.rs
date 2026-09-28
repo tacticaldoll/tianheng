@@ -19,8 +19,8 @@ use crate::crate_scope::{
 use crate::driver::run_boundaries;
 use crate::dsl::SignatureBoundary;
 use crate::emit::{SingleModuleViolationContext, push_single_module_violations};
-use crate::errors::{undecodable_foreign_item_error, unknown_module_error};
-use crate::file_scope::{over_each_unit, resolve_crate_units};
+use crate::errors::undecodable_foreign_item_error;
+use crate::file_scope::{UnitAnchor, over_each_unit, resolve_crate_units};
 use crate::finding::{ExposureKind, PathExposure, SemanticFact, sort_faceted_facts};
 use crate::module_resolve::resolve_module_items_with_cfg_tags;
 use crate::resolve::{
@@ -55,37 +55,38 @@ pub(crate) fn check_boundary(
 ) -> Result<(), String> {
     let module = canonical_module_anchor(&boundary.module, &boundary.crate_package)?;
     let (package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
-    over_each_unit(
-        &units,
-        &unknown_module_error(&module, &boundary.crate_package),
-        |root_file, src_dir, unit| {
-            let findings = module_findings(
-                src_dir,
-                root_file,
-                &module,
-                &boundary.forbidden,
-                &boundary.crate_package,
-                boundary.including_trait_impls,
-                &dependency_names(package),
-            )?;
+    let anchor = UnitAnchor::Module {
+        module: &module,
+        crate_package: &boundary.crate_package,
+    };
+    over_each_unit(&units, anchor, |root_file, src_dir, unit| {
+        let findings = module_findings(
+            src_dir,
+            root_file,
+            &module,
+            &boundary.forbidden,
+            &boundary.crate_package,
+            boundary.including_trait_impls,
+            &dependency_names(package),
+        )
+        .map_err(crate::errors::ResolveError::Other)?;
 
-            push_single_module_violations(
-                violations,
-                SingleModuleViolationContext {
-                    module: &module,
-                    rule: SIGNATURE_RULE,
-                    rule_key: boundary.rule_key(),
-                    reason: &boundary.reason,
-                    severity: boundary.severity,
-                    anchor: boundary.anchor(),
-                    crate_package: &boundary.crate_package,
-                    unit,
-                },
-                findings,
-            );
-            Ok(())
-        },
-    )
+        push_single_module_violations(
+            violations,
+            SingleModuleViolationContext {
+                module: &module,
+                rule: SIGNATURE_RULE,
+                rule_key: boundary.rule_key(),
+                reason: &boundary.reason,
+                severity: boundary.severity,
+                anchor: boundary.anchor(),
+                crate_package: &boundary.crate_package,
+                unit,
+            },
+            findings,
+        );
+        Ok(())
+    })
 }
 
 /// Per-branch (mutually-exclusive `#[cfg]`-group) resolution context: `uses` (a bare local `use …

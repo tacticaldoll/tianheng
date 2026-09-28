@@ -424,7 +424,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             BoundId::new(
                 "semantic-static-item-boundary/a-thread-local-body-that-is-not-static-declarations-refuses-to-judge-a-stated-bound",
             ),
-            "a `thread_local!` whose body does not parse as `static` declarations",
+            "a `thread_local!` at or beneath the anchored module whose body does not parse as `static` declarations",
             Extent::Reached(Reached::RefusesToJudge {
                 because: "the statics it declares cannot be named, and passing it would be a silent pass over \
                           a declaration".into(),

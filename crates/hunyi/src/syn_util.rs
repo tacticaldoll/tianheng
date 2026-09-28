@@ -613,7 +613,10 @@ pub(crate) fn visibility_rank(vis: &syn::Visibility) -> u8 {
         syn::Visibility::Public(_) => 3,
         syn::Visibility::Restricted(r) => {
             let single = if r.path.leading_colon.is_none() && r.path.segments.len() == 1 {
-                r.path.segments.first().map(|s| s.ident.to_string())
+                r.path
+                    .segments
+                    .first()
+                    .map(|s| strip_raw(&s.ident.to_string()))
             } else {
                 None
             };
@@ -853,49 +856,26 @@ fn item_observation_parts(item: &syn::Item) -> Result<Vec<VisibleItem>, Undecoda
         kind,
         name,
     };
+    let strip = |ident: &syn::Ident| crate::resolve::strip_raw(&ident.to_string());
     Ok(match item {
-        syn::Item::Fn(i) => vec![observed(
-            &i.vis,
-            VisibleItemKind::Fn,
-            i.sig.ident.to_string(),
-        )],
-        syn::Item::Struct(i) => vec![observed(
-            &i.vis,
-            VisibleItemKind::Struct,
-            i.ident.to_string(),
-        )],
-        syn::Item::Enum(i) => vec![observed(&i.vis, VisibleItemKind::Enum, i.ident.to_string())],
-        syn::Item::Union(i) => vec![observed(
-            &i.vis,
-            VisibleItemKind::Union,
-            i.ident.to_string(),
-        )],
-        syn::Item::Type(i) => vec![observed(&i.vis, VisibleItemKind::Type, i.ident.to_string())],
-        syn::Item::Const(i) => vec![observed(
-            &i.vis,
-            VisibleItemKind::Const,
-            i.ident.to_string(),
-        )],
-        syn::Item::Static(i) => vec![observed(
-            &i.vis,
-            VisibleItemKind::Static,
-            i.ident.to_string(),
-        )],
-        syn::Item::Trait(i) => vec![observed(
-            &i.vis,
-            VisibleItemKind::Trait,
-            i.ident.to_string(),
-        )],
+        syn::Item::Fn(i) => vec![observed(&i.vis, VisibleItemKind::Fn, strip(&i.sig.ident))],
+        syn::Item::Struct(i) => vec![observed(&i.vis, VisibleItemKind::Struct, strip(&i.ident))],
+        syn::Item::Enum(i) => vec![observed(&i.vis, VisibleItemKind::Enum, strip(&i.ident))],
+        syn::Item::Union(i) => vec![observed(&i.vis, VisibleItemKind::Union, strip(&i.ident))],
+        syn::Item::Type(i) => vec![observed(&i.vis, VisibleItemKind::Type, strip(&i.ident))],
+        syn::Item::Const(i) => vec![observed(&i.vis, VisibleItemKind::Const, strip(&i.ident))],
+        syn::Item::Static(i) => vec![observed(&i.vis, VisibleItemKind::Static, strip(&i.ident))],
+        syn::Item::Trait(i) => vec![observed(&i.vis, VisibleItemKind::Trait, strip(&i.ident))],
         syn::Item::TraitAlias(i) => vec![observed(
             &i.vis,
             VisibleItemKind::TraitAlias,
-            i.ident.to_string(),
+            strip(&i.ident),
         )],
-        syn::Item::Mod(i) => vec![observed(&i.vis, VisibleItemKind::Mod, i.ident.to_string())],
+        syn::Item::Mod(i) => vec![observed(&i.vis, VisibleItemKind::Mod, strip(&i.ident))],
         syn::Item::ExternCrate(i) => vec![observed(
             &i.vis,
             VisibleItemKind::ExternCrate,
-            i.ident.to_string(),
+            strip(&i.ident),
         )],
         syn::Item::Use(i) => vec![observed(
             &i.vis,
@@ -911,13 +891,13 @@ fn item_observation_parts(item: &syn::Item) -> Result<Vec<VisibleItem>, Undecoda
             for foreign_item in &item.items {
                 match decode_foreign_item(foreign_item)? {
                     ForeignDecl::Fn { vis, sig } => {
-                        foreign.push(observed(&vis, VisibleItemKind::Fn, sig.ident.to_string()));
+                        foreign.push(observed(&vis, VisibleItemKind::Fn, strip(&sig.ident)));
                     }
                     ForeignDecl::Static { vis, ident, .. } => {
-                        foreign.push(observed(&vis, VisibleItemKind::Static, ident.to_string()));
+                        foreign.push(observed(&vis, VisibleItemKind::Static, strip(&ident)));
                     }
                     ForeignDecl::Type { vis, ident } => {
-                        foreign.push(observed(&vis, VisibleItemKind::Type, ident.to_string()));
+                        foreign.push(observed(&vis, VisibleItemKind::Type, strip(&ident)));
                     }
                     ForeignDecl::Macro => {}
                 }

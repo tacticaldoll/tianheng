@@ -644,3 +644,83 @@ pub(super) fn an_unparseable_file_outside_the_anchor_refuses_to_judge() {
         "the refusal names the unparseable file: {error}"
     );
 }
+
+#[test]
+pub(super) fn semantic_error_in_ungoverned_module_does_not_fail_governed_static_scan() {
+    let violations = statics(
+        "static-semantic-err-outside",
+        &[
+            ("lib.rs", "pub mod kernel;\npub mod other;\n"),
+            ("kernel.rs", "pub static IN_KERNEL: u8 = 0;\n"),
+            ("other.rs", "thread_local! { not a static }\n"),
+        ],
+        "crate::kernel",
+    )
+    .unwrap();
+    assert_eq!(violations.len(), 1);
+    assert_eq!(violations[0].fact().shape(), "static");
+    let name = violations[0]
+        .fact()
+        .fields()
+        .find(|(k, _)| *k == "name")
+        .map(|(_, v)| v)
+        .unwrap();
+    assert_eq!(name, "IN_KERNEL");
+}
+
+/// A declaration outside the anchor that cannot be named is ungoverned, but the module holding it is
+/// still read for a rename: a rename written after it in the same module is refused, never dropped
+/// with it.
+#[test]
+pub(super) fn a_rename_beside_an_unnameable_declaration_outside_the_anchor_is_still_refused() {
+    let error = statics(
+        "static-rename-beside-unnameable",
+        &[
+            ("lib.rs", "pub mod kernel;\npub mod other;"),
+            ("kernel.rs", "thread_local! { static A: u8 = 0; }"),
+            (
+                "other.rs",
+                "thread_local! { not a static }\nuse std::thread_local as tls;",
+            ),
+        ],
+        "crate::kernel",
+    )
+    .unwrap_err();
+    assert!(
+        error.contains("tls")
+            && error.contains("renames `thread_local`")
+            && error.contains("write `thread_local!`"),
+        "the rename is refused, not the ungoverned declaration beside it: {error}"
+    );
+}
+
+#[test]
+pub(super) fn static_nested_in_thread_local_type_position_reacts() {
+    let violations = kernel_statics(
+        "static-in-tl-type",
+        "thread_local! { static FOO: [u8; { static NESTED: u8 = 42; 1 }] = [0]; }\n",
+    )
+    .unwrap();
+    let mut observed = rows(&violations);
+    observed.sort();
+    assert_eq!(
+        observed,
+        [
+            row("static", "crate::kernel", "NESTED", "static FOO"),
+            row("thread_local", "crate::kernel", "FOO", ""),
+        ]
+    );
+}
+
+#[test]
+pub(super) fn thread_local_missing_semicolon_between_statics_is_refused_exit_2() {
+    let error = kernel_statics(
+        "static-tl-missing-semi",
+        "thread_local! { static A: u8 = 0 static B: u8 = 0; }\n",
+    )
+    .unwrap_err();
+    assert!(
+        error.contains("cannot judge a `thread_local!` in module 'crate::kernel'"),
+        "error should refuse unparseable thread_local body: {error}"
+    );
+}

@@ -317,3 +317,73 @@ pub(super) fn a_module_present_in_one_compilation_unit_is_not_absent() {
     check_trait_impl_boundary(&metadata, &located, &mut violations).unwrap();
     assert!(violations.is_empty(), "{violations:?}");
 }
+
+/// Two compilation units that both declare `crate::target`, so a deferral is the only way either
+/// row below could come back `Ok`.
+fn two_units_declaring_target(tree: &TempSrcTree) -> Vec<crate::file_scope::CompilationUnit> {
+    tree.write_all(&[
+        ("lib.rs", "pub mod target;\n"),
+        ("target.rs", "\n"),
+        ("bin/tool.rs", "pub mod target;\nfn main() {}\n"),
+    ]);
+    vec![
+        (tree.root(), tree.src().to_path_buf(), "lib".to_string()),
+        (
+            tree.src().join("bin/tool.rs"),
+            tree.src().to_path_buf(),
+            "bin".to_string(),
+        ),
+    ]
+}
+
+/// An unresolvable-module error pointing to a DIFFERENT module is an unexpected resolution failure,
+/// not the absence of the boundary's module anchor, and must not be deferred.
+#[test]
+pub(super) fn unresolvable_error_pointing_to_different_module_anchor_is_not_deferred() {
+    let tree = TempSrcTree::new("diff-module-anchor-multi-unit");
+    let units = two_units_declaring_target(&tree);
+    let anchor = crate::file_scope::UnitAnchor::Module {
+        module: "crate::target",
+        crate_package: "x",
+    };
+    let res = crate::file_scope::over_each_unit(&units, anchor, |_root_file, _src_dir, unit| {
+        if unit == "lib" {
+            Err(crate::errors::ResolveError::UnresolvableModule(
+                "crate::different".to_string(),
+                "x".to_string(),
+            ))
+        } else {
+            Ok(())
+        }
+    });
+    assert!(
+        res.is_err(),
+        "unresolvable error for a different module must not be deferred: {res:?}"
+    );
+}
+
+/// An unknown-trait error pointing to a DIFFERENT trait is an unexpected resolution failure, not the
+/// absence of the boundary's trait anchor, and must not be deferred.
+#[test]
+pub(super) fn unknown_trait_error_pointing_to_different_trait_anchor_is_not_deferred() {
+    let tree = TempSrcTree::new("diff-trait-anchor-multi-unit");
+    let units = two_units_declaring_target(&tree);
+    let anchor = crate::file_scope::UnitAnchor::Trait {
+        trait_path: "crate::TargetTr",
+        crate_package: "x",
+    };
+    let res = crate::file_scope::over_each_unit(&units, anchor, |_root_file, _src_dir, unit| {
+        if unit == "lib" {
+            Err(crate::errors::ResolveError::UnknownTrait(
+                "crate::DifferentTr".to_string(),
+                "x".to_string(),
+            ))
+        } else {
+            Ok(())
+        }
+    });
+    assert!(
+        res.is_err(),
+        "unknown trait error for a different trait must not be deferred: {res:?}"
+    );
+}
