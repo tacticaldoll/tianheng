@@ -276,7 +276,10 @@ impl ModuleRule {
                                 .map(|verb| canonical_module_path(verb)),
                         ),
                     ),
-                    ("prefix", canonical_module_path(prefix)),
+                    (
+                        "prefix",
+                        canonical_module_path(prefix.trim_start_matches("::")),
+                    ),
                     ("strict", strict.to_string()),
                 ],
             ),
@@ -297,7 +300,10 @@ impl ModuleRule {
                                 .map(|verb| canonical_module_path(verb)),
                         ),
                     ),
-                    ("prefix", canonical_module_path(prefix)),
+                    (
+                        "prefix",
+                        canonical_module_path(prefix.trim_start_matches("::")),
+                    ),
                     ("strict", strict.to_string()),
                 ],
             ),
@@ -746,10 +752,9 @@ impl InlineConfinementDraft {
     ///
     /// One stated **over-**reaction bound, only under a **single-segment** bare crate prefix
     /// (`must_not_call_inline("rand")`) — a multi-segment prefix (`chrono::Utc`) is immune: 圭表's
-    /// text scan cannot tell a local binding or a definition site from a call, so a local
-    /// `let rand = …; rand()`, or the definition site of an associated / nested `fn rand(…)` (whose
-    /// `rand(` reads as a call), may false-positive. Module-top-level definitions are exempt (they
-    /// resolve to the local item). Declared, not silent.
+    /// text scan cannot tell a local binding from a call, so a local `let rand = …; rand()` may
+    /// false-positive. A `fn` item's own name (`fn rand(…)`) is read as its definition, never a call,
+    /// and module-top-level definitions resolve to the local item. Declared, not silent.
     ///
     /// Orthogonal to [`ending_with`](Self::ending_with) / [`strict_prefix_only`](Self::strict_prefix_only):
     /// it changes head *resolution*, not call-vs-mention breadth, and composes with either — it is

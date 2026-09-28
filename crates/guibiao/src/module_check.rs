@@ -672,7 +672,7 @@ fn check_inline_confinement(
     } else {
         Vec::new()
     };
-    let confined_prefix = canonical_module_path(prefix);
+    let confined_prefix = canonical_module_path(prefix.trim_start_matches("::"));
     let findings = inline_symbol_findings(
         &all_files,
         governed,

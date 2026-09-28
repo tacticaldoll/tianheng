@@ -239,24 +239,15 @@ fn path_occurrences(source: &str, base_module: &str) -> Vec<PathOccurrence> {
             break;
         }
         let mut segments = normalize_segments(&bytes[start..end]);
-        let mut p = i;
-        while p > 0 && bytes[p - 1].is_ascii_whitespace() {
-            p -= 1;
+        match root_form(bytes, i) {
+            RootForm::Plain => {}
+            RootForm::Rooted => segments = format!("::{segments}"),
+            RootForm::Qualified => {
+                i = end.max(i + 1);
+                continue;
+            }
         }
-        let is_leading_colons = p >= 2
-            && bytes[p - 1] == b':'
-            && bytes[p - 2] == b':'
-            && (p == 2 || {
-                let mut before_colons = p - 2;
-                while before_colons > 0 && bytes[before_colons - 1].is_ascii_whitespace() {
-                    before_colons -= 1;
-                }
-                before_colons == 0 || !is_ident_byte(bytes[before_colons - 1])
-            });
-        if is_leading_colons {
-            segments = format!("::{segments}");
-        }
-        let is_call = is_call_application(bytes, end);
+        let is_call = is_call_application(bytes, end) && !names_a_fn_definition(bytes, i);
         if segments.contains("::") || is_call {
             let module = inline_modules.modules[inline_modules.contexts[i] as usize].clone();
             out.push(PathOccurrence {
@@ -269,6 +260,79 @@ fn path_occurrences(source: &str, base_module: &str) -> Vec<PathOccurrence> {
         i = end.max(i + 1);
     }
     out
+}
+
+/// How a path starting at an identifier is rooted, read from what precedes it.
+enum RootForm {
+    /// No `::` before the head: the head is looked up from the path's scope.
+    Plain,
+    /// A `::` standing where a path begins: the head names a crate.
+    Rooted,
+    /// A `::` after the `>` closing a `<…>` group — the tail of `<T>::f` or `<T as Trait>::f`, whose item the
+    /// type chooses. It has no crate-root head, and resolving it needs the type inference the scanner does not
+    /// perform, so it stays unresolved under the receiver-method bound.
+    Qualified,
+}
+
+/// The [`RootForm`] of a path whose head starts at `i`. A `::` directly before the head roots the path unless it
+/// follows an identifier (a continuation this walk reads as the same path) or a `>` that closes a `<…>` group in
+/// the same statement; the `>` of `->` and `=>`, and a `>` with no `<` to close, are comparisons or arrows before
+/// which a path begins.
+fn root_form(bytes: &[u8], i: usize) -> RootForm {
+    let mut p = i;
+    while p > 0 && bytes[p - 1].is_ascii_whitespace() {
+        p -= 1;
+    }
+    if p < 2 || bytes[p - 1] != b':' || bytes[p - 2] != b':' {
+        return RootForm::Plain;
+    }
+    let mut before = p - 2;
+    while before > 0 && bytes[before - 1].is_ascii_whitespace() {
+        before -= 1;
+    }
+    if before == 0 {
+        return RootForm::Rooted;
+    }
+    match bytes[before - 1] {
+        byte if is_ident_byte(byte) => RootForm::Plain,
+        b'>' if closes_an_angle_group(bytes, before - 1) => RootForm::Qualified,
+        _ => RootForm::Rooted,
+    }
+}
+
+/// Whether the `>` at `close` closes a `<…>` group opened earlier in the same statement. The `>` of `->` and
+/// `=>` closes nothing.
+fn closes_an_angle_group(bytes: &[u8], close: usize) -> bool {
+    let is_arrow = |k: usize| k > 0 && matches!(bytes[k - 1], b'-' | b'=');
+    if is_arrow(close) {
+        return false;
+    }
+    let mut depth = 0usize;
+    let mut k = close + 1;
+    while k > 0 {
+        k -= 1;
+        match bytes[k] {
+            b'>' if !is_arrow(k) => depth += 1,
+            b'<' => {
+                depth -= 1;
+                if depth == 0 {
+                    return true;
+                }
+            }
+            b';' | b'{' | b'}' => return false,
+            _ => {}
+        }
+    }
+    false
+}
+
+/// Whether the identifier at `i` is the name a `fn` item declares: its `name(` defines rather than calls.
+fn names_a_fn_definition(bytes: &[u8], i: usize) -> bool {
+    let mut p = i;
+    while p > 0 && bytes[p - 1].is_ascii_whitespace() {
+        p -= 1;
+    }
+    p >= 2 && super::lexer::keyword_starts_at(bytes, p - 2, b"fn")
 }
 
 /// Index just past the identifier starting at `i`, tolerating a leading raw-identifier `r#`.
@@ -421,9 +485,8 @@ fn collect_defs(
 ///
 /// Residual stated bound: the full single-segment over-reaction (a local `let` / param / closure
 /// binding, `must_not_call_inline("rand")` only; `chrono::Utc` is immune) is canonical in
-/// `strict_external`'s rustdoc and not re-argued here. One corollary specific to this fn's
-/// module-top-level-only discipline: the definition site of an associated / nested `fn` named like
-/// the crate (whose `name(` reads as a call) may likewise false-positive under a single-segment prefix.
+/// `strict_external`'s rustdoc and not re-argued here. A `fn` item's own name is never read as a call,
+/// so an associated or nested `fn` named like the crate is not one of them.
 fn collect_item_definition_names(module: &str, source: &str, out: &mut HashSet<String>) {
     const KEYWORDS: [&[u8]; 9] = [
         b"mod", b"struct", b"enum", b"union", b"trait", b"type", b"fn", b"const", b"static",
@@ -680,8 +743,10 @@ fn head_is_external_dependency(
 /// Resolve the head of a written path occurrence (its `::`-joined `segments`) to every canonical path
 /// it can name — empty when it names none a prefix can reach.
 ///
-/// A `std`/`core`/`alloc` head is literal and a `crate`/`self`/`super` head is local. A `::`-rooted head
-/// names an external crate, except in edition 2015, where it starts at the crate root. Any other head
+/// A `std`/`core`/`alloc` head is literal and a `crate`/`self`/`super` head is local. Any other
+/// `::`-rooted head names an external crate, except in edition 2015, where it starts at the crate root;
+/// an external crate is observed under `.strict_external()` only, the same answer its bare spelling
+/// gets, so `dep::f()` and `::dep::f()` are reported in the same mode. Any other head
 /// is looked up first in `scoped` — the file's [`ScopeTable`], the scope the occurrence stands in, and
 /// the crate's [`CrateScopes`] its globs are followed through — which answers with every binding of
 /// the nearest scope that binds it; a block-local item is named by no path a prefix can reach, so it
@@ -726,13 +791,13 @@ fn resolve_head(
         "std" | "core" | "alloc" => Some(parts.join("::")),
         "crate" => fold_canonical_segments(&parts_str),
         "self" | "super" if !global => resolve_self_super(occurrence_module, &parts_str),
-        other if global => Some(
+        other if global => {
             if roots.edition_2015 && roots.names_root_module("crate", other) {
-                format!("crate::{}", parts.join("::"))
+                Some(format!("crate::{}", parts.join("::")))
             } else {
-                parts.join("::")
-            },
-        ),
+                external.map(|_| parts.join("::"))
+            }
+        }
         other => {
             let namespace = if rest.is_empty() {
                 Namespace::Value

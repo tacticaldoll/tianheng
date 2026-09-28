@@ -1735,8 +1735,11 @@ fn an_inline_module_type_alias_resolves_under_its_inline_path() {
     );
 }
 
+/// A leading `::` names the dependency, never the same-named crate-root module: `::md5x::compute()` beside a local
+/// `mod md5x` is outside the default, as every un-`use`d dependency call is, and under strict-external it is
+/// reported as the dependency's — only that mode can show which of the two the `::` names.
 #[test]
-fn an_external_prefix_disambiguates_with_leading_colons() {
+fn a_leading_colon_names_the_dependency_not_the_same_named_module() {
     let probe = RootProbe::new(
         "inlinedisambiguate",
         "[dependencies]\nmd5x_pkg = { path = \"md5x_dep\", package = \"md5x_pkg\" }\n",
@@ -1758,17 +1761,14 @@ fn an_external_prefix_disambiguates_with_leading_colons() {
             ("md5x_dep/src/lib.rs", "pub fn compute() -> u32 { 0 }\n"),
         ],
     );
-    let law = Constitution::new("inline-disambiguate").boundary(
-        ModuleBoundary::in_crate("inlinedisambiguate")
-            .module("crate::core")
-            .must_not_call_inline("::md5x::compute")
-            .because("external md5x is forbidden"),
+    assert_inline_answers(
+        &probe,
+        "inlinedisambiguate",
+        "crate::core",
+        "::md5x::compute",
+        &[],
+        &["md5x::compute in crate::core"],
     );
-    let outcome = check(&law, probe.manifest());
-    assert_eq!(outcome.exit_code(), 1, "{outcome:?}");
-    let violations = confined_violations(&outcome);
-    assert_eq!(violations.len(), 1, "{violations:?}");
-    assert_eq!(violations[0].finding, "md5x::compute in crate::core");
     let root = probe.dir().to_path_buf();
     drop(probe);
     assert!(
@@ -1974,24 +1974,32 @@ fn inline_relative_and_root_sysroot_prefixes_react_on_a_qualified_call() {
     }
 }
 
-/// R3: an un-`use`d dependency call written with a bare head is outside the default and inside strict-external.
+/// R3: an un-`use`d dependency call is outside the default and inside strict-external, whichever root spelling
+/// writes it and whichever spelling the prefix takes — `md5x` and `::md5x` name one crate.
 #[test]
-fn inline_bare_dependency_call_is_default_clean_and_strict_reported() {
-    let (manifest, mut files) = renamed_dependency("md5x");
-    files.push(("src/lib.rs".to_string(), "pub mod core;\n".to_string()));
-    files.push((
-        "src/core.rs".to_string(),
-        "pub fn g() -> u32 { md5x::compute() }\n".to_string(),
-    ));
-    let probe = RootProbe::new("frozenr3", &manifest, &borrowed(&files));
-    assert_inline_answers(
-        &probe,
-        "frozenr3",
-        "crate::core",
-        "md5x",
-        &[],
-        &["md5x::compute in crate::core"],
-    );
+fn inline_external_dependency_root_spelling_is_mode_invariant() {
+    for (package, call) in [
+        ("rootbare", "md5x::compute()"),
+        ("rootcolons", "::md5x::compute()"),
+    ] {
+        let (manifest, mut files) = renamed_dependency("md5x");
+        files.push(("src/lib.rs".to_string(), "pub mod core;\n".to_string()));
+        files.push((
+            "src/core.rs".to_string(),
+            format!("pub fn g() -> u32 {{ {call} }}\n"),
+        ));
+        let probe = RootProbe::new(package, &manifest, &borrowed(&files));
+        for prefix in ["md5x", "::md5x"] {
+            assert_inline_answers(
+                &probe,
+                package,
+                "crate::core",
+                prefix,
+                &[],
+                &["md5x::compute in crate::core"],
+            );
+        }
+    }
 }
 
 /// R4: a crate-root `mod md5x` shadows the same-named dependency for a bare head, so an external-only prefix
@@ -2676,4 +2684,58 @@ fn a_block_candidate_naming_a_local_item_keeps_the_other_candidates() {
         }
     }
     assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+}
+
+/// R2: `std::time` and `::std::time` name one crate, so a baseline recorded under either spelling suppresses the
+/// same finding declared under the other.
+#[test]
+fn a_root_qualified_prefix_shares_its_baseline_identity() {
+    let probe = RootProbe::new(
+        "rootidentity",
+        "",
+        &[
+            ("src/lib.rs", "pub mod core;\n"),
+            (
+                "src/core.rs",
+                "pub fn g() -> std::time::SystemTime { std::time::SystemTime::now() }\n",
+            ),
+        ],
+    );
+    let law = |prefix: &str| {
+        Constitution::new("root-identity").boundary(
+            ModuleBoundary::in_crate("rootidentity")
+                .module("crate::core")
+                .must_not_call_inline(prefix)
+                .because("time is injected"),
+        )
+    };
+    for (recorded, declared) in [("::std::time", "std::time"), ("std::time", "::std::time")] {
+        let Outcome::Violations(accepted) = check(&law(recorded), probe.manifest()) else {
+            panic!("{recorded}: the call must react before it can be baselined");
+        };
+        let baseline = xuanji::Baseline::of(&accepted);
+        let Outcome::Violations(mut report) = check(&law(declared), probe.manifest()) else {
+            panic!("{declared}: the call must react");
+        };
+        xuanji::apply_baseline(&mut report, &baseline);
+        assert!(
+            report.violations.iter().all(|v| v.baselined),
+            "a baseline recorded under {recorded} suppresses {declared}: {:?}",
+            report.violations
+        );
+    }
+}
+
+/// R6: `<W>::md5x()` calls `W`'s associated function; the `::` after the angle close continues a qualified path
+/// and roots nothing, so an external `md5x` prefix is not reached in either mode.
+#[test]
+fn inline_associated_path_after_angle_close_is_not_global_root() {
+    let (manifest, mut files) = renamed_dependency("md5x");
+    files.push(("src/lib.rs".to_string(), "pub mod core;\n".to_string()));
+    files.push((
+        "src/core.rs".to_string(),
+        "pub struct W;\nimpl W { pub fn md5x() {} }\npub fn g() { <W>::md5x(); }\n".to_string(),
+    ));
+    let probe = RootProbe::new("anglecloseroot", &manifest, &borrowed(&files));
+    assert_inline_answers(&probe, "anglecloseroot", "crate::core", "md5x", &[], &[]);
 }

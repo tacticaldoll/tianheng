@@ -154,7 +154,7 @@ The draft [spec.md](spec.md) updates requirement and scenarios together. It make
 1. `an_inline_module_use_resolves_from_its_enclosing_module`
 2. `an_inline_module_use_does_not_leak_to_sibling_modules`
 3. `an_inline_module_type_alias_resolves_under_its_inline_path`
-4. `an_external_prefix_disambiguates_with_leading_colons`
+4. `an_external_prefix_disambiguates_with_leading_colons` — renamed `a_leading_colon_names_the_dependency_not_the_same_named_module` and pinned under the R3 scenario: its default answer becomes clean, as every un-`use`d dependency call's is, and its strict answer keeps the finding that shows `::` names the dependency
 5. `a_prefix_starting_with_a_keyword_is_refused` — renamed `a_prefix_head_naming_no_crate_or_module_is_refused`, because its name carries the superseded claim; every `PINNED-BY` citing it changes in the same commit.
 
 Add new tests for R1's inherited private import, B3/B4 block scope, F, H1/H3, E6, the D rows and the `_` head, the H2 pin for the generic-parameter bound (g), and pin the existing cross-module public-re-export test `inline_resolves_a_cross_module_local_reexport` to the pub-use scenario. Each new pin under an ordinary scenario records its negative run in the PR; the new pin under the receiver-method bound adds its mutation record, which `pin_bites` reads from `HEAD`, so it is committed before that gate is run.
