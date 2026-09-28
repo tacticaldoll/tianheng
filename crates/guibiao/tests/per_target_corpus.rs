@@ -2769,3 +2769,94 @@ fn a_fn_name_is_its_definition_not_a_call() {
     }
     assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
 }
+
+/// A glob brings only the names visible where it is written: `crate::a::support` holds a private `Hidden` and a
+/// `pub(super)` `Near`, which `crate::core`'s glob of it cannot name, so `Hidden::now()` and `Near::now()` there
+/// are `crate::clocks`' items and no call reports under `crate::a::support` — only the glob hazard, which reacts
+/// to the glob naming the prefix itself.
+#[test]
+fn a_glob_brings_only_the_names_visible_where_it_is_written() {
+    let probe = RootProbe::new(
+        "globvisibility",
+        "",
+        &[
+            ("src/lib.rs", "pub mod a;\npub mod clocks;\npub mod core;\n"),
+            ("src/a.rs", "pub mod support;\n"),
+            (
+                "src/a/support.rs",
+                "#[allow(dead_code)]\nstruct Hidden;\n#[allow(dead_code)]\npub(super) struct Near;\npub fn helper() {}\n",
+            ),
+            (
+                "src/clocks.rs",
+                "pub struct Hidden;\nimpl Hidden { pub fn now() -> u8 { 1 } }\npub struct Near;\nimpl Near { pub fn now() -> u8 { 1 } }\n",
+            ),
+            (
+                "src/core.rs",
+                "use crate::a::support::*;\nuse crate::clocks::*;\npub fn g() -> u8 { helper(); Hidden::now() + Near::now() }\n",
+            ),
+        ],
+    );
+    let found = [
+        "crate::a::support::helper in crate::core",
+        "glob crate::a::support in crate::core",
+    ];
+    assert_inline_answers(
+        &probe,
+        "globvisibility",
+        "crate::core",
+        "crate::a::support",
+        &found,
+        &found,
+    );
+    let clocks = [
+        "crate::clocks::Hidden::now in crate::core",
+        "crate::clocks::Near::now in crate::core",
+        "glob crate::clocks in crate::core",
+    ];
+    assert_inline_answers(
+        &probe,
+        "globvisibility",
+        "crate::core",
+        "crate::clocks",
+        &clocks,
+        &clocks,
+    );
+}
+
+/// In an edition-2015 package a `use` path and a `::`-rooted path start at the crate root, so they name a
+/// crate-root item as well as a crate-root module: `use now;` and `::now()` both call `crate::now`.
+#[test]
+fn inline_edition_2015_root_paths_reach_a_crate_root_item() {
+    let probe = RootProbe::with_edition(
+        "rootitem2015",
+        "2015",
+        "",
+        &[
+            (
+                "src/lib.rs",
+                "pub mod usepath;\npub mod rooted;\npub fn now() -> u64 { 0 }\n",
+            ),
+            ("src/usepath.rs", "use now;\npub fn g() -> u64 { now() }\n"),
+            ("src/rooted.rs", "pub fn h() -> u64 { ::now() }\n"),
+        ],
+    );
+    let mut mismatches = Vec::new();
+    for module in ["crate::usepath", "crate::rooted"] {
+        let expected = [format!("crate::now in {module}")];
+        for strict_external in [false, true] {
+            let found = inline_findings(
+                &probe,
+                "rootitem2015",
+                module,
+                "crate::now",
+                strict_external,
+            );
+            if found != expected {
+                mismatches.push(format!(
+                    "{module}, strict_external = {strict_external}: {found:?}"
+                ));
+            }
+        }
+    }
+    assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+}

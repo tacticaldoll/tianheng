@@ -89,9 +89,107 @@ enum ScopeKind {
     Block,
 }
 
+/// Who may name an item or an import from outside the module that declares it, as its `pub` qualifier says.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Visibility {
+    /// No qualifier, or `pub(self)`: the declaring module's own subtree.
+    Private,
+    /// `pub`, or `pub(crate)`: the whole compilation unit, which is all a glob in it can be written from.
+    Public,
+    /// `pub(super)`: the subtree of the declaring module's parent.
+    Super,
+    /// `pub(in path)`, with the path as written.
+    In(String),
+}
+
+impl Visibility {
+    /// Whether code in module `from` can name something `owner` declares with this visibility.
+    fn visible_from(&self, owner: &str, from: &str) -> bool {
+        match self {
+            Visibility::Public => true,
+            Visibility::Private => path_within(from, owner),
+            Visibility::Super => path_within(
+                from,
+                owner
+                    .rsplit_once("::")
+                    .map_or("crate", |(parent, _)| parent),
+            ),
+            Visibility::In(written) => {
+                let parts: Vec<&str> = written.split("::").map(str::trim).collect();
+                match resolve_self_super(owner, &parts).or_else(|| fold_canonical_segments(&parts))
+                {
+                    Some(region) => path_within(from, &region),
+                    None => true,
+                }
+            }
+        }
+    }
+}
+
+/// The visibility qualifier written before the item keyword or `use` at `i`, skipping the other
+/// qualifiers an item head may carry.
+fn visibility_before(bytes: &[u8], i: usize) -> Visibility {
+    let mut j = i;
+    loop {
+        while j > 0 && bytes[j - 1].is_ascii_whitespace() {
+            j -= 1;
+        }
+        let mut start = j;
+        while start > 0 && is_ident_byte(bytes[start - 1]) {
+            start -= 1;
+        }
+        if start < j
+            && matches!(
+                &bytes[start..j],
+                b"unsafe" | b"async" | b"const" | b"extern" | b"default" | b"auto"
+            )
+        {
+            j = start;
+            continue;
+        }
+        break;
+    }
+    if j > 0 && bytes[j - 1] == b')' {
+        let close = j - 1;
+        let mut open = close;
+        while open > 0 && bytes[open] != b'(' {
+            open -= 1;
+        }
+        let mut w = open;
+        while w > 0 && bytes[w - 1].is_ascii_whitespace() {
+            w -= 1;
+        }
+        if w >= 3 && keyword_starts_at(bytes, w - 3, b"pub") {
+            let inner = String::from_utf8_lossy(&bytes[open + 1..close])
+                .trim()
+                .to_string();
+            return match inner.as_str() {
+                "crate" => Visibility::Public,
+                "self" => Visibility::Private,
+                "super" => Visibility::Super,
+                other => match other.strip_prefix("in") {
+                    Some(path) if path.starts_with(char::is_whitespace) => {
+                        Visibility::In(path.trim().to_string())
+                    }
+                    _ => Visibility::Public,
+                },
+            };
+        }
+        return Visibility::Private;
+    }
+    if j >= 3 && keyword_starts_at(bytes, j - 3, b"pub") {
+        Visibility::Public
+    } else {
+        Visibility::Private
+    }
+}
+
 enum Binding {
-    /// A `use` leaf, resolved from its scope's module, and whether it is a `pub` import.
-    Import { target: String, public: bool },
+    /// A `use` leaf, resolved from its scope's module, and who may name it through a glob.
+    Import {
+        target: String,
+        visibility: Visibility,
+    },
     /// A block-local `type Name = Target;`, resolved from its own scope when looked up.
     Alias(String),
 }
@@ -108,8 +206,8 @@ struct Scope {
     module: String,
     bindings: HashMap<String, Vec<Binding>>,
     items: HashMap<String, ItemNamespaces>,
-    /// Each glob written in this scope: the module it names, and whether it is a `pub use`.
-    globs: Vec<(String, bool)>,
+    /// Each glob written in this scope: the module it names, and who may reach through it.
+    globs: Vec<(String, Visibility)>,
 }
 
 /// A `type Name = Target;` written directly in a module body, not in a block and not as an
@@ -121,6 +219,8 @@ pub(super) struct ScopeTable {
     scopes: Vec<Scope>,
     scope_at: Vec<u32>,
     module_aliases: Vec<ModuleAlias>,
+    /// `({module}::{name}, visibility)` for every item declared directly in a module body.
+    module_items: Vec<(String, Visibility)>,
 }
 
 /// Where a declaration at a byte is recorded: in a scope, or nowhere because it is a member of an
@@ -143,29 +243,37 @@ enum Brace {
 /// What every module of a compilation unit binds at module scope, read from each file's
 /// [`ScopeTable`]: what a glob of that module can bring into another.
 pub(super) struct CrateScopes {
-    bindings: HashMap<String, HashMap<String, Vec<(String, bool)>>>,
-    globs: HashMap<String, Vec<(String, bool)>>,
-    /// `{module}::{name}` for every item a module declares at its own top level.
-    items: HashSet<String>,
+    bindings: HashMap<String, HashMap<String, Vec<(String, Visibility)>>>,
+    globs: HashMap<String, Vec<(String, Visibility)>>,
+    /// `{module}::{name}` for every item a module declares at its own top level, with its visibility.
+    items: HashMap<String, Visibility>,
 }
 
 impl CrateScopes {
-    pub(super) fn new<'a>(
-        tables: impl IntoIterator<Item = &'a ScopeTable>,
-        items: HashSet<String>,
-    ) -> Self {
-        let mut bindings: HashMap<String, HashMap<String, Vec<(String, bool)>>> = HashMap::new();
-        let mut globs: HashMap<String, Vec<(String, bool)>> = HashMap::new();
+    /// Whether the crate root declares an item named `name` — what a 2015 `use name…` or `::name…` path
+    /// starts from when no crate-root module is named that.
+    pub(super) fn is_root_item(&self, name: &str) -> bool {
+        self.items.contains_key(&format!("crate::{name}"))
+    }
+
+    pub(super) fn new<'a>(tables: impl IntoIterator<Item = &'a ScopeTable>) -> Self {
+        let mut bindings: HashMap<String, HashMap<String, Vec<(String, Visibility)>>> =
+            HashMap::new();
+        let mut globs: HashMap<String, Vec<(String, Visibility)>> = HashMap::new();
+        let mut items: HashMap<String, Visibility> = HashMap::new();
         for table in tables {
+            for (item, visibility) in &table.module_items {
+                items.insert(item.clone(), visibility.clone());
+            }
             for scope in table.scopes.iter().filter(|s| s.kind == ScopeKind::Module) {
                 let names = bindings.entry(scope.module.clone()).or_default();
                 for (name, all) in &scope.bindings {
                     for binding in all {
-                        if let Binding::Import { target, public } = binding {
+                        if let Binding::Import { target, visibility } = binding {
                             names
                                 .entry(name.clone())
                                 .or_default()
-                                .push((target.clone(), *public));
+                                .push((target.clone(), visibility.clone()));
                         }
                     }
                 }
@@ -183,8 +291,9 @@ impl CrateScopes {
     }
 
     /// Every path `name` can name in `module` as a glob of it, written in `from`, brings it: `module`'s
-    /// own imports and items, or else what its own globs bring, to a fixed point. A private import or
-    /// glob of `module` is visible only from `module`'s own subtree, as `use super::*` sees it.
+    /// own imports and items, or else what its own globs bring, to a fixed point. Each counts only where
+    /// its visibility reaches `from` — a private one from `module`'s own subtree, as `use super::*` sees
+    /// it, a `pub(super)` one from its parent's.
     fn glob_candidates(
         &self,
         module: &str,
@@ -195,25 +304,25 @@ impl CrateScopes {
         if !module.starts_with("crate") || !visited.insert(module.to_string()) {
             return Vec::new();
         }
-        let visible = |public: bool| public || path_within(from, module);
+        let visible = |visibility: &Visibility| visibility.visible_from(module, from);
         let mut found: Vec<String> = self
             .bindings
             .get(module)
             .and_then(|names| names.get(name))
             .into_iter()
             .flatten()
-            .filter(|(_, public)| visible(*public))
+            .filter(|(_, visibility)| visible(visibility))
             .map(|(target, _)| target.clone())
             .collect();
         let item = format!("{module}::{name}");
-        if self.items.contains(&item) {
+        if self.items.get(&item).is_some_and(visible) {
             found.push(item);
         }
         if !found.is_empty() {
             return found;
         }
-        for (glob, public) in self.globs.get(module).into_iter().flatten() {
-            if visible(*public) {
+        for (glob, visibility) in self.globs.get(module).into_iter().flatten() {
+            if visible(visibility) {
                 found.extend(self.glob_candidates(glob, name, from, visited));
             }
         }
@@ -296,6 +405,7 @@ impl ScopeTable {
             scopes,
             scope_at,
             module_aliases: Vec::new(),
+            module_items: Vec::new(),
         };
         table.record_uses(&declarations, &positions, &record_at, roots)?;
         table.record_items(&declarations, &positions, &record_at);
@@ -364,7 +474,7 @@ impl ScopeTable {
             if entry.kind == ScopeKind::Module
                 && crate_scopes
                     .items
-                    .contains(&format!("{}::{head}", entry.module))
+                    .contains_key(&format!("{}::{head}", entry.module))
             {
                 return Head::Unbound;
             }
@@ -466,7 +576,7 @@ impl ScopeTable {
                     UseStatementScan::Statement { body, next } => {
                         let scope = record_at[positions[i]];
                         if scope != MEMBER {
-                            let public = follows_pub(bytes, i);
+                            let visibility = visibility_before(bytes, i);
                             let module = self.scopes[scope as usize].module.clone();
                             for (name, path) in expand_use_leaves(&body)? {
                                 if let Some(target) = resolve_written_path(&path, &module, roots) {
@@ -474,14 +584,19 @@ impl ScopeTable {
                                         .bindings
                                         .entry(name)
                                         .or_default()
-                                        .push(Binding::Import { target, public });
+                                        .push(Binding::Import {
+                                            target,
+                                            visibility: visibility.clone(),
+                                        });
                                 }
                             }
                             let mut bases = Vec::new();
                             glob_bases(&body, &mut bases, 0)?;
                             for base in bases {
                                 if let Some(target) = resolve_written_path(&base, &module, roots) {
-                                    self.scopes[scope as usize].globs.push((target, public));
+                                    self.scopes[scope as usize]
+                                        .globs
+                                        .push((target, visibility.clone()));
                                 }
                             }
                         }
@@ -536,6 +651,10 @@ impl ScopeTable {
             }
             let entry = &mut self.scopes[scope as usize];
             if entry.kind == ScopeKind::Module {
+                self.module_items.push((
+                    format!("{}::{name}", entry.module),
+                    visibility_before(bytes, i - keyword.len()),
+                ));
                 if *keyword == b"type" {
                     if let Some(target) = alias_target(declarations, name_end) {
                         self.module_aliases
@@ -567,24 +686,6 @@ impl ScopeTable {
             item.value_ns |= value_ns;
         }
     }
-}
-
-/// Whether the `use` keyword at `i` is qualified `pub` or `pub(…)`.
-fn follows_pub(bytes: &[u8], i: usize) -> bool {
-    let mut j = i;
-    while j > 0 && bytes[j - 1].is_ascii_whitespace() {
-        j -= 1;
-    }
-    if j > 0 && bytes[j - 1] == b')' {
-        while j > 0 && bytes[j - 1] != b'(' {
-            j -= 1;
-        }
-        j = j.saturating_sub(1);
-        while j > 0 && bytes[j - 1].is_ascii_whitespace() {
-            j -= 1;
-        }
-    }
-    j >= 3 && keyword_starts_at(bytes, j - 3, b"pub")
 }
 
 fn push_scope(
@@ -1009,7 +1110,7 @@ mod tests {
             edition_2015: false,
         };
         let table = ScopeTable::build(source, "crate::core", roots).unwrap();
-        let crate_scopes = CrateScopes::new([&table], HashSet::new());
+        let crate_scopes = CrateScopes::new([&table]);
         let offset = source.find(at).unwrap();
         match table.resolve(table.scope_at(offset), head, &[], ns, &crate_scopes) {
             Head::Paths(paths) => Some(paths.join(" | ")),

@@ -106,7 +106,7 @@ pub(crate) fn inline_symbol_findings(
         item_defs: &item_defs,
         dep_names: &dep_names,
     });
-    let crate_scopes = CrateScopes::new(tables.values(), item_defs.clone());
+    let crate_scopes = CrateScopes::new(tables.values());
 
     let mut findings: Vec<InlineFinding> = Vec::new();
     for (file, module) in governed {
@@ -792,7 +792,10 @@ fn resolve_head(
         "crate" => fold_canonical_segments(&parts_str),
         "self" | "super" if !global => resolve_self_super(occurrence_module, &parts_str),
         other if global => {
-            if roots.edition_2015 && roots.names_root_module("crate", other) {
+            if roots.edition_2015
+                && (roots.names_root_module("crate", other)
+                    || scoped.is_some_and(|(_, _, crate_scopes)| crate_scopes.is_root_item(other)))
+            {
                 Some(format!("crate::{}", parts.join("::")))
             } else {
                 external.map(|_| parts.join("::"))
@@ -808,7 +811,12 @@ fn resolve_head(
                 table.resolve(scope, other, rest, namespace, crate_scopes)
             });
             match lexical {
-                Head::Paths(paths) => return paths,
+                Head::Paths(paths) => {
+                    return paths
+                        .into_iter()
+                        .map(|path| rooted_at_a_2015_root_item(path, roots, scoped))
+                        .collect();
+                }
                 Head::Local => None,
                 Head::Unbound => Some(
                     if let Some(target) =
@@ -832,6 +840,27 @@ fn resolve_head(
         }
     };
     base.into_iter().collect()
+}
+
+/// In an edition-2015 package a `use` path starts at the crate root, and a crate-root module is resolved
+/// there when the path is written; a crate-root item is known only once every file is read, so a path a
+/// `use` binds whose head names one is rooted here.
+fn rooted_at_a_2015_root_item(
+    path: String,
+    roots: PathRoots<'_>,
+    scoped: Option<(&ScopeTable, u32, &CrateScopes)>,
+) -> String {
+    let head = path
+        .split_once("::")
+        .map_or(path.as_str(), |(head, _)| head);
+    let rooted = roots.edition_2015
+        && !matches!(head, "crate" | "std" | "core" | "alloc")
+        && scoped.is_some_and(|(_, _, crate_scopes)| crate_scopes.is_root_item(head));
+    if rooted {
+        format!("crate::{path}")
+    } else {
+        path
+    }
 }
 
 /// Chase a candidate path through the `type`-alias / `pub use` closure to a fixpoint: repeatedly
