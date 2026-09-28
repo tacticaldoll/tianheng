@@ -1034,6 +1034,13 @@ macro_rules! spawn_call {
 
 const EXEC_SPAWNS: &str = concat!("pub fn run() { let _ = ", spawn_call!(), "; }\n");
 
+/// A bare `Command` constructor call, assembled from two literals for the reason [`spawn_call`] gives.
+macro_rules! command_new {
+    () => {
+        concat!("Command", "::new(\"x\")")
+    };
+}
+
 fn fact_field<'a>(violation: &'a xuanji::Violation, key: &str) -> Option<&'a str> {
     violation
         .fact()
@@ -2060,11 +2067,19 @@ fn a_block_local_use_resolves_inside_its_block() {
     for (package, core) in [
         (
             "frozena",
-            "pub fn g() { use std::process::Command; let _ = Command::new(\"x\"); }\n",
+            concat!(
+                "pub fn g() { use std::process::Command; let _ = ",
+                command_new!(),
+                "; }\n"
+            ),
         ),
         (
             "frozena2",
-            "pub fn g() { { use std::process::Command; let _ = Command::new(\"x\"); } }\n",
+            concat!(
+                "pub fn g() { { use std::process::Command; let _ = ",
+                command_new!(),
+                "; } }\n"
+            ),
         ),
     ] {
         let probe = RootProbe::new(
@@ -2131,7 +2146,11 @@ fn a_block_local_use_covers_text_before_it() {
             ("src/lib.rs", "pub mod core;\n"),
             (
                 "src/core.rs",
-                "pub fn g() { let _ = Command::new(\"x\"); use std::process::Command; }\n",
+                concat!(
+                    "pub fn g() { let _ = ",
+                    command_new!(),
+                    "; use std::process::Command; }\n"
+                ),
             ),
         ],
     );
@@ -2279,11 +2298,19 @@ fn inline_associated_item_or_variant_does_not_shadow_an_import() {
     for (package, core) in [
         (
             "frozenh1",
-            "use std::process::Command; pub struct S; impl S { const Command: u8 = 0; pub fn f() { let _ = Command::new(\"x\"); } }\n",
+            concat!(
+                "use std::process::Command; pub struct S; impl S { const Command: u8 = 0; pub fn f() { let _ = ",
+                command_new!(),
+                "; } }\n"
+            ),
         ),
         (
             "frozenh3",
-            "use std::process::Command; pub enum E { Command } pub fn f() { let _ = Command::new(\"x\"); }\n",
+            concat!(
+                "use std::process::Command; pub enum E { Command } pub fn f() { let _ = ",
+                command_new!(),
+                "; }\n"
+            ),
         ),
     ] {
         let probe = RootProbe::new(
@@ -2326,5 +2353,71 @@ fn inline_generic_parameter_named_like_an_import_is_read_as_the_import() {
         "std::process",
         &found,
         &found,
+    );
+}
+
+/// B3, B4: `crate::core` imports `crate::a::X` at module level, `h` calls `X::fa()`, and `g` declares
+/// `use crate::b::X;` and calls `X::fb()`. In either textual order the block's `use` binds only inside `g`, so
+/// each prefix reports its own call and nothing else.
+#[test]
+fn inline_block_local_use_binds_only_inside_its_block() {
+    for (package, core) in [
+        (
+            "blockuseafter",
+            "use crate::a::X;\npub fn h() -> u8 { X::fa() }\npub fn g() -> u16 { use crate::b::X; X::fb() }\n",
+        ),
+        (
+            "blockusebefore",
+            "pub fn g() -> u16 { use crate::b::X; X::fb() }\npub fn h() -> u8 { X::fa() }\nuse crate::a::X;\n",
+        ),
+    ] {
+        let probe = RootProbe::new(
+            package,
+            "",
+            &[
+                ("src/lib.rs", "pub mod a;\npub mod b;\npub mod core;\n"),
+                (
+                    "src/a.rs",
+                    "pub struct X;\nimpl X { pub fn fa() -> u8 { 0 } }\n",
+                ),
+                (
+                    "src/b.rs",
+                    "pub struct X;\nimpl X { pub fn fb() -> u16 { 0 } }\n",
+                ),
+                ("src/core.rs", core),
+            ],
+        );
+        let a = ["crate::a::X::fa in crate::core"];
+        assert_inline_answers(&probe, package, "crate::core", "crate::a", &a, &a);
+        let b = ["crate::b::X::fb in crate::core"];
+        assert_inline_answers(&probe, package, "crate::core", "crate::b", &b, &b);
+    }
+}
+
+/// F: a function body's own `struct Command` shadows the module's `use std::process::Command` inside that body.
+#[test]
+fn inline_block_local_item_shadows_a_module_import() {
+    let probe = RootProbe::new(
+        "blockitemshadow",
+        "",
+        &[
+            ("src/lib.rs", "pub mod core;\n"),
+            (
+                "src/core.rs",
+                concat!(
+                    "#[allow(unused_imports)]\nuse std::process::Command;\npub fn g() { struct Command; impl Command { fn new(_: &str) -> Self { Command } } let _ = ",
+                    command_new!(),
+                    "; }\n"
+                ),
+            ),
+        ],
+    );
+    assert_inline_answers(
+        &probe,
+        "blockitemshadow",
+        "crate::core",
+        "std::process",
+        &[],
+        &[],
     );
 }

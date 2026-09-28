@@ -13,6 +13,7 @@ mod fs_walk;
 mod lexer;
 mod path_vocab;
 mod reachability;
+mod scope_graph;
 mod symbol_scan;
 mod use_scan;
 
