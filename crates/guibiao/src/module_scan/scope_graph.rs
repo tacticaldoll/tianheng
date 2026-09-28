@@ -335,17 +335,21 @@ impl ScopeTable {
             let entry = &self.scopes[id as usize];
             if let Some(all) = entry.bindings.get(head).filter(|all| !all.is_empty()) {
                 let mut paths = Vec::new();
+                let mut names_a_local_item = false;
                 for binding in all {
                     match binding {
                         Binding::Import { target, .. } => paths.push(target.clone()),
                         Binding::Alias(written) => {
                             match self.resolve_alias(id, written, crate_scopes, depth) {
                                 Head::Paths(found) => paths.extend(found),
-                                Head::Local => return Head::Local,
+                                Head::Local => names_a_local_item = true,
                                 Head::Unbound => {}
                             }
                         }
                     }
+                }
+                if paths.is_empty() && names_a_local_item {
+                    return Head::Local;
                 }
                 return Head::Paths(paths.into_iter().map(|p| with_rest(p, rest)).collect());
             }

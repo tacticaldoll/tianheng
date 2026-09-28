@@ -2639,3 +2639,32 @@ fn a_brace_in_a_literal_or_beside_a_lifetime_opens_no_scope() {
     }
     assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
 }
+
+/// A block holding `#[cfg(unix)] type X = L;` for a block-local `L` beside `#[cfg(not(unix))] use crate::a::X;`
+/// has two candidates for `X`. The alias names only a local item, which no prefix reaches, and that is no reason to
+/// drop the import: the call reports under `crate::a` in either order, as the same pair does at module level.
+#[test]
+fn a_block_candidate_naming_a_local_item_keeps_the_other_candidates() {
+    const L: &str = "    #[cfg(unix)] struct L;\n    #[cfg(unix)] impl L { fn f() -> u8 { 1 } }\n    #[cfg(unix)] type X = L;\n";
+    const USE: &str = "    #[cfg(not(unix))] use crate::a::X;\n";
+    for (package, body) in [
+        ("blockcandaliasfirst", format!("{L}{USE}")),
+        ("blockcandusefirst", format!("{USE}{L}")),
+    ] {
+        let core = format!("pub fn g() -> u8 {{\n{body}    X::f()\n}}\n");
+        let probe = RootProbe::new(
+            package,
+            "",
+            &[
+                ("src/lib.rs", "pub mod a;\npub mod core;\n"),
+                (
+                    "src/a.rs",
+                    "pub struct X;\nimpl X { pub fn f() -> u8 { 0 } }\n",
+                ),
+                ("src/core.rs", &core),
+            ],
+        );
+        let found = ["crate::a::X::f in crate::core"];
+        assert_inline_answers(&probe, package, "crate::core", "crate::a", &found, &found);
+    }
+}
