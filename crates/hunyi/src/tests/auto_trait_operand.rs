@@ -928,7 +928,7 @@ fn auto_trait_operand_error_recommendation_is_executable() {
     );
     let bad = DynTraitBoundary::in_crate("x")
         .module("crate::m")
-        .must_not_expose_dyn_of(["std::panic::UnwindSafe"])
+        .must_not_expose_dyn_bounded_by(["std::marker::UnwindSafe"])
         .because("auto-bound recommendation");
     let outcome = check_dyn_trait(&[bad], &manifest(&tree));
     let message = match outcome {
@@ -936,9 +936,11 @@ fn auto_trait_operand_error_recommendation_is_executable() {
         other => panic!("expected constitution error, got {other:?}"),
     };
     assert!(
-        message.contains("must_not_expose_dyn_bounded_by([\"UnwindSafe\"])"),
+        message.contains("UnwindSafe is defined in std::panic"),
         "{message}"
     );
+    assert!(message.contains("std::panic::UnwindSafe"), "{message}");
+    assert!(message.contains("bare UnwindSafe"), "{message}");
     let good = DynTraitBoundary::in_crate("x")
         .module("crate::m")
         .must_not_expose_dyn_bounded_by(["UnwindSafe"])

@@ -193,6 +193,18 @@ pub(crate) fn auto_bound_leaves<'a>(
                 let p1 = strip_raw(p1);
                 let p2 = strip_raw(p2);
                 let stripped_leaf = strip_raw(leaf);
+                if let Some(module) = shape::auto_trait_module(&stripped_leaf) {
+                    if p2 != module {
+                        return Err(crate::errors::wrong_auto_trait_module_error(
+                            s,
+                            &stripped_leaf,
+                            module,
+                            shape::auto_trait_standard_path(&stripped_leaf)
+                                .expect("auto-trait table supplies its standard path"),
+                            boundary_kind,
+                        ));
+                    }
+                }
                 if (p1 == "std" || p1 == "core")
                     && shape::auto_trait_module(&stripped_leaf) == Some(p2.as_str())
                 {

@@ -185,6 +185,20 @@ pub(crate) fn unrecognized_auto_trait_error(
     )
 }
 
+pub(crate) fn wrong_auto_trait_module_error(
+    operand: &str,
+    leaf: &str,
+    module: &str,
+    standard_path: String,
+    boundary_kind: crate::resolve::AutoTraitBoundaryKind,
+) -> String {
+    format!(
+        "{} forbidden auto-trait bound '{operand}' names auto trait '{leaf}', but {leaf} is defined in \
+         std::{module}; use {standard_path} or bare {leaf} instead",
+        boundary_kind.display_name()
+    )
+}
+
 pub(crate) fn missing_module_file_error(module: &str, crate_package: &str) -> String {
     format!(
         "module '{module}' of crate '{crate_package}' is declared (`mod …;`) but its source file \

@@ -179,6 +179,10 @@ pub(crate) fn auto_trait_module(leaf: &str) -> Option<&'static str> {
         .find_map(|(name, module)| (*name == leaf).then_some(*module))
 }
 
+pub(crate) fn auto_trait_standard_path(leaf: &str) -> Option<String> {
+    auto_trait_module(leaf).map(|module| format!("std::{module}::{leaf}"))
+}
+
 /// The leaf-name test used both when collecting principal traits and when validating a
 /// dyn/impl-trait forbidden operand. Raw identifiers compare by their unprefixed leaf.
 pub(crate) fn is_auto_trait_leaf(leaf: &str) -> bool {
