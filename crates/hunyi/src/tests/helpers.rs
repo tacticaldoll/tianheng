@@ -4,7 +4,7 @@ pub(super) use std::path::{Path, PathBuf};
 pub(super) use crate::containment::leaf_of;
 pub(super) use crate::crate_scope::dependency_names;
 pub(super) use crate::errors::{
-    dual_backed_module_error, missing_module_file_error, unknown_module_error, unknown_trait_error,
+    missing_module_file_error, unknown_module_error, unknown_trait_error,
 };
 pub(super) use crate::exposure::module_findings;
 pub(super) use crate::finding::SemanticFact;

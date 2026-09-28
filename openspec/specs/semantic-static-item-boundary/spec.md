@@ -215,11 +215,14 @@ hold is undecided.
 ### Requirement: A declaration that cannot be named is refused, never passed
 
 The system SHALL refuse to judge (exit 2), naming the module and cause, rather than pass a declaration
-it cannot name: a `thread_local!` whose body does not read as `static` items; a static whose enclosing
-impl's self type or trait has no supported rendering, since no positional label is invented for it; a
-foreign item the shared foreign-item decoder cannot read. An unreadable or unparseable source anywhere
-in a compilation unit that holds the anchor SHALL be a constitution error too, because the whole unit is
-read for a rename.
+at or beneath the anchor that it cannot name: a `thread_local!` whose body does not read as `static`
+items; a static whose enclosing impl's self type or trait has no supported rendering, since no
+positional label is invented for it; a foreign item the shared foreign-item decoder cannot read. A
+declaration of those kinds outside the anchor is ungoverned and SHALL NOT refuse the boundary. A rename
+of `thread_local` SHALL still be read across the whole unit, and a declaration that cannot be named SHALL
+NOT stop that read, because the module holding it is exactly where a rename beside it would otherwise be
+dropped. An unreadable or unparseable source anywhere in a compilation unit that holds the anchor SHALL
+be a constitution error too, because the whole unit is read for a rename.
 
 #### Scenario: A thread_local! body that is not static declarations refuses to judge — a stated bound
 
@@ -236,8 +239,20 @@ read for a rename.
 #### Scenario: An undecodable foreign item refuses to judge
 
 - **WHEN** an `unsafe extern "C"` block in the governed module holds `#[cfg(any())] pub fn with_body() {}`
-- **THEN** the system emits the shared undecodable-foreign-item constitution error (exit 2) naming it, the module `crate::kernel`, and deletion as the repair
+- **THEN** the system emits the shared undecodable-foreign-item constitution error (exit 2) naming it, the module `crate::kernel`, and deletion or expanded declaration as the repair
 - **PINNED-BY** `an_undecodable_foreign_item_refuses_to_judge`
+
+#### Scenario: A declaration outside the anchor that cannot be named does not refuse the boundary
+
+- **WHEN** a boundary on `crate::kernel` governs a crate whose `crate::other` writes `thread_local! { not a static }`
+- **THEN** the boundary is judged and `crate::kernel`'s `IN_KERNEL` reacts
+- **PINNED-BY** `semantic_error_in_ungoverned_module_does_not_fail_governed_static_scan`
+
+#### Scenario: A rename beside an unnameable declaration outside the anchor is still refused
+
+- **WHEN** a boundary on `crate::kernel` governs a crate whose `crate::other` writes `thread_local! { not a static }` and then `use std::thread_local as tls;`
+- **THEN** the system emits the rename constitution error (exit 2) naming `tls` and asking for `thread_local!` by its name, never a judgement over `crate::kernel`
+- **PINNED-BY** `a_rename_beside_an_unnameable_declaration_outside_the_anchor_is_still_refused`
 
 ### Requirement: Observation bounds are stated, not silent
 

@@ -120,10 +120,13 @@ impl<'a> StaticCollector<'a> {
                 return;
             }
         };
-        for (ident, expr) in &statics {
+        for (ident, ty, expr) in &statics {
             self.record(StaticKind::ThreadLocal, ident);
             let segment = Ok(format!("static {}", strip_raw(&ident.to_string())));
-            self.within(segment, |this| this.visit_expr(expr));
+            self.within(segment, |this| {
+                this.visit_type(ty);
+                this.visit_expr(expr);
+            });
         }
     }
 
@@ -289,7 +292,7 @@ impl<'ast> Visit<'ast> for StaticCollector<'_> {
 /// declarations are read, because std's grammar admits nothing else.
 fn thread_local_statics(
     input: syn::parse::ParseStream,
-) -> syn::Result<Vec<(syn::Ident, syn::Expr)>> {
+) -> syn::Result<Vec<(syn::Ident, syn::Type, syn::Expr)>> {
     let mut statics = Vec::new();
     while !input.is_empty() {
         input.call(syn::Attribute::parse_outer)?;
@@ -297,10 +300,10 @@ fn thread_local_statics(
         input.parse::<syn::Token![static]>()?;
         let ident = input.parse::<syn::Ident>()?;
         input.parse::<syn::Token![:]>()?;
-        input.parse::<syn::Type>()?;
+        let ty = input.parse::<syn::Type>()?;
         input.parse::<syn::Token![=]>()?;
         let expr = input.parse::<syn::Expr>()?;
-        statics.push((ident, expr));
+        statics.push((ident, ty, expr));
         if input.is_empty() {
             break;
         }
@@ -309,11 +312,17 @@ fn thread_local_statics(
     Ok(statics)
 }
 
+pub(crate) struct StaticSiteError {
+    pub(crate) module: String,
+    pub(crate) error: String,
+}
+
 /// What one compilation unit declares: every static site, and the first rename of `thread_local`
 /// met anywhere in the unit, with the module that wrote it.
 pub(crate) struct StaticScan {
     pub(crate) sites: Vec<StaticSite>,
     pub(crate) rename: Option<(String, String)>,
+    pub(crate) errors: Vec<StaticSiteError>,
 }
 
 /// Walk the whole unit from its root and collect every declared static with its declaring module.
@@ -332,6 +341,7 @@ pub(crate) fn scan_static_sites(
     let modules = walk_subtree_direct_modules(src_dir, root_file, "crate", crate_package)?;
     let mut sites = Vec::new();
     let mut rename = None;
+    let mut errors = Vec::new();
     for (module, items, file) in &modules {
         let uses = collect_uses(items);
         let local_types = local_type_namespace_names(items);
@@ -343,14 +353,21 @@ pub(crate) fn scan_static_sites(
             collector.visit_item(item);
         }
         if let Some(error) = collector.error {
-            return Err(error);
+            errors.push(StaticSiteError {
+                module: module.clone(),
+                error,
+            });
         }
         if rename.is_none() {
             rename = collector.rename.map(|to| (to, module.clone()));
         }
         sites.extend(collector.sites);
     }
-    Ok(StaticScan { sites, rename })
+    Ok(StaticScan {
+        sites,
+        rename,
+        errors,
+    })
 }
 
 /// The refusal a unit's `thread_local` rename earns, if it has one.

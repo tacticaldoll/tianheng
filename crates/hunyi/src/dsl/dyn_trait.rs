@@ -50,16 +50,16 @@ impl DynTraitBoundary {
                 "tianheng.rule/hunyi/dyn-trait-exposure",
                 [("forbidden_operands", super::canonical_path_set(operands))],
             ),
-            DynTraitTarget::AutoBounds(bounds) => {
-                let json = crate::resolve::auto_bound_leaves(
-                    bounds,
-                    crate::resolve::AutoTraitBoundaryKind::Dyn,
-                )
-                .map(|leaves| {
-                    serde_json::to_string(&leaves.into_iter().collect::<Vec<_>>())
-                        .expect("serialized leaves")
-                })
-                .unwrap_or_else(|_| super::canonical_path_set(bounds));
+            DynTraitTarget::AutoBounds(_bounds) => {
+                let json = match self.resolved_auto_bounds() {
+                    crate::resolve::ResolvedAutoBounds::Normalized(leaves) => {
+                        serde_json::to_string(&leaves.into_iter().collect::<Vec<_>>())
+                            .expect("serialized leaves")
+                    }
+                    crate::resolve::ResolvedAutoBounds::InvalidSyntax(original) => {
+                        super::canonical_path_set(&original)
+                    }
+                };
                 RuleKey::of(
                     "tianheng.rule/hunyi/dyn-trait-auto-bound",
                     [("forbidden_auto_bounds", json)],
@@ -97,14 +97,17 @@ impl DynTraitBoundary {
         }
     }
 
-    /// Return the sorted, deduplicated auto-trait leaves used by the rule key and projections.
-    pub fn forbidden_auto_bound_leaves(&self) -> Vec<String> {
-        crate::resolve::auto_bound_leaves(
+    /// The typed resolution of the boundary's auto traits.
+    pub(crate) fn resolved_auto_bounds(&self) -> crate::resolve::ResolvedAutoBounds {
+        crate::resolve::resolved_auto_bounds(
             self.forbidden_auto_bounds(),
             crate::resolve::AutoTraitBoundaryKind::Dyn,
         )
-        .map(|leaves| leaves.into_iter().collect())
-        .unwrap_or_default()
+    }
+
+    /// Return the sorted, deduplicated auto-trait leaves used by the rule key and projections.
+    pub fn forbidden_auto_bound_leaves(&self) -> Vec<String> {
+        self.resolved_auto_bounds().into_vec()
     }
 
     /// The human-readable reason recorded with the boundary (the repair hint).

@@ -18,8 +18,7 @@ use crate::emit::{
     MultiModuleViolationContext, SingleModuleViolationContext, push_multi_module_violations,
     push_single_module_violations,
 };
-use crate::errors::unknown_module_error;
-use crate::file_scope::{over_each_unit, resolve_crate_units};
+use crate::file_scope::{UnitAnchor, over_each_unit, resolve_crate_units};
 use crate::finding::{ExposureKind, SemanticFact, shape_finding, sort_attributed_facts};
 use crate::resolve::{
     ShapeExposure, UseMap, canonical_path_str, collect_uses, validate_exposed_trait_operands,
@@ -50,103 +49,104 @@ pub(crate) fn check_impl_trait_boundary(
 ) -> Result<(), String> {
     let module = canonical_module_anchor(&boundary.module, &boundary.crate_package)?;
     let (package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
-    over_each_unit(
-        &units,
-        &unknown_module_error(&module, &boundary.crate_package),
-        |root_file, src_dir, unit| {
-            let rule_key = boundary.rule_key();
+    let anchor = UnitAnchor::Module {
+        module: &module,
+        crate_package: &boundary.crate_package,
+    };
+    over_each_unit(&units, anchor, |root_file, src_dir, unit| {
+        let rule_key = boundary.rule_key();
 
-            if boundary.including_submodules() {
-                let findings = match &boundary.target {
-                    crate::dsl::ImplTraitTarget::Any => impl_trait_subtree_findings(
-                        src_dir,
-                        root_file,
-                        &module,
-                        &boundary.crate_package,
-                    )?,
-                    crate::dsl::ImplTraitTarget::Principal(operands) => {
-                        impl_trait_operand_subtree_findings(
-                            src_dir,
-                            root_file,
-                            &module,
-                            operands,
-                            &boundary.crate_package,
-                            &dependency_names(package),
-                        )?
-                    }
-                    crate::dsl::ImplTraitTarget::AutoBounds(bounds) => {
-                        impl_trait_auto_bound_subtree_findings(
-                            src_dir,
-                            root_file,
-                            &module,
-                            bounds,
-                            &boundary.crate_package,
-                        )?
-                    }
-                };
-                push_multi_module_violations(
-                    violations,
-                    MultiModuleViolationContext {
-                        target: &module,
-                        rule: IMPL_TRAIT_RULE,
-                        rule_key,
-                        reason: &boundary.reason,
-                        severity: boundary.severity,
-                        anchor: boundary.anchor(),
-                        polarity: Polarity::DenyBreach,
-                        crate_package: &boundary.crate_package,
-                        unit,
-                    },
-                    findings,
-                );
-                return Ok(());
-            }
-
+        if boundary.including_submodules() {
             let findings = match &boundary.target {
-                crate::dsl::ImplTraitTarget::Any => impl_trait_module_findings(
+                crate::dsl::ImplTraitTarget::Any => impl_trait_subtree_findings(
                     src_dir,
                     root_file,
                     &module,
                     &boundary.crate_package,
-                )?,
+                )
+                .map_err(crate::errors::ResolveError::Other)?,
                 crate::dsl::ImplTraitTarget::Principal(operands) => {
-                    impl_trait_operand_module_findings(
+                    impl_trait_operand_subtree_findings(
                         src_dir,
                         root_file,
                         &module,
                         operands,
                         &boundary.crate_package,
                         &dependency_names(package),
-                    )?
+                    )
+                    .map_err(crate::errors::ResolveError::Other)?
                 }
                 crate::dsl::ImplTraitTarget::AutoBounds(bounds) => {
-                    impl_trait_auto_bound_module_findings(
+                    impl_trait_auto_bound_subtree_findings(
                         src_dir,
                         root_file,
                         &module,
                         bounds,
                         &boundary.crate_package,
-                    )?
+                    )
+                    .map_err(crate::errors::ResolveError::Other)?
                 }
             };
-
-            push_single_module_violations(
+            push_multi_module_violations(
                 violations,
-                SingleModuleViolationContext {
-                    module: &module,
+                MultiModuleViolationContext {
+                    target: &module,
                     rule: IMPL_TRAIT_RULE,
                     rule_key,
                     reason: &boundary.reason,
                     severity: boundary.severity,
                     anchor: boundary.anchor(),
+                    polarity: Polarity::DenyBreach,
                     crate_package: &boundary.crate_package,
                     unit,
                 },
                 findings,
             );
-            Ok(())
-        },
-    )
+            return Ok(());
+        }
+
+        let findings = match &boundary.target {
+            crate::dsl::ImplTraitTarget::Any => {
+                impl_trait_module_findings(src_dir, root_file, &module, &boundary.crate_package)
+                    .map_err(crate::errors::ResolveError::Other)?
+            }
+            crate::dsl::ImplTraitTarget::Principal(operands) => impl_trait_operand_module_findings(
+                src_dir,
+                root_file,
+                &module,
+                operands,
+                &boundary.crate_package,
+                &dependency_names(package),
+            )
+            .map_err(crate::errors::ResolveError::Other)?,
+            crate::dsl::ImplTraitTarget::AutoBounds(bounds) => {
+                impl_trait_auto_bound_module_findings(
+                    src_dir,
+                    root_file,
+                    &module,
+                    bounds,
+                    &boundary.crate_package,
+                )
+                .map_err(crate::errors::ResolveError::Other)?
+            }
+        };
+
+        push_single_module_violations(
+            violations,
+            SingleModuleViolationContext {
+                module: &module,
+                rule: IMPL_TRAIT_RULE,
+                rule_key,
+                reason: &boundary.reason,
+                severity: boundary.severity,
+                anchor: boundary.anchor(),
+                crate_package: &boundary.crate_package,
+                unit,
+            },
+            findings,
+        );
+        Ok(())
+    })
 }
 
 /// The pure heart of the **subtree** impl-trait reaction: walk the anchored module's whole subtree

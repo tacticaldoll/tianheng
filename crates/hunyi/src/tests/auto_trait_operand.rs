@@ -919,8 +919,8 @@ fn auto_bound_qualified_path_matrix() {
     }
 }
 #[test]
-fn auto_trait_operand_error_recommendation_is_executable() {
-    let tree = TempSrcTree::new("auto-operand-recommendation");
+fn auto_bound_wrong_module_recommendation_is_executable() {
+    let tree = TempSrcTree::new("auto-bound-wrong-module-recommendation");
     tree.write("lib.rs", "pub mod m;\n");
     tree.write(
         "m.rs",
@@ -946,4 +946,208 @@ fn auto_trait_operand_error_recommendation_is_executable() {
         .must_not_expose_dyn_bounded_by(["UnwindSafe"])
         .because("auto-bound recommendation");
     assert_eq!(check_dyn_trait(&[good], &manifest(&tree)).exit_code(), 1);
+}
+
+#[test]
+fn auto_trait_operand_error_recommendation_is_executable() {
+    // Dyn trait
+    let tree_dyn = TempSrcTree::new("auto-operand-rec-dyn");
+    tree_dyn.write("lib.rs", "pub mod m;\n");
+    tree_dyn.write(
+        "m.rs",
+        "pub fn f() -> Box<dyn crate::ports::Port + Send> { todo!() }\n",
+    );
+    let bad_dyn = DynTraitBoundary::in_crate("x")
+        .module("crate::m")
+        .must_not_expose_dyn_of(["Send"])
+        .because("forbidden Send operand");
+    let outcome_dyn = check_dyn_trait(&[bad_dyn], &manifest(&tree_dyn));
+    let message_dyn = match outcome_dyn {
+        crate::Outcome::ConstitutionError(msg) => msg,
+        other => panic!("expected constitution error, got {other:?}"),
+    };
+    assert!(
+        message_dyn.contains("must_not_expose_dyn_bounded_by([\"Send\"])"),
+        "{message_dyn}"
+    );
+    let good_dyn = DynTraitBoundary::in_crate("x")
+        .module("crate::m")
+        .must_not_expose_dyn_bounded_by(["Send"])
+        .because("forbidden Send bound");
+    assert_eq!(
+        check_dyn_trait(&[good_dyn], &manifest(&tree_dyn)).exit_code(),
+        1
+    );
+
+    // Impl trait
+    let tree_impl = TempSrcTree::new("auto-operand-rec-impl");
+    tree_impl.write("lib.rs", "pub mod m;\n");
+    tree_impl.write(
+        "m.rs",
+        "pub fn f() -> impl crate::ports::Port + Send { todo!() }\n",
+    );
+    let bad_impl = ImplTraitBoundary::in_crate("x")
+        .module("crate::m")
+        .must_not_expose_impl_trait_of(["Send"])
+        .because("forbidden Send operand");
+    let outcome_impl = check_impl_trait(&[bad_impl], &manifest(&tree_impl));
+    let message_impl = match outcome_impl {
+        crate::Outcome::ConstitutionError(msg) => msg,
+        other => panic!("expected constitution error, got {other:?}"),
+    };
+    assert!(
+        message_impl.contains("must_not_expose_impl_trait_bounded_by([\"Send\"])"),
+        "{message_impl}"
+    );
+    let good_impl = ImplTraitBoundary::in_crate("x")
+        .module("crate::m")
+        .must_not_expose_impl_trait_bounded_by(["Send"])
+        .because("forbidden Send bound");
+    assert_eq!(
+        check_impl_trait(&[good_impl], &manifest(&tree_impl)).exit_code(),
+        1
+    );
+}
+
+#[test]
+fn auto_trait_operand_rejection_suggests_exact_bounded_by_syntax() {
+    let tree = TempSrcTree::new("auto-operand-exact-syntax");
+    tree.write("lib.rs", "pub mod m;\n");
+    tree.write("m.rs", "pub fn f() -> Box<dyn Send> { todo!() }\n");
+    let m = manifest(&tree);
+
+    // Dyn bare
+    let b_dyn_bare = DynTraitBoundary::in_crate("x")
+        .module("crate::m")
+        .must_not_expose_dyn_of(["Send"])
+        .because("r");
+    let Outcome::ConstitutionError(msg) = check_dyn_trait(&[b_dyn_bare], &m) else {
+        panic!()
+    };
+    assert!(
+        msg.contains("must_not_expose_dyn_bounded_by([\"Send\"])"),
+        "expected exact suggestion in {msg}"
+    );
+
+    // Dyn qualified
+    let b_dyn_qual = DynTraitBoundary::in_crate("x")
+        .module("crate::m")
+        .must_not_expose_dyn_of(["std::marker::Send"])
+        .because("r");
+    let Outcome::ConstitutionError(msg) = check_dyn_trait(&[b_dyn_qual], &m) else {
+        panic!()
+    };
+    assert!(
+        msg.contains("must_not_expose_dyn_bounded_by([\"Send\"])"),
+        "expected exact suggestion in {msg}"
+    );
+
+    // Impl bare
+    let b_impl_bare = ImplTraitBoundary::in_crate("x")
+        .module("crate::m")
+        .must_not_expose_impl_trait_of(["Send"])
+        .because("r");
+    let Outcome::ConstitutionError(msg) = check_impl_trait(&[b_impl_bare], &m) else {
+        panic!()
+    };
+    assert!(
+        msg.contains("must_not_expose_impl_trait_bounded_by([\"Send\"])"),
+        "expected exact suggestion in {msg}"
+    );
+
+    // Impl qualified
+    let b_impl_qual = ImplTraitBoundary::in_crate("x")
+        .module("crate::m")
+        .must_not_expose_impl_trait_of(["core::marker::Send"])
+        .because("r");
+    let Outcome::ConstitutionError(msg) = check_impl_trait(&[b_impl_qual], &m) else {
+        panic!()
+    };
+    assert!(
+        msg.contains("must_not_expose_impl_trait_bounded_by([\"Send\"])"),
+        "expected exact suggestion in {msg}"
+    );
+}
+
+#[test]
+fn invalid_auto_bound_syntax_preserves_original_in_leaves_and_rule_key() {
+    let invalid = ["not::an::auto::trait".to_string(), "Send".to_string()];
+
+    // DynTraitBoundary
+    let b_dyn = DynTraitBoundary::in_crate("x")
+        .module("crate::m")
+        .must_not_expose_dyn_bounded_by(invalid.clone())
+        .because("r");
+    assert_eq!(
+        b_dyn.forbidden_auto_bound_leaves(),
+        invalid,
+        "leaves projection preserves original syntax on invalid bounds"
+    );
+    let key_dyn = b_dyn.rule_key();
+    let (_, val_dyn) = key_dyn
+        .fields()
+        .find(|(k, _)| *k == "forbidden_auto_bounds")
+        .expect("auto bounds field");
+    assert!(
+        val_dyn.contains("not::an::auto::trait"),
+        "rule_key preserves invalid bounds in {val_dyn}"
+    );
+
+    // ImplTraitBoundary
+    let b_impl = ImplTraitBoundary::in_crate("x")
+        .module("crate::m")
+        .must_not_expose_impl_trait_bounded_by(invalid.clone())
+        .because("r");
+    assert_eq!(
+        b_impl.forbidden_auto_bound_leaves(),
+        invalid,
+        "leaves projection preserves original syntax on invalid bounds"
+    );
+    let key_impl = b_impl.rule_key();
+    let (_, val_impl) = key_impl
+        .fields()
+        .find(|(k, _)| *k == "forbidden_auto_bounds")
+        .expect("auto bounds field");
+    assert!(
+        val_impl.contains("not::an::auto::trait"),
+        "rule_key preserves invalid bounds in {val_impl}"
+    );
+}
+
+#[test]
+fn auto_bound_identifies_leaf_first_for_module_recommendation() {
+    let tree = TempSrcTree::new("auto-bound-leaf-first");
+    tree.write("lib.rs", "pub mod m;\n");
+    tree.write("m.rs", "pub fn f() -> Box<dyn Send> { todo!() }\n");
+
+    // "foo::Send" has 2 segments with auto-trait leaf "Send".
+    // Rather than saying "unrecognized auto trait foo::Send", it identifies the leaf Send
+    // and tells the author which module it is defined in.
+    let b = DynTraitBoundary::in_crate("x")
+        .module("crate::m")
+        .must_not_expose_dyn_bounded_by(["foo::Send"])
+        .because("r");
+    let Outcome::ConstitutionError(err) = check_dyn_trait(&[b], &manifest(&tree)) else {
+        panic!()
+    };
+    assert!(
+        err.contains("Send is defined in std::marker"),
+        "expected module hint in: {err}"
+    );
+    assert!(
+        err.contains("use std::marker::Send or bare Send instead"),
+        "expected standard path suggestion in: {err}"
+    );
+}
+
+#[test]
+fn exposure_kind_maps_to_auto_trait_boundary_kind() {
+    assert_eq!(
+        crate::finding::ExposureKind::DynTrait.auto_trait_boundary_kind(),
+        crate::resolve::AutoTraitBoundaryKind::Dyn
+    );
+    assert_eq!(
+        crate::finding::ExposureKind::ImplTrait.auto_trait_boundary_kind(),
+        crate::resolve::AutoTraitBoundaryKind::Impl
+    );
 }

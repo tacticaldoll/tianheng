@@ -3,7 +3,63 @@
 //! anchor, an unreadable workspace, an unreadable/unparseable source file), so no capability
 //! or sibling module drifts a copy.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ResolveError {
+    UnresolvableModule(String, String),
+    MissingModuleFile(String, String),
+    DualBackedModule(String, String, String, PathBuf, PathBuf),
+    UnreadableSource(PathBuf, String),
+    UnparseableSource(PathBuf, String),
+    UnknownTrait(String, String),
+    AmbiguousTraitAnchor(String, String, Vec<String>),
+    Other(String),
+}
+
+impl std::fmt::Display for ResolveError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnresolvableModule(module, crate_package) => {
+                f.write_str(&unknown_module_error(module, crate_package))
+            }
+            Self::MissingModuleFile(module, crate_package) => {
+                f.write_str(&missing_module_file_error(module, crate_package))
+            }
+            Self::DualBackedModule(module, declaration, crate_package, flat, nested) => f
+                .write_str(&dual_backed_module_error(
+                    module,
+                    declaration,
+                    crate_package,
+                    flat,
+                    nested,
+                )),
+            Self::UnreadableSource(file, err) => f.write_str(&unreadable_source_error(file, err)),
+            Self::UnparseableSource(file, err) => f.write_str(&unparseable_source_error(file, err)),
+            Self::UnknownTrait(trait_path, crate_package) => {
+                f.write_str(&unknown_trait_error(trait_path, crate_package))
+            }
+            Self::AmbiguousTraitAnchor(trait_path, crate_package, anchors) => f.write_str(
+                &ambiguous_trait_anchor_error(trait_path, crate_package, anchors),
+            ),
+            Self::Other(msg) => f.write_str(msg),
+        }
+    }
+}
+
+impl std::error::Error for ResolveError {}
+
+impl From<ResolveError> for String {
+    fn from(err: ResolveError) -> Self {
+        err.to_string()
+    }
+}
+
+impl From<String> for ResolveError {
+    fn from(msg: String) -> Self {
+        Self::Other(msg)
+    }
+}
 
 pub(crate) fn unreadable_workspace_error(manifest_path: &Path, err: &str) -> String {
     format!(
@@ -189,12 +245,13 @@ pub(crate) fn wrong_auto_trait_module_error(
     operand: &str,
     leaf: &str,
     module: &str,
+    root: &str,
     standard_path: String,
     boundary_kind: crate::resolve::AutoTraitBoundaryKind,
 ) -> String {
     format!(
         "{} forbidden auto-trait bound '{operand}' names auto trait '{leaf}', but {leaf} is defined in \
-         std::{module}; use {standard_path} or bare {leaf} instead",
+         {root}::{module}; use {standard_path} or bare {leaf} instead",
         boundary_kind.display_name()
     )
 }
@@ -255,15 +312,17 @@ pub(crate) fn out_of_package_root_error(crate_package: &str, root: &std::path::P
 /// What it declares is unknown, so no boundary over the module can be judged against it, and passing
 /// it would be a silent pass over a declaration. rustc refuses such an item wherever its `#[cfg]` holds
 /// (`incorrect function inside \`extern\` block`, `incorrect \`type\` inside \`extern\` block`,
-/// measured under rustc 1.96.1 and 1.85.1), so it compiles only where cfg removes it and declares
-/// nothing on any configuration that builds: deleting it changes no build.
+/// measured under rustc 1.96.1 and 1.85.1), so it compiles only where cfg removes it or an attribute
+/// macro rewrites it: delete it if disabled by cfg, or write the expanded declaration directly if
+/// produced by an attribute macro.
 pub(crate) fn undecodable_foreign_item_error(module: &str, file: &Path, seen: &str) -> String {
     format!(
         "cannot judge a foreign item in module '{module}' ({}): {seen} inside an `extern` block does \
          not parse as a `fn`, `static`, `type` or macro invocation with any leading `safe` or `unsafe` \
          qualifier removed, so this dimension cannot tell what it declares and a boundary over this \
-         module would pass it unobserved; rustc accepts such an item only while a `#[cfg]` removes it, \
-         so it declares nothing in any build — delete it",
+         module would pass it unobserved; rustc accepts such an item only while a `#[cfg]` removes it \
+         or an attribute macro rewrites it — delete it if disabled by cfg, or write the expanded \
+         declaration directly if produced by an attribute macro",
         file.display()
     )
 }

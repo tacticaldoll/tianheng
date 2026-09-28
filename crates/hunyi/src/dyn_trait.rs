@@ -13,8 +13,7 @@ use crate::crate_scope::dependency_names;
 use crate::driver::run_boundaries;
 use crate::dsl::DynTraitBoundary;
 use crate::emit::{SingleModuleViolationContext, push_single_module_violations};
-use crate::errors::unknown_module_error;
-use crate::file_scope::{over_each_unit, resolve_crate_units};
+use crate::file_scope::{UnitAnchor, over_each_unit, resolve_crate_units};
 use crate::finding::{ExposureKind, SemanticFact, shape_finding};
 use crate::rules::DYN_TRAIT_RULE;
 use crate::shape_scan::{operand_module_findings, shape_module_findings};
@@ -39,48 +38,51 @@ pub(crate) fn check_dyn_trait_boundary(
 ) -> Result<(), String> {
     let module = canonical_module_anchor(&boundary.module, &boundary.crate_package)?;
     let (package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
-    over_each_unit(
-        &units,
-        &unknown_module_error(&module, &boundary.crate_package),
-        |root_file, src_dir, unit| {
-            let findings = match &boundary.target {
-                crate::dsl::DynTraitTarget::Any => {
-                    dyn_module_findings(src_dir, root_file, &module, &boundary.crate_package)?
-                }
-                crate::dsl::DynTraitTarget::Principal(operands) => dyn_operand_module_findings(
-                    src_dir,
-                    root_file,
-                    &module,
-                    operands,
-                    &boundary.crate_package,
-                    &dependency_names(package),
-                )?,
-                crate::dsl::DynTraitTarget::AutoBounds(bounds) => dyn_auto_bound_module_findings(
-                    src_dir,
-                    root_file,
-                    &module,
-                    bounds,
-                    &boundary.crate_package,
-                )?,
-            };
+    let anchor = UnitAnchor::Module {
+        module: &module,
+        crate_package: &boundary.crate_package,
+    };
+    over_each_unit(&units, anchor, |root_file, src_dir, unit| {
+        let findings = match &boundary.target {
+            crate::dsl::DynTraitTarget::Any => {
+                dyn_module_findings(src_dir, root_file, &module, &boundary.crate_package)
+                    .map_err(crate::errors::ResolveError::Other)?
+            }
+            crate::dsl::DynTraitTarget::Principal(operands) => dyn_operand_module_findings(
+                src_dir,
+                root_file,
+                &module,
+                operands,
+                &boundary.crate_package,
+                &dependency_names(package),
+            )
+            .map_err(crate::errors::ResolveError::Other)?,
+            crate::dsl::DynTraitTarget::AutoBounds(bounds) => dyn_auto_bound_module_findings(
+                src_dir,
+                root_file,
+                &module,
+                bounds,
+                &boundary.crate_package,
+            )
+            .map_err(crate::errors::ResolveError::Other)?,
+        };
 
-            push_single_module_violations(
-                violations,
-                SingleModuleViolationContext {
-                    module: &module,
-                    rule: DYN_TRAIT_RULE,
-                    rule_key: boundary.rule_key(),
-                    reason: &boundary.reason,
-                    severity: boundary.severity,
-                    anchor: boundary.anchor(),
-                    crate_package: &boundary.crate_package,
-                    unit,
-                },
-                findings,
-            );
-            Ok(())
-        },
-    )
+        push_single_module_violations(
+            violations,
+            SingleModuleViolationContext {
+                module: &module,
+                rule: DYN_TRAIT_RULE,
+                rule_key: boundary.rule_key(),
+                reason: &boundary.reason,
+                severity: boundary.severity,
+                anchor: boundary.anchor(),
+                crate_package: &boundary.crate_package,
+                unit,
+            },
+            findings,
+        );
+        Ok(())
+    })
 }
 
 /// The pure heart of dyn-trait-boundary, testable without spawning `cargo`: resolve the

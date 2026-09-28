@@ -15,7 +15,7 @@ pub(super) fn resolve_file(
 ) -> Result<PathBuf, String> {
     let tree = TempSrcTree::new(&format!("file-{name}"));
     tree.write_all(files);
-    resolve_module_file(tree.src(), &tree.root(), module, "x")
+    resolve_module_file(tree.src(), &tree.root(), module, "x").map_err(|e| e.to_string())
 }
 
 #[test]
@@ -112,12 +112,12 @@ pub(super) fn a_dual_backed_module_anchor_is_a_constitution_error() {
         .expect_err("both conventional forms present must be a constitution error, not a pick");
     assert_eq!(
         err,
-        dual_backed_module_error(
-            "crate::child",
-            "child",
-            "x",
-            &tree.src().join("child.rs"),
-            &tree.src().join("child").join("mod.rs"),
+        crate::errors::ResolveError::DualBackedModule(
+            "crate::child".to_string(),
+            "child".to_string(),
+            "x".to_string(),
+            tree.src().join("child.rs"),
+            tree.src().join("child").join("mod.rs"),
         )
     );
 }
@@ -139,12 +139,12 @@ pub(super) fn a_dual_backed_ancestor_reacts_when_the_anchor_is_a_deeper_segment(
         .expect_err("a dual-backed ancestor must react before the deeper segment resolves");
     assert_eq!(
         err,
-        dual_backed_module_error(
-            "crate::child::deep",
-            "child",
-            "x",
-            &tree.src().join("child.rs"),
-            &tree.src().join("child").join("mod.rs"),
+        crate::errors::ResolveError::DualBackedModule(
+            "crate::child::deep".to_string(),
+            "child".to_string(),
+            "x".to_string(),
+            tree.src().join("child.rs"),
+            tree.src().join("child").join("mod.rs"),
         ),
         "the anchor and the ambiguous declaration must be named separately"
     );
@@ -239,12 +239,12 @@ pub(super) fn a_cfg_gated_dual_backed_declaration_is_still_an_ambiguity() {
         .expect_err("a cfg gate tolerates an absent file, never two present ones");
     assert_eq!(
         err,
-        dual_backed_module_error(
-            "crate::child",
-            "child",
-            "x",
-            &tree.src().join("child.rs"),
-            &tree.src().join("child").join("mod.rs"),
+        crate::errors::ResolveError::DualBackedModule(
+            "crate::child".to_string(),
+            "child".to_string(),
+            "x".to_string(),
+            tree.src().join("child.rs"),
+            tree.src().join("child").join("mod.rs"),
         )
     );
 }
@@ -269,12 +269,12 @@ pub(super) fn a_cfg_attr_decorated_dual_backed_declaration_is_still_an_ambiguity
         .expect_err("a cfg_attr-decorated dual-backed declaration is still an ambiguity");
     assert_eq!(
         err,
-        dual_backed_module_error(
-            "crate::child",
-            "child",
-            "x",
-            &tree.src().join("child.rs"),
-            &tree.src().join("child").join("mod.rs"),
+        crate::errors::ResolveError::DualBackedModule(
+            "crate::child".to_string(),
+            "child".to_string(),
+            "x".to_string(),
+            tree.src().join("child.rs"),
+            tree.src().join("child").join("mod.rs"),
         )
     );
 }

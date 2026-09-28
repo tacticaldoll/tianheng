@@ -62,32 +62,68 @@ pub(crate) fn resolve_crate_units<'m>(
     Ok((package, units))
 }
 
+/// The anchor a boundary evaluates against a compilation unit.
+///
+/// A boundary is anchored either at a module (for module-level or subtree boundaries)
+/// or at a trait (for trait-implementation locality). Each kind carries its canonical path
+/// and package name so an absence error can be checked for exact identity against this anchor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum UnitAnchor<'a> {
+    Module {
+        module: &'a str,
+        crate_package: &'a str,
+    },
+    Trait {
+        trait_path: &'a str,
+        crate_package: &'a str,
+    },
+}
+
 /// Whether a per-unit failure is the one kind that legitimately varies BETWEEN units: the boundary's
-/// **anchor** is absent from this root's graph — whichever kind of anchor it is, a governed module or a
-/// governed trait.
+/// **anchor** is absent from this root's graph — matching the exact anchor, not any wildcard.
 ///
 /// A package's roots are separate compilation units, so a library's internals are not the binary's — a
 /// boundary anchored at `crate::api` is real for the library root and meaningless for a `src/bin/*.rs`
 /// root beside it. Erroring per root would refuse to judge source that compiles; the caller therefore
-/// defers this one failure and reports it only if NO unit hosts the module.
+/// defers this one failure and reports it only if NO unit hosts the anchor.
 ///
-/// The caller passes its own canonical absence error rather than a substring, so a change to the message
-/// moves both sides together. Every OTHER failure — an unreadable source, a resolution ambiguity, a root
-/// outside the package directory — propagates immediately: deferring it until a sibling unit happened to
-/// be governable would silently pass over source the system could not read.
-fn is_anchor_absent_from_unit(err: &str, canonical_absence: &str) -> bool {
-    err == canonical_absence
+/// A module anchor's absence is decided before the checker runs, by [`over_each_unit`]'s pre-check, so a
+/// unit that lacks the module never reaches this predicate. A trait anchor's absence is known only to
+/// the checker's own resolution, so for a trait this predicate is where [`over_each_unit`] matches the
+/// error the closure returned.
+///
+/// The deferral check matches the exact anchor rather than using wildcards: an error naming a
+/// different module or trait is an unexpected resolution failure that must propagate immediately.
+pub(crate) fn is_anchor_absent_from_unit(
+    err: &crate::errors::ResolveError,
+    anchor: UnitAnchor<'_>,
+) -> bool {
+    match (err, anchor) {
+        (
+            crate::errors::ResolveError::UnresolvableModule(m, c),
+            UnitAnchor::Module {
+                module,
+                crate_package,
+            },
+        ) => m == module && c == crate_package,
+        (
+            crate::errors::ResolveError::UnknownTrait(t, c),
+            UnitAnchor::Trait {
+                trait_path,
+                crate_package,
+            },
+        ) => t == trait_path && c == crate_package,
+        _ => false,
+    }
 }
 
 /// Evaluate `per_unit` over every compilation unit of a package, deferring an anchor that is absent from
 /// one unit but present in another.
 ///
-/// **The policy had two halves and only one of them lived here.** [`is_anchor_absent_from_unit`] decided
-/// what an absence means; what to *do* about it — govern where the anchor is, refuse only where it is
-/// nowhere — was written out at every boundary checker, head and tail identical in all of them and
-/// differing only in the body between. A copy per checker is a chance per checker for the policy to mean
-/// something else, and the half that decides was the half already shared. The count is deliberately not
-/// written: it is the callers of this function, and it changes when a boundary is added.
+/// For a module anchor ([`UnitAnchor::Module`]), existence is pre-checked directly against each unit.
+/// If absent from a unit, the failure is deferred without running the checker closure. If present,
+/// the closure is invoked. For a trait anchor ([`UnitAnchor::Trait`]), the closure executes and any
+/// absence error matching the anchor is deferred.
 ///
 /// A package's crate roots are separate compilation units — same `crate` module path, separate module
 /// graph — so each is evaluated on its own and the unit is carried into each finding's identity. An
@@ -96,27 +132,47 @@ fn is_anchor_absent_from_unit(err: &str, canonical_absence: &str) -> bool {
 /// last one tried.
 pub(crate) fn over_each_unit<F>(
     units: &[CompilationUnit],
-    canonical_absence: &str,
+    anchor: UnitAnchor<'_>,
     mut per_unit: F,
 ) -> Result<(), String>
 where
-    F: FnMut(&Path, &Path, &str) -> Result<(), String>,
+    F: FnMut(&Path, &Path, &str) -> Result<(), crate::errors::ResolveError>,
 {
     let mut governed_somewhere = false;
-    let mut deferred: Option<String> = None;
+    let mut deferred: Option<crate::errors::ResolveError> = None;
     for (root_file, src_dir, unit) in units {
+        if let UnitAnchor::Module {
+            module,
+            crate_package,
+        } = anchor
+        {
+            match crate::anchor::module_exists_in_unit(src_dir, root_file, module, crate_package) {
+                Ok(true) => {}
+                Ok(false) => {
+                    if deferred.is_none() {
+                        deferred = Some(crate::errors::ResolveError::UnresolvableModule(
+                            module.to_string(),
+                            crate_package.to_string(),
+                        ));
+                    }
+                    continue;
+                }
+                Err(reason) => return Err(reason.to_string()),
+            }
+        }
+
         match per_unit(root_file, src_dir.as_path(), unit.as_str()) {
             Ok(()) => governed_somewhere = true,
-            Err(reason) if is_anchor_absent_from_unit(&reason, canonical_absence) => {
+            Err(reason) if is_anchor_absent_from_unit(&reason, anchor) => {
                 if deferred.is_none() {
                     deferred = Some(reason);
                 }
             }
-            Err(reason) => return Err(reason),
+            Err(reason) => return Err(reason.to_string()),
         }
     }
     match deferred {
-        Some(reason) if !governed_somewhere => Err(reason),
+        Some(reason) if !governed_somewhere => Err(reason.to_string()),
         _ => Ok(()),
     }
 }

@@ -12,9 +12,7 @@
 use syn::ext::IdentExt;
 use syn::parse::Parser;
 
-use crate::errors::{
-    non_canonical_module_anchor_error, unknown_location_error, unknown_module_error,
-};
+use crate::errors::{non_canonical_module_anchor_error, unknown_location_error};
 use crate::file_scope::CompilationUnit;
 use crate::module_resolve::resolve_module_branches;
 use crate::resolve::canonical_path_str;
@@ -108,10 +106,14 @@ pub(crate) fn module_exists_in_unit(
     root_file: &std::path::Path,
     module: &str,
     crate_package: &str,
-) -> Result<bool, String> {
+) -> Result<bool, crate::errors::ResolveError> {
     match resolve_module_branches(src_dir, root_file, module, crate_package) {
         Ok(_) => Ok(true),
-        Err(reason) if reason == unknown_module_error(module, crate_package) => Ok(false),
+        Err(crate::errors::ResolveError::UnresolvableModule(m, c))
+            if m == module && c == crate_package =>
+        {
+            Ok(false)
+        }
         Err(reason) => Err(reason),
     }
 }

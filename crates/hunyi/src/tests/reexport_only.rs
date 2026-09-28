@@ -351,3 +351,15 @@ fn including_submodules_is_subtree_depth() {
     assert!(named.including_submodules());
     assert!(!draft().because("only re-exports").including_submodules());
 }
+
+#[test]
+fn reexport_only_describe_item_strips_r_hash_from_ident() {
+    assert_eq!(
+        findings("reexport-raw-struct", "struct r#type;\n"),
+        ["struct type"]
+    );
+    assert_eq!(
+        findings("reexport-raw-fn", "fn r#match() {}\n"),
+        ["fn match"]
+    );
+}

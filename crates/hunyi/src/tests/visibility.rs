@@ -624,3 +624,55 @@ pub(super) fn a_pub_in_narrow_path_over_reacts_under_a_module_ceiling() {
         "the conservative rank must react rather than pass silently: {out:?}"
     );
 }
+
+#[test]
+pub(super) fn raw_identifier_items_strip_r_hash_in_visibility_fact_identity() {
+    let tree = TempSrcTree::new("vis-raw-ident");
+    tree.write("lib.rs", "pub mod m;\n");
+    tree.write(
+        "m.rs",
+        "pub fn r#match() {}\n\
+         pub struct r#type;\n\
+         pub enum r#true {}\n\
+         pub const r#const: u8 = 0;\n\
+         pub static r#static: u8 = 0;\n\
+         pub use r#async;\n",
+    );
+    let boundary = VisibilityBoundary::in_crate("x")
+        .module("crate::m")
+        .must_not_declare_pub()
+        .because("no pub");
+    let mut violations = Vec::new();
+    let metadata = serde_json::json!({
+        "packages": [{
+            "name": "x",
+            "dependencies": [],
+            "targets": [{ "kind": ["lib"], "src_path": tree.root().to_string_lossy().into_owned() }],
+        }],
+    });
+    check_visibility_boundary(&metadata, &boundary, &mut violations).unwrap();
+
+    let names: Vec<String> = violations
+        .iter()
+        .map(|v| {
+            v.fact()
+                .fields()
+                .find(|(k, _)| *k == "item_name")
+                .map(|(_, val)| val.to_string())
+                .expect("item_name present")
+        })
+        .collect();
+
+    assert!(names.contains(&"match".to_string()), "names: {names:?}");
+    assert!(names.contains(&"type".to_string()), "names: {names:?}");
+    assert!(names.contains(&"true".to_string()), "names: {names:?}");
+    assert!(names.contains(&"const".to_string()), "names: {names:?}");
+    assert!(names.contains(&"static".to_string()), "names: {names:?}");
+    assert!(names.contains(&"async".to_string()), "names: {names:?}");
+    for name in &names {
+        assert!(
+            !name.starts_with("r#"),
+            "raw identifier prefix not stripped: {name}"
+        );
+    }
+}

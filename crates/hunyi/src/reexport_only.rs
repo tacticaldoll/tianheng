@@ -8,8 +8,7 @@ use crate::anchor::canonical_module_anchor;
 use crate::driver::run_boundaries;
 use crate::dsl::ReexportOnlyBoundary;
 use crate::emit::{MultiModuleViolationContext, push_multi_module_violations};
-use crate::errors::unknown_module_error;
-use crate::file_scope::{over_each_unit, resolve_crate_units};
+use crate::file_scope::{UnitAnchor, over_each_unit, resolve_crate_units};
 use crate::finding::{SemanticFact, sort_attributed_facts};
 use crate::module_resolve::resolve_module_direct_items_with_files;
 use crate::resolve::{path_to_string, type_to_string};
@@ -28,35 +27,36 @@ pub(crate) fn check_reexport_only_boundary(
 ) -> Result<(), String> {
     let module = canonical_module_anchor(&boundary.module, &boundary.crate_package)?;
     let (_package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
-    over_each_unit(
-        &units,
-        &unknown_module_error(&module, &boundary.crate_package),
-        |root_file, src_dir, unit| {
-            let findings = reexport_only_findings(
-                src_dir,
-                root_file,
-                &module,
-                &boundary.crate_package,
-                boundary.depth,
-            )?;
-            push_multi_module_violations(
-                violations,
-                MultiModuleViolationContext {
-                    target: &module,
-                    rule: REEXPORT_ONLY_RULE,
-                    rule_key: boundary.rule_key(),
-                    reason: &boundary.reason,
-                    severity: boundary.severity,
-                    anchor: boundary.anchor(),
-                    polarity: Polarity::DenyBreach,
-                    crate_package: &boundary.crate_package,
-                    unit,
-                },
-                findings,
-            );
-            Ok(())
-        },
-    )
+    let anchor = UnitAnchor::Module {
+        module: &module,
+        crate_package: &boundary.crate_package,
+    };
+    over_each_unit(&units, anchor, |root_file, src_dir, unit| {
+        let findings = reexport_only_findings(
+            src_dir,
+            root_file,
+            &module,
+            &boundary.crate_package,
+            boundary.depth,
+        )
+        .map_err(crate::errors::ResolveError::Other)?;
+        push_multi_module_violations(
+            violations,
+            MultiModuleViolationContext {
+                target: &module,
+                rule: REEXPORT_ONLY_RULE,
+                rule_key: boundary.rule_key(),
+                reason: &boundary.reason,
+                severity: boundary.severity,
+                anchor: boundary.anchor(),
+                polarity: Polarity::DenyBreach,
+                crate_package: &boundary.crate_package,
+                unit,
+            },
+            findings,
+        );
+        Ok(())
+    })
 }
 
 pub(crate) fn reexport_only_findings(
@@ -103,18 +103,19 @@ pub(crate) fn reexport_only_findings(
 }
 
 pub(crate) fn describe_item(item: &syn::Item) -> (String, String) {
+    let strip = |ident: &syn::Ident| crate::resolve::strip_raw(&ident.to_string());
     match item {
-        syn::Item::Fn(i) => ("fn".into(), i.sig.ident.to_string()),
-        syn::Item::Struct(i) => ("struct".into(), i.ident.to_string()),
-        syn::Item::Enum(i) => ("enum".into(), i.ident.to_string()),
-        syn::Item::Union(i) => ("union".into(), i.ident.to_string()),
-        syn::Item::Type(i) => ("type".into(), i.ident.to_string()),
-        syn::Item::Const(i) => ("const".into(), i.ident.to_string()),
-        syn::Item::Static(i) => ("static".into(), i.ident.to_string()),
-        syn::Item::Trait(i) => ("trait".into(), i.ident.to_string()),
-        syn::Item::TraitAlias(i) => ("trait alias".into(), i.ident.to_string()),
-        syn::Item::Mod(i) => ("mod".into(), i.ident.to_string()),
-        syn::Item::ExternCrate(i) => ("extern crate".into(), i.ident.to_string()),
+        syn::Item::Fn(i) => ("fn".into(), strip(&i.sig.ident)),
+        syn::Item::Struct(i) => ("struct".into(), strip(&i.ident)),
+        syn::Item::Enum(i) => ("enum".into(), strip(&i.ident)),
+        syn::Item::Union(i) => ("union".into(), strip(&i.ident)),
+        syn::Item::Type(i) => ("type".into(), strip(&i.ident)),
+        syn::Item::Const(i) => ("const".into(), strip(&i.ident)),
+        syn::Item::Static(i) => ("static".into(), strip(&i.ident)),
+        syn::Item::Trait(i) => ("trait".into(), strip(&i.ident)),
+        syn::Item::TraitAlias(i) => ("trait alias".into(), strip(&i.ident)),
+        syn::Item::Mod(i) => ("mod".into(), strip(&i.ident)),
+        syn::Item::ExternCrate(i) => ("extern crate".into(), strip(&i.ident)),
         syn::Item::ForeignMod(_) => ("extern block".into(), "".into()),
         syn::Item::Impl(i) => {
             let owner = type_to_string(&i.self_ty).unwrap_or_else(|| "<unrenderable>".into());

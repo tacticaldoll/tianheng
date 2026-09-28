@@ -42,9 +42,13 @@ them.
   baseline. A foreign item 渾儀 cannot read as a `fn`, `static`, `type` or macro invocation, with any
   qualifier removed, is now a constitution error (exit 2) naming the module, the tokens and the file, where
   it was skipped: a `#[cfg]`-disabled foreign `fn` with a body, or `type` with a definition, compiles and is
-  such an item. rustc accepts one only while a `#[cfg]` removes it, so the refusal asks for it to be deleted.
+  such an item. rustc accepts one only while a `#[cfg]` removes it or an attribute macro rewrites it, so the
+  refusal asks to delete it if disabled by cfg, or write the expanded declaration directly if produced by an
+  attribute macro.
 
 - **BREAKING** — **Dyn-trait and impl-trait operand boundaries reject auto-trait operands as constitution errors.** `must_not_expose_dyn_of` and `must_not_expose_impl_trait_of` now exit 2 when any forbidden operand has an auto-trait leaf, including a qualified spelling or an entry beside valid operands. These entries could not match: the observer removes auto-trait bounds before principal-trait resolution. The error message directs the author to `must_not_expose_dyn_bounded_by` or `must_not_expose_impl_trait_bounded_by` (or to remove the entry). The impl-trait rule applies equally with `including_submodules()`; `must_not_acquire("Send")` remains legal and reacts to an acquisition.
+
+- **BREAKING** — **Visibility findings normalize raw identifiers by stripping leading `r#`.** Direct items and re-exports declared with raw identifiers (e.g. `pub fn r#match()`, `pub struct r#type`, `pub use r#async`) now have their leading `r#` stripped in finding and fact identities (`item_name`), aligning visibility facts with the rest of the semantic identity convention. Existing recorded baselines containing raw-identifier names must be regenerated.
 
 - **Auto-trait bound governance for returned impl Trait and dyn Trait: `must_not_expose_impl_trait_bounded_by` and `must_not_expose_dyn_bounded_by`.**
   Adopters can now forbid specific auto-trait bounds (`Send`, `Sync`, `Unpin`, `UnwindSafe`, `RefUnwindSafe`) on returned `impl Trait` and exposed `dyn Trait` without blanket-forbidding all existential or dynamic dispatch returns. Bare names and qualified names are accepted when the qualifier names the defining `marker` or `panic` module under `std` or `core`; projections use the normalized leaf set. Bounded by leaf-name matching (`OverReacts`), macro expansion (`OutOfReach`), and private aliases for dyn (`OutOfReach`). Emits findings under `tianheng.rule/hunyi/impl-trait-auto-bound` and `tianheng.rule/hunyi/dyn-trait-auto-bound`, reusing existing exposure facts (`DenyBreach`) and projecting through `list` with `forbidden_auto_bounds`.
@@ -106,7 +110,9 @@ them.
   `foreign_static_mut`, `thread_local`), declaring module, name and enclosing owner. `thread_local!` is
   recognized by its name, however it is qualified; a crate renaming it (`use std::thread_local as tls;`) is a
   constitution error asking for the macro by name. A `thread_local!` body is read by std's own grammar, so its
-  last static may omit the `;`; a body that is not `static` declarations is refused. Statics produced by other macros are a stated bound, and cfg is observed as written.
+  last static may omit the `;`; a body that is not `static` declarations is refused inside the anchored subtree,
+  and outside it is ungoverned and does not stop the scan for a rename. Statics produced by other macros are a
+  stated bound, and cfg is observed as written.
   Calls with process-global effects, such as `std::env::set_var`, are `must_not_call_inline`'s, not this
   boundary's. `SemanticBoundaries` gains the `static_item` field, which needs no migration beyond the
   `SemanticBoundaries` construction step below.
@@ -114,9 +120,11 @@ them.
 ### Migration
 
 - Repair or baseline a public `safe`- or `unsafe`-qualified foreign item that now reports under a
-  visibility or signature-coupling boundary. Delete a foreign item reported as undecodable, such as a
-  `#[cfg]`-disabled foreign `fn` with a body: rustc accepts it only while the `#[cfg]` removes it, so it
-  declares nothing in any build.
+  visibility or signature-coupling boundary. For an undecodable foreign item (such as a foreign `fn` with
+  a body), delete it if disabled by cfg, or write the expanded declaration directly if produced by an
+  attribute macro.
+
+- Regenerate recorded baselines if governing code declares raw-identifier items under visibility boundaries.
 
 - Remove auto-trait entries such as `Send` from `must_not_expose_dyn_of` and `must_not_expose_impl_trait_of` operand sets, or migrate to `must_not_expose_dyn_bounded_by` / `must_not_expose_impl_trait_bounded_by`.
 
