@@ -1807,6 +1807,7 @@ fn a_prefix_head_naming_no_crate_or_module_is_refused() {
         ("r#crate::clock", Some("crate::clock")),
         ("r#crate", Some("crate")),
     ];
+    let mut wrong = Vec::new();
     for (prefix, suggestion) in refused {
         for (module, draft) in [
             (
@@ -1825,22 +1826,20 @@ fn a_prefix_head_naming_no_crate_or_module_is_refused() {
             let law =
                 Constitution::new("inline-no-head").boundary(draft.because("a head names nothing"));
             let outcome = check(&law, probe.manifest());
-            assert_eq!(outcome.exit_code(), 2, "{module}({prefix}): {outcome:?}");
-            let message = constitution_error(&outcome);
-            assert!(
-                message.contains(&format!("names '{prefix}'")),
-                "{module}({prefix}) quotes the written prefix: {message}"
-            );
             let repair = match suggestion {
                 Some(spelling) => format!("write `{spelling}`"),
                 None => "write the path from `crate`".to_string(),
             };
-            assert!(
-                message.contains(&repair),
-                "{module}({prefix}) repairs with {repair:?}: {message}"
-            );
+            match &outcome {
+                Outcome::ConstitutionError(message)
+                    if message.contains(&format!("names '{prefix}'")) && message.contains(&repair) => {}
+                other => wrong.push(format!(
+                    "{module}({prefix}): expected exit 2 quoting it and repairing with {repair:?}, got {other:?}"
+                )),
+            }
         }
     }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
     let found = ["crate::clock::now in crate::core"];
     assert_inline_answers(
         &probe,
