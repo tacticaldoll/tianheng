@@ -151,6 +151,18 @@ No revision reports or refuses any of these; each is a call Rust makes into the 
 
 `(glob)` marks a cell whose finding is `glob crate::… in crate::core`, the existing glob-hazard reaction. Every glob row already reacts through it, so no glob shape needs a resolver answer to be judged. E6 is the named-import form: every revision keeps the last `use`, so on the platform that compiles the `unix` arm, the live binding is the one not observed.
 
+### Braces that open no name scope, and a generic parameter
+
+Measured 2026-09-29 with `rustc 1.96.0` / `cargo 1.96.0` against the same three revisions, by the script's `H` section: the script with its `K` through `E` sections removed (`awk '/^# --- K:/{skip=1} /^# --- H:/{skip=0} !skip'`), so the checker builds and helpers are the ones every other row used. Each row is one edition-2021 package; `crate::core` holds the source shown, the prefix is `std::process`, and the finding in every reacting cell is `std::process::Command::new in crate::core` (H1, H3) or `std::process::Command::default in crate::core` (H2). The sections are appended to [measurements.revision.raw.log](measurements.revision.raw.log) under the same `## {row} · …` headings.
+
+| Row | Rust | v0.7.1 | `be047d8b^` | release/0.8.0 | Target |
+|---|---|---:|---:|---:|---:|
+| H1 `use std::process::Command; pub struct S; impl S { const Command: u8 = 0; pub fn f() { let _ = Command::new("x"); } }` | Build 0; an associated item is reached only through `Self::`, so the bare `Command` is the import | 1/1 | 1/1 | 1/1 | 1/1 |
+| H2 `#[allow(unused_imports)] use std::process::Command; pub fn f<Command: Default>() -> Command { Command::default() }` | Build 0; `Command` is the generic parameter | 1/1 | 1/1 | 1/1 | 1/1, declared over-reaction (design g) |
+| H3 `use std::process::Command; pub enum E { Command } pub fn f() { let _ = Command::new("x"); }` | Build 0; a variant is reached only through `E::` | 1/1 | 1/1 | 1/1 | 1/1 |
+
+H1 and H3 are what a scope walk that opened a scope at every brace would get wrong: it would record `const Command` or the variant as a binding and lose a finding Rust says is real. H2 is the one row here whose target is not Rust's answer.
+
 ### Script
 
 Run as `S=<scratch dir> REPO=<tianheng checkout> bash probes.sh`. It prints the summary rows above and writes the raw log.
@@ -326,4 +338,15 @@ w $p core.rs $'use crate::a::*;\nuse crate::b::*;\npub fn g() -> u8 { X::f() }'
 build $p 2021 > /dev/null; row "$p" $p crate::a crate::core
 p=E6-2021-cfg-alternative-named-uses; new $p 2021; ab $p same; w $p core.rs $'#[cfg(unix)]\nuse crate::a::X;\n#[cfg(not(unix))]\nuse crate::b::X;\npub fn g() { let _ = X::f(); }'
 build $p 2021 > /dev/null; row "$p[crate::a]" $p crate::a crate::core; row "$p[crate::b]" $p crate::b crate::core
+
+# --- H: braces that open no name scope, and a generic parameter
+p=H1-2021-associated-const-does-not-shadow; new $p 2021; w $p lib.rs 'pub mod core;'
+w $p core.rs 'use std::process::Command; pub struct S; impl S { const Command: u8 = 0; pub fn f() { let _ = Command::new("x"); } }'
+build $p 2021 > /dev/null; row "$p" $p std::process crate::core
+p=H2-2021-generic-parameter-shadows-use; new $p 2021; w $p lib.rs 'pub mod core;'
+w $p core.rs '#[allow(unused_imports)] use std::process::Command; pub fn f<Command: Default>() -> Command { Command::default() }'
+build $p 2021 > /dev/null; row "$p" $p std::process crate::core
+p=H3-2021-enum-variant-does-not-shadow; new $p 2021; w $p lib.rs 'pub mod core;'
+w $p core.rs 'use std::process::Command; pub enum E { Command } pub fn f() { let _ = Command::new("x"); }'
+build $p 2021 > /dev/null; row "$p" $p std::process crate::core
 ```

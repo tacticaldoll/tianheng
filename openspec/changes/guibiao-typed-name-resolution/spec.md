@@ -107,6 +107,22 @@ Its scenario gains the qualified form, and a second pin with a declared mutation
 - **PINNED-BY** `inline_receiver_method_read_is_a_bound`
 - **PINNED-BY** `inline_qualified_path_is_the_type_directed_bound`
 
+## Bound: a generic parameter named like an import is read as the import
+
+The requirement above records bindings from module bodies and blocks only; a generic parameter's `<…>` list is not read. This SHALL be stated as an over-reaction bound under the capability's observation bounds:
+
+#### Scenario: A generic parameter named like an import is read as the import — a stated bound
+
+- **WHEN** `crate::core` writes `use std::process::Command;` and `pub fn f<Command: Default>() -> Command { Command::default() }` under a boundary forbidding inline calls under `std::process`
+- **THEN** the system reports `std::process::Command::default in crate::core`: Rust resolves `Command` to the generic parameter, and the scanner, which does not read generic parameter lists, reads the module's import — an over-reaction declared, not a precision claim
+- **PINNED-BY** `inline_generic_parameter_named_like_an_import_is_read_as_the_import`
+
+#### Scenario: An associated item or variant named like an import does not shadow it
+
+- **WHEN** `crate::core` writes `use std::process::Command;` and calls `Command::new("x")` inside a method of `impl S { const Command: u8 = 0; … }`, or beside `pub enum E { Command }`
+- **THEN** the system reports `std::process::Command::new in crate::core`: an `impl`, `trait`, `enum`, `struct` or `union` body opens no name scope, so its members bind no bare head
+- **PINNED-BY** `inline_associated_item_or_variant_does_not_shadow_an_import`
+
 ## Requirement: One use-tree collection feeds all inline path consumers
 
 The system SHALL collect grouped, aliased, public, and glob use-tree facts once and expose them to import reporting, external-import reporting, symbol resolution, and glob-hazard analysis. These consumers SHALL NOT maintain duplicate use-tree walkers.

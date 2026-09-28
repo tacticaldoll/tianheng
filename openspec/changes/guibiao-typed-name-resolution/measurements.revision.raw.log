@@ -9165,3 +9165,495 @@ Reaction:
   CI failed.
 Tianheng: coverage — all 1 workspace crate(s) have a boundary
 [exit code] 1
+
+## H1-2021-associated-const-does-not-shadow · rustc (2021)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H1-2021-associated-const-does-not-shadow/Cargo.toml --target-dir /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+warning: associated constant `Command` is never used
+ --> src/core.rs:1:57
+  |
+1 | use std::process::Command; pub struct S; impl S { const Command: u8 = 0; pub fn f() { let _ = Command::new("x"); } }
+  |                                          ------         ^^^^^^^
+  |                                          |
+  |                                          associated constant in this implementation
+  |
+  = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: associated constant `Command` should have an upper case name
+ --> src/core.rs:1:57
+  |
+1 | use std::process::Command; pub struct S; impl S { const Command: u8 = 0; pub fn f() { let _ = Command::new("x"); } }
+  |                                                         ^^^^^^^ help: convert the identifier to upper case: `COMMAND`
+  |
+  = note: `#[warn(non_upper_case_globals)]` (part of `#[warn(nonstandard_style)]`) on by default
+
+[exit code] 0
+
+## H1-2021-associated-const-does-not-shadow · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=std::process PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/targets/v071/debug/tianheng check --manifest-path /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H1-2021-associated-const-does-not-shadow/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::process
+Rule:
+  inline symbol path confined to module
+Found:
+  std::process::Command::new in crate::core
+File:
+  /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H1-2021-associated-const-does-not-shadow/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## H1-2021-associated-const-does-not-shadow · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=std::process PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/targets/v071/debug/tianheng check --manifest-path /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H1-2021-associated-const-does-not-shadow/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::process
+Rule:
+  inline symbol path confined to module
+Found:
+  std::process::Command::new in crate::core
+File:
+  /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H1-2021-associated-const-does-not-shadow/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## H1-2021-associated-const-does-not-shadow · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=std::process PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/targets/pre/debug/tianheng check --manifest-path /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H1-2021-associated-const-does-not-shadow/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::process
+Rule:
+  inline symbol path confined to module
+Found:
+  std::process::Command::new in crate::core
+File:
+  /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H1-2021-associated-const-does-not-shadow/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## H1-2021-associated-const-does-not-shadow · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=std::process PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/targets/pre/debug/tianheng check --manifest-path /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H1-2021-associated-const-does-not-shadow/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::process
+Rule:
+  inline symbol path confined to module
+Found:
+  std::process::Command::new in crate::core
+File:
+  /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H1-2021-associated-const-does-not-shadow/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## H1-2021-associated-const-does-not-shadow · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=std::process PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/targets/rel/debug/tianheng check --manifest-path /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H1-2021-associated-const-does-not-shadow/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::process
+Rule:
+  inline symbol path confined to module
+Found:
+  std::process::Command::new in crate::core
+File:
+  /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H1-2021-associated-const-does-not-shadow/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## H1-2021-associated-const-does-not-shadow · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=std::process PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/targets/rel/debug/tianheng check --manifest-path /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H1-2021-associated-const-does-not-shadow/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::process
+Rule:
+  inline symbol path confined to module
+Found:
+  std::process::Command::new in crate::core
+File:
+  /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H1-2021-associated-const-does-not-shadow/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## H2-2021-generic-parameter-shadows-use · rustc (2021)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H2-2021-generic-parameter-shadows-use/Cargo.toml --target-dir /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## H2-2021-generic-parameter-shadows-use · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=std::process PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/targets/v071/debug/tianheng check --manifest-path /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H2-2021-generic-parameter-shadows-use/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::process
+Rule:
+  inline symbol path confined to module
+Found:
+  std::process::Command::default in crate::core
+File:
+  /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H2-2021-generic-parameter-shadows-use/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## H2-2021-generic-parameter-shadows-use · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=std::process PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/targets/v071/debug/tianheng check --manifest-path /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H2-2021-generic-parameter-shadows-use/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::process
+Rule:
+  inline symbol path confined to module
+Found:
+  std::process::Command::default in crate::core
+File:
+  /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H2-2021-generic-parameter-shadows-use/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## H2-2021-generic-parameter-shadows-use · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=std::process PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/targets/pre/debug/tianheng check --manifest-path /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H2-2021-generic-parameter-shadows-use/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::process
+Rule:
+  inline symbol path confined to module
+Found:
+  std::process::Command::default in crate::core
+File:
+  /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H2-2021-generic-parameter-shadows-use/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## H2-2021-generic-parameter-shadows-use · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=std::process PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/targets/pre/debug/tianheng check --manifest-path /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H2-2021-generic-parameter-shadows-use/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::process
+Rule:
+  inline symbol path confined to module
+Found:
+  std::process::Command::default in crate::core
+File:
+  /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H2-2021-generic-parameter-shadows-use/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## H2-2021-generic-parameter-shadows-use · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=std::process PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/targets/rel/debug/tianheng check --manifest-path /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H2-2021-generic-parameter-shadows-use/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::process
+Rule:
+  inline symbol path confined to module
+Found:
+  std::process::Command::default in crate::core
+File:
+  /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H2-2021-generic-parameter-shadows-use/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## H2-2021-generic-parameter-shadows-use · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=std::process PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/targets/rel/debug/tianheng check --manifest-path /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H2-2021-generic-parameter-shadows-use/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::process
+Rule:
+  inline symbol path confined to module
+Found:
+  std::process::Command::default in crate::core
+File:
+  /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H2-2021-generic-parameter-shadows-use/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## H3-2021-enum-variant-does-not-shadow · rustc (2021)
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true cargo build --manifest-path /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H3-2021-enum-variant-does-not-shadow/Cargo.toml --target-dir /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/targets/probes --tests --quiet
+[stdout]
+<empty>
+[stderr]
+<empty>
+[exit code] 0
+
+## H3-2021-enum-variant-does-not-shadow · v0.7.1 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=std::process PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/targets/v071/debug/tianheng check --manifest-path /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H3-2021-enum-variant-does-not-shadow/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::process
+Rule:
+  inline symbol path confined to module
+Found:
+  std::process::Command::new in crate::core
+File:
+  /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H3-2021-enum-variant-does-not-shadow/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## H3-2021-enum-variant-does-not-shadow · v0.7.1 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=std::process PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/targets/v071/debug/tianheng check --manifest-path /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H3-2021-enum-variant-does-not-shadow/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::process
+Rule:
+  inline symbol path confined to module
+Found:
+  std::process::Command::new in crate::core
+File:
+  /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H3-2021-enum-variant-does-not-shadow/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## H3-2021-enum-variant-does-not-shadow · be047d8b^ · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=std::process PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/targets/pre/debug/tianheng check --manifest-path /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H3-2021-enum-variant-does-not-shadow/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::process
+Rule:
+  inline symbol path confined to module
+Found:
+  std::process::Command::new in crate::core
+File:
+  /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H3-2021-enum-variant-does-not-shadow/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## H3-2021-enum-variant-does-not-shadow · be047d8b^ · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=std::process PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/targets/pre/debug/tianheng check --manifest-path /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H3-2021-enum-variant-does-not-shadow/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::process
+Rule:
+  inline symbol path confined to module
+Found:
+  std::process::Command::new in crate::core
+File:
+  /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H3-2021-enum-variant-does-not-shadow/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## H3-2021-enum-variant-does-not-shadow · release/0.8.0 · default
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=default PREFIX=std::process PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/targets/rel/debug/tianheng check --manifest-path /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H3-2021-enum-variant-does-not-shadow/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::process
+Rule:
+  inline symbol path confined to module
+Found:
+  std::process::Command::new in crate::core
+File:
+  /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H3-2021-enum-variant-does-not-shadow/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
+## H3-2021-enum-variant-does-not-shadow · release/0.8.0 · strict
+$ CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true MODE=strict PREFIX=std::process PROBE_MODULE=crate::core PROBE_PACKAGE=probe /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/targets/rel/debug/tianheng check --manifest-path /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H3-2021-enum-variant-does-not-shadow/Cargo.toml
+[stdout]
+<empty>
+[stderr]
+
+Tianheng violation
+
+Reason:
+  probe inline path resolution
+Boundary:
+  std::process
+Rule:
+  inline symbol path confined to module
+Found:
+  std::process::Command::new in crate::core
+File:
+  /tmp/claude-1000/-home-tnaic-work-tianheng/cff5a9c3-0a13-4b05-83d6-17764bb217df/scratchpad/tnr-h/probes/H3-2021-enum-variant-does-not-shadow/src/core.rs
+Repair:
+  deny_breach
+Reaction:
+  CI failed.
+Tianheng: coverage — all 1 workspace crate(s) have a boundary
+[exit code] 1
+
