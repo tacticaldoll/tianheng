@@ -127,6 +127,11 @@ them.
   the canonical `crate::…` spelling, and make sure it names a module the crate declares. Regenerate any
   baseline entry recorded under a non-canonical or `crate::r#…` target.
 
+- Review 圭表 findings after inline-module `use`, `type` alias, glob, and relative-path resolution.
+  Repair newly reported calls or record accepted findings with `tianheng check --write-baseline
+  <file>` and restore `owner` / `tracker` annotations. Corrected resolution may also make recorded
+  entries redundant; `--disallow-stale` reports those entries for removal.
+
 - Rewrite every 圭表 module path — the module passed to `ModuleBoundary::…::module`, and each module named by
   `must_not_import`, `must_not_be_imported_by`, `restrict_imports_to` and `must_only_be_imported_by` — in the
   canonical `crate::…` spelling, naming a module some root of the crate declares. Address or baseline what a

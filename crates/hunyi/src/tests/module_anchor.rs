@@ -11,6 +11,7 @@ pub(super) const ANCHOR_SPELLINGS: &[(&str, Spelling)] = &[
     ("crate", Spelling::Canonical("crate")),
     ("crate::kernel", Spelling::Canonical("crate::kernel")),
     ("crate::r#kernel", Spelling::Canonical("crate::kernel")),
+    ("crate::type", Spelling::Canonical("crate::type")),
     (
         "crate::kernel::r#inner",
         Spelling::Canonical("crate::kernel::inner"),
@@ -74,7 +75,8 @@ fn anchor_fixture(name: &str) -> (Value, TempSrcTree) {
     fixture_metadata(
         name,
         &[
-            ("lib.rs", "pub mod kernel;\npub mod other;\n"),
+            ("lib.rs", "pub mod kernel;\npub mod other;\nmod r#type;\n"),
+            ("type.rs", ""),
             (
                 "kernel.rs",
                 "pub mod inner {}\n\
@@ -202,6 +204,16 @@ pub(super) fn every_anchored_capability_refuses_a_non_canonical_spelling() {
         }
     }
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+/// A bare keyword segment reaches a module declared with its raw spelling.
+#[test]
+pub(super) fn a_bare_keyword_anchor_reaches_a_raw_declared_module() {
+    let (metadata, _fixture) = anchor_fixture("anchor-keyword");
+    for (capability, check) in anchored_capabilities() {
+        check(&metadata, "crate::type", &mut Vec::new())
+            .unwrap_or_else(|error| panic!("{capability}: {error}"));
+    }
 }
 
 /// A canonical anchor and its raw-identifier spelling are one module, so each produces the same
