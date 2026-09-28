@@ -2357,8 +2357,9 @@ fn inline_generic_parameter_named_like_an_import_is_read_as_the_import() {
 }
 
 /// B3, B4: `crate::core` imports `crate::a::X` at module level, `h` calls `X::fa()`, and `g` declares
-/// `use crate::b::X;` and calls `X::fb()`. In either textual order the block's `use` binds only inside `g`, so
-/// each prefix reports its own call and nothing else.
+/// `use crate::b::X;` and calls `X::fb()`. In any textual order the block's `use` binds only inside `g`, so each
+/// prefix reports its own call and nothing else. The third order puts `h` after `g`, the one call a block scope
+/// that closed late would read through `g`'s binding.
 #[test]
 fn inline_block_local_use_binds_only_inside_its_block() {
     for (package, core) in [
@@ -2369,6 +2370,10 @@ fn inline_block_local_use_binds_only_inside_its_block() {
         (
             "blockusebefore",
             "pub fn g() -> u16 { use crate::b::X; X::fb() }\npub fn h() -> u8 { X::fa() }\nuse crate::a::X;\n",
+        ),
+        (
+            "blockusebetween",
+            "use crate::a::X;\npub fn g() -> u16 { use crate::b::X; X::fb() }\npub fn h() -> u8 { X::fa() }\n",
         ),
     ] {
         let probe = RootProbe::new(
