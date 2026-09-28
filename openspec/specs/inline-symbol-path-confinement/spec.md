@@ -78,7 +78,12 @@ type). Within this resolvable scope there SHALL be no false negative.
 
 #### Scenario: A self-prefixed use-group member resolves and reacts
 - **WHEN** `crate::clock` declares a module `self_utc` and a struct `Duration`, and `crate::core` declares `use crate::clock::{self_utc as clk, Duration};` then calls `clk::now()` under a prefix `crate::clock` — a group member whose name merely *starts with* the substring `self`, not the `self` leaf
-- **THEN** the system resolves `clk` to `crate::clock::self_utc` and reacts; only the exact `self` group leaf (bare or `self as x`, which names the prefix module) is skipped, never a legal `self`-prefixed identifier (dropping it would be a false negative — the confined call would pass unresolved)
+- **THEN** the system resolves `clk` to `crate::clock::self_utc` and reacts; only the exact `self` group leaf is read as the prefix module, never a legal `self`-prefixed identifier (dropping it would be a false negative — the confined call would pass unresolved)
+
+#### Scenario: A `{self}` group leaf binds its module
+- **WHEN** `crate::core` declares `use std::io::{self, Write};` then calls `io::stdout()`, `use crate::a::{self};` then calls `a::X::f()`, or `use std::time::{self as t};` then calls `t::Instant::now()`
+- **THEN** the system binds the prefix module under its last segment, or under the ` as ` alias, and reports each call under `std::io`, `crate::a` and `std::time` respectively, in either mode
+- **PINNED-BY** `a_self_leaf_binds_its_module_under_its_last_segment_or_alias`
 
 #### Scenario: A bare path resolves and reacts
 - **WHEN** `crate::core` declares `use std::time;` then calls `time::Instant::now()`
@@ -109,7 +114,8 @@ type). Within this resolvable scope there SHALL be no false negative.
 For each recognized inline path occurrence, the system SHALL resolve the first identifier from the
 occurrence's lexical scope chain — each enclosing block, then its module — using the package
 edition, the namespace the head is looked up in (a head followed by `::` names a module or type, a
-bare call names a value), item declarations, named imports and aliases, the local `type`-alias and
+bare call names a value), item declarations, named imports and aliases — a `{self}` group leaf
+binding its module under the last segment or its alias — the local `type`-alias and
 `pub use` closure, and glob-import edges followed to a fixed point. Only a module body and a block
 open a scope: an `impl`, `trait`, `enum`, `struct` or `union` body binds none of its members to a
 bare head, and the items of an `extern` block or a `cfg_if!` arm belong to the enclosing scope. A

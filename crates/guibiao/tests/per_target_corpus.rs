@@ -2894,3 +2894,50 @@ fn inline_edition_2015_root_paths_reach_a_crate_root_item() {
     }
     assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
 }
+
+/// A `{self}` leaf binds the group's prefix module under its last segment, or under its alias: `use std::io::{self,
+/// Write};` binds `io`, `use crate::a::{self};` binds `a`, and `use std::time::{self as t};` binds `t`, so a call
+/// through each reports under the module's prefix.
+#[test]
+fn a_self_leaf_binds_its_module_under_its_last_segment_or_alias() {
+    let mut mismatches = Vec::new();
+    for (package, core, prefix, found) in [
+        (
+            "selfleafio",
+            "#[allow(unused_imports)]\nuse std::io::{self, Write};\npub fn g() { let _ = io::stdout(); }\n",
+            "std::io",
+            "std::io::stdout in crate::core",
+        ),
+        (
+            "selfleafcrate",
+            "use crate::a::{self};\npub fn g() { a::X::f(); }\n",
+            "crate::a",
+            "crate::a::X::f in crate::core",
+        ),
+        (
+            "selfleafalias",
+            "use std::time::{self as t};\npub fn g() { let _ = t::Instant::now(); }\n",
+            "std::time",
+            "std::time::Instant::now in crate::core",
+        ),
+    ] {
+        let probe = RootProbe::new(
+            package,
+            "",
+            &[
+                ("src/lib.rs", "pub mod a;\npub mod core;\n"),
+                ("src/a.rs", "pub struct X;\nimpl X { pub fn f() {} }\n"),
+                ("src/core.rs", core),
+            ],
+        );
+        for strict_external in [false, true] {
+            let got = inline_findings(&probe, package, "crate::core", prefix, strict_external);
+            if got != [found] {
+                mismatches.push(format!(
+                    "{package}, strict_external = {strict_external}: {got:?}"
+                ));
+            }
+        }
+    }
+    assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+}

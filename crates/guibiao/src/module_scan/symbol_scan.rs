@@ -430,12 +430,15 @@ fn collect_defs(
                         ctx.glob_reexports.push((def_module.clone(), canonical));
                     }
                 }
-                UseLeaf::Name { path, binds } => {
+                UseLeaf::Name { path, binds }
+                | UseLeaf::SelfLeaf {
+                    module: path,
+                    binds,
+                } => {
                     if let Some(canonical) = resolve_written_path(&path, &def_module, roots) {
                         ctx.defs.insert(format!("{def_module}::{binds}"), canonical);
                     }
                 }
-                UseLeaf::SelfLeaf(_) => {}
             }
         }
     }

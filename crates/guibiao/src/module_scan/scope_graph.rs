@@ -574,7 +574,11 @@ impl ScopeTable {
             let module = self.scopes[scope as usize].module.clone();
             for leaf in use_tree_leaves(&statement.body, MAX_SYMBOL_NEST_DEPTH)? {
                 match leaf {
-                    UseLeaf::Name { path, binds } => {
+                    UseLeaf::Name { path, binds }
+                    | UseLeaf::SelfLeaf {
+                        module: path,
+                        binds,
+                    } => {
                         if let Some(target) = resolve_written_path(&path, &module, roots) {
                             self.scopes[scope as usize]
                                 .bindings
@@ -593,7 +597,6 @@ impl ScopeTable {
                                 .push((target, statement.visibility.clone()));
                         }
                     }
-                    UseLeaf::SelfLeaf(_) => {}
                 }
             }
         }
@@ -1008,8 +1011,9 @@ pub(super) enum UseLeaf {
     Name { path: String, binds: String },
     /// A glob, by its base path: `a::b::*` and the `*` of `a::b::{*}` are both `a::b`.
     Glob(String),
-    /// A `{self}` leaf, `{self as x}` included: the group's prefix module itself.
-    SelfLeaf(String),
+    /// A `{self}` leaf: the group's prefix module itself, and the name it binds — its ` as ` alias, or
+    /// else the module path's last segment, so `use std::io::{self};` binds `io`.
+    SelfLeaf { module: String, binds: String },
 }
 
 /// Every leaf of a use tree — the one parser every reader of imports in this scanner shares. Groups are
@@ -1033,7 +1037,10 @@ pub(super) fn use_tree_leaves(tree: &str, cap: usize) -> Result<Vec<UseLeaf>, St
                 let base = prefix.trim_end_matches(':').trim();
                 for part in split_top_commas(&brace_content(&tree[open..])) {
                     let part = part.trim();
-                    let head = part.find(" as ").map_or(part, |idx| part[..idx].trim());
+                    let (head, alias) = match part.split_once(" as ") {
+                        Some((head, alias)) => (head.trim(), Some(alias.trim())),
+                        None => (part, None),
+                    };
                     if part.is_empty() {
                         continue;
                     } else if part == "*" {
@@ -1041,8 +1048,14 @@ pub(super) fn use_tree_leaves(tree: &str, cap: usize) -> Result<Vec<UseLeaf>, St
                             out.push(UseLeaf::Glob(base.to_string()));
                         }
                     } else if head == "self" {
+                        let named = alias.unwrap_or_else(|| {
+                            base.rsplit_once("::").map_or(base, |(_, leaf)| leaf).trim()
+                        });
                         if !base.is_empty() {
-                            out.push(UseLeaf::SelfLeaf(base.to_string()));
+                            out.push(UseLeaf::SelfLeaf {
+                                module: base.to_string(),
+                                binds: canonical_module_path(named),
+                            });
                         }
                     } else {
                         go(&format!("{prefix}{part}"), out, depth + 1, cap)?;

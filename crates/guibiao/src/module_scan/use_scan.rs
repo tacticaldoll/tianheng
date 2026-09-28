@@ -173,7 +173,7 @@ fn expand_use_tree(tree: &str) -> Result<Vec<(String, bool, bool)>, String> {
         .map(|leaf| match leaf {
             UseLeaf::Name { path, .. } => (path, false, false),
             UseLeaf::Glob(base) => (base, true, false),
-            UseLeaf::SelfLeaf(module) => (module, false, true),
+            UseLeaf::SelfLeaf { module, .. } => (module, false, true),
         })
         .collect())
 }
