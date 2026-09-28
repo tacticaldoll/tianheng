@@ -333,19 +333,21 @@ impl InlinePrefix {
         }))
     }
 
-    /// Refuse a prefix that names nothing a call can reach.
+    /// Refuse a prefix that names nothing a call can reach, where the refusal can be decided.
     ///
     /// A `crate::` prefix must name a module some compiled root declares, or an item defined at the
     /// top level of one; segments past that item are not read, since the scanner collects no
-    /// associated items. A `std`, `core` or `alloc` prefix, or one starting at a dependency the crate
-    /// declares under its local name, is accepted without reading further: its segments name another
-    /// crate's contents, which the scanner does not see. Any other first segment is refused, with the
-    /// same path rooted at `crate` as the suggestion when that names something.
+    /// associated items. Any other first segment names a crate, and what that crate holds is its own
+    /// source, which the scanner does not read. A sysroot crate, a dependency under its local name, or
+    /// the package's own library is accepted as such. A first segment none of those confirms is still
+    /// accepted — a dependency's crate name can differ from its package name, and `--no-deps` metadata
+    /// does not say what it is — unless the same path rooted at `crate` names something, which is the
+    /// one reading the text determines: that prefix is refused, suggesting the rooted spelling.
     fn require_names_something(
         &self,
         modules: &std::collections::BTreeSet<String>,
         items: &std::collections::BTreeSet<String>,
-        dependencies: &[String],
+        external_crates: &[String],
         crate_package: &str,
     ) -> Result<(), String> {
         let head = self
@@ -359,17 +361,20 @@ impl InlinePrefix {
                 crate_package,
                 self.rule_method,
             )),
-            "std" | "core" | "alloc" => Ok(()),
-            _ if dependencies.iter().any(|dependency| dependency == head) => Ok(()),
+            "std" | "core" | "alloc" | "proc_macro" | "test" => Ok(()),
+            _ if external_crates.iter().any(|name| name == head) => Ok(()),
             _ => {
                 let rooted = format!("crate::{}", self.canonical);
-                let suggestion = names_a_local_path(&rooted, modules, items).then_some(rooted);
-                Err(unknown_inline_prefix_head_error(
-                    &self.written,
-                    crate_package,
-                    self.rule_method,
-                    suggestion.as_deref(),
-                ))
+                if names_a_local_path(&rooted, modules, items) {
+                    Err(unknown_inline_prefix_head_error(
+                        &self.written,
+                        crate_package,
+                        self.rule_method,
+                        &rooted,
+                    ))
+                } else {
+                    Ok(())
+                }
             }
         }
     }
@@ -807,7 +812,10 @@ pub(crate) fn check_module_boundary(
             Some(prefix) => prefix.require_names_something(
                 declared,
                 items,
-                &crate::cargo_metadata::dependency_import_names(package),
+                &crate::cargo_metadata::dependency_import_names(package)
+                    .into_iter()
+                    .chain(crate::cargo_metadata::library_import_names(package))
+                    .collect::<Vec<_>>(),
                 &boundary.crate_package,
             ),
             None => Ok(()),

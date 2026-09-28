@@ -130,9 +130,9 @@ them.
   repaired `must_not_import` or `must_not_be_imported_by` now reports, and regenerate a baseline entry recorded
   under an allowlist that named no module.
 
-- Write every `must_not_call_inline` and `confine_inline_call` prefix as `::`-separated identifiers from `crate`,
-  `std`, `core`, `alloc` or a dependency's local name, and make a `crate::` prefix name a module or item the crate
-  declares. Address or baseline what a repaired prefix now reports.
+- Write every `must_not_call_inline` and `confine_inline_call` prefix as `::`-separated identifiers, root a
+  prefix into the crate's own modules at `crate::`, and make it name a module or item the crate declares.
+  Address or baseline what a repaired prefix now reports.
 
 ### Static
 
@@ -174,14 +174,18 @@ them.
   implementation both builders share:
   - **Spelling.** `::`-separated identifiers, not starting at `self` or `super`; `r#x` is `x`. An empty
     segment, a leading or trailing `::`, or whitespace is exit 2, suggesting the trimmed segments.
-  - **First segment.** `crate`, `std`, `core`, `alloc`, or a dependency the package declares, under the local
-    name a rename gives it. Any other is exit 2, suggesting the path rooted at `crate` when that names something.
   - **Existence.** A `crate::` prefix must name a module some compiled root declares, or an item one defines.
+  - **Missing root.** A first segment that is not `crate`, a sysroot crate (`std`, `core`, `alloc`,
+    `proc_macro`, `test`), a declared dependency under its local name, or the package's own library is
+    exit 2 only when the same path rooted at `crate` names something, suggesting that spelling.
 
-  What a prefix names past a sysroot or dependency head, or past an item of the crate, is not read, so
-  `std::tiem` is accepted and matches nothing — declared as the bound
+  Any other first segment names a crate whose contents are not read, and is accepted: a dependency's crate name
+  can differ from its package name, as with `[lib] name`, and `--no-deps` metadata does not report it. So
+  `std::tiem`, and `clcok` where no `crate::clcok` exists, are accepted and match nothing — declared as the bound
   `inline-symbol-path-confinement/a-prefix-segment-past-what-guibiao-reads-is-not-verified-a-stated-bound`.
-  A blank prefix keeps its own refusal.
+  An item a macro invocation defines is not collected, so a `crate::` prefix naming one is exit 2 — declared as
+  `inline-symbol-path-confinement/a-prefix-naming-a-macro-generated-item-is-refused-a-stated-bound`. A blank
+  prefix keeps its own refusal.
 
 ## [0.7.1] - 2026-09-27
 

@@ -2472,9 +2472,9 @@ pub(super) fn an_inline_prefix_is_accepted_only_in_its_canonical_spelling() {
     assert!(wrong.is_empty(), "{wrong:#?}");
 }
 
-/// A library declaring `crate::clock` (with the item `now` and the type `Clock`) and `crate::core`,
-/// which calls `crate::clock::now()`; a binary declaring `crate::cli`; and two dependencies, `extdep`
-/// and `otherdep` imported as `renamed`.
+/// A library `x` declaring `crate::clock` (with the item `now` and the type `Clock`) and `crate::core`,
+/// which calls `crate::clock::now()`; a binary declaring `crate::cli`; and three dependencies, `extdep`,
+/// `otherdep` imported as `renamed`, and `my-dep`.
 fn inline_prefix_fixture(label: &str) -> (TempWorkspace, Value) {
     let ws = TempWorkspace::new(label);
     ws.write("lib.rs", "pub mod clock;\npub mod core;\n");
@@ -2491,10 +2491,11 @@ fn inline_prefix_fixture(label: &str) -> (TempWorkspace, Value) {
             "dependencies": [
                 { "name": "extdep" },
                 { "name": "otherdep", "rename": "renamed" },
+                { "name": "my-dep" },
             ],
             "targets": [
-                { "kind": ["lib"], "src_path": ws.src().join("lib.rs").to_string_lossy() },
-                { "kind": ["bin"], "src_path": ws.src().join("bin/tool.rs").to_string_lossy() },
+                { "name": "x", "kind": ["lib"], "src_path": ws.src().join("lib.rs").to_string_lossy() },
+                { "name": "tool", "kind": ["bin"], "src_path": ws.src().join("bin/tool.rs").to_string_lossy() },
             ],
         }],
     });
@@ -2557,27 +2558,32 @@ pub(super) fn a_misspelled_crate_prefix_is_refused_not_judged_clean() {
     );
 }
 
-/// A prefix written without its `crate::` root starts at nothing a call's path can, and is refused
-/// with the rooted spelling as the repair when that names something.
+/// A prefix written without its `crate::` root, where the rooted path names something the crate
+/// declares, is refused with the rooted spelling as the repair — the one reading of an unconfirmed first
+/// segment the text determines.
 #[test]
 pub(super) fn a_prefix_written_without_its_crate_root_is_refused_with_the_rooted_spelling() {
     let (_ws, metadata) = inline_prefix_fixture("inline-prefix-unrooted");
-    let suggestion = |prefix: &str| match prefix {
-        "clock" => Some("crate::clock"),
-        "clock::now" => Some("crate::clock::now"),
-        _ => None,
-    };
+    assert_every_prefix(&metadata, &["clock", "clock::now"], |rule, prefix| {
+        Err(crate::errors::unknown_inline_prefix_head_error(
+            prefix,
+            "x",
+            rule,
+            &format!("crate::{prefix}"),
+        ))
+    });
+}
+
+/// A first segment naming another crate is accepted whether or not the metadata confirms it: a sysroot
+/// crate the manifest never declares, the package's own library named from its binary, and a dependency
+/// whose crate name differs from its package name, which `--no-deps` metadata does not report.
+#[test]
+pub(super) fn a_first_segment_naming_another_crate_is_accepted() {
+    let (_ws, metadata) = inline_prefix_fixture("inline-prefix-other-crate");
     assert_every_prefix(
         &metadata,
-        &["clock", "clock::now", "clcok", "otherdep", "proc_macro"],
-        |rule, prefix| {
-            Err(crate::errors::unknown_inline_prefix_head_error(
-                prefix,
-                "x",
-                rule,
-                suggestion(prefix),
-            ))
-        },
+        &["proc_macro", "test", "x::core", "inilike::load", "my_dep"],
+        |_, _| Ok(Vec::new()),
     );
 }
 
@@ -2599,6 +2605,7 @@ pub(super) fn a_prefix_with_a_trailing_separator_is_refused() {
             "crate::clock::",
             "std::time::",
             "extdep::api::",
+            "my-dep",
             "::std::time",
             "self::clock",
         ],
@@ -2630,6 +2637,7 @@ pub(super) fn an_inline_prefix_naming_something_that_exists_is_accepted() {
         "extdep",
         "extdep::api",
         "renamed::x",
+        "my_dep::f",
         "crate::cli",
         "crate::cli::run",
     ];
@@ -2643,16 +2651,53 @@ pub(super) fn an_inline_prefix_naming_something_that_exists_is_accepted() {
 }
 
 /// Segments guibiao cannot read are not verified: past a sysroot crate or a dependency, whose
-/// contents are another crate's, and past an item of this crate, whose associated items are not
-/// collected. A misspelling there is accepted and matches nothing — a stated bound.
+/// contents are another crate's; past an item of this crate, whose associated items are not collected;
+/// and a first segment no metadata confirms whose `crate::` reading names nothing. A misspelling there
+/// is accepted and matches nothing — a stated bound.
 #[test]
 pub(super) fn a_prefix_past_what_guibiao_reads_is_not_verified() {
     let (_ws, metadata) = inline_prefix_fixture("inline-prefix-unread");
     assert_every_prefix(
         &metadata,
-        &["std::tiem", "extdep::nosuch", "crate::clock::Clock::nwo"],
+        &[
+            "std::tiem",
+            "extdep::nosuch",
+            "crate::clock::Clock::nwo",
+            "clcok",
+            "otherdep",
+        ],
         |_, _| Ok(Vec::new()),
     );
+}
+
+/// An item a macro invocation defines is not in the item set, so a `crate::` prefix naming it is refused
+/// as naming nothing, though the call it names compiles — a stated bound.
+#[test]
+pub(super) fn a_prefix_naming_a_macro_generated_item_is_refused() {
+    let ws = TempWorkspace::new("inline-prefix-macro-item");
+    ws.write("lib.rs", "pub mod clock;\npub mod core;\n");
+    ws.write(
+        "clock.rs",
+        "macro_rules! make { ($i:item) => { $i }; }\nmake!(pub fn stamp() -> u64 { 0 });\n",
+    );
+    ws.write(
+        "core.rs",
+        "pub fn tick() -> u64 { crate::clock::stamp() }\n",
+    );
+    let metadata = ws.metadata("x");
+    let mut wrong = Vec::new();
+    for (rule, role) in inline_prefix_roles() {
+        let (result, violations) = check_prefix(&metadata, role("crate::clock::stamp"));
+        let want = Err(crate::errors::unknown_inline_prefix_error(
+            "crate::clock::stamp",
+            "x",
+            rule,
+        ));
+        if result != want {
+            wrong.push(format!("{rule}: got {result:?} {violations:?}"));
+        }
+    }
+    assert!(wrong.is_empty(), "\n{}", wrong.join("\n"));
 }
 
 fn inline_prefix_role(rule: &str) -> PrefixRole {

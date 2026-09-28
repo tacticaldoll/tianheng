@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**27 of 126 declared bounds have no pinning test.** That figure is the register's
+**27 of 127 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -123,9 +123,15 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `inline-symbol-path-confinement/a-prefix-segment-past-what-guibiao-reads-is-not-verified-a-stated-bound`
 
-> the system accepts the prefix and reports no violation: a sysroot crate's or a dependency's contents are another crate's source, and associated items are not collected, so a misspelling there matches nothing and is not refused
+> the system accepts the prefix and reports no violation: another crate's contents are its own source, associated items are not collected, and a first segment nothing confirms may be a dependency's crate name, so a misspelling there matches nothing and is not refused
 
 - **pinned by**: `a_prefix_past_what_guibiao_reads_is_not_verified`
+
+### `inline-symbol-path-confinement/a-prefix-naming-a-macro-generated-item-is-refused-a-stated-bound`
+
+> the system exits 2 as for a prefix naming nothing: macro bodies are stripped before items are collected, so the item is not in the set the prefix is held to
+
+- **pinned by**: `a_prefix_naming_a_macro_generated_item_is_refused`
 
 ### `inline-symbol-path-confinement/the-fully-qualified-external-call-is-a-stated-bound-under-the-default`
 

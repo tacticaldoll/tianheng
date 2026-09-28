@@ -132,13 +132,27 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             BoundId::new(
                 "inline-symbol-path-confinement/a-prefix-segment-past-what-guibiao-reads-is-not-verified-a-stated-bound",
             ),
-            "an inline-call prefix misspelled after a sysroot or dependency head, or after an item of the crate",
-            Extent::OutOfReach {
-                because: "a sysroot crate's or a dependency's contents are another crate's source, and associated \
-                          items are not collected, so what those segments name is never compared with anything"
+            "an inline-call prefix misspelled after a crate's name or after an item of the crate, or starting at a \
+             segment nothing confirms and whose `crate::` reading names nothing",
+            Extent::Reached(Reached::DeclinesToRefuse {
+                because: "another crate's contents are its own source and associated items are not collected, and \
+                          a dependency's crate name can differ from what `--no-deps` metadata reports, so refusing \
+                          what those segments name would refuse prefixes that are right"
                     .into(),
-            },
+            }),
             "a_prefix_past_what_guibiao_reads_is_not_verified",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "inline-symbol-path-confinement/a-prefix-naming-a-macro-generated-item-is-refused-a-stated-bound",
+            ),
+            "a `crate::` inline-call prefix naming an item a macro invocation defines",
+            Extent::Reached(Reached::RefusesToJudge {
+                because: "macro bodies are stripped before items are collected, so the item is absent from the set \
+                          the prefix is held to and the prefix is refused as naming nothing"
+                    .into(),
+            }),
+            "a_prefix_naming_a_macro_generated_item_is_refused",
         ),
         BoundDecl::pinned(
             BoundId::new(

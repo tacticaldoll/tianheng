@@ -576,10 +576,10 @@ impl ModuleTargetDraft {
     /// non-observations, never silent passes.
     ///
     /// The prefix of this and of [`confine_inline_call`](Self::confine_inline_call) is written as
-    /// `::`-separated identifiers (`r#x` is read as `x`) starting at `crate`, `std`, `core`, `alloc`, or
-    /// a dependency's local name, and a `crate::` prefix must name a module some compiled root declares
-    /// or an item one defines. Anything else is a constitution error suggesting the spelling to write.
-    /// Segments past a sysroot or dependency head, or past an item of the crate, are not verified.
+    /// `::`-separated identifiers (`r#x` is read as `x`), and a `crate::` prefix must name a module some
+    /// compiled root declares or an item one defines. A prefix starting elsewhere names another crate and is
+    /// not verified, unless the same path rooted at `crate` names something — then it is a constitution
+    /// error suggesting that spelling, as is any other spelling.
     pub fn must_not_call_inline(self, prefix: &str) -> InlineConfinementDraft {
         InlineConfinementDraft {
             crate_package: self.crate_package,

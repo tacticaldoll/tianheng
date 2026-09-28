@@ -237,22 +237,19 @@ pub(crate) fn non_canonical_inline_prefix_error(
 }
 
 /// An inline confinement (`must_not_call_inline` or `confine_inline_call`, named by `rule`) declares a
-/// prefix whose first segment is neither `crate`, a sysroot crate, nor a dependency the crate declares.
-/// `suggestion` is the path rooted at `crate` when that names something the crate declares.
+/// prefix whose first segment no sysroot crate, dependency or library of the package confirms, while the
+/// same path rooted at `crate` — `rooted` — names something the crate declares.
 pub(crate) fn unknown_inline_prefix_head_error(
     written: &str,
     crate_package: &str,
     rule: &str,
-    suggestion: Option<&str>,
+    rooted: &str,
 ) -> String {
-    let repair = match suggestion {
-        Some(spelling) => format!("write `{spelling}`"),
-        None => "write the path from `crate`, `std`, `core`, `alloc` or a dependency".to_string(),
-    };
     format!(
-        "a prefix must start where a call's path can, or the rule silently never reacts: `{rule}` in \
-         crate '{crate_package}' names '{written}', whose first segment is not `crate`, `std`, \
-         `core`, `alloc`, or a dependency the crate declares — {repair}"
+        "a prefix of the crate's own path starts at `crate`, or the rule silently never reacts: `{rule}` \
+         in crate '{crate_package}' names '{written}', whose first segment is not a sysroot crate, a \
+         dependency or the package's library, while `{rooted}` names something the crate declares — \
+         write `{rooted}`"
     )
 }
 

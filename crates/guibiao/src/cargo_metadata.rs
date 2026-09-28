@@ -178,6 +178,29 @@ pub(crate) fn dependency_import_names(package: &Value) -> Vec<String> {
     names
 }
 
+/// The import identifiers of the package's own library targets — what a binary root of the same package
+/// names that library by. A target's `name` is its crate name, `[lib] name` when one is declared, so it is
+/// read rather than derived from the package name.
+pub(crate) fn library_import_names(package: &Value) -> Vec<String> {
+    const LIBRARY_KINDS: [&str; 6] = ["lib", "rlib", "dylib", "cdylib", "staticlib", "proc-macro"];
+    package["targets"]
+        .as_array()
+        .map(|targets| {
+            targets
+                .iter()
+                .filter(|target| {
+                    target["kind"].as_array().is_some_and(|kinds| {
+                        kinds
+                            .iter()
+                            .any(|kind| kind.as_str().is_some_and(|k| LIBRARY_KINDS.contains(&k)))
+                    })
+                })
+                .filter_map(|target| target["name"].as_str().map(package_name_to_import_ident))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Classify a dependency's **declared** source kind from its `cargo metadata` (`--no-deps`)
 /// `source` field: null → `Path`, `git+`-prefixed → `Git`, any other non-null → `Registry` (the
 /// residual, covering `registry+`/`sparse+`/alternative registries — see `crate-source-boundary`'s
