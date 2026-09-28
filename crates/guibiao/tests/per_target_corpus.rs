@@ -2647,6 +2647,7 @@ fn a_brace_in_a_literal_or_beside_a_lifetime_opens_no_scope() {
 fn a_block_candidate_naming_a_local_item_keeps_the_other_candidates() {
     const L: &str = "    #[cfg(unix)] struct L;\n    #[cfg(unix)] impl L { fn f() -> u8 { 1 } }\n    #[cfg(unix)] type X = L;\n";
     const USE: &str = "    #[cfg(not(unix))] use crate::a::X;\n";
+    let mut mismatches = Vec::new();
     for (package, body) in [
         ("blockcandaliasfirst", format!("{L}{USE}")),
         ("blockcandusefirst", format!("{USE}{L}")),
@@ -2664,7 +2665,15 @@ fn a_block_candidate_naming_a_local_item_keeps_the_other_candidates() {
                 ("src/core.rs", &core),
             ],
         );
-        let found = ["crate::a::X::f in crate::core"];
-        assert_inline_answers(&probe, package, "crate::core", "crate::a", &found, &found);
+        for strict_external in [false, true] {
+            let found =
+                inline_findings(&probe, package, "crate::core", "crate::a", strict_external);
+            if found != ["crate::a::X::f in crate::core"] {
+                mismatches.push(format!(
+                    "{package}, strict_external = {strict_external}: {found:?}"
+                ));
+            }
+        }
     }
+    assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
 }
