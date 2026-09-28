@@ -82,16 +82,17 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "inline_a_verb_outside_the_declared_set_is_a_bound",
         ),
-        BoundDecl::pinned(
+        BoundDecl::pinned_by_many(
             BoundId::new(
                 "inline-symbol-path-confinement/a-receiver-method-read-is-a-documented-bound",
             ),
-            "a read reached through a method call on a receiver",
+            "a read reached through a method call on a receiver, or through a path beginning with `<`",
             Extent::OutOfReach {
-                because: "no type inference is performed on the receiver, so the confined path is never \
-                          resolved from the call site".into(),
+                because: "no type inference is performed on the receiver or the qualified type, so the confined \
+                          path is never resolved from the call site".into(),
             },
             "inline_receiver_method_read_is_a_bound",
+            ["inline_qualified_path_is_the_type_directed_bound"],
         ),
         BoundDecl::pinned(
             BoundId::new(
@@ -178,6 +179,18 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                 owner: Owner::Engine,
             }),
             "an_example_root_is_not_governed",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "inline-symbol-path-confinement/a-generic-parameter-named-like-an-import-is-read-as-the-import-a-stated-bound",
+            ),
+            "a head naming a generic parameter that shares its name with a `use` of the enclosing module",
+            Extent::Reached(Reached::OverReacts {
+                because: "generic parameter lists are not read, so the head is resolved through whatever the \
+                          module binds under that name"
+                    .into(),
+            }),
+            "inline_generic_parameter_named_like_an_import_is_read_as_the_import",
         ),
         BoundDecl::pinned(
             BoundId::new(

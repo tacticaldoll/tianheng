@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**27 of 127 declared bounds have no pinning test.** That figure is the register's
+**27 of 128 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -99,9 +99,16 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `inline-symbol-path-confinement/a-receiver-method-read-is-a-documented-bound`
 
-> the system does not claim to observe it (no type inference on the receiver) — a stated bound, not a silent assertion of cleanliness
+> the system does not claim to observe it (no type inference on the receiver or the qualified type) — a stated bound, not a silent assertion of cleanliness
 
 - **pinned by**: `inline_receiver_method_read_is_a_bound`
+- **pinned by**: `inline_qualified_path_is_the_type_directed_bound`
+
+### `inline-symbol-path-confinement/a-generic-parameter-named-like-an-import-is-read-as-the-import-a-stated-bound`
+
+> the system reports `std::process::Command::default in crate::core`: Rust resolves `Command` to the generic parameter, and the scanner, which does not read generic parameter lists, reads the module's import — an over-reaction declared, not a precision claim
+
+- **pinned by**: `inline_generic_parameter_named_like_an_import_is_read_as_the_import`
 
 ### `inline-symbol-path-confinement/a-path-taken-as-a-value-is-a-documented-bound-under-the-default`
 

@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**60 of 127 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**60 of 128 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -200,11 +200,12 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 ### `inline-symbol-path-confinement/a-receiver-method-read-is-a-documented-bound`
 
-> a read reached through a method call on a receiver
+> a read reached through a method call on a receiver, or through a path beginning with `<`
 
-- **because**: no type inference is performed on the receiver, so the confined path is never resolved from the call site
+- **because**: no type inference is performed on the receiver or the qualified type, so the confined path is never resolved from the call site
 - **its defence must show**: does not react
 - **pinned by**: `inline_receiver_method_read_is_a_bound`
+- **pinned by**: `inline_qualified_path_is_the_type_directed_bound`
 
 ### `inline-symbol-path-confinement/an-external-crate-re-export-is-a-documented-bound`
 
@@ -430,7 +431,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_macro_invocation_pub_item_is_a_documented_bound`
 
-## over-reacts (20)
+## over-reacts (21)
 
 ### `crate-dependency-boundary/an-optional-dependency-edge-is-observed-as-a-declared-one-a-stated-bound`
 
@@ -455,6 +456,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the predicate is never evaluated, so a dead arm is observed as live — cfg-blindness inherited from the module scanner, which reacts wider than the build
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `confine_external_crate_is_cfg_blind_to_unenabled_cfg_arms`
+
+### `inline-symbol-path-confinement/a-generic-parameter-named-like-an-import-is-read-as-the-import-a-stated-bound`
+
+> a head naming a generic parameter that shares its name with a `use` of the enclosing module
+
+- **because**: generic parameter lists are not read, so the head is resolved through whatever the module binds under that name
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `inline_generic_parameter_named_like_an_import_is_read_as_the_import`
 
 ### `inline-symbol-path-confinement/a-glob-reacts-to-any-alias-or-re-export-beneath-its-resolved-module-a-stated-bound`
 

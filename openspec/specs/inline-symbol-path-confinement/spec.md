@@ -8,9 +8,9 @@ module subtree it forbids inline symbol-path calls resolving under a declared mo
 (the "core reads no ambient clock; time is injected" pattern). A call-vs-mention default keeps 圭表
 free of a read-verb heuristic (type annotations and constants pass); `.ending_with([verbs])`
 narrows to adopter-declared read verbs, `.strict_prefix_only()` escalates to any mention. Path
-heads resolve through the alias-carrying use-map, local `type` aliases, and the local `pub use`
-re-export closure to a fixpoint; a glob that can bring a prefix-resolving name into scope reacts
-fail-closed (stated by hazard, not shape). Source-observed on the hand-rolled 圭表 token scanner
+heads resolve from a typed lexical scope table — module and block scopes, `use` bindings, glob
+edges followed to a fixed point, and the local `type`-alias and `pub use` re-export closure; a glob
+that can bring a prefix-resolving name into scope reacts fail-closed (stated by hazard, not shape). Source-observed on the hand-rolled 圭表 token scanner
 (serde_json-only, no `syn`); not `cargo-deny`'s resolved/whole-graph lane.
 
 ## Subject
@@ -77,8 +77,8 @@ type). Within this resolvable scope there SHALL be no false negative.
 - **THEN** the system resolves `SysT` through the use-map to `std::time::SystemTime` and reacts
 
 #### Scenario: A self-prefixed use-group member resolves and reacts
-- **WHEN** `crate::core` declares `use std::time::{self_utc as clk, Duration};` then calls `clk::now()` — a group member whose name merely *starts with* the substring `self`, not the `self` leaf
-- **THEN** the system resolves `clk` through the use-map to `std::time::self_utc` and reacts; only the exact `self` group leaf (bare or `self as x`, which names the prefix module) is skipped, never a legal `self`-prefixed identifier (dropping it would be a false negative — the confined call would pass unresolved)
+- **WHEN** `crate::clock` declares a module `self_utc` and a struct `Duration`, and `crate::core` declares `use crate::clock::{self_utc as clk, Duration};` then calls `clk::now()` under a prefix `crate::clock` — a group member whose name merely *starts with* the substring `self`, not the `self` leaf
+- **THEN** the system resolves `clk` to `crate::clock::self_utc` and reacts; only the exact `self` group leaf (bare or `self as x`, which names the prefix module) is skipped, never a legal `self`-prefixed identifier (dropping it would be a false negative — the confined call would pass unresolved)
 
 #### Scenario: A bare path resolves and reacts
 - **WHEN** `crate::core` declares `use std::time;` then calls `time::Instant::now()`
@@ -104,6 +104,122 @@ type). Within this resolvable scope there SHALL be no false negative.
 - **WHEN** `crate::core` defines a local type `Instant` (not `std::time::Instant`) and calls `Instant::now()`, with no `use` / `type` / re-export bringing `std::time::Instant` into scope
 - **THEN** the system does NOT react (leaf-only matching is rejected — it would be a false positive)
 
+### Requirement: Inline path heads resolve from one typed lexical scope
+
+For each recognized inline path occurrence, the system SHALL resolve the first identifier from the
+occurrence's lexical scope chain — each enclosing block, then its module — using the package
+edition, the namespace the head is looked up in (a head followed by `::` names a module or type, a
+bare call names a value), item declarations, named imports and aliases, the local `type`-alias and
+`pub use` closure, and glob-import edges followed to a fixed point. Only a module body and a block
+open a scope: an `impl`, `trait`, `enum`, `struct` or `union` body binds none of its members to a
+bare head, and the items of an `extern` block or a `cfg_if!` arm belong to the enclosing scope. A
+`use` or item written directly in a block SHALL bind for that whole block and SHALL NOT bind
+outside it. A glob SHALL carry the names visible where it is written, as each name's visibility —
+`pub`, `pub(crate)`, `pub(super)`, `pub(in …)` or private — reaches that module, a private import
+reaching a descendant through `use super::*`. In an edition-2015 package, a `use` path and a path
+beginning with `::` SHALL resolve from the crate root where their head names a crate-root module or
+item. The system SHALL distinguish a local binding from an external-prelude binding and SHALL NOT
+select among distinct candidate bindings: where a scope binds a name more than once, as
+cfg-exclusive imports do, the occurrence SHALL react under each candidate that resolves under the
+prefix, and a candidate naming a block-local item SHALL NOT remove the others. A path whose `::`
+follows the `>` closing a `<…>` group is the tail of a qualified path and is not resolved; it is
+covered by the receiver-method observation bound. A `fn` item's own name is its definition and
+SHALL NOT be read as a call. Resolution SHALL NOT itself produce exit 2.
+
+The confined prefix SHALL be normalized once into its canonical form — segments without a leading
+`::` and without `r#` — and that one value SHALL be what the rule key, a violation's target and the
+call matcher read, so `std::time` and `::std::time` are one identity. Default and strict-external
+observation policy SHALL be applied after resolution: an un-`use`d external dependency call remains
+outside the default policy and is observed under strict-external, whether it is written
+`dep::item()` or `::dep::item()`.
+
+#### Scenario: A private import inherited through a parent glob resolves in an inline test
+- **WHEN** `crate::clock` privately imports `std::time::SystemTime`, and its inline test module, through `use super::*` or two levels down through `use super::super::*`, calls `SystemTime::now()`
+- **THEN** the system resolves the head to `std::time::SystemTime` through the parent scope and reports `std::time::SystemTime::now in crate::clock`
+- **PINNED-BY** `inline_private_use_inherited_through_super_glob_resolves`
+
+#### Scenario: An inline module use resolves from its enclosing module
+- **WHEN** a nested inline module imports `crate::clock::now` from its actual ancestor scope and calls `now()` under a boundary on `crate::core`
+- **THEN** the system resolves the alias to `crate::clock::now` and reports the call
+- **PINNED-BY** `an_inline_module_use_resolves_from_its_enclosing_module`
+
+#### Scenario: An inline use does not leak to a sibling
+- **WHEN** one inline child imports `crate::clock::now` and a sibling defines and calls its own `now`
+- **THEN** the system keeps the two lexical scopes distinct and reports no violation for the sibling
+- **PINNED-BY** `an_inline_module_use_does_not_leak_to_sibling_modules`
+
+#### Scenario: A block-local use binds for its whole block and only inside it
+- **WHEN** `crate::core` imports `crate::a::X` at module level, one function calls `X::fa()`, and another declares `use crate::b::X;` and calls `X::fb()`, in any textual order; or a block calls `Command::new("x")` before its own `use std::process::Command`; or a char literal `'{'`, a raw string `r#"}"#`, a byte literal `b'}'` or a lifetime stands in the block
+- **THEN** under a prefix `crate::a` the system reports `crate::a::X::fa` only and under `crate::b` `crate::b::X::fb` only, the call before the block's `use` is reported through it, and no literal's brace opens or closes a scope
+- **PINNED-BY** `inline_block_local_use_binds_only_inside_its_block`
+- **PINNED-BY** `a_block_local_use_covers_text_before_it`
+- **PINNED-BY** `a_brace_in_a_literal_or_beside_a_lifetime_opens_no_scope`
+
+#### Scenario: A block-local item or alias binds only inside its block
+- **WHEN** `crate::core` imports `std::process::Command` and a function body declares its own `struct Command` and calls `Command::new("x")`; or a function body declares `type Clock = std::time::SystemTime;` beside a module-level `struct Clock` called elsewhere as `Clock::tick()`
+- **THEN** the system resolves the block's head to the block's item and reports no violation under `std::process`, and reports only the block's `std::time::SystemTime::now` under `std::time`, never the module's `Clock::tick()`
+- **PINNED-BY** `inline_block_local_item_shadows_a_module_import`
+- **PINNED-BY** `a_block_local_type_alias_does_not_bind_outside_its_block`
+
+#### Scenario: A member of a body that opens no scope binds no bare head
+- **WHEN** `crate::core` imports `std::process::Command` and calls `Command::new("x")` inside a method of `impl S { const Command: u8 = 0; … }`, beside `pub enum E { Command }`, or inside a trait impl declaring `type Command = u8;`; or a trait impl declares `type Item = std::time::SystemTime;` beside a module-level `Item` called as `Item::tick()`
+- **THEN** the system reports `std::process::Command::new in crate::core` in the first three, and nothing under `std::time` in the last
+- **PINNED-BY** `inline_associated_item_or_variant_does_not_shadow_an_import`
+- **PINNED-BY** `an_associated_type_does_not_bind_a_bare_head`
+
+#### Scenario: An inline type alias resolves at its inline path
+- **WHEN** an inline child defines a type alias to `std::process::Command` and an occurrence calls the alias's `new`
+- **THEN** the system resolves the alias to `std::process::Command` and reports the call
+- **PINNED-BY** `an_inline_module_type_alias_resolves_under_its_inline_path`
+
+#### Scenario: A local public re-export resolves across modules
+- **WHEN** `crate::support` declares `pub use std::time::SystemTime`, `crate::core` imports that name, and calls `SystemTime::now()`
+- **THEN** the system resolves the public re-export closure to `std::time::SystemTime` and reports the call
+- **PINNED-BY** `inline_resolves_a_cross_module_local_reexport`
+
+#### Scenario: A glob brings only the names visible where it is written
+- **WHEN** `crate::core` globs `crate::a::support`, which holds a private `Hidden`, a `pub(super)` `Near` and a public `helper`, and globs `crate::clocks`, which holds public `Hidden` and `Near`, then calls `helper()`, `Hidden::now()` and `Near::now()`
+- **THEN** under a prefix `crate::a::support` the system reports only `crate::a::support::helper` beside the glob hazard, and under `crate::clocks` both `now` calls
+- **PINNED-BY** `a_glob_brings_only_the_names_visible_where_it_is_written`
+
+#### Scenario: Every binding of a name is a candidate
+- **WHEN** `crate::core` writes `#[cfg(unix)] use crate::a::X;` and `#[cfg(not(unix))] use crate::b::X;` and calls `X::f()`; or a block holds `#[cfg(unix)] type X = L;` for a block-local `L` beside `#[cfg(not(unix))] use crate::a::X;`
+- **THEN** the system reports the call under a prefix `crate::a` and under a prefix `crate::b` in the first, and under `crate::a` in either order in the second, since cfg-gated source is observed as written and a candidate naming a local item removes no other
+- **PINNED-BY** `inline_cfg_alternative_uses_are_both_observed`
+- **PINNED-BY** `a_block_candidate_naming_a_local_item_keeps_the_other_candidates`
+
+#### Scenario: Edition-2015 root paths resolve from the crate root
+- **WHEN** an edition-2015 package declares `mod clock` and `fn now` at its root, and its modules call `::clock::now()`, write `use clock::now;` and call `now()`, write `use now;` and call `now()`, or call `::now()`
+- **THEN** the system reports the calls under a prefix `crate::clock` or `crate::now` respectively
+- **PINNED-BY** `inline_edition_2015_root_paths_resolve_from_the_crate_root`
+- **PINNED-BY** `inline_edition_2015_root_paths_reach_a_crate_root_item`
+
+#### Scenario: A local same-name module shadows an external dependency
+- **WHEN** the crate root defines `mod md5x` returning a local `md5x::Local`, the package also depends on an external `md5x` returning a different type, and code calls bare `md5x::compute()`
+- **THEN** the system resolves the bare head to the local module and does not match an external-only `::md5x` prefix in either mode
+- **PINNED-BY** `inline_bare_local_module_shadows_same_named_dependency`
+
+#### Scenario: An un-used dependency has the same answer under both root spellings
+- **WHEN** the package depends on `md5x` and writes `md5x::compute()` or `::md5x::compute()` without a `use`, under a prefix `md5x` or `::md5x`, or writes `::md5x::compute()` beside a crate-root `mod md5x`
+- **THEN** both paths resolve to the same external binding; default mode reports neither, and strict-external reports each as `md5x::compute`, the leading `::` naming the dependency rather than the local module
+- **PINNED-BY** `inline_external_dependency_root_spelling_is_mode_invariant`
+- **PINNED-BY** `a_leading_colon_names_the_dependency_not_the_same_named_module`
+
+#### Scenario: Both root spellings of a prefix share one baseline identity
+- **WHEN** a baseline is recorded for a call under a prefix `::std::time` and the boundary is then declared as `std::time`, or the reverse
+- **THEN** the baseline suppresses the same finding under the other spelling
+- **PINNED-BY** `a_root_qualified_prefix_shares_its_baseline_identity`
+
+#### Scenario: A qualified associated path is not treated as an extern root
+- **WHEN** code declares `impl W { fn md5x() {} }` and calls `<W>::md5x()` under a `md5x` external-prefix boundary
+- **THEN** the system does not treat the `::` after `>` as a leading root and reports no violation in either mode
+- **PINNED-BY** `inline_associated_path_after_angle_close_is_not_global_root`
+
+#### Scenario: A fn item's name is its definition, not a call
+- **WHEN** a nested `fn md5x()`, an associated `fn md5x()` or a trait's `fn md5x();` is declared under a single-segment `md5x` prefix with strict-external on
+- **THEN** the system reports nothing
+- **PINNED-BY** `a_fn_name_is_its_definition_not_a_call`
+
 ### Requirement: A glob that can bring a prefix-resolving name into scope reacts (fail-closed)
 
 The rule SHALL be stated by the **hazard**, not a single glob shape (an enumerated shape list
@@ -126,7 +242,8 @@ a glob introduces no forbidden read, so the glob itself is the violation — one
 flood, never a silent pass. The hazard test is wider than what a glob can bring into scope, and that width SHALL
 be declared by the over-reaction scenario below rather than claimed as precision: it asks whether any alias or
 re-export **beneath** the glob's resolved module resolves under the prefix, not whether the glob brings that name
-into scope.
+into scope. Where the glob's module is local, a call through a name the glob brings SHALL also resolve through
+it and report as a call, beside the glob's own finding.
 
 #### Scenario: A glob of the confined prefix reacts
 - **WHEN** `crate::core` declares `use std::time::*;` under a boundary confining `std::time`
@@ -151,6 +268,11 @@ into scope.
 #### Scenario: A glob finding is not suppressed by narrowing
 - **WHEN** a boundary declares `.must_not_call_inline("std::time").ending_with(["now"])` and `crate::core` declares `use std::time::*;`
 - **THEN** the system still reacts on the glob (narrowing filters call terminal segments, not globs)
+
+#### Scenario: A call through a local glob reports beside the glob
+- **WHEN** `crate::core` globs `crate::a` and `crate::b`, each holding a struct `X`, and calls `X::f()` — both globs written plainly, cfg-exclusive, or `crate::b` re-exporting `crate::a::X`
+- **THEN** the system reports each glob that reaches the prefix and the call under each candidate it reaches (`crate::a::X::f in crate::core` under `crate::a`)
+- **PINNED-BY** `a_glob_that_can_bring_the_prefix_reacts_however_the_name_is_used`
 
 #### Scenario: A glob reacts to any alias or re-export beneath its resolved module — a stated bound
 - **WHEN** `crate::agent` declares `mod hidden { pub type Spawner = std::process::Command; }` and holds only `mod tests { use super::*; }`, under a boundary permitting `std::process::Command` only within `crate::exec`
@@ -231,7 +353,7 @@ narrowing. The engine MUST NOT bake a default verb set of its own.
 - **THEN** the system reacts on `Instant::now()` and does NOT react on `Duration::from_secs(5)` (terminal `from_secs` is not a declared verb)
 
 #### Scenario: A future read verb outside the declared set is a documented bound
-- **WHEN** a boundary is narrowed to `.ending_with(["now"])` and `crate::core` calls `std::time::SystemTime::current()` (hypothetical non-`now` read)
+- **WHEN** `crate::clock` defines `now` and `current`, a boundary on `crate::core` confining `crate::clock` is narrowed to `.ending_with(["now"])`, and `crate::core` calls `crate::clock::current()`
 - **THEN** the system does NOT react (a false negative the adopter owns by narrowing), rather than the engine silently guessing which verbs are reads
 - **PINNED-BY** `inline_a_verb_outside_the_declared_set_is_a_bound`
 
@@ -267,8 +389,8 @@ forbidden bug (real reads hide in `cfg_if!` / logging / async DSL bodies).
 
 The following SHALL be OUT OF SCOPE as stated coverage bounds, never a claimed reaction and never
 a silent pass beyond them: (1) a read whose type is not in a plain written path — a
-receiver-method call (`instant.elapsed()`) or a UFCS-qualified call (`<Type as Trait>::now()`,
-type inside `<…>`) — no type inference; (2) an alias introduced *within* an unexpanded
+receiver-method call (`instant.elapsed()`) or a call through a path beginning with `<` (`<Type>::now()`,
+`<Type as Trait>::now()`, type inside `<…>`) — no type inference; (2) an alias introduced *within* an unexpanded
 macro-invocation body; (3) a symbol name assembled by fragment/proc-macro construction (`paste!`,
 `concat_idents!`) or generated by a proc-macro; (4) a path reached through an **external**-crate
 re-export (foreign AST is not observed); (5) a **fully-qualified, un-`use`d external-crate call**
@@ -292,15 +414,23 @@ Finally, strict-external only: a `mod name {` token or unbalanced braces **insid
 macro-invocation body** can perturb the call scan's inline-module tracking (the call scan keeps
 macro bodies while the item collector strips them), so a call's true module may be mis-attributed —
 a stated bound. Each bound is a declared non-observation, not a silent pass on a case within scope.
+One over-reaction SHALL be stated beside them: the scope table does not read generic parameter
+lists, so a head naming a generic parameter is read as whatever the module binds under that name.
 
 #### Scenario: A `#[path]`-remapped file in the subtree is observed
 - **WHEN** a `#[path = "…"]`-remapped module inside `crate::core` contains `std::time::Instant::now()`, whether the attribute is written directly or wrapped in `cfg_attr`
 - **THEN** the system reacts, naming the remapped module — the scanner follows an unconditional remap to its target and union-scans a `cfg_attr`-wrapped one, so the confinement observes the call there exactly as it does one written in the module's own file
 
 #### Scenario: A receiver-method read is a documented bound
-- **WHEN** `crate::core` calls `some_instant.elapsed()` where `some_instant` is an `Instant` value received by injection
-- **THEN** the system does not claim to observe it (no type inference on the receiver) — a stated bound, not a silent assertion of cleanliness
+- **WHEN** `crate::core` calls `some_instant.elapsed()` where `some_instant` is an `Instant` value received by injection, or calls `<std::time::SystemTime>::now()`, `<S as crate::clock::Clock>::now()` or `<SystemTime as Clone>::clone(t)`
+- **THEN** the system does not claim to observe it (no type inference on the receiver or the qualified type) — a stated bound, not a silent assertion of cleanliness
 - **PINNED-BY** `inline_receiver_method_read_is_a_bound`
+- **PINNED-BY** `inline_qualified_path_is_the_type_directed_bound`
+
+#### Scenario: A generic parameter named like an import is read as the import — a stated bound
+- **WHEN** `crate::core` writes `use std::process::Command;` and `pub fn f<Command: Default>() -> Command { Command::default() }` under a boundary forbidding inline calls under `std::process`
+- **THEN** the system reports `std::process::Command::default in crate::core`: Rust resolves `Command` to the generic parameter, and the scanner, which does not read generic parameter lists, reads the module's import — an over-reaction declared, not a precision claim
+- **PINNED-BY** `inline_generic_parameter_named_like_an_import_is_read_as_the_import`
 
 #### Scenario: A path taken as a value is a documented bound under the default
 - **WHEN** `crate::core` writes `let f = std::time::SystemTime::now; f();` under a default (non-strict) confinement
@@ -334,10 +464,14 @@ The confined prefix of either builder SHALL be held to one spelling and to namin
 implementation both share, because a prefix is compared with resolved call paths segment by segment and one
 that matches no spelling a resolved path takes never reacts. Its spelling SHALL be `::`-separated identifiers,
 read by the identifier test module paths are read by, optionally starting with a leading `::` for explicit
-external crate disambiguation, and not starting with a keyword (`Self`, `self`, `super`, etc.); `r#x` and `x` SHALL be
+external crate disambiguation, and starting with a head that can name a crate or module; `r#x` and `x` SHALL be
 one identifier, recorded without the raw prefix. Any other spelling — an empty segment, a trailing
-`::`, whitespace, or a keyword head — SHALL be exit 2, quoting the written prefix and suggesting its trimmed, non-empty segments
-when those are a valid spelling. A blank prefix SHALL keep the empty-prefix refusal above. A first segment
+`::`, or whitespace — SHALL be exit 2, quoting the written prefix and suggesting its trimmed, non-empty segments
+when those are a valid spelling. The heads that can name nothing are those the Rust Reference's identifier grammar
+excludes: `_`, which is not an identifier, and `r#crate`, `r#self`, `r#super` and `r#Self`, which are not raw
+identifiers; with bare `self`, `super` and `Self`, which are relative to a module or type a declaration does not
+have, and `crate` after a leading `::`. Each SHALL be exit 2, suggesting the unraw spelling where that is a valid
+prefix. Any other head, keyword or not and in any edition, SHALL be accepted written bare or raw. A blank prefix SHALL keep the empty-prefix refusal above. A first segment
 that is not `crate` names a crate, whose contents the scanner does not read. A sysroot crate (`std`, `core`,
 `alloc`, `proc_macro`, `test`), a dependency the package declares under the local name a rename gives it, and the
 package's own library SHALL be accepted. A first segment none of those confirms SHALL be accepted too, since a
@@ -358,6 +492,16 @@ past its first segment when that is not `crate`, or past an item of the crate, i
 - **THEN** the system exits 2, quoting the written prefix and suggesting `crate::clock`, `std::time`, or `::std::time` where the trimmed segments are a valid spelling
 - **PINNED-BY** `a_prefix_with_a_trailing_separator_is_refused`
 - **PINNED-BY** `an_inline_prefix_is_accepted_only_in_its_canonical_spelling`
+
+#### Scenario: A prefix head that names no crate or module is refused
+- **WHEN** either builder is given `_`, `_::clock`, `r#_::clock`, `Self::now`, `Self::clock`, `r#Self::clock`, `self::clock`, `r#self::clock`, `super::clock`, `r#super::clock`, `::crate::clock`, `r#crate::clock` or `r#crate`
+- **THEN** the system exits 2 quoting the written prefix, suggesting `crate::clock` for `r#crate::clock`, `crate` for `r#crate`, and nothing for the others
+- **PINNED-BY** `a_prefix_head_naming_no_crate_or_module_is_refused`
+
+#### Scenario: A keyword head is accepted bare or raw
+- **WHEN** a package depends on a crate renamed `async`, `crate::core` writes `use r#async::f;` and calls `f()`, and a boundary's prefix is `async` or `r#async` — and likewise for `dyn`, `try`, `gen` and `union` in editions 2018, 2021 and 2024
+- **THEN** the system accepts the prefix, reports the call under it, and records one identity for both spellings
+- **PINNED-BY** `a_keyword_prefix_head_is_accepted_bare_or_raw`
 
 #### Scenario: A prefix naming something that exists is accepted
 - **WHEN** either builder is given `crate::clock`, `crate::clock::now`, `crate::r#clock`, `std::time`, `::std::time`, a dependency's local name, a renamed dependency's local name, or a module only the binary root declares
@@ -437,9 +581,10 @@ subtree and gate only on new calls.
 
 A confinement MAY be extended with `.strict_external()`. When set, the system SHALL resolve a
 written path's bare head that matches a **declared dependency name** (rename-aware, `-`→`_`
-normalized to its import identifier) as that external crate, so a **fully-qualified, un-`use`d
-external call** — e.g. `chrono::Utc::now()` with no `use chrono` in scope — resolving under the
-confined prefix SHALL react. This closes the asymmetry whereby a sysroot head (`std`/`core`/`alloc`)
+normalized to its import identifier), and any `::`-rooted head other than a sysroot crate, as that
+external crate, so a **fully-qualified, un-`use`d external call** — e.g. `chrono::Utc::now()` or
+`::chrono::Utc::now()` with no `use chrono` in scope — resolving under the confined prefix SHALL
+react. This closes the asymmetry whereby a sysroot head (`std`/`core`/`alloc`)
 was resolved literally and caught while a fully-qualified external head was resolved as a local
 path and silently missed (a false negative).
 
@@ -464,9 +609,8 @@ the type-alias / re-export closure) SHALL be preserved.
 
 One **over-reaction** bound SHALL be stated, not silent, and only under a **single-segment** bare
 crate prefix (`"rand"`) — a multi-segment prefix (`"chrono::Utc"`) is immune: a local `let` /
-parameter / closure binding, or the definition site of an associated / nested `fn` named like the
-crate (whose `name(` reads as a call), may react (a declared false positive). Module-top-level
-definitions are exempt.
+parameter / closure binding named like the crate may react (a declared false positive). A `fn`
+item's own name is its definition and never reacts, and module-top-level definitions are exempt.
 
 `.strict_external()` is **orthogonal** to `.ending_with(…)` and `.strict_prefix_only()`: it changes
 head *resolution*, not call-vs-mention breadth, and SHALL compose with either — unlike the
@@ -515,7 +659,10 @@ this capability's confinement check depends on, and past that cap SHALL fail lou
 error, exit 2) rather than silently dropping the nested glob base or alias from observation. A
 real, compilable glob-hazard or alias chain nested past the cap would otherwise vanish entirely
 from observation with no report — the false negative the core contract forbids. Nesting
-comfortably under the cap SHALL be observed exactly as a shallower tree would be.
+comfortably under the cap SHALL be observed exactly as a shallower tree would be. Every reader of
+imports — import reports, the scope table, the glob-hazard walk and the re-export closure — reads
+`use` statements through one enumeration and use trees through one parser, each with its own cap,
+so the readers cannot disagree about what a tree holds.
 
 #### Scenario: A grouped glob nested past the depth cap is a scan error
 
