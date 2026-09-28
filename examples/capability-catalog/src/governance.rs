@@ -41,6 +41,12 @@ pub fn constitution() -> Constitution {
                 .must_not_expose_impl_trait()
                 .because("the catalog impl-trait family must produce its structured reaction"),
         )
+        .static_boundary(
+            StaticBoundary::in_crate("capability_catalog")
+                .module("crate::stateful")
+                .must_not_declare_static()
+                .because("the stateful module declares no static item or thread_local!"),
+        )
         .no_existential_leak(
             NoExistentialLeak::in_crate("capability_catalog")
                 .module("crate::shapes")

@@ -19,7 +19,7 @@ documented adoption path remains usable and semantically honest across the 0.2 l
 `tianheng::prelude::*` SHALL expose the existing declaration and execution surface: `Constitution`,
 `CrateBoundary`, `ModuleBoundary`, `SignatureBoundary`, `TraitImplBoundary`, `VisibilityBoundary`,
 `ForbiddenMarkerBoundary`, `DynTraitBoundary`, `ImplTraitBoundary`, `AsyncExposureBoundary`,
-`UnsafeBoundary`, `RuntimeBoundary`, `SansIoPure`, `NoExistentialLeak`, `GovernanceTest`,
+`UnsafeBoundary`, `StaticBoundary`, `RuntimeBoundary`, `SansIoPure`, `NoExistentialLeak`, `GovernanceTest`,
 `ScanDepth`, `DependencyKind`, `SourceKind`, `VisibilityCeiling`, `Severity`, and `run`. An
 external consumer SHALL be able to compose boundaries from all three instruments through one
 `Constitution` without importing dimension crates.

@@ -93,6 +93,18 @@ fn is_transparent_macro(item: &syn::ItemMacro) -> bool {
             .is_some_and(|seg| strip_raw(&seg.ident.to_string()) == "cfg_if")
 }
 
+/// Whether a macro invocation's path names `thread_local!`, judged by its name alone.
+///
+/// The last segment with a raw prefix stripped is `thread_local`, so `std::thread_local!`,
+/// `::std::thread_local!` and `r#thread_local!` all match — the name gate [`is_transparent_macro`]
+/// applies to `cfg_if!`, for the reason it gives: reading a macro's body is sound only for a macro
+/// known by name. A local `macro_rules! thread_local` matches too, and a rename does not.
+pub(crate) fn is_thread_local_macro(path: &syn::Path) -> bool {
+    path.segments
+        .last()
+        .is_some_and(|seg| strip_raw(&seg.ident.to_string()) == "thread_local")
+}
+
 /// The items of every arm of a transparent macro invocation, in source order, kept **separate
 /// per arm** (not one flattened list): [`flatten_transparent_macros`] needs each arm's own
 /// identity to tag its items with an [`ArmKey`], since two arms of the SAME invocation are
@@ -708,6 +720,9 @@ pub(crate) enum ForeignDecl {
         vis: syn::Visibility,
         ident: syn::Ident,
         ty: Box<syn::Type>,
+        /// `static mut` or `static`: the static-item boundary records it, the visibility and
+        /// signature readers do not.
+        mutability: syn::StaticMutability,
     },
     Type {
         vis: syn::Visibility,
@@ -747,6 +762,7 @@ pub(crate) fn decode_foreign_item(
             vis: s.vis.clone(),
             ident: s.ident.clone(),
             ty: s.ty.clone(),
+            mutability: s.mutability.clone(),
         }),
         syn::ForeignItem::Type(t) => Ok(ForeignDecl::Type {
             vis: t.vis.clone(),
@@ -781,6 +797,7 @@ pub(crate) fn decode_foreign_item(
                     vis: s.vis,
                     ident: s.ident,
                     ty: s.ty,
+                    mutability: s.mutability,
                 }),
                 _ => Err(undecodable()),
             }

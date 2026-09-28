@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**60 of 117 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**60 of 125 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -73,7 +73,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 **refuses to judge** and *out of reach* are kept distinct deliberately. The misclassification this model exists to prevent was exactly a confusion between them — a prediction of a silent false negative where the real behaviour was a fail-loud refusal — and a direction that cannot be named cannot be predicted with.
 
-## as intended, granularity bounded (6)
+## as intended, granularity bounded (7)
 
 ### `observation-bound-model/an-answer-that-depends-on-the-corpus-entry-point-has-no-extent-of-its-own-a-stated-bound`
 
@@ -115,6 +115,16 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: collapses granularity
 - **pinned by**: `an_unrenderable_sub_node_is_a_stated_rendering_bound`
 
+### `semantic-static-item-boundary/same-named-statics-under-one-owner-share-one-identity-a-stated-bound`
+
+> two statics of one name under one owner: in two nested blocks of one fn, in two `const _` initializers, or in two closures of one fn
+
+- **because**: identity is kind, declaring module, name and the chain of named value items, never scan position, and a block, a `const _` or a closure adds no name to the chain
+- **its defence must show**: collapses granularity
+- **pinned by**: `nested_block_statics_share_one_identity`
+- **pinned by**: `anonymous_const_statics_share_one_identity`
+- **pinned by**: `closure_statics_share_one_identity`
+
 ### `semantic-visibility-boundary/direct-items-that-render-alike-share-one-identity-a-stated-bound`
 
 > two direct items of one module that render alike: a repeated macro path, several impl blocks whose self type and trait render alike, several extern blocks, or several unrenderable items
@@ -136,7 +146,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not refuse
 - **pinned by**: `hunyi::a_cfg_gated_module_with_no_file_is_skipped_not_errored`
 
-## not a violation (3)
+## not a violation (4)
 
 ### `semantic-async-exposure-boundary/a-body-nested-module-is-a-stated-bound`
 
@@ -162,7 +172,15 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_plain_fn_directly_in_a_const_body_stays_a_stated_bound`
 
-## out of reach (28)
+### `semantic-static-item-boundary/an-interior-mutable-const-is-not-a-static-a-stated-bound`
+
+> a `const` whose type has interior mutability, such as `const C: Cell<u8>`
+
+- **because**: a `const` is a value inlined at each use, never one shared location, so it declares no state for the module to hold
+- **its defence must show**: does not react
+- **pinned by**: `an_interior_mutable_const_is_not_a_static`
+
+## out of reach (30)
 
 ### `external-crate-confinement/a-confined-crate-use-inside-a-string-or-macro-body-is-not-observed-a-stated-bound`
 
@@ -356,6 +374,22 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `an_arbitrary_macro_body_is_not_read_as_transparent_arms`
 
+### `semantic-static-item-boundary/a-foreign-crate-rename-of-thread-local-is-a-documented-bound`
+
+> a `thread_local!` invoked under a name another crate re-exported it as
+
+- **because**: another crate's source is not parsed, so its rename is never seen and the renamed invocation is not recognized by name
+- **its defence must show**: does not react
+- **pinned by**: `a_foreign_crate_rename_of_thread_local_is_a_documented_bound`
+
+### `semantic-static-item-boundary/a-macro-generated-static-is-a-documented-bound`
+
+> a `static` appearing only in a macro's expansion — a `macro_rules!` that declares one, a `lazy_static!`-shaped invocation, or a `thread_local!` wrapped in another macro
+
+- **because**: macros other than `thread_local!` are not expanded, so the declaration never enters the observed AST
+- **its defence must show**: does not react
+- **pinned by**: `a_macro_generated_static_is_a_documented_bound`
+
 ### `semantic-trait-impl-exposure/a-glob-imported-type-in-an-impl-position-is-a-documented-bound`
 
 > an impl position naming a type that arrives through a glob import
@@ -388,7 +422,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_macro_invocation_pub_item_is_a_documented_bound`
 
-## over-reacts (18)
+## over-reacts (20)
 
 ### `crate-dependency-boundary/an-optional-dependency-edge-is-observed-as-a-declared-one-a-stated-bound`
 
@@ -518,6 +552,22 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `impl_trait_local_auto_trait_leaf_over_reacts_is_a_bound`
 
+### `semantic-static-item-boundary/a-local-macro-sharing-the-thread-local-name-over-reacts-a-stated-bound`
+
+> a local `macro_rules! thread_local` invoked in the governed subtree
+
+- **because**: `thread_local!` is recognized by its name, so a local macro of that name is read as the std one and the statics its body spells react
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `a_local_thread_local_macro_over_reacts_is_a_bound`
+
+### `semantic-static-item-boundary/cfg-gated-statics-are-observed-as-written-a-stated-bound`
+
+> a `static` whose `#[cfg]` predicate is false on the host, such as `#[cfg(test)]`
+
+- **because**: the AST reader observes the declaration as written without evaluating cfg, so a host-inactive static reacts
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `static_cfg_is_observed_as_written`
+
 ### `semantic-visibility-boundary/a-pub-in-narrow-path-item-may-over-react-under-a-tight-ceiling-a-stated-bound`
 
 > `pub(in crate::a) fn` on an item already directly in `crate::a`, under a `Module` ceiling
@@ -534,7 +584,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `cfg_is_observed_as_written`
 
-## refuses to judge (1)
+## refuses to judge (3)
 
 ### `publish-source-integrity/whether-a-worktree-holding-an-undecodable-path-is-clean-is-not-observed-a-stated-bound`
 
@@ -543,6 +593,22 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: a verdict is not owed on an input this reader cannot represent, and the alternative is worse than a refusal: collapsing the undecodable bytes to U+FFFD would make every comparison downstream against a name the repository does not hold, which is the property `xingbiao::path_identity` exists to keep. So the worktree read stops and the cleanliness judgement is never reached -- neither `clean` nor `dirty` for that tree. What it costs is that such a repository cannot be published through the wrapper until the path is renamed or removed, which is a refusal standing in front of an irreversible act rather than a pass over one
 - **its defence must show**: refuses to judge
 - **pinned by**: `a_worktree_holding_an_undecodable_path_is_not_judged_clean_or_dirty`
+
+### `semantic-static-item-boundary/a-crate-renaming-thread-local-refuses-to-judge-a-stated-bound`
+
+> `use std::thread_local as tls;` anywhere in the governed crate, a function body included
+
+- **because**: a `thread_local!` is recognized by its name, so an invocation under the new name would escape it; the boundary asks for the macro to be written by its name
+- **its defence must show**: refuses to judge
+- **pinned by**: `a_renamed_thread_local_refuses_to_judge`
+
+### `semantic-static-item-boundary/a-thread-local-body-that-is-not-static-declarations-refuses-to-judge-a-stated-bound`
+
+> a `thread_local!` whose body does not parse as `static` declarations
+
+- **because**: the statics it declares cannot be named, and passing it would be a silent pass over a declaration
+- **its defence must show**: refuses to judge
+- **pinned by**: `an_unparseable_thread_local_body_refuses_to_judge`
 
 ## under-reacts (60)
 

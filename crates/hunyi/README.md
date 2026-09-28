@@ -58,6 +58,9 @@ Built capabilities (each passing Tianheng's capability-admission test — declar
   is impl-trait's domain. The finding is an **owner-qualified item identity** (`async fn <Ty>::name(…)`)
   so two same-named async fns never collide under the baseline. Declarative = "this seam is
   synchronous" by anchor scoping (a sync-core/async-edges layering), not a blanket "no async".
+- **Static-item** — a module's whole subtree declares no `static` item, foreign `static` or
+  `thread_local!` (`StaticBoundary::…::must_not_declare_static()`): the layer holds no process or thread
+  state of its own. `thread_local!` is recognized by name, and a crate renaming it is refused.
 
 ```rust
 use hunyi::{

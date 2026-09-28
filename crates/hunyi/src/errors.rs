@@ -249,3 +249,35 @@ pub(crate) fn undecodable_foreign_item_error(file: &Path, seen: &str) -> String 
         file.display()
     )
 }
+
+/// A crate governed by a static-item boundary renames `thread_local!` (`use std::thread_local as
+/// tls;`), so an invocation under the new name escapes the name `thread_local!` is recognized by.
+pub(crate) fn thread_local_rename_error(
+    renamed_to: &str,
+    module: &str,
+    crate_package: &str,
+) -> String {
+    format!(
+        "cannot judge static-item boundaries over crate '{crate_package}': module '{module}' renames \
+         `thread_local` to `{renamed_to}`, and a `thread_local!` is recognized by its name, so a static \
+         declared through `{renamed_to}!` would not be seen — write `thread_local!` (or \
+         `std::thread_local!`) directly instead of renaming it"
+    )
+}
+
+/// A `thread_local!` invocation whose body is not a sequence of `static` declarations.
+pub(crate) fn thread_local_body_error(module: &str, file: &Path, why: &str) -> String {
+    format!(
+        "cannot judge a `thread_local!` in module '{module}' ({}): its body does not read as `static` \
+         declarations ({why}), so the statics it declares cannot be named",
+        file.display()
+    )
+}
+
+/// A static whose enclosing owner cannot be named without inventing a positional label.
+pub(crate) fn static_owner_unnameable_error(name: &str, module: &str, cause: &str) -> String {
+    format!(
+        "cannot identify static {name} in {module} — its enclosing {cause}; no positional fallback is \
+         invented for it, because a label that names a traversal position is not an identity"
+    )
+}

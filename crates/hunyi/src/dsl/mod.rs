@@ -1,7 +1,8 @@
 //! Declaration DSL for 渾儀's semantic boundaries — the builder types each capability
 //! exposes (`SignatureBoundary`, `TraitImplBoundary`, `VisibilityBoundary`,
 //! `ForbiddenMarkerBoundary`, `DynTraitBoundary`, `ImplTraitBoundary`,
-//! `AsyncExposureBoundary`) and their crate/module/boundary draft chains. Pure data and
+//! `AsyncExposureBoundary`, `ReexportOnlyBoundary`, `UnsafeBoundary`, `StaticBoundary`) and their
+//! crate/module/boundary draft chains. Pure data and
 //! builders — no scan, no resolution, no reaction — re-exported from the crate root so the
 //! public paths (`hunyi::SignatureBoundary`, …) stay unchanged. One module per capability
 //! family; each family is self-contained, sharing only the small canonical path/set encoding used
@@ -13,6 +14,7 @@ mod forbidden_marker;
 mod impl_trait;
 mod reexport_only;
 mod signature;
+mod static_item;
 mod trait_impl;
 mod unsafe_confinement;
 mod visibility;
@@ -23,6 +25,7 @@ pub use forbidden_marker::*;
 pub use impl_trait::*;
 pub use reexport_only::*;
 pub use signature::*;
+pub use static_item::*;
 pub use trait_impl::*;
 pub use unsafe_confinement::*;
 pub use visibility::*;

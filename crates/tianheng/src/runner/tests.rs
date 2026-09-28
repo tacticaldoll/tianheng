@@ -1037,6 +1037,12 @@ fn list_document_covers_every_populated_dimension() {
                 .must_declare_only_reexports()
                 .because("facade carries only re-exports"),
         )
+        .static_boundary(
+            StaticBoundary::in_crate("app")
+                .module("crate::kernel")
+                .must_not_declare_static()
+                .because("the kernel holds no process or thread state"),
+        )
         .forbidden_marker_boundary(
             ForbiddenMarkerBoundary::in_crate("app")
                 .module("crate::domain")
@@ -1056,6 +1062,7 @@ fn list_document_covers_every_populated_dimension() {
         ("trait_impl_boundaries", "semantic", "crate::Command"),
         ("visibility_boundaries", "semantic", "crate::internal"),
         ("reexport_only_boundaries", "semantic", "crate::facade"),
+        ("static_item_boundaries", "semantic", "crate::kernel"),
         ("forbidden_marker_boundaries", "semantic", "crate::domain"),
         ("runtime_boundaries", "runtime", "domain-entry"),
     ] {
@@ -1140,6 +1147,12 @@ fn markdown_projection_covers_every_dimension_the_json_document_emits() {
                 .must_declare_only_reexports()
                 .because("facade carries only re-exports"),
         )
+        .static_boundary(
+            StaticBoundary::in_crate("app")
+                .module("crate::kernel")
+                .must_not_declare_static()
+                .because("the kernel holds no process or thread state"),
+        )
         .forbidden_marker_boundary(
             ForbiddenMarkerBoundary::in_crate("app")
                 .module("crate::domain")
@@ -1180,7 +1193,7 @@ fn markdown_projection_covers_every_dimension_the_json_document_emits() {
 
     // Each known dimension: the fixture must populate it (a non-empty JSON array), and the
     // Markdown must carry its section — so the Markdown never carries less than the JSON.
-    const DIMENSIONS: [(&str, &str); 11] = [
+    const DIMENSIONS: [(&str, &str); 12] = [
         ("boundaries", "## Static boundaries"),
         ("semantic_boundaries", "## Semantic boundaries"),
         ("trait_impl_boundaries", "## Trait-impl-locality boundaries"),
@@ -1197,6 +1210,7 @@ fn markdown_projection_covers_every_dimension_the_json_document_emits() {
             "unsafe_confinement_boundaries",
             "## Unsafe-confinement boundaries",
         ),
+        ("static_item_boundaries", "## Static-item boundaries"),
         ("runtime_boundaries", "## Runtime boundaries"),
     ];
 
@@ -1267,6 +1281,12 @@ fn full_constitution() -> Constitution {
                 .module("crate::facade")
                 .must_declare_only_reexports()
                 .because("facade carries only re-exports"),
+        )
+        .static_boundary(
+            StaticBoundary::in_crate("app")
+                .module("crate::kernel")
+                .must_not_declare_static()
+                .because("the kernel holds no process or thread state"),
         )
         .forbidden_marker_boundary(
             ForbiddenMarkerBoundary::in_crate("app")

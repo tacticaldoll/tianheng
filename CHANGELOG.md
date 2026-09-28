@@ -93,6 +93,21 @@ them.
   and its violation target and identity are those of `crate::kernel`, where they carried the raw spelling.
   A baseline entry recorded under a `crate::r#…` target is stale.
 
+- **渾儀 can hold a module to no `static` item or `thread_local!`: `StaticBoundary`.**
+  `StaticBoundary::in_crate(p).module(m).must_not_declare_static().because(r)`, composed through
+  `Constitution::static_boundary`, reacts to every `static` and `static mut` declared anywhere in the anchored
+  module's subtree — at module level or in a function, method, closure or initializer body — to each foreign
+  `static` in an `extern` block, `safe`- and `unsafe`-qualified ones included, and to each static a
+  `thread_local!` declares. Each finding is `tianheng.fact/hunyi/static-item` under the new rule key
+  `tianheng.rule/hunyi/static-item`, naming its kind (`static`, `static_mut`, `foreign_static`,
+  `foreign_static_mut`, `thread_local`), declaring module, name and enclosing owner. `thread_local!` is
+  recognized by its name, however it is qualified; a crate renaming it (`use std::thread_local as tls;`) is a
+  constitution error asking for the macro by name. A `thread_local!` body that is not `static` declarations
+  is refused too. Statics produced by other macros are a stated bound, and cfg is observed as written.
+  Calls with process-global effects, such as `std::env::set_var`, are `must_not_call_inline`'s, not this
+  boundary's. `SemanticBoundaries` gains the `static_item` field; it is non-exhaustive, so nothing that
+  compiled stops compiling.
+
 ### Migration
 
 - Repair or baseline a public `safe`- or `unsafe`-qualified foreign item that now reports under a

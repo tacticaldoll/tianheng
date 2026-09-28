@@ -2,9 +2,9 @@ use guibiao::constitution_json;
 use hunyi::{
     ASYNC_EXPOSURE_RULE, AsyncExposureBoundary, DYN_TRAIT_RULE, DynTraitBoundary,
     FORBIDDEN_MARKER_RULE, ForbiddenMarkerBoundary, IMPL_TRAIT_RULE, ImplTraitBoundary,
-    REEXPORT_ONLY_RULE, ReexportOnlyBoundary, SIGNATURE_RULE, ScanDepth, SignatureBoundary,
-    TRAIT_IMPL_RULE, TraitImplBoundary, UNSAFE_CONFINEMENT_RULE, UnsafeBoundary,
-    VisibilityBoundary,
+    REEXPORT_ONLY_RULE, ReexportOnlyBoundary, SIGNATURE_RULE, STATIC_ITEM_RULE, ScanDepth,
+    SignatureBoundary, StaticBoundary, TRAIT_IMPL_RULE, TraitImplBoundary, UNSAFE_CONFINEMENT_RULE,
+    UnsafeBoundary, VisibilityBoundary,
 };
 use louke::{RUNTIME_SEAM_RULE, RuntimeBoundary};
 use serde_json::Value;
@@ -222,6 +222,21 @@ pub(in crate::runner) fn unsafe_boundary_json(boundary: &UnsafeBoundary) -> Valu
     object["allowed_locations"] = serde_json::json!(boundary.allowed_locations());
     object
 }
+/// The JSON projection of one static-item boundary. Its scope is the anchored subtree, always, and
+/// the projection says so rather than leaving a reader to assume the semantic default.
+pub(in crate::runner) fn static_item_boundary_json(boundary: &StaticBoundary) -> Value {
+    subtree_scoped(
+        semantic_module_json(
+            boundary.module(),
+            boundary.crate_package(),
+            STATIC_ITEM_RULE,
+            boundary.severity().as_str(),
+            boundary.reason(),
+            boundary.anchor(),
+        ),
+        ScanDepth::Subtree,
+    )
+}
 fn append_array<T>(document: &mut Value, key: &str, items: &[T], project: impl Fn(&T) -> Value) {
     if !items.is_empty() {
         document[key] = Value::Array(items.iter().map(project).collect());
@@ -290,6 +305,12 @@ pub(in crate::runner) fn list_document(constitution: &Constitution) -> Value {
         "unsafe_confinement_boundaries",
         &semantic.unsafe_confinement,
         unsafe_boundary_json,
+    );
+    append_array(
+        &mut document,
+        "static_item_boundaries",
+        &semantic.static_item,
+        static_item_boundary_json,
     );
     append_array(
         &mut document,

@@ -56,13 +56,14 @@ pub use louke::RuntimeObserver;
 
 pub use hunyi::{
     AsyncExposureBoundary, DynTraitBoundary, ForbiddenMarkerBoundary, ImplTraitBoundary,
-    ReexportOnlyBoundary, SemanticBoundaries, SignatureBoundary, TraitImplBoundary, UnsafeBoundary,
-    VisibilityBoundary, VisibilityCeiling, check as check_semantic,
+    ReexportOnlyBoundary, SemanticBoundaries, SignatureBoundary, StaticBoundary, TraitImplBoundary,
+    UnsafeBoundary, VisibilityBoundary, VisibilityCeiling, check as check_semantic,
 };
 #[doc(hidden)]
 pub use hunyi::{
     check_all, check_async_exposure, check_dyn_trait, check_forbidden_marker, check_impl_trait,
-    check_reexport_only, check_trait_impl_locality, check_unsafe_confinement, check_visibility,
+    check_reexport_only, check_static_item, check_trait_impl_locality, check_unsafe_confinement,
+    check_visibility,
 };
 pub use louke::{OriginEntry, Posture, RuntimeBoundary, Tracked, audit_probe_coverage};
 
@@ -77,9 +78,9 @@ pub use hunyi::{
     DynTraitBoundaryDraft, DynTraitCrateDraft, DynTraitModuleDraft, ForbiddenMarkerBoundaryDraft,
     ForbiddenMarkerCrateDraft, ForbiddenMarkerModuleDraft, ImplTraitBoundaryDraft,
     ImplTraitCrateDraft, ImplTraitModuleDraft, SignatureBoundaryDraft, SignatureCrateDraft,
-    SignatureModuleDraft, TraitImplBoundaryDraft, TraitImplCrateDraft, TraitImplTraitDraft,
-    UnsafeBoundaryDraft, UnsafeCrateDraft, VisibilityBoundaryDraft, VisibilityCrateDraft,
-    VisibilityModuleDraft,
+    SignatureModuleDraft, StaticBoundaryDraft, StaticCrateDraft, StaticModuleDraft,
+    TraitImplBoundaryDraft, TraitImplCrateDraft, TraitImplTraitDraft, UnsafeBoundaryDraft,
+    UnsafeCrateDraft, VisibilityBoundaryDraft, VisibilityCrateDraft, VisibilityModuleDraft,
 };
 #[doc(hidden)]
 pub use louke::{RuntimeBoundaryDraft, RuntimeSeamDraft};
@@ -180,6 +181,12 @@ impl Constitution {
         self
     }
 
+    /// Add a 渾儀 static-item boundary (a module's subtree declares no `static` item or `thread_local!`).
+    pub fn static_boundary(mut self, boundary: StaticBoundary) -> Self {
+        self.semantic.static_item.push(boundary);
+        self
+    }
+
     /// Add a 漏刻 runtime boundary. The CI face audits its probe coverage (via [`run`]); the same
     /// object is what the adopter hands to [`louke::install`] for the prod face.
     pub fn runtime(mut self, boundary: RuntimeBoundary) -> Self {
@@ -245,8 +252,8 @@ pub mod prelude {
         ImplTraitBoundary, ModuleBoundary, ModuleRule, NoExistentialLeak, Observer, Outcome, Owner,
         Polarity, Reached, ReexportOnlyBoundary, Report, Rule, RuleKey, Run, RuntimeBoundary,
         RuntimeObserver, SansIoPure, ScanDepth, SemanticObserver, Severity, SignatureBoundary,
-        SourceKind, StaticObserver, StructuredFactIdentity, Subject, TraitImplBoundary,
-        UnsafeBoundary, Violation, ViolationId, VisibilityBoundary, VisibilityCeiling, check,
-        check_constitution, run,
+        SourceKind, StaticBoundary, StaticObserver, StructuredFactIdentity, Subject,
+        TraitImplBoundary, UnsafeBoundary, Violation, ViolationId, VisibilityBoundary,
+        VisibilityCeiling, check, check_constitution, run,
     };
 }

@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**27 of 117 declared bounds have no pinning test.** That figure is the register's
+**27 of 125 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -746,6 +746,58 @@ fallback used where no manifest exists, which the register spec describes.
 
 - **pinned by**: `an_impl_nested_one_level_further_stays_a_stated_bound`
 - **pinned by**: `a_static_wrapped_impl_stays_a_stated_bound`
+
+## semantic-static-item-boundary
+
+### `semantic-static-item-boundary/same-named-statics-under-one-owner-share-one-identity-a-stated-bound`
+
+> each pair is one finding, because a block, a `const _` and a closure add no name to the owner chain and scan position is not identity; a baseline accepting one also accepts the other
+
+- **pinned by**: `nested_block_statics_share_one_identity`
+- **pinned by**: `anonymous_const_statics_share_one_identity`
+- **pinned by**: `closure_statics_share_one_identity`
+
+### `semantic-static-item-boundary/a-crate-renaming-thread-local-refuses-to-judge-a-stated-bound`
+
+> the system emits a constitution error (exit 2) saying the crate renames `thread_local` and asking for `thread_local!` to be written directly
+
+- **pinned by**: `a_renamed_thread_local_refuses_to_judge`
+
+### `semantic-static-item-boundary/a-local-macro-sharing-the-thread-local-name-over-reacts-a-stated-bound`
+
+> `NOT_REAL` reacts as a `thread_local` finding, because the invocation is recognized by name
+
+- **pinned by**: `a_local_thread_local_macro_over_reacts_is_a_bound`
+
+### `semantic-static-item-boundary/a-foreign-crate-rename-of-thread-local-is-a-documented-bound`
+
+> no violation is reported and the boundary is not refused, because another crate's source is not read
+
+- **pinned by**: `a_foreign_crate_rename_of_thread_local_is_a_documented_bound`
+
+### `semantic-static-item-boundary/a-thread-local-body-that-is-not-static-declarations-refuses-to-judge-a-stated-bound`
+
+> the system emits a constitution error (exit 2) naming the module, never a clean pass
+
+- **pinned by**: `an_unparseable_thread_local_body_refuses_to_judge`
+
+### `semantic-static-item-boundary/a-macro-generated-static-is-a-documented-bound`
+
+> no violation is reported, because macros other than `thread_local!` are not expanded
+
+- **pinned by**: `a_macro_generated_static_is_a_documented_bound`
+
+### `semantic-static-item-boundary/cfg-gated-statics-are-observed-as-written-a-stated-bound`
+
+> both react, because this AST observation does not evaluate cfg predicates
+
+- **pinned by**: `static_cfg_is_observed_as_written`
+
+### `semantic-static-item-boundary/an-interior-mutable-const-is-not-a-static-a-stated-bound`
+
+> no violation is reported
+
+- **pinned by**: `an_interior_mutable_const_is_not_a_static`
 
 ## semantic-trait-impl-exposure
 
