@@ -314,8 +314,7 @@ pub(crate) fn inline_mod_bases(
 /// under a 2MB test-thread stack), so a pathologically nested source file fails loud (a scan
 /// error) rather than crashing the process. Past the cap, this is a stated observation bound,
 /// never a silent truncation — matching every other depth-bound walker in this workspace
-/// (`hunyi::scan::MAX_MODULE_DEPTH`, `guibiao::use_scan::MAX_USE_NEST_DEPTH`,
-/// `guibiao::symbol_scan::MAX_SYMBOL_NEST_DEPTH`).
+/// (`hunyi::scan::MAX_MODULE_DEPTH`, `guibiao::use_tree::MAX_USE_TREE_NESTING`).
 const MAX_SCOPE_NEST_DEPTH: usize = 300;
 
 /// Traverses module declarations in `bytes[start..end]`.

@@ -1,249 +1,312 @@
-//! Lexical extraction of top-level `mod` declarations and their cfg/path attributes.
+//! Extraction of top-level `mod` declarations and their cfg/path attributes, read from a file's [`TokenTree`].
 
-#[cfg(test)]
-use super::super::lexer::clean_with_positions;
-use super::super::lexer::{balanced_group_end, is_ident_byte, transparent_macro_body_at};
-use super::super::path_vocab::{canonical_segment, is_mod_declaration_keyword};
+use super::super::item_head::{
+    GroupKind, attribute_path, cfg_attr_metas, classify_group, in_macro_body, is_outer_attribute,
+    item_at_keyword, macro_group_kind,
+};
+use super::super::path_vocab::canonical_segment;
+use super::super::token_tree::{Delimiter, Kind, Node, TokenTree};
 
-/// One `mod` declared at the top level of a byte range within already-cleaned (comment/string/
-/// macro-body-stripped) text: its canonical name, and — for an inline declaration (`{ … }`) — the byte
-/// range of its body's *content* (excluding the enclosing braces), `None` for a file declaration (`;`), so a
-/// caller can re-scan just that span to find further declarations nested inside it. `direct_path_eq` is the
-/// cleaned-text position of the `=` in an **unconditional** `#[path = "…"]` preceding a FILE declaration —
-/// cleaning has already dropped the quoted value itself, so a caller resolves it by mapping this position back
-/// to the original source (see [`super::super::lexer::clean_with_positions`]) and reading from there.
+/// One `mod` declared at the top level of a token range: its canonical name, and — for an inline declaration
+/// (`{ … }`) — the token indices of its body's braces, `None` for a file declaration (`;`), so a caller can re-scan
+/// just that body to find further declarations nested inside it.
 pub(super) struct DeclaredModule {
     pub(super) name: String,
-    /// The inline body's content span, and `None` for a file declaration — one field, so an inline
-    /// declaration without a body, or a file declaration with one, cannot be built.
+    /// The inline body's `{` and `}`, and `None` for a file declaration — one field, so an inline declaration
+    /// without a body, or a file declaration with one, cannot be built.
     pub(super) body: Option<(usize, usize)>,
-    pub(super) direct_path_eq: Option<usize>,
-    pub(super) conditional_path_eqs: Vec<usize>,
+    /// An **unconditional** `#[path = …]` before the declaration: `Some(Some(value))` where its value is a string
+    /// literal, `Some(None)` where it is written but its value cannot be read, which leaves the declaration no
+    /// backing source rather than the conventional one; `None` where there is none.
+    pub(super) direct_path: Option<Option<String>>,
+    /// Whether a `cfg_attr(…, path = …)` is written before the direct `#[path]`, so the direct one is the first path
+    /// attribute only where that predicate is false and its target may be absent on a build that compiles the
+    /// candidate — which the walk grants only where some candidate's file exists, the test a lone `cfg_attr` path
+    /// already meets, so a declaration no configuration backs still fails loud — measured against rustc 1.96.0, edition 2021, on unix: `#[cfg_attr(unix, path = "b.rs")]
+    /// #[path = "a.rs"] mod m;` builds with only `b.rs` on disk.
+    pub(super) direct_path_is_conditional: bool,
+    /// Every readable `cfg_attr(…, path = "…")` value before the declaration, nested `cfg_attr`s included, in
+    /// textual order.
+    pub(super) conditional_paths: Vec<String>,
     /// Whether this declaration may legitimately have no source file in the current configuration —
     /// the "might legitimately be absent on this build" signal. Only meaningful for a non-inline
     /// (file-form) declaration with no resolvable file, where it decides between a tolerated skip and
     /// a constitution error, for a plain conventional file and for a `#[path]` remap target alike.
     ///
     /// Two sources, treated identically because they express one intent:
-    /// - a BARE `#[cfg(...)]` attribute (never `cfg_attr`) precedes the item — see
-    ///   [`has_bare_cfg_attr_before_item`];
+    /// - a BARE `#[cfg(...)]` attribute (never `cfg_attr`) precedes the item;
     /// - the declaration sits directly inside a transparent control-flow macro arm (`cfg_if!`), whose
     ///   predicate lives in the macro's `if #[cfg(..)]` header rather than on the item. Every arm is
     ///   conditionally compiled by construction, the trailing `else` on its predicate's negation.
+    ///
+    /// A `cfg_attr` counts only where it applies a `cfg`: unlike a bare `#[cfg(pred)]`, which removes the whole item
+    /// when `pred` is false, `#[cfg_attr(pred, …)]` removes nothing of itself, so `#[cfg_attr(unix,
+    /// allow(dead_code))] mod x;` with no backing file is a genuine compile error, E0583 (verified against a real
+    /// `rustc` build), while `#[cfg_attr(all(), cfg(any()))] mod x;` applies a `cfg` that removes it and builds with
+    /// no `x.rs`, measured against rustc 1.96.0, edition 2021.
     ///
     /// Deliberately NOT the same signal as 渾儀's `has_cfg_attr`, which reads only the item's own
     /// attributes: the semantic dimension does not observe arm declarations at all yet, so it has
     /// nothing here to agree or disagree with until it does.
     pub(super) is_cfg_conditional: bool,
+    /// Whether a block declares it, so it names no conventional file — rustc refuses a file-form `mod` in a block
+    /// with no path attribute that applies — and is read from its path attributes alone.
+    pub(super) declared_in_block: bool,
 }
 
-struct MacroScope {
-    open_pos: usize,
-    close_pos: usize,
-    macro_depth: usize,
-    inherited_top_level: bool,
-}
-
-enum ScanPosition {
-    TransparentMacroStart,
-    Source { is_top_level: bool },
-}
-
+/// What the attributes before one `mod` declare about where its source is.
 #[derive(Default)]
-struct TopLevelTracker {
-    macro_scopes: Vec<MacroScope>,
-    file_depth: usize,
+struct PathAttributes {
+    direct: Option<Option<String>>,
+    direct_after_candidate: bool,
+    conditional: Vec<(usize, String)>,
+    bare_cfg: bool,
 }
 
-impl TopLevelTracker {
-    fn advance(&mut self, bytes: &[u8], index: usize) -> ScanPosition {
-        while self
-            .macro_scopes
-            .last()
-            .is_some_and(|active| index >= active.close_pos)
-        {
-            self.macro_scopes.pop();
-        }
-
-        if let Some((open_pos, close_pos)) = transparent_macro_body_at(bytes, index) {
-            let inherited_top_level = self
-                .macro_scopes
-                .last()
-                .map_or(self.file_depth == 0, |parent| {
-                    parent.inherited_top_level && parent.macro_depth == 1
-                });
-            self.macro_scopes.push(MacroScope {
-                open_pos,
-                close_pos,
-                macro_depth: 0,
-                inherited_top_level,
-            });
-            return ScanPosition::TransparentMacroStart;
-        }
-
-        let is_top_level = self
-            .macro_scopes
-            .last()
-            .map_or(self.file_depth == 0, |active| {
-                active.inherited_top_level && active.macro_depth == 1
-            });
-        match bytes[index] {
-            b'{' | b'(' | b'[' => {
-                if let Some(active) = self.macro_scopes.last_mut() {
-                    if index > active.open_pos {
-                        active.macro_depth += 1;
-                    }
-                } else if bytes[index] == b'{' {
-                    self.file_depth += 1;
-                }
-            }
-            b'}' | b')' | b']' => {
-                if let Some(active) = self.macro_scopes.last_mut() {
-                    if index > active.open_pos {
-                        active.macro_depth = active.macro_depth.saturating_sub(1);
-                    }
-                } else if bytes[index] == b'}' {
-                    self.file_depth = self.file_depth.saturating_sub(1);
-                }
-            }
-            _ => {}
-        }
-        ScanPosition::Source { is_top_level }
-    }
-
-    /// Whether a transparent control-flow macro (`cfg_if!`) body is open at the position last passed
-    /// to [`Self::advance`] — which, combined with the `is_top_level` gate that already restricts
-    /// `mod` observation to a declaration directly in an arm brace, is arm membership.
-    ///
-    /// Read rather than re-derived: scanning backward for a `cfg_if!` header would duplicate this
-    /// scope model and have to re-solve arm-versus-item-body depth, the exact problem the model owns.
-    fn in_transparent_macro(&self) -> bool {
-        !self.macro_scopes.is_empty()
-    }
-}
-
-/// The test-only `declared_modules_with_kind` generalized to scan `cleaned[range]` instead of a
-/// whole file, so it can be re-applied to an inline module's own body — the byte span between its
-/// braces — to find the `mod` declarations nested inside it. `path_attr_before_item` scans backward
-/// from a candidate unbounded by `range.start`, which stays correct here: the nearest preceding
-/// `;`/`{`/`}` it finds is either an earlier sibling's terminator within the range or the range's
-/// own enclosing `{`, never a byte outside the declaration it is checking.
-/// The direct/conditional `#[path]` remap pair for the `mod` declaration at `mod_index`, or
-/// `(None, [])` when there is none — the shared shape both the inline (`{`) and file (`;`) forms
-/// below extract identically from [`path_attr_before_item`], so a fix to one cannot silently
-/// diverge from the other.
-fn path_attr_pair(bytes: &[u8], mod_index: usize) -> (Option<usize>, Vec<usize>) {
-    path_attr_before_item(bytes, mod_index).map_or_else(|| (None, Vec::new()), Remap::pair)
-}
-
-/// Scan declared modules in `cleaned[range]`.
+/// Scan the `mod` declarations at the top level of tokens `range` — a whole file, or an inline module's body
+/// between its braces.
 ///
-/// An inline body `{ ... }` is skipped in a single jump; its contents are re-scanned only if the
-/// module turns out to be inline-only. An unconditional `#[path]` on an inline body relocates the
-/// base directory from which its file-form children resolve (`direct_path_eq`).
-/// For file-form declarations `mod name;`, `is_cfg_conditional` is true if a bare `#[cfg]` attribute
-/// precedes the declaration or it is enclosed in a transparent macro arm such as `cfg_if!`.
+/// A group is passed over whole, so a `mod` nested inside another item declares no child of this range; an inline
+/// body's contents are re-scanned by the caller only if the module turns out to be inline-only. A macro's group is
+/// passed over too, except a `cfg_if!`'s, whose arms hold top-level declarations of the range, nested `cfg_if!`s
+/// included. A `mod` is read by the item-header grammar every reader shares. Nothing recurses: arms wait on a
+/// worklist.
 pub(super) fn declared_modules_in(
-    cleaned: &str,
+    tree: &TokenTree,
     range: std::ops::Range<usize>,
 ) -> Vec<DeclaredModule> {
-    let bytes = cleaned.as_bytes();
-    let end = range.end.min(bytes.len());
-    let mut declared = Vec::new();
-    let mut i = range.start.min(end);
-
-    let mut top_level = TopLevelTracker::default();
-
-    while i < end {
-        let is_top_level = match top_level.advance(bytes, i) {
-            ScanPosition::TransparentMacroStart => {
-                i += 1;
+    let mut declared: Vec<(usize, DeclaredModule)> = Vec::new();
+    let mut work: Vec<(usize, usize, bool)> = vec![(range.start, range.end.min(tree.len()), false)];
+    while let Some((from, to, in_arm)) = work.pop() {
+        let mut i = from;
+        while i < to {
+            let node = tree.node_at(i);
+            if let Node::Macro { open, close, .. } = node {
+                if macro_group_kind(tree, open) == Some(GroupKind::CfgIf) {
+                    work.extend(
+                        cfg_if_arms(tree, open, close).map(|(open, close)| (open + 1, close, true)),
+                    );
+                }
+                i = close + 1;
                 continue;
             }
-            ScanPosition::Source { is_top_level } => is_top_level,
-        };
-
-        match bytes[i] {
-            b'{' | b'(' | b'[' | b'}' | b')' | b']' => i += 1,
-            b'm' if is_top_level && is_mod_declaration_keyword(bytes, i) => {
-                let mut j = i + 3;
-                while j < end && bytes[j].is_ascii_whitespace() {
-                    j += 1;
-                }
-                let start = j;
-                while j < end
-                    && !bytes[j].is_ascii_whitespace()
-                    && bytes[j] != b';'
-                    && bytes[j] != b'{'
-                {
-                    j += 1;
-                }
-                let ident = cleaned[start..j].trim();
-                let mut k = j;
-                while k < end && bytes[k].is_ascii_whitespace() {
-                    k += 1;
-                }
-                if !ident.is_empty() {
-                    match bytes.get(k) {
-                        Some(b'{') => {
-                            let (direct_path_eq, conditional_path_eqs) = path_attr_pair(bytes, i);
-                            let close = balanced_group_end(bytes, k).unwrap_or(bytes.len());
-                            declared.push(DeclaredModule {
-                                name: canonical_segment(ident).to_string(),
-                                body: Some((k + 1, close.saturating_sub(1))),
-                                direct_path_eq,
-                                conditional_path_eqs,
-                                is_cfg_conditional: false,
-                            });
-                            i = close;
-                            continue;
-                        }
-                        Some(b';') => {
-                            let is_cfg_conditional = has_bare_cfg_attr_before_item(bytes, i)
-                                || top_level.in_transparent_macro();
-                            let (direct_path_eq, conditional_path_eqs) = path_attr_pair(bytes, i);
-                            declared.push(DeclaredModule {
-                                name: canonical_segment(ident).to_string(),
-                                body: None,
-                                direct_path_eq,
-                                conditional_path_eqs,
-                                is_cfg_conditional,
-                            });
-                        }
-                        _ => {}
-                    }
-                }
-                i += 3;
+            let head = (tree.kind(i) == Kind::Keyword && tree.text(i) == "mod")
+                .then(|| item_at_keyword(tree, i))
+                .flatten();
+            let Some((head, name)) = head.and_then(|head| head.name.map(|name| (head, name)))
+            else {
+                i = node.last() + 1;
+                continue;
+            };
+            let body = head.body.map(|open| (open, tree.partner(open)));
+            if body.is_none() && !tree.is(name + 1, ";") {
+                i = node.last() + 1;
+                continue;
             }
-            _ => i += 1,
+            let attributes = attributes_before(tree, head.start);
+            i = body.map_or(name + 2, |(_, close)| close + 1);
+            declared.push((
+                head.start,
+                DeclaredModule {
+                    name: canonical_segment(tree.text(name)).to_string(),
+                    body,
+                    direct_path: attributes.direct,
+                    direct_path_is_conditional: attributes.direct_after_candidate,
+                    conditional_paths: attributes
+                        .conditional
+                        .into_iter()
+                        .map(|(_, value)| value)
+                        .collect(),
+                    is_cfg_conditional: body.is_none() && (attributes.bare_cfg || in_arm),
+                    declared_in_block: false,
+                },
+            ));
         }
+    }
+    declared.sort_by_key(|(at, _)| *at);
+    declared.into_iter().map(|(_, module)| module).collect()
+}
+
+/// The arms of the `cfg_if!` whose group is `open..=close`: the brace groups directly inside it that the group
+/// classifier reads as arms.
+fn cfg_if_arms<'t>(
+    tree: &'t TokenTree,
+    open: usize,
+    close: usize,
+) -> impl Iterator<Item = (usize, usize)> + 't {
+    let mut k = open + 1;
+    std::iter::from_fn(move || {
+        while k < close {
+            let child = tree.node_at(k);
+            k = child.last() + 1;
+            if let Node::Group { open, close } = child {
+                if classify_group(tree, open, Some(&GroupKind::CfgIf)) == GroupKind::CfgArm {
+                    return Some((open, close));
+                }
+            }
+        }
+        None
+    })
+}
+
+/// Every file-form `mod` a block within tokens `range` declares with a path attribute, direct or `cfg_attr` — `fn f()
+/// { #[path = "x.rs"] mod m; }` and `fn f() { #[cfg_attr(unix, path = "x.rs")] mod m; }`, which rustc compiles on unix,
+/// measured against rustc 1.96.0, edition 2021 — named as the module it is governed
+/// as: `{block}::m`, and `{block N}::m` for the Nth module named `m` a block of the range declares, inline or not, in
+/// source order, so two are two modules. A block names nothing a path outside it can write, so the name is the
+/// block's readable form rather than a path; rustc refuses a file-form `mod` in a block with no path attribute, so
+/// none is read. A `mod` inside a macro's group, or inside an inline module the range holds — whose own scan reads it — is
+/// not this range's, and a `cfg_if!` arm is no block: [`declared_modules_in`] reads its declarations. The walk out from a
+/// `mod` ends at the first module body it meets, which decides it, so a range reads a `mod` its inline modules hold in
+/// time the blocks between the `mod` and that body bound, rather than once per group enclosing it.
+pub(super) fn block_path_modules(
+    tree: &TokenTree,
+    range: std::ops::Range<usize>,
+) -> Vec<DeclaredModule> {
+    let mut seen: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+    let mut declared = Vec::new();
+    let end = range.end.min(tree.len());
+    for i in range.start..end {
+        if tree.kind(i) != Kind::Keyword || tree.text(i) != "mod" {
+            continue;
+        }
+        let mut in_block = false;
+        let mut in_nested_module = false;
+        let mut at = tree.enclosing(i);
+        while let Some(open) = at.filter(|&open| open >= range.start) {
+            let arm = tree
+                .enclosing(open)
+                .is_some_and(|outer| macro_group_kind(tree, outer) == Some(GroupKind::CfgIf));
+            match classify_group(tree, open, None) {
+                GroupKind::ModuleBody(_) => {
+                    in_nested_module = true;
+                    break;
+                }
+                GroupKind::CfgIf => {}
+                _ if arm => {}
+                _ => in_block = true,
+            }
+            at = tree.enclosing(open);
+        }
+        if !in_block || in_nested_module || in_macro_body(tree, i) {
+            continue;
+        }
+        let Some((head, name)) =
+            item_at_keyword(tree, i).and_then(|head| head.name.map(|name| (head, name)))
+        else {
+            continue;
+        };
+        let name = canonical_segment(tree.text(name)).to_string();
+        let count = seen.entry(name.clone()).or_default();
+        *count += 1;
+        if head.body.is_some() || !tree.is(head.name.map_or(i, |n| n + 1), ";") {
+            continue;
+        }
+        let attributes = attributes_before(tree, head.start);
+        if attributes.direct.is_none() && attributes.conditional.is_empty() {
+            continue;
+        }
+        let block = if *count == 1 {
+            "{block}".to_string()
+        } else {
+            format!("{{block {count}}}")
+        };
+        declared.push(DeclaredModule {
+            name: format!("{block}::{name}"),
+            body: None,
+            direct_path: attributes.direct,
+            direct_path_is_conditional: attributes.direct_after_candidate,
+            conditional_paths: attributes
+                .conditional
+                .into_iter()
+                .map(|(_, value)| value)
+                .collect(),
+            is_cfg_conditional: attributes.bare_cfg,
+            declared_in_block: true,
+        });
     }
     declared
 }
 
-/// Names of modules declared at the top level (brace depth 0) of `source`, each paired with
-/// whether it is an **inline** declaration (`mod name { … }`, `true`) or a **file** declaration
-/// (`mod name;`, `false`) — the distinction [`reachable_modules`] needs to tell a real
-/// file-backed module from an inline body whose same-named conventional file is an orphan.
-/// Declared at any visibility (`pub mod`, `pub(crate) mod`, …). Comments, string/char literals,
-/// and macro bodies are stripped first, so a commented-out, quoted, or macro-generated `mod` is
-/// not counted; a `mod` nested inside another item (depth > 0) declares a child module, not a
-/// crate-root one, and is skipped. Names are canonicalized (`r#name` -> `name`). Robust over
-/// malformed input: it never panics (the same tolerance as the `use` scanner). Test-only: the
-/// reachability walk itself calls [`declared_modules_in`] directly (over both whole files and
-/// inline body spans), so production code no longer goes through this whole-file convenience.
+/// The `#[path]`, `cfg_attr(…, path = …)` and bare `#[cfg]` attributes of the item whose header starts at `start`:
+/// the outer attribute nodes standing directly before it. An inner attribute, `#![…]`, belongs to the item it is
+/// written in, so it ends the walk.
+///
+/// The static scanner intentionally does not read attributes in general, but `path` is a stated coverage concern
+/// either way: an unconditional, direct `#[path = "…"]` is followed, and a `cfg_attr`-wrapped one written before it
+/// is a conditional candidate beside it. Every candidate that may be compiled is unioned, because this scanner is
+/// deliberately cfg-blind and the active predicate may not silently remove governed source. An
+/// attribute's name is one segment, so a raw spelling names the built-in: `#[r#path = "…"]` IS the remap,
+/// measured against rustc 1.96.0, edition 2021, which compiles the remapped file for it.
+///
+/// rustc compiles the first path attribute written and reports every later one as unused, so which attributes are
+/// read is decided by position, and only a `cfg_attr` one's predicate is left to the build. The first direct
+/// `#[path]` is the remap; a `cfg_attr` path written before it is a candidate, since where its predicate holds it is
+/// the first; every path written after it, direct or `cfg_attr`, is never compiled and is not read. Measured
+/// against rustc 1.96.0, edition 2021: `#[path = "a.rs"] #[path = "b.rs"] mod m;` and
+/// `#[path = "a.rs"] #[cfg_attr(unix, path = "b.rs")] mod m;` compile `a.rs` with no `b.rs` on disk and warn that
+/// the second attribute is unused, while `#[cfg_attr(unix, path = "b.rs")] #[path = "a.rs"] mod m;` compiles `b.rs`
+/// on unix.
+fn attributes_before(tree: &TokenTree, start: usize) -> PathAttributes {
+    let mut attributes = Vec::new();
+    let mut k = start;
+    while let Some(node @ Node::Attribute { open, close, .. }) = tree.node_before(k) {
+        if !is_outer_attribute(node) {
+            break;
+        }
+        attributes.push((open + 1, close));
+        k = node.first();
+    }
+    let mut found = PathAttributes::default();
+    let mut direct_at = None;
+    let mut metas: Vec<(usize, usize, bool)> = attributes
+        .into_iter()
+        .map(|(start, end)| (start, end, false))
+        .collect();
+    while let Some((start, end, applied)) = metas.pop() {
+        match attribute_path(tree, start, end) {
+            (Some("path"), after) if tree.is(after, "=") && !applied => {
+                if direct_at.is_none() {
+                    direct_at = Some(start);
+                    found.direct = Some(tree.string_value(after + 1));
+                }
+            }
+            (Some("path"), after) if tree.is(after, "=") => {
+                if let Some(value) = tree.string_value(after + 1) {
+                    found.conditional.push((start, value));
+                }
+            }
+            (Some("cfg"), _) => found.bare_cfg = true,
+            (Some("cfg_attr"), after) if tree.kind(after) == Kind::Open(Delimiter::Parenthesis) => {
+                metas.extend(
+                    cfg_attr_metas(tree, after)
+                        .into_iter()
+                        .rev()
+                        .map(|(meta, end)| (meta, end, true)),
+                );
+            }
+            _ => {}
+        }
+    }
+    if let Some(direct_at) = direct_at {
+        found.conditional.retain(|(at, _)| *at < direct_at);
+        found.direct_after_candidate = !found.conditional.is_empty();
+    }
+    found.conditional.sort_by_key(|(at, _)| *at);
+    found
+}
+
+/// The declared module names at the top level of `source`, each paired with whether it is inline.
 #[cfg(test)]
 fn declared_modules_with_kind(source: &str) -> Vec<(String, bool)> {
-    let (cleaned, _positions) = clean_with_positions(source);
-    let len = cleaned.len();
-    declared_modules_in(&cleaned, 0..len)
+    let tree = TokenTree::lex(source, super::super::token_tree::Edition::Rust2018);
+    declared_modules_in(&tree, 0..tree.len())
         .into_iter()
         .map(|declared| (declared.name, declared.body.is_some()))
         .collect()
 }
 
-/// The declared module names only, discarding the inline/file kind — a test-only convenience
-/// wrapping [`declared_modules_with_kind`] (itself test-only; see its doc).
+/// The declared module names only, discarding the inline/file kind.
 #[cfg(test)]
 pub(super) fn declared_modules(source: &str) -> Vec<String> {
     declared_modules_with_kind(source)
@@ -252,370 +315,45 @@ pub(super) fn declared_modules(source: &str) -> Vec<String> {
         .collect()
 }
 
-/// A `#[path]` remap the prefix before a `mod` keyword carries — which, being one, remaps something.
-///
-/// The static scanner intentionally does not read attributes in general, but `path` is a stated coverage
-/// concern either way: an unconditional, direct `#[path = "…"]` is followed, carrying the cleaned-text
-/// position of its `=` so the real value can be read from the untouched original source, and a
-/// `cfg_attr`-wrapped one is a conditional candidate beside it. Every candidate physically written is
-/// unioned, because this scanner is deliberately cfg-blind and neither attribute order nor the active
-/// predicate may silently remove governed source.
-///
-/// **A remap that remaps nothing is unconstructible, and it used to be a runtime check.** The shape was a
-/// three-variant enum whose `Remaps` held an `Option` and a `Vec` — so `direct: None` with an empty
-/// `conditional` was a value the type admitted and only an `if` before the constructor kept out. Its
-/// siblings were `None` and an `Excluded` that no consumer acted on: the sole match folded the two into one
-/// arm, making the variant behaviourally identical to its neighbour while its doc claimed the opposite.
-/// `first` keeps the conditional state non-empty in the type, the way `xuanji::bound::Defence::PinnedBy`
-/// does for the same reason.
-///
-/// Measured by planting the construction the old shape admitted:
-///
-/// ```text
-/// error[E0308]: mismatched types
-///         let _ = Remap::Conditional { first: None, rest: Vec::new() };
-///                                             ^^^^ expected `usize`, found `Option<_>`
-/// ```
-///
-/// There is no negative *run* for this, and the reason is the property: a state the type cannot hold has no
-/// value to assert about. The compiler's refusal is the evidence, and the two rows this change adds to
-/// `both_readers_take_the_attribute_name_from_one_position` are what hold the behaviour that used to reach
-/// the deleted variant.
-///
-/// **What `Excluded` was for is not legal Rust.** It stood for a `path`-named attribute with no followable
-/// value, and its doc said such a module is excluded from conventional file backing. Measured against rustc
-/// 1.96.0, edition 2021, `--crate-type lib`: `#[path] mod m;` and `#[path("m.rs")] mod m;` are both
-/// `error: malformed 'path' attribute input`. A shape no configuration compiles is outside what a cfg-blind
-/// union of compilable candidates governs, so the answer is the same as no remap at all — which is what the
-/// fold already did, and is now what the type says.
-enum Remap {
-    /// An unconditional `#[path = "…"]`, with every cfg-conditional candidate written beside it.
-    Direct { at: usize, conditional: Vec<usize> },
-    /// Only cfg-conditional candidates. `first` is what keeps the state non-empty in the type.
-    Conditional { first: usize, rest: Vec<usize> },
-}
-
-impl Remap {
-    /// The direct/conditional pair a consumer reads, which is the shape both `mod` forms extract.
-    fn pair(self) -> (Option<usize>, Vec<usize>) {
-        match self {
-            Remap::Direct { at, conditional } => (Some(at), conditional),
-            Remap::Conditional { first, mut rest } => {
-                rest.insert(0, first);
-                (None, rest)
-            }
-        }
-    }
-}
-
-fn path_attr_before_item(bytes: &[u8], mod_index: usize) -> Option<Remap> {
-    let start = attribute_prefix_start(bytes, mod_index);
-    let shift = |positions: Vec<usize>| positions.into_iter().map(|rel| start + rel).collect();
-    match attr_prefix_remap(&bytes[start..mod_index])? {
-        Remap::Direct { at, conditional } => Some(Remap::Direct {
-            at: start + at,
-            conditional: shift(conditional),
-        }),
-        Remap::Conditional { first, rest } => Some(Remap::Conditional {
-            first: start + first,
-            rest: shift(rest),
-        }),
-    }
-}
-
-/// Start of the top-level attribute prefix immediately before the item at `item_index`.
-///
-/// A preceding item or block delimiter ends the candidate prefix; punctuation inside literals and
-/// comments has already been stripped by the reachability scan's cleaned source.
-fn attribute_prefix_start(bytes: &[u8], item_index: usize) -> usize {
-    (0..item_index)
-        .rev()
-        .find(|&i| matches!(bytes[i], b';' | b'{' | b'}'))
-        .map_or(0, |i| i + 1)
-}
-
-/// Where the attribute's name begins, given the `#` at `hash` — or `None` where that `#` opens no attribute.
-///
-/// **Two readers ask this, and the position is one fact.** `attr_prefix_remap` looks for `path` here and
-/// `attr_prefix_has_bare_cfg` looks for `cfg`, and what each looks *at* has to be the same byte or the two
-/// disagree about the same source. Written out per site the preamble stood twice, byte-identical for
-/// twenty-three lines and diverging only at the terminal word — which is the shape where one copy gets a
-/// repair and the other keeps the defect. It got one: the raw-identifier skip below was added to both by
-/// hand, and a hand is what would have to add the next one.
-///
-/// **A raw identifier is ONE segment**, at the attribute's own name position as much as inside a
-/// `cfg_attr`'s argument list, where `cfg_attr_group_path_eqs` already consumes the prefix with the segment
-/// it belongs to. `r#` changes a lexical spelling and not the name it spells, so `#[r#path = "…"]` IS the
-/// built-in remap — measured against rustc 1.96.0, edition 2021, `--crate-type lib`, which compiles the
-/// remapped file for it even with the conventional file present. Reading the name as written left this
-/// scanner governing a file the build does not contain.
-///
-/// The `#` is not consumed on a miss: the caller advances by one and reads the next byte itself, so
-/// `##[path = "…"]` reaches the attribute its second `#` opens.
-fn attr_name_start(bytes: &[u8], hash: usize) -> Option<usize> {
-    let mut i = hash + 1;
-    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
-        i += 1;
-    }
-    if bytes.get(i) != Some(&b'[') {
-        return None;
-    }
-    i += 1;
-    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
-        i += 1;
-    }
-    if bytes[i..].starts_with(b"r#") && bytes.get(i + 2).is_some_and(|byte| is_ident_byte(*byte)) {
-        i += 2;
-    }
-    Some(i)
-}
-
-/// Parse direct and conditional `#[path]` remaps in an attribute prefix.
-///
-/// Both matching branches advance the cursor directly. On a non-matching branch, the cursor sits on
-/// the attribute's name or inner `#` (e.g. `#[#[path = "x.rs"]]`), where the loop head's
-/// `bytes[i] != b'#'` check advances to the next attribute. Retains direct path and unions all
-/// cfg-conditional candidates. Bare `#[path]` without `=` contributes no candidate.
-fn attr_prefix_remap(bytes: &[u8]) -> Option<Remap> {
-    let mut i = 0;
-    let mut direct = None;
-    let mut conditional_eqs = Vec::new();
-    while i < bytes.len() {
-        if bytes[i] != b'#' {
-            i += 1;
-            continue;
-        }
-        let Some(name) = attr_name_start(bytes, i) else {
-            i += 1;
-            continue;
-        };
-        i = name;
-        if bytes[i..].starts_with(b"path")
-            && bytes.get(i + 4).is_none_or(|byte| !is_ident_byte(*byte))
-        {
-            let mut j = i + 4;
-            while j < bytes.len() && bytes[j].is_ascii_whitespace() {
-                j += 1;
-            }
-            if bytes.get(j) == Some(&b'=') {
-                direct = Some(j);
-                i = j + 1;
-                continue;
-            }
-            i = j;
-            continue;
-        }
-        if bytes[i..].starts_with(b"cfg_attr")
-            && bytes.get(i + 8).is_none_or(|byte| !is_ident_byte(*byte))
-        {
-            cfg_attr_prefix_collect_path_eqs(&bytes[i + 8..], i + 8, &mut conditional_eqs);
-            i += 8;
-            continue;
-        }
-    }
-    match (direct, conditional_eqs) {
-        (Some(at), conditional) => Some(Remap::Direct { at, conditional }),
-        (None, mut conditional) if !conditional.is_empty() => Some(Remap::Conditional {
-            first: conditional.remove(0),
-            rest: conditional,
-        }),
-        (None, _) => None,
-    }
-}
-
-/// Collect path assignment '=' offsets across nested `cfg_attr` groups, sorting offsets to restore
-/// rustc-facing textual order.
-fn cfg_attr_prefix_collect_path_eqs(bytes: &[u8], base_offset: usize, eqs: &mut Vec<usize>) {
-    let mut pending = vec![(bytes, base_offset)];
-    while let Some((bytes, base_offset)) = pending.pop() {
-        cfg_attr_group_path_eqs(bytes, base_offset, eqs, &mut pending);
-    }
-    eqs.sort_unstable();
-}
-
-/// Collect path assignment '=' offsets in a single `cfg_attr(...)` argument list.
-///
-/// Both `cfg_attr` and `path` must be unqualified segments (`foo::cfg_attr` or `foo::path` are
-/// somebody else's attributes and are ignored). Raw identifiers (`r#cfg_attr`) are treated as a
-/// single segment. Nested groups are pushed onto `pending`.
-fn cfg_attr_group_path_eqs<'a>(
-    bytes: &'a [u8],
-    base_offset: usize,
-    eqs: &mut Vec<usize>,
-    pending: &mut Vec<(&'a [u8], usize)>,
-) {
-    let mut i = 0;
-    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
-        i += 1;
-    }
-    if bytes.get(i) != Some(&b'(') {
-        return;
-    }
-    i += 1;
-    let mut depth = 1usize;
-    let mut past_predicate = false;
-    let mut after_path_sep = false;
-    while i < bytes.len() && depth > 0 {
-        match bytes[i] {
-            b':' if bytes.get(i + 1) == Some(&b':') => {
-                after_path_sep = true;
-                i += 2;
-            }
-            b'"' => {
-                i += 1;
-                while i < bytes.len() && bytes[i] != b'"' {
-                    if bytes[i] == b'\\' {
-                        i += 1;
-                    }
-                    i += 1;
-                }
-                i += 1;
-            }
-            b'(' => {
-                depth += 1;
-                after_path_sep = false;
-                i += 1;
-            }
-            b')' => {
-                depth -= 1;
-                after_path_sep = false;
-                i += 1;
-            }
-            b',' if depth == 1 => {
-                past_predicate = true;
-                after_path_sep = false;
-                i += 1;
-            }
-            byte if depth == 1 && past_predicate && is_ident_byte(byte) => {
-                let mut start = i;
-                if bytes[i] == b'r' && bytes.get(i + 1) == Some(&b'#') {
-                    let after = i + 2;
-                    if after < bytes.len() && is_ident_byte(bytes[after]) {
-                        start = after;
-                    }
-                }
-                i = start;
-                while i < bytes.len() && is_ident_byte(bytes[i]) {
-                    i += 1;
-                }
-                let ident = &bytes[start..i];
-                let qualified = after_path_sep;
-                after_path_sep = false;
-                if ident == b"path" && !qualified {
-                    let mut j = i;
-                    while j < bytes.len() && bytes[j].is_ascii_whitespace() {
-                        j += 1;
-                    }
-                    if bytes.get(j) == Some(&b'=') {
-                        eqs.push(base_offset + j);
-                    }
-                } else if ident == b"cfg_attr" && !qualified {
-                    pending.push((&bytes[i..], base_offset + i));
-                }
-            }
-            _ => {
-                if !bytes[i].is_ascii_whitespace() {
-                    after_path_sep = false;
-                }
-                i += 1;
-            }
-        }
-    }
-}
-
-/// Whether a BARE `#[cfg(...)]` attribute (never `cfg_attr`) is among the attribute prefix
-/// immediately preceding an item — the same "might legitimately be absent on this build" signal
-/// hunyi's `has_cfg_attr` checks via `syn` (`crate::syn_util::has_cfg_attr`), hand-rolled here for
-/// this crate's syn-free scanner. Deliberately narrow: this detects mere PRESENCE of the `cfg`
-/// identifier, never evaluates a predicate — the same syntactic-identifier-only shape already used
-/// above to detect `path`/`cfg_attr`, not a new capability tier or a step toward general attribute
-/// evaluation. `cfg_attr` is deliberately excluded (verified against a real `rustc` build): unlike
-/// a bare `#[cfg(pred)]`, which removes the whole item when `pred` is false, `#[cfg_attr(pred, …)]`
-/// never removes the item — it only conditionally applies its wrapped attribute — so it must never
-/// grant this tolerance (`#[cfg_attr(unix, allow(dead_code))] mod x;` with no backing file is a
-/// genuine compile error, E0583, on every platform).
-fn has_bare_cfg_attr_before_item(bytes: &[u8], mod_index: usize) -> bool {
-    let start = attribute_prefix_start(bytes, mod_index);
-    attr_prefix_has_bare_cfg(&bytes[start..mod_index])
-}
-
-/// Check if attribute prefix contains a bare `#[cfg(...)]` attribute (excluding `cfg_attr`).
-fn attr_prefix_has_bare_cfg(bytes: &[u8]) -> bool {
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] != b'#' {
-            i += 1;
-            continue;
-        }
-        let Some(name) = attr_name_start(bytes, i) else {
-            i += 1;
-            continue;
-        };
-        i = name;
-        if bytes[i..].starts_with(b"cfg")
-            && bytes.get(i + 3).is_none_or(|byte| !is_ident_byte(*byte))
-        {
-            return true;
-        }
-        i += 1;
-    }
-    false
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{
-        attr_name_start, attr_prefix_has_bare_cfg, attr_prefix_remap,
-        cfg_attr_prefix_collect_path_eqs,
-    };
+    use super::super::super::token_tree::Edition;
+    use super::*;
 
-    /// The two readers of an attribute prefix agree about where the name is, because they ask once.
-    ///
-    /// The position is what the two shared before it was extracted: twenty-three byte-identical lines in
-    /// each, diverging only at `path` versus `cfg`. This direction is over the position itself and over both
-    /// verdicts that stand on it, so a change to one reader's approach shows up as a disagreement here
-    /// rather than as a `cfg` scanner that learned a spelling the `path` scanner did not.
+    fn attributes(source: &str) -> PathAttributes {
+        let tree = TokenTree::lex(source, Edition::Rust2018);
+        let at = (0..tree.len())
+            .rev()
+            .find(|&i| tree.is(i, "mod"))
+            .expect("a mod");
+        attributes_before(&tree, at)
+    }
+
+    /// The `path` and the bare `cfg` reader take the attribute's name from one position, so they agree about the
+    /// same source whatever its spacing or raw spelling.
     #[test]
     fn both_readers_take_the_attribute_name_from_one_position() {
-        for (prefix, name_at, remaps, bare_cfg) in [
-            (&b"#[path = \"x.rs\"]"[..], Some(2), true, false),
-            (&b"#[cfg(unix)]"[..], Some(2), false, true),
-            (&b"# [ path = \"x.rs\"]"[..], Some(4), true, false),
-            (&b"# [ cfg(unix)]"[..], Some(4), false, true),
-            (&b"#[r#path = \"x.rs\"]"[..], Some(4), true, false),
-            (&b"#[r#cfg(unix)]"[..], Some(4), false, true),
-            (
-                &b"#[r#cfg_attr(unix, path = \"x.rs\")]"[..],
-                Some(4),
-                true,
-                false,
-            ),
-            (&b"#[path]"[..], Some(2), false, false),
-            (&b"#[path(\"x.rs\")]"[..], Some(2), false, false),
-            (&b"#[r#]"[..], Some(2), false, false),
-            (&b"##[path = \"x.rs\"]"[..], Some(3), true, false),
-            (&b"#[#[path = \"x.rs\"]"[..], Some(2), true, false),
+        for (prefix, remaps, bare_cfg) in [
+            ("#[path = \"x.rs\"]", true, false),
+            ("#[cfg(unix)]", false, true),
+            ("# [ path = \"x.rs\"]", true, false),
+            ("# [ cfg(unix)]", false, true),
+            ("#[r#path = \"x.rs\"]", true, false),
+            ("#[r#cfg(unix)]", false, true),
+            ("#[r#cfg_attr(unix, path = \"x.rs\")]", true, false),
+            ("#[path]", false, false),
+            ("#[path(\"x.rs\")]", false, false),
+            ("##[path = \"x.rs\"]", true, false),
+            ("#![cfg(unix)]", false, false),
+            ("#![path = \"x.rs\"]", false, false),
+            ("mod tests { #![cfg(test)]", false, false),
         ] {
-            let spelling = String::from_utf8_lossy(prefix).into_owned();
-            let hash = prefix
-                .iter()
-                .position(|byte| *byte == b'#')
-                .expect("every row opens with a hash");
-            let start = match attr_name_start(prefix, hash) {
-                Some(start) => Some(start),
-                None => attr_name_start(prefix, hash + 1),
-            };
-            assert_eq!(start, name_at, "the name position in {spelling}");
-
+            let found = attributes(&format!("{prefix} mod m;"));
+            let remapped = found.direct.is_some() || !found.conditional.is_empty();
+            assert_eq!(remapped, remaps, "the path reader's verdict on {prefix}");
             assert_eq!(
-                attr_prefix_remap(prefix).is_some(),
-                remaps,
-                "the path reader's verdict on {spelling}"
-            );
-            assert_eq!(
-                attr_prefix_has_bare_cfg(prefix),
-                bare_cfg,
-                "the cfg reader's verdict on {spelling}"
+                found.bare_cfg, bare_cfg,
+                "the cfg reader's verdict on {prefix}"
             );
         }
     }
@@ -623,7 +361,7 @@ mod tests {
     #[test]
     fn deeply_nested_cfg_attr_paths_use_a_bounded_native_stack() {
         const DEPTH: usize = 4096;
-        let mut nested = String::new();
+        let mut nested = String::from("#[cfg_attr");
         for _ in 0..DEPTH {
             nested.push_str("(predicate, cfg_attr");
         }
@@ -631,79 +369,83 @@ mod tests {
         for _ in 0..=DEPTH {
             nested.push(')');
         }
-
-        let mut eqs = Vec::new();
-        cfg_attr_prefix_collect_path_eqs(nested.as_bytes(), 0, &mut eqs);
-
+        nested.push_str("] mod m;");
+        let found = attributes(&nested);
         assert_eq!(
-            eqs.len(),
+            found.conditional.len(),
             1,
             "the deepest path candidate remains observable"
         );
-        assert_eq!(nested.as_bytes()[eqs[0]], b'=');
+        assert_eq!(found.conditional[0].1, "target.rs");
     }
 
     #[test]
     fn iterative_cfg_attr_collection_preserves_textual_candidate_order() {
-        let nested =
-            b"(a, cfg_attr(b, path = \"first.rs\"), path = \"second.rs\", cfg_attr(c, path = \"third.rs\"))";
-        let mut eqs = Vec::new();
-
-        cfg_attr_prefix_collect_path_eqs(nested, 0, &mut eqs);
-
-        assert_eq!(eqs.len(), 3);
-        assert!(eqs.windows(2).all(|pair| pair[0] < pair[1]), "{eqs:?}");
+        let found = attributes(
+            "#[cfg_attr(a, cfg_attr(b, path = \"first.rs\"), path = \"second.rs\", cfg_attr(c, path = \"third.rs\"))] mod m;",
+        );
+        let values: Vec<&str> = found.conditional.iter().map(|(_, v)| v.as_str()).collect();
+        assert_eq!(values, ["first.rs", "second.rs", "third.rs"]);
     }
 
-    /// The attribute admitting applied metas is the BUILT-IN `cfg_attr`, whose path is exactly one
-    /// segment.
-    ///
-    /// **A qualified look-alike ends in the same word while being somebody else's attribute**, so
-    /// descending into it collects a target no build compiles — a module read that rustc never reads,
-    /// and any violation found there is reported over source the governed tree does not have. `r#`
-    /// changes an identifier's lexical spelling and not its name, so it must not split one segment into
-    /// separate events either.
-    ///
-    /// Negative run, against the reader that matched the bare identifier: both spellings yielded **two**
-    /// positions where one is right.
-    ///
-    /// The control is the other half: an unqualified `cfg_attr`, raw-spelled or not, IS the built-in, so
-    /// this must not cost a genuine nested group its applied metas.
+    /// The attribute admitting applied metas is the BUILT-IN `cfg_attr`, whose path is exactly one segment. A
+    /// qualified look-alike ends in the same word while being somebody else's attribute, so descending into it
+    /// would collect a target no build compiles; an unqualified one, raw-spelled or not, keeps its metas.
     #[test]
     fn a_qualified_look_alike_is_not_the_built_in_cfg_attr() {
-        for (label, span) in [
+        for (label, attr, expected) in [
             (
                 "plain",
-                &b"(any(), foo::cfg_attr(a, path = \"bogus\"), path = \"real.rs\")"[..],
+                "#[cfg_attr(any(), foo::cfg_attr(a, path = \"bogus\"), path = \"real.rs\")]",
+                1,
             ),
             (
                 "raw identifier",
-                &b"(any(), foo::r#cfg_attr(a, path = \"bogus\"), path = \"real.rs\")"[..],
+                "#[cfg_attr(any(), foo::r#cfg_attr(a, path = \"bogus\"), path = \"real.rs\")]",
+                1,
+            ),
+            (
+                "nested plain",
+                "#[cfg_attr(any(), cfg_attr(a, path = \"nested.rs\"))]",
+                1,
+            ),
+            (
+                "nested raw",
+                "#[cfg_attr(any(), r#cfg_attr(a, path = \"nested.rs\"))]",
+                1,
             ),
         ] {
-            let mut eqs = Vec::new();
-            super::cfg_attr_prefix_collect_path_eqs(span, 0, &mut eqs);
+            let found = attributes(&format!("{attr} mod m;"));
             assert_eq!(
-                eqs.len(),
-                1,
-                "{label}: only the applied target is a module path, got {eqs:?}"
+                found.conditional.len(),
+                expected,
+                "{label}: {:?}",
+                found.conditional
+            );
+            assert!(
+                found.conditional.iter().all(|(_, v)| v != "bogus"),
+                "{label}"
             );
         }
+    }
 
-        for (label, span) in [
-            ("plain", &b"(any(), cfg_attr(a, path = \"nested.rs\"))"[..]),
-            (
-                "raw identifier",
-                &b"(any(), r#cfg_attr(a, path = \"nested.rs\"))"[..],
-            ),
-        ] {
-            let mut eqs = Vec::new();
-            super::cfg_attr_prefix_collect_path_eqs(span, 0, &mut eqs);
-            assert_eq!(
-                eqs.len(),
-                1,
-                "{label}: an unqualified nested group keeps its applied metas, got {eqs:?}"
-            );
-        }
+    /// A `#[path]` whose value is no string literal is written but unreadable, which is not the same fact as no
+    /// remap: the declaration then has no backing source.
+    #[test]
+    fn an_unreadable_path_value_is_not_an_absent_path() {
+        assert_eq!(
+            attributes("#[path = concat!(\"a\")] mod m;").direct,
+            Some(None)
+        );
+        assert_eq!(attributes("#[path = \"a\\q\"] mod m;").direct, Some(None));
+        assert_eq!(
+            attributes("#[path = r#\"a.rs\"#] mod m;").direct,
+            Some(Some("a.rs".into()))
+        );
+        assert_eq!(
+            attributes("#[path = \"a\\\n   b.rs\"] mod m;").direct,
+            Some(Some("ab.rs".into()))
+        );
+        assert_eq!(attributes("mod m;").direct, None);
     }
 }

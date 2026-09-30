@@ -58,7 +58,7 @@ struct Boundary {
 /// derived, because a typed list drifts. Here the drift *is* the reaction: this list is the second artifact an
 /// amendment has to produce, so it must be the thing that has to be edited, and a derived one would agree with
 /// the law by construction and observe nothing.
-const DECLARED: [Boundary; 13] = [
+const DECLARED: [Boundary; 14] = [
     Boundary {
         heading: "`xuanji` (crate)",
         reason: "璇璣 is the dimension-agnostic reaction model: its direct normal edges reach only serde_json",
@@ -136,6 +136,14 @@ const DECLARED: [Boundary; 13] = [
         reason: "path canonicalization and cycle/dedup guards in guibiao must resolve through `xingbiao::canonicalize_or_fail` or `try_visit` for unified failure handling",
         fields: &[
             "- **rule**: inline symbol path confined to module (confined_prefix: std::fs; ending_with: canonicalize)",
+            "- **kind**: module · **severity**: enforce · **crate**: guibiao",
+        ],
+    },
+    Boundary {
+        heading: "`guibiao::crate::module_scan::token_tree` (module)",
+        reason: "guibiao's token tree imports no other guibiao module, so lexing a file depends on no reader of its tokens",
+        fields: &[
+            "- **rule**: restrict imports to (only: )",
             "- **kind**: module · **severity**: enforce · **crate**: guibiao",
         ],
     },

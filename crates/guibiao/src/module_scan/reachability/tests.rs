@@ -84,7 +84,8 @@ fn reachable_modules_follows_mod_declarations_not_filenames() {
 
     let files = rust_files(&src).expect("list files");
     let (reachable, _inline_only, _remapped, _remap_shadowed) =
-        reachable_modules(&src, &files, None).expect("walk modules");
+        reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018)
+            .expect("walk modules");
     assert!(reachable.contains("crate"), "{reachable:?}");
     assert!(
         reachable.contains("crate::kernel"),
@@ -124,8 +125,13 @@ fn a_stray_lib_beside_a_custom_root_is_not_a_second_crate_root() {
 
     let files = rust_files(&src).expect("list files");
     let root_relative = std::path::PathBuf::from("core.rs");
-    let (reachable, _inline_only, _remapped, _remap_shadowed) =
-        reachable_modules(&src, &files, Some(&root_relative)).expect("walk modules");
+    let (reachable, _inline_only, _remapped, _remap_shadowed) = reachable_modules(
+        &src,
+        &files,
+        Some(&root_relative),
+        crate::module_scan::Edition::Rust2018,
+    )
+    .expect("walk modules");
     assert!(
         reachable.contains("crate"),
         "the custom root seeds crate: {reachable:?}"
@@ -162,7 +168,8 @@ fn path_remapped_modules_are_followed_to_their_target() {
 
     let files = rust_files(&src).expect("list files");
     let (reachable, inline_only, remapped, remap_shadowed) =
-        reachable_modules(&src, &files, None).expect("walk modules");
+        reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018)
+            .expect("walk modules");
     let governed = governed_files(
         &src,
         &files,
@@ -220,7 +227,8 @@ fn a_plain_child_of_a_path_remapped_module_is_governed_from_the_remaps_own_direc
 
     let files = rust_files(&src).expect("list files");
     let (reachable, inline_only, remapped, remap_shadowed) =
-        reachable_modules(&src, &files, None).expect("walk modules");
+        reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018)
+            .expect("walk modules");
     let governed = governed_files(
         &src,
         &files,
@@ -298,7 +306,8 @@ fn a_deeply_nested_cfg_attr_path_is_followed_without_native_recursion() {
 
     let files = rust_files(&src).expect("list files");
     let (reachable, _inline_only, remapped, _remap_shadowed) =
-        reachable_modules(&src, &files, None).expect("walk deeply nested cfg_attr");
+        reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018)
+            .expect("walk deeply nested cfg_attr");
 
     assert!(reachable.contains("crate::target"), "{reachable:?}");
     assert!(
@@ -328,57 +337,6 @@ fn mixed_direct_and_conditional_path_attrs_keep_the_module_regardless_of_order()
 }
 
 #[test]
-fn mixed_direct_and_conditional_path_attrs_union_both_sources_regardless_of_order() {
-    for (case, attrs) in [
-        (
-            "conditional-first",
-            "#[cfg_attr(unix, path = \"conditional.rs\")]\n#[path = \"direct.rs\"]",
-        ),
-        (
-            "direct-first",
-            "#[path = \"direct.rs\"]\n#[cfg_attr(unix, path = \"conditional.rs\")]",
-        ),
-    ] {
-        let tree = TempSrcTree::new(case);
-        let src = tree.src().to_path_buf();
-        std::fs::write(src.join("lib.rs"), format!("{attrs}\npub mod imp;\n"))
-            .expect("write lib.rs");
-        let direct = src.join("direct.rs");
-        let conditional = src.join("conditional.rs");
-        std::fs::write(&direct, "use crate::from_direct::Thing;\n").expect("write direct.rs");
-        std::fs::write(&conditional, "use crate::from_conditional::Thing;\n")
-            .expect("write conditional.rs");
-
-        let files = rust_files(&src).expect("list files");
-        let (reachable, inline_only, remapped, remap_shadowed) =
-            reachable_modules(&src, &files, None).expect("walk modules");
-        let governed = governed_files(
-            &src,
-            &files,
-            "crate",
-            &reachable,
-            &inline_only,
-            &remapped,
-            &remap_shadowed,
-            None,
-            ScanDepth::Subtree,
-        );
-        assert!(
-            governed
-                .iter()
-                .any(|(file, module)| file == &direct && module == "crate::imp"),
-            "{case}: direct candidate must be governed: {governed:?}"
-        );
-        assert!(
-            governed
-                .iter()
-                .any(|(file, module)| file == &conditional && module == "crate::imp"),
-            "{case}: conditional candidate must be governed: {governed:?}"
-        );
-    }
-}
-
-#[test]
 fn stacked_cfg_attr_path_only_targets_are_governed_without_a_plain_file() {
     // The 0.4.0 audit trigger, reconstructed at the reachability-walk level: a single `pub mod
     // imp;` decorated with TWO STACKED `#[cfg_attr(.., path = ..)]` attributes, one per platform,
@@ -401,7 +359,7 @@ fn stacked_cfg_attr_path_only_targets_are_governed_without_a_plain_file() {
 
     let files = rust_files(&src).expect("list files");
     let (reachable, _inline_only, remapped, _remap_shadowed) =
-        reachable_modules(&src, &files, None)
+        reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018)
             .expect("stacked cfg_attr(path)-only must not hard error");
 
     assert!(reachable.contains("crate::imp"), "{reachable:?}");
@@ -435,7 +393,7 @@ fn single_cfg_attr_path_only_target_is_governed_without_a_plain_file() {
 
     let files = rust_files(&src).expect("list files");
     let (reachable, _inline_only, remapped, _remap_shadowed) =
-        reachable_modules(&src, &files, None)
+        reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018)
             .expect("single cfg_attr(path)-only must not hard error");
 
     assert!(reachable.contains("crate::imp"), "{reachable:?}");
@@ -464,7 +422,7 @@ fn a_cfg_attr_path_target_absent_with_no_plain_file_is_still_a_scan_error() {
     // Deliberately do not create `windows_only.rs`, `imp.rs`, or `imp/mod.rs`.
 
     let files = rust_files(&src).expect("list files");
-    let result = reachable_modules(&src, &files, None);
+    let result = reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018);
     let err = result.expect_err(
         "a cfg_attr(path) target absent with no plain conventional file is still a scan error",
     );
@@ -495,7 +453,7 @@ fn both_conventional_forms_present_stays_an_ambiguity_alongside_a_resolved_cfg_a
         .expect("write imp/mod.rs");
 
     let files = rust_files(&src).expect("list files");
-    let result = reachable_modules(&src, &files, None);
+    let result = reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018);
     let err = result.expect_err("both conventional forms present must still be an ambiguity error");
     assert!(
         err.contains("resolves to both"),
@@ -571,8 +529,8 @@ fn a_path_attr_on_an_inline_module_does_not_drop_it() {
 
 #[test]
 fn a_block_comment_before_a_mod_name_does_not_fuse_it() {
-    // `mod/*c*/foo;` must not strip to `modfoo;` (which drops the
-    // declaration); a block comment leaves a separator.
+    // `mod/*c*/foo;` declares `foo`: a block comment is no token, so `mod` and
+    // `foo` stay two tokens.
     assert_eq!(
         declared_modules("mod/*c*/foo;"),
         vec!["foo".to_string()],
@@ -590,9 +548,15 @@ fn a_custom_crate_root_filename_maps_to_crate() {
     std::fs::write(src.join("core.rs"), "pub mod sub;\n").expect("write core.rs");
     std::fs::write(src.join("sub.rs"), "// sub\n").expect("write sub.rs");
     let files = rust_files(&src).expect("list files");
-    let (with_root, _, _, _) =
-        reachable_modules(&src, &files, Some(std::path::Path::new("core.rs"))).expect("walk");
-    let (without_root, _, _, _) = reachable_modules(&src, &files, None).expect("walk");
+    let (with_root, _, _, _) = reachable_modules(
+        &src,
+        &files,
+        Some(std::path::Path::new("core.rs")),
+        crate::module_scan::Edition::Rust2018,
+    )
+    .expect("walk");
+    let (without_root, _, _, _) =
+        reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018).expect("walk");
     assert!(
         with_root.contains("crate::sub"),
         "with the custom root mapped to crate, its submodule is reachable: {with_root:?}"
@@ -711,7 +675,8 @@ fn an_inline_modules_file_backed_child_is_reachable() {
 
     let files = rust_files(&src).expect("list files");
     let (reachable, inline_only, _remapped, _remap_shadowed) =
-        reachable_modules(&src, &files, None).expect("walk modules");
+        reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018)
+            .expect("walk modules");
 
     assert!(
         inline_only.contains_key("crate::parent"),
@@ -744,7 +709,8 @@ fn an_inline_modules_file_backed_child_is_governed() {
 
     let files = rust_files(&src).expect("list files");
     let (reachable, inline_only, remapped, remap_shadowed) =
-        reachable_modules(&src, &files, None).expect("walk modules");
+        reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018)
+            .expect("walk modules");
     let governed = governed_files(
         &src,
         &files,
@@ -787,7 +753,8 @@ fn a_chain_of_inline_modules_reaches_its_file_backed_leaf() {
 
     let files = rust_files(&src).expect("list files");
     let (reachable, _inline_only, _remapped, _remap_shadowed) =
-        reachable_modules(&src, &files, None).expect("walk modules");
+        reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018)
+            .expect("walk modules");
     assert!(
         reachable.contains("crate::kernel::parent::a::b::c"),
         "a file-backed leaf beneath a chain of inline modules must be reachable: {reachable:?}"
@@ -815,7 +782,8 @@ fn an_inline_modules_mod_rs_style_child_is_reachable() {
 
     let files = rust_files(&src).expect("list files");
     let (reachable, _inline_only, _remapped, _remap_shadowed) =
-        reachable_modules(&src, &files, None).expect("walk modules");
+        reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018)
+            .expect("walk modules");
     assert!(
         reachable.contains("crate::parent::child"),
         "a mod.rs-style child beneath an inline parent must be reachable: {reachable:?}"
@@ -849,7 +817,8 @@ fn an_inline_only_grandparents_conventional_orphan_stays_excluded() {
 
     let files = rust_files(&src).expect("list files");
     let (reachable, inline_only, _remapped, _remap_shadowed) =
-        reachable_modules(&src, &files, None).expect("walk modules");
+        reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018)
+            .expect("walk modules");
     assert!(
         inline_only.contains_key("crate::parent"),
         "parent is declared inline-only: {inline_only:?}"
@@ -885,7 +854,8 @@ fn a_path_remapped_child_nested_in_an_inline_parent_is_followed() {
 
     let files = rust_files(&src).expect("list files");
     let (reachable, inline_only, remapped, remap_shadowed) =
-        reachable_modules(&src, &files, None).expect("walk modules");
+        reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018)
+            .expect("walk modules");
     let governed = governed_files(
         &src,
         &files,
@@ -938,7 +908,8 @@ fn a_path_remap_value_with_a_backslash_newline_continuation_is_followed() {
 
     let files = rust_files(&src).expect("list files");
     let (reachable, inline_only, remapped, remap_shadowed) =
-        reachable_modules(&src, &files, None).expect("walk modules");
+        reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018)
+            .expect("walk modules");
     let governed = governed_files(
         &src,
         &files,
@@ -981,7 +952,7 @@ fn a_path_remap_to_a_missing_target_is_a_scan_error() {
     .expect("write lib.rs");
 
     let files = rust_files(&src).expect("list files");
-    let result = reachable_modules(&src, &files, None);
+    let result = reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018);
     assert!(
         result.is_err(),
         "a #[path] target that does not exist is a scan error, not a silent skip: {result:?}"
@@ -1008,7 +979,7 @@ fn a_path_remap_cycle_is_a_scan_error_not_a_hang() {
     .expect("write lib.rs");
 
     let files = rust_files(&src).expect("list files");
-    let result = reachable_modules(&src, &files, None);
+    let result = reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018);
     // Asserting on the specific message (not just `is_err()`) pins that this is genuinely the
     // ancestor-cycle guard firing, not an unrelated error (e.g. an OS path-length limit from
     // an unnormalized `..` accumulating across repeated hops) that would happen to also return
@@ -1040,7 +1011,7 @@ fn two_declarations_sharing_one_path_remap_target_is_not_a_cycle() {
 
     let files = rust_files(&src).expect("list files");
     let (reachable, _inline_only, remapped, _remap_shadowed) =
-        reachable_modules(&src, &files, None)
+        reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018)
             .expect("two modules sharing one #[path] target is not a cycle (rustc compiles it)");
     assert!(reachable.contains("crate::a"), "{reachable:?}");
     assert!(reachable.contains("crate::b"), "{reachable:?}");
@@ -1071,7 +1042,8 @@ fn cfg_gated_sibling_path_declarations_are_followed_cfg_blind_both() {
 
     let files = rust_files(&src).expect("list files");
     let (reachable, _inline_only, remapped, _remap_shadowed) =
-        reachable_modules(&src, &files, None).expect("both cfg-gated targets are followed");
+        reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018)
+            .expect("both cfg-gated targets are followed");
     assert!(reachable.contains("crate::imp"), "{reachable:?}");
     let mut targets: Vec<&PathBuf> = remapped
         .iter()
@@ -1117,7 +1089,7 @@ fn a_nested_path_crossing_into_a_cfg_siblings_own_target_is_not_a_cycle() {
 
     let files = rust_files(&src).expect("list files");
     let (reachable, _inline_only, remapped, _remap_shadowed) =
-        reachable_modules(&src, &files, None).expect(
+        reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018).expect(
             "a nested #[path] crossing into a mutually-exclusive cfg sibling's own target must \
          not be misreported as a cycle",
         );
@@ -1168,7 +1140,10 @@ fn a_nested_path_inside_an_inline_cfg_siblings_plain_child_is_not_a_cycle() {
 
     let files = rust_files(&src).expect("list files");
     let (reachable, _inline_only, remapped, _remap_shadowed) = reachable_modules(
-        &src, &files, None,
+        &src,
+        &files,
+        None,
+        crate::module_scan::Edition::Rust2018,
     )
     .expect(
         "a plain child's own nested #[path] crossing into a cfg sibling's target must not be a cycle",
@@ -1214,7 +1189,8 @@ fn a_grandchild_of_a_probed_plain_child_is_governed() {
 
     let files = rust_files(&src).expect("list files");
     let (reachable, inline_only, remapped, remap_shadowed) =
-        reachable_modules(&src, &files, None).expect("walk modules");
+        reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018)
+            .expect("walk modules");
     let governed = governed_files(
         &src,
         &files,
@@ -1273,7 +1249,8 @@ fn a_stray_file_at_a_remapped_modules_naive_structural_path_is_not_phantom_gover
 
     let files = rust_files(&src).expect("list files");
     let (reachable, inline_only, remapped, remap_shadowed) =
-        reachable_modules(&src, &files, None).expect("walk modules");
+        reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018)
+            .expect("walk modules");
     let governed = governed_files(
         &src,
         &files,
@@ -1325,7 +1302,8 @@ fn a_plain_file_sibling_of_a_path_remap_is_still_governed() {
 
     let files = rust_files(&src).expect("list files");
     let (reachable, inline_only, remapped, remap_shadowed) =
-        reachable_modules(&src, &files, None).expect("walk modules");
+        reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018)
+            .expect("walk modules");
     let governed = governed_files(
         &src,
         &files,
@@ -1376,7 +1354,8 @@ fn an_inline_sibling_of_a_path_remap_is_still_governed() {
 
     let files = rust_files(&src).expect("list files");
     let (reachable, inline_only, remapped, remap_shadowed) =
-        reachable_modules(&src, &files, None).expect("walk modules");
+        reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018)
+            .expect("walk modules");
     let governed = governed_files(
         &src,
         &files,
@@ -1436,7 +1415,8 @@ fn an_inline_sibling_of_a_plain_file_is_still_governed() {
 
     let files = rust_files(&src).expect("list files");
     let (reachable, inline_only, _remapped, _remap_shadowed) =
-        reachable_modules(&src, &files, None).expect("walk modules");
+        reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018)
+            .expect("walk modules");
     assert!(
         !inline_only.contains_key("crate::x"),
         "a plain file is declared, so crate::x is not inline-only: {inline_only:?}"
@@ -1468,7 +1448,8 @@ fn governed_files_does_not_duplicate_a_plain_files_own_path_remap_target() {
 
     let files = rust_files(&src).expect("list files");
     let (reachable, inline_only, remapped, remap_shadowed) =
-        reachable_modules(&src, &files, None).expect("walk modules");
+        reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018)
+            .expect("walk modules");
     let governed = governed_files(
         &src,
         &files,
@@ -1489,5 +1470,351 @@ fn governed_files_does_not_duplicate_a_plain_files_own_path_remap_target() {
         1,
         "the plain sibling and its own #[path] target are the same file — governed once, \
          not twice: {governed:?}"
+    );
+}
+
+/// An inner attribute belongs to the item it is written in, not to the `mod` after it: `#![cfg(unix)] mod c;` with no
+/// `c.rs` is `error[E0583]` whatever the platform, so the declaration is no more tolerated in its absence than a
+/// plain `mod c;` is; `#![path = "x.rs"] mod c;` beside an existing `x.rs` does not remap `c` to it; and
+/// `mod tests { #![cfg(test)] mod c; }` does not make `c` conditional. Each is a missing-file error naming `c`.
+#[test]
+fn an_inner_attribute_is_no_attribute_of_the_mod_after_it() {
+    let mut mismatches = Vec::new();
+    for (lib, module, expected) in [
+        ("#![cfg(unix)]\nmod c;\n", "crate::c", "src/c.rs"),
+        ("#![path = \"x.rs\"]\nmod c;\n", "crate::c", "src/c.rs"),
+        (
+            "mod tests { #![cfg(test)] mod c; }\n",
+            "crate::tests::c",
+            "src/tests/c.rs",
+        ),
+    ] {
+        let tree = TempSrcTree::new("inner-attribute");
+        let src = tree.src().to_path_buf();
+        std::fs::write(src.join("lib.rs"), lib).expect("write lib.rs");
+        std::fs::write(src.join("x.rs"), "\n").expect("write x.rs");
+        let files = rust_files(&src).expect("list files");
+        let result = reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018);
+        let err = result.err().unwrap_or_default();
+        let located = format!(
+            "module '{module}' is declared (`mod c;`) but its source file could not be located"
+        );
+        if !(err.contains(&located) && err.contains(expected)) {
+            mismatches.push(format!("{lib:?}: {err}"));
+        }
+    }
+    assert!(
+        mismatches.is_empty(),
+        "a missing file for a `mod` after an inner attribute is a scan error naming it:\n{}",
+        mismatches.join("\n")
+    );
+}
+
+/// Which path attributes of a `mod` are read is decided by their position, as rustc decides it: rustc compiles the
+/// first path attribute written and reports every later one as unused. So the first direct `#[path]` is the remap,
+/// a `cfg_attr` path written before it is a candidate — the first attribute wherever its predicate holds — and
+/// every path written after it, direct or `cfg_attr`, is never compiled and is not read. Each row was compiled by
+/// rustc 1.96.0, edition 2021, on unix: the direct-first rows build with the later file absent and warn that the
+/// later attribute is unused, and a `cfg_attr`-first row builds its `cfg_attr` target. A candidate that exists as a
+/// directory without the child an inline body declares is the missing-file error, since the configuration that
+/// selects it does not build.
+#[test]
+fn a_path_attribute_is_read_by_its_position() {
+    const DIRECT_THEN_DIRECT: &str = "#[path = \"a.rs\"]\n#[path = \"b.rs\"]";
+    const DIRECT_THEN_CFG: &str = "#[path = \"a.rs\"]\n#[cfg_attr(unix, path = \"b.rs\")]";
+    const CFG_THEN_DIRECT: &str = "#[cfg_attr(unix, path = \"b.rs\")]\n#[path = \"a.rs\"]";
+    const INLINE_DIRECT_THEN_CFG: &str = "#[path = \"d\"]\n#[cfg_attr(unix, path = \"c\")]";
+    const INLINE_DIRECT_THEN_DIRECT: &str = "#[path = \"d\"]\n#[path = \"c\"]";
+    const INLINE_CFG_THEN_DIRECT: &str = "#[cfg_attr(unix, path = \"c\")]\n#[path = \"d\"]";
+    // (row, attributes, inline, whether the later file exists, the files governed as the module, or the file a
+    // missing-file error names)
+    type Row<'a> = (&'a str, &'a str, bool, bool, Result<&'a [&'a str], &'a str>);
+    let rows: [Row; 11] = [
+        ("dd-both", DIRECT_THEN_DIRECT, false, true, Ok(&["a.rs"])),
+        (
+            "dd-first-only",
+            DIRECT_THEN_DIRECT,
+            false,
+            false,
+            Ok(&["a.rs"]),
+        ),
+        ("dc-both", DIRECT_THEN_CFG, false, true, Ok(&["a.rs"])),
+        (
+            "dc-first-only",
+            DIRECT_THEN_CFG,
+            false,
+            false,
+            Ok(&["a.rs"]),
+        ),
+        (
+            "cd-both",
+            CFG_THEN_DIRECT,
+            false,
+            true,
+            Ok(&["a.rs", "b.rs"]),
+        ),
+        (
+            "cd-direct-only",
+            CFG_THEN_DIRECT,
+            false,
+            false,
+            Ok(&["a.rs"]),
+        ),
+        (
+            "inline-dc-both",
+            INLINE_DIRECT_THEN_CFG,
+            true,
+            true,
+            Ok(&["d/k.rs"]),
+        ),
+        (
+            "inline-dc-first-only",
+            INLINE_DIRECT_THEN_CFG,
+            true,
+            false,
+            Ok(&["d/k.rs"]),
+        ),
+        (
+            "inline-dd-first-only",
+            INLINE_DIRECT_THEN_DIRECT,
+            true,
+            false,
+            Ok(&["d/k.rs"]),
+        ),
+        (
+            "inline-cd-both",
+            INLINE_CFG_THEN_DIRECT,
+            true,
+            true,
+            Ok(&["c/k.rs", "d/k.rs"]),
+        ),
+        (
+            "inline-cd-direct-only",
+            INLINE_CFG_THEN_DIRECT,
+            true,
+            false,
+            Err("c/k.rs"),
+        ),
+    ];
+    let mut mismatches = Vec::new();
+    for (row, attrs, inline, later, expected) in rows {
+        let tree = TempSrcTree::new(row);
+        let src = tree.src().to_path_buf();
+        let (module, first, second) = if inline {
+            std::fs::create_dir_all(src.join("c")).expect("create c");
+            std::fs::create_dir_all(src.join("d")).expect("create d");
+            ("crate::m::k", "d/k.rs", "c/k.rs")
+        } else {
+            ("crate::m", "a.rs", "b.rs")
+        };
+        let body = if inline {
+            "mod m { pub mod k; }"
+        } else {
+            "mod m;"
+        };
+        std::fs::write(src.join("lib.rs"), format!("{attrs}\n{body}\n")).expect("write lib.rs");
+        std::fs::write(src.join(first), "\n").expect("write the first path's file");
+        if later {
+            std::fs::write(src.join(second), "\n").expect("write the later path's file");
+        }
+        let files = rust_files(&src).expect("list files");
+        let walked = reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018);
+        let answer: Result<Vec<String>, String> =
+            walked.map(|(reachable, inline_only, remapped, remap_shadowed)| {
+                let mut governed: Vec<String> = governed_files(
+                    &src,
+                    &files,
+                    "crate",
+                    &reachable,
+                    &inline_only,
+                    &remapped,
+                    &remap_shadowed,
+                    None,
+                    ScanDepth::Subtree,
+                )
+                .into_iter()
+                .filter(|(_, m)| m == module)
+                .map(|(file, _)| {
+                    file.strip_prefix(&src)
+                        .expect("a governed file lies under src")
+                        .to_string_lossy()
+                        .replace('\\', "/")
+                })
+                .collect();
+                governed.sort();
+                governed
+            });
+        let matches = match (&answer, expected) {
+            (Ok(governed), Ok(files)) => governed == files,
+            (Err(err), Err(file)) => err.contains(file) && err.contains("could not be located"),
+            _ => false,
+        };
+        if !matches {
+            mismatches.push(format!("{row}: {answer:?}"));
+        }
+    }
+    assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+}
+
+/// Two shapes whose declared file may be absent on a build rustc accepts, each measured against rustc 1.96.0, edition
+/// 2021, on unix. A direct `#[path]` written after a `cfg_attr` path is the first path attribute only where that
+/// predicate is false, so `#[cfg_attr(unix, path = "b.rs")] #[path = "a.rs"] mod m;` builds with only `b.rs`, which is
+/// governed, and the absent `a.rs` is no scan error. A `cfg_attr` that applies a `cfg` can remove the item, so
+/// `#[cfg_attr(all(), cfg(any()))] mod m;` builds with no `m.rs`, and the declaration is conditional.
+#[test]
+fn a_declaration_a_predicate_may_remove_or_redirect_tolerates_its_absent_file() {
+    let mut mismatches = Vec::new();
+    for (name, lib, file, governed) in [
+        (
+            "direct-after-candidate",
+            "#[cfg_attr(unix, path = \"b.rs\")]\n#[path = \"a.rs\"]\nmod m;\n",
+            Some("b.rs"),
+            Some("b.rs"),
+        ),
+        (
+            "cfg-inside-cfg-attr",
+            "#[cfg_attr(all(), cfg(any()))]\nmod m;\n",
+            None,
+            None,
+        ),
+    ] {
+        let tree = TempSrcTree::new(name);
+        let src = tree.src().to_path_buf();
+        std::fs::write(src.join("lib.rs"), lib).expect("write lib.rs");
+        if let Some(file) = file {
+            std::fs::write(src.join(file), "\n").expect("write the candidate");
+        }
+        let files = rust_files(&src).expect("list files");
+        match reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018) {
+            Ok((reachable, inline_only, remapped, remap_shadowed)) => {
+                let found: Vec<String> = governed_files(
+                    &src,
+                    &files,
+                    "crate",
+                    &reachable,
+                    &inline_only,
+                    &remapped,
+                    &remap_shadowed,
+                    None,
+                    ScanDepth::Subtree,
+                )
+                .into_iter()
+                .filter(|(_, module)| module == "crate::m")
+                .map(|(file, _)| file.file_name().unwrap().to_string_lossy().into_owned())
+                .collect();
+                if found.first().map(String::as_str) != governed {
+                    mismatches.push(format!("{name}: governed {found:?}"));
+                }
+            }
+            Err(err) => mismatches.push(format!("{name}: {err}")),
+        }
+    }
+    assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+}
+
+/// Two bodies each declaring `#[path] mod m;` govern two files as two modules, `crate::{block}::m` and
+/// `crate::{block 2}::m`, numbered in source order among the modules named `m` the file's blocks declare.
+#[test]
+fn block_declared_path_modules_are_numbered_apart() {
+    let tree = TempSrcTree::new("block-path-mods");
+    let src = tree.src().to_path_buf();
+    std::fs::write(
+        src.join("lib.rs"),
+        "pub fn f() { #[path = \"x.rs\"] mod m; }\npub fn g() { #[path = \"y.rs\"] mod m; }\n",
+    )
+    .expect("write lib.rs");
+    std::fs::write(src.join("x.rs"), "\n").expect("write x.rs");
+    std::fs::write(src.join("y.rs"), "\n").expect("write y.rs");
+    let files = rust_files(&src).expect("list files");
+    let (reachable, inline_only, remapped, remap_shadowed) =
+        reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018)
+            .expect("walk modules");
+    let mut governed: Vec<(String, String)> = governed_files(
+        &src,
+        &files,
+        "crate",
+        &reachable,
+        &inline_only,
+        &remapped,
+        &remap_shadowed,
+        None,
+        ScanDepth::Subtree,
+    )
+    .into_iter()
+    .map(|(file, module)| {
+        (
+            file.file_name().unwrap().to_string_lossy().into_owned(),
+            module,
+        )
+    })
+    .collect();
+    governed.sort();
+    assert_eq!(
+        governed,
+        [
+            ("lib.rs".to_string(), "crate".to_string()),
+            ("x.rs".to_string(), "crate::{block}::m".to_string()),
+            ("y.rs".to_string(), "crate::{block 2}::m".to_string()),
+        ]
+    );
+}
+
+/// A `#[path]` in a file reached through a symlink resolves from the directory of the path the file is opened by, as
+/// rustc resolves it: with `src/a.rs -> ../elsewhere/a.rs` holding `#[path = "x.rs"] pub mod k;`, rustc 1.96.0 reads
+/// `src/x.rs`, and refuses the crate when `x.rs` lies beside the symlink's target instead. So `src/x.rs` is governed
+/// as `crate::a::k`.
+#[cfg(unix)]
+#[test]
+fn a_path_in_a_symlinked_file_resolves_from_the_symlinks_directory() {
+    let tree = TempSrcTree::new("symlink-path-base");
+    let src = tree.src().to_path_buf();
+    let elsewhere = src.parent().expect("src has a parent").join("elsewhere");
+    std::fs::create_dir_all(&elsewhere).expect("create elsewhere");
+    std::fs::write(src.join("lib.rs"), "pub mod a;\n").expect("write lib.rs");
+    std::fs::write(elsewhere.join("a.rs"), "#[path = \"x.rs\"]\npub mod k;\n").expect("write a.rs");
+    std::os::unix::fs::symlink("../elsewhere/a.rs", src.join("a.rs")).expect("create the symlink");
+    std::fs::write(src.join("x.rs"), "\n").expect("write x.rs");
+    let files = rust_files(&src).expect("list files");
+    let (reachable, inline_only, remapped, remap_shadowed) =
+        reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018)
+            .expect("walk modules");
+    let governed = governed_files(
+        &src,
+        &files,
+        "crate",
+        &reachable,
+        &inline_only,
+        &remapped,
+        &remap_shadowed,
+        None,
+        ScanDepth::Subtree,
+    );
+    assert!(
+        governed
+            .iter()
+            .any(|(file, module)| file == &src.join("x.rs") && module == "crate::a::k"),
+        "{governed:?}"
+    );
+}
+
+/// A direct `#[path]` after a `cfg_attr` candidate is tolerated absent only where a candidate's file exists: with
+/// neither `a.rs` nor `b.rs`, `#[cfg_attr(unix, path = "b.rs")] #[path = "a.rs"] mod m;` builds on no configuration —
+/// rustc 1.96.0 refuses it on unix for the missing `b.rs` — and is the scan error naming `a.rs`.
+#[test]
+fn a_direct_path_after_a_candidate_no_file_backs_is_a_scan_error() {
+    let tree = TempSrcTree::new("direct-after-absent-candidate");
+    let src = tree.src().to_path_buf();
+    std::fs::write(
+        src.join("lib.rs"),
+        "#[cfg_attr(unix, path = \"b.rs\")]\n#[path = \"a.rs\"]\nmod m;\n",
+    )
+    .expect("write lib.rs");
+    let files = rust_files(&src).expect("list files");
+    let err = reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2018)
+        .err()
+        .unwrap_or_default();
+    assert!(
+        err.contains("a.rs") && err.contains("does not exist"),
+        "{err}"
     );
 }

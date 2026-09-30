@@ -347,7 +347,7 @@ undeclared-seam probe there is caught. A declaration whose preamble merely
 NOT be read as a relocation and SHALL resolve conventionally, so no reachable module is dropped by a
 false substring match (which would silently drop every probe beneath it — a coverage false negative,
 the worst outcome under FN-first). A `cfg_attr`-wrapped `#[path]` is cfg-conditional on which file a
-given build compiles, but `cfg_attr` never removes the `mod` item the way a bare `#[cfg]` does — so
+given build compiles, but a `cfg_attr` applying a `path` never removes the `mod` item the way a bare `#[cfg]` does — so
 its own target SHALL be followed too, resolved the identical way an unconditional `#[path]` is (from
 the containing file's own directory): EVERY such target that exists on disk SHALL be read, unioned
 with the conventional file if it too exists — cfg-blind observation cannot know which one a given

@@ -651,7 +651,7 @@ pub(crate) fn preceding_ident_is(b: &[u8], end: usize, target: &[u8]) -> bool {
 /// `runtime-origin-assertion`'s "CI face — every declared seam is probed" requirement for why
 /// scanning into its arms (rather than skipping them as macro-generated) closes a coverage false
 /// negative, and why the gate is on the macro **name** rather than any body-wrapping macro. Matches
-/// 圭表's `is_transparent_macro_name` and 渾儀's own test — the same rule in three hand-written
+/// 圭表's `item_head::macro_group_kind` and 渾儀's own test — the same rule in three hand-written
 /// copies, never a shared scanner (三儀 ⊥ 三儀), with `cfg_if_transparency_conformance.rs` as the
 /// drift reaction.
 ///

@@ -1,61 +1,52 @@
 //! The source scanner: the functional core's observation source for module boundaries.
 //! Given a crate's `src/`, it lists `.rs` files ([`fs_walk`]), walks the `mod`-declared
-//! module graph reachable from the crate root ([`reachability`]), and extracts the
-//! `crate::…` module paths a file imports via `use` ([`use_scan`]) — comments, string
-//! literals, and macro bodies stripped ([`lexer`]), so only real, file-based, reachable
-//! imports are observed (PROJECT.md). The shared path vocabulary (raw-identifier
-//! canonicalization, `::`-containment, and the `mod`-keyword test) lives in [`path_vocab`],
-//! the small foundation the `use`-scan and the module walk both stand on so neither depends
-//! laterally on the other. Pure string, byte, and path processing: it depends on no model
-//! type, only `std`.
+//! module graph reachable from the crate root ([`reachability`]),
+//! extracts the `crate::…` module paths a file imports via `use` ([`use_scan`]), and judges inline
+//! symbol paths ([`symbol_scan`]).
+//!
+//! The import scan and the inline scan read a file through modules in one order, each importing only modules before
+//! it: the [`token_tree`], the one reader of a file's bytes; the shared path vocabulary ([`path_vocab`]:
+//! raw-identifier canonicalization, `::`-containment, `self`/`super` folding); the item-header grammar
+//! ([`item_head`]); the `use` trees ([`use_tree`]) and path [`occurrence`]s read over it; the [`scope_tree`]; the one
+//! [`resolve`]r; and the [`glob_hazard`].
+//! [`fs_walk`], [`reachability`] and [`symbol_scan`] read the file system; every other module is pure string,
+//! token, and path processing. It depends on no model type but the finding the inline scan
+//! reports.
 
 mod fs_walk;
-mod lexer;
+mod glob_hazard;
+mod item_head;
+mod occurrence;
 mod path_vocab;
 mod reachability;
+mod resolve;
+mod scope_tree;
 mod symbol_scan;
+mod token_tree;
 mod use_scan;
+mod use_tree;
 
 pub(crate) use fs_walk::rust_files;
-pub(crate) use lexer::declaration_text;
 pub(crate) use path_vocab::{
-    canonical_module_path, canonical_module_spelling, canonical_symbol_path_spelling,
-    package_name_to_import_ident, path_within,
+    PrefixRoot, SymbolPrefix, canonical_module_path, canonical_module_spelling,
+    canonical_symbol_path_spelling, package_name_to_import_ident, path_within,
 };
 pub(crate) use reachability::{governed_files, names_crate_by_path_alone, reachable_modules};
-pub(crate) use symbol_scan::{
-    InlineFinding, inline_symbol_findings, local_item_definitions, value_namespace_item_names,
-};
-pub(crate) use use_scan::{ImportedPath, external_imports_with_importers, imports_with_importers};
+pub(crate) use symbol_scan::{InlineFinding, UnitScan, value_namespace_item_names};
+pub(crate) use token_tree::Edition;
+pub(crate) use use_scan::ImportedPath;
 
-/// Cross-cutting tests assert invariants that span the dimensions the scanner is split into:
-/// the `use`-scan ([`use_scan`]) and the declaration walk ([`reachability`]) must share exactly
-/// one lexical-hygiene pass ([`lexer`]) and one canonicalization ([`path_vocab`]), so both agree on
-/// what a macro body, a raw identifier, or a Unicode identifier is.
+/// Cross-cutting tests assert invariants that span the readers the scanner is split into: the
+/// `use`-scan ([`use_scan`]) and the declaration walk ([`reachability`]) read through one
+/// [`token_tree`] and one canonicalization ([`path_vocab`]), and these hold them to one answer on what
+/// a macro body, a raw identifier, or a Unicode identifier is.
 #[cfg(test)]
 mod tests {
-    use super::lexer::{keyword_starts_at, strip_macro_bodies};
     use super::path_vocab::canonical_segment;
     use super::reachability::declared_modules;
-    use super::{ImportedPath, canonical_module_path, imports_with_importers};
-
-    /// Import PATHS only, derived from [`imports_with_importers`] — the paths-only accessor these
-    /// assertions were written against lost its last production caller when the outbound rules began
-    /// carrying their importing module in identity. Their subject (path normalization) is unchanged.
-    fn imported_module_paths(
-        source: &str,
-        current_module: &str,
-        root_modules: &[String],
-    ) -> Result<Vec<ImportedPath>, String> {
-        let mut paths: Vec<ImportedPath> =
-            imports_with_importers(source, current_module, root_modules)?
-                .into_iter()
-                .map(|(_importer, import)| import)
-                .collect();
-        paths.sort();
-        paths.dedup();
-        Ok(paths)
-    }
+    use super::token_tree::{Edition, Kind, TokenTree};
+    use super::use_scan::{imported_module_paths, imports_with_importers};
+    use super::{ImportedPath, canonical_module_path};
 
     /// Truncated or malformed inputs must never panic.
     #[test]
@@ -73,14 +64,13 @@ mod tests {
             "}",
             "",
         ] {
-            let _ = imported_module_paths(src, "crate::kernel", &[]).unwrap();
+            let _ = imported_module_paths(src, "crate::kernel").unwrap();
             let _ = declared_modules(src);
-            let _ = strip_macro_bodies(src);
         }
     }
 
-    /// A `macro_rules!` with a raw-identifier name (`r#try`) must have its body stripped
-    /// so that `use` or `mod` items inside are not observed.
+    /// A `macro_rules!` with a raw-identifier name (`r#try`) is one macro node like any other,
+    /// so the `use` or `mod` items its body holds are not observed.
     #[test]
     fn a_raw_identifier_macro_name_does_not_leak_its_body() {
         let with_use = r#"
@@ -90,7 +80,7 @@ mod tests {
             use crate::real::A;
         "#;
         assert_eq!(
-            imported_module_paths(with_use, "crate", &[]).unwrap(),
+            imported_module_paths(with_use, "crate").unwrap(),
             vec![ImportedPath::plain("crate::real::A")],
             "a `use` inside a raw-identifier macro definition is not observed"
         );
@@ -105,11 +95,15 @@ mod tests {
     /// Rust allows non-ASCII identifiers: `use貓` / `mod貓` are single identifiers, not keywords.
     #[test]
     fn keyword_detection_does_not_fire_inside_a_unicode_identifier() {
-        assert!(!keyword_starts_at("use貓;".as_bytes(), 0, b"use"));
-        assert!(!keyword_starts_at("mod貓 {}".as_bytes(), 0, b"mod"));
-        assert!(keyword_starts_at("use 貓;".as_bytes(), 0, b"use"));
+        let first = |source: &str| {
+            let tree = TokenTree::lex(source, Edition::Rust2018);
+            (tree.kind(0), tree.text(0).to_string())
+        };
+        assert_eq!(first("use貓;"), (Kind::Ident, "use貓".to_string()));
+        assert_eq!(first("mod貓 {}"), (Kind::Ident, "mod貓".to_string()));
+        assert_eq!(first("use 貓;"), (Kind::Keyword, "use".to_string()));
         assert!(
-            imports_with_importers("fn use貓() {}", "crate", &[])
+            imports_with_importers("fn use貓() {}", "crate", Edition::Rust2018)
                 .unwrap()
                 .is_empty()
         );
@@ -130,7 +124,7 @@ mod tests {
             vec!["type".to_string()]
         );
         assert_eq!(
-            imported_module_paths("use crate::r#type::Thing;", "crate", &[]).unwrap(),
+            imported_module_paths("use crate::r#type::Thing;", "crate").unwrap(),
             vec![ImportedPath::plain("crate::type::Thing")],
             "a raw-identifier use path is canonicalized to its plain form"
         );

@@ -299,6 +299,29 @@ pub(crate) fn unreadable_governed_file_error(file: &Path, err: &str) -> String {
     )
 }
 
+/// A source file the scan read but could not judge — a nesting cap, a chain past its cap — named with the refusal, so
+/// a crate of many files says which one to repair. It is a governed file, or for the inline scan any file of the
+/// compilation unit, since every file's scope table is read in resolving a governed one.
+pub(crate) fn scan_refusal_in_file(file: &Path, refusal: &str) -> String {
+    format!("cannot judge source file '{}': {refusal}", file.display())
+}
+
+/// Targets sharing one root in different editions are two compilations of one file, and a scan reads it once.
+pub(crate) fn root_in_several_editions_error(
+    crate_package: &str,
+    root: &std::path::Path,
+    editions: &[&str],
+) -> String {
+    format!(
+        "a crate root is read in the edition its target is compiled in, and targets sharing one root in \
+         different editions compile it once in each, which one reading cannot judge: crate \
+         '{crate_package}' roots targets in editions {} at '{}'; give each edition its own root file, or \
+         one edition to every target rooted there",
+        editions.join(", "),
+        root.display()
+    )
+}
+
 /// A package target whose root source file lies outside the package's own manifest directory cannot be
 /// given a checkout-independent identity label, so it is "cannot judge" rather than a silent pass or a
 /// checkout-dependent label — the same ordering 漏刻 applies when refusing a relative or empty anchor.

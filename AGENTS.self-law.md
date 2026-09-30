@@ -89,6 +89,13 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 - **rule**: inline symbol path confined to module (confined_prefix: std::fs; ending_with: canonicalize)
 - **kind**: module · **severity**: enforce · **crate**: guibiao
 
+### `guibiao::crate::module_scan::token_tree` (module)
+
+> guibiao's token tree imports no other guibiao module, so lexing a file depends on no reader of its tokens
+
+- **rule**: restrict imports to (only: )
+- **kind**: module · **severity**: enforce · **crate**: guibiao
+
 ### `hunyi::crate` (module)
 
 > path canonicalization and cycle/dedup guards in hunyi must resolve through `xingbiao::canonicalize_or_fail` or `try_visit` for unified failure handling

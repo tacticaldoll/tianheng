@@ -114,7 +114,7 @@ The rule SHALL observe only imports of the confined crate `c`; imports of any ot
 
 ### Requirement: External imports observed with the scanner's existing resolution
 
-The system SHALL observe the confined crate's imports using the **identical** external/internal resolution the module scanner already applies (the resolution by which the internal rules ignore external imports): a bare first segment in a submodule reaches the extern prelude and is external; a bare first segment in the crate root is external unless it names a crate-root `mod`-declared module; a leading-`::` path (`use ::c::…`) is the explicit external/global form and is external even when its head matches a crate-root module; raw identifiers are canonicalized; text inside comments, string literals, and macro bodies is stripped before scanning; a `#[path]`-remapped module and a `cfg_attr`-wrapped path attribute are followed to the file they name, so imports there are observed like any other; cfg-gated code (bound: external-crate-confinement/cfg-gated-code-is-observed-as-written-a-stated-bound) remains the scanner's stated out-of-scope bound. The confinement SHALL therefore observe an external import of `c` **exactly when** the internal rules would have ignored that import as external — one definition of "external," never a divergent one.
+The system SHALL observe the confined crate's imports using the **identical** external/internal resolution the module scanner already applies (the resolution by which the internal rules ignore external imports): a bare first segment is external exactly when the scope the `use` stands in binds and declares nothing under it — in edition 2018 and later a uniform path's head names that scope's `mod`s, items, imports and glob-brought names first, and in edition 2015 a `use` path is read from the crate root; in edition 2018 and later a leading-`::` path (`use ::c::…`) is the explicit external/global form and is external even when its head matches a crate-root module, while in edition 2015 it is read from the crate root; raw identifiers are canonicalized; a comment is no token, a string literal is one literal token, and no `use` written inside a macro's group other than a `cfg_if!` arm is recorded; a `#[path]`-remapped module and a `cfg_attr`-wrapped path attribute are followed to the file they name, so imports there are observed like any other; cfg-gated code (bound: external-crate-confinement/cfg-gated-code-is-observed-as-written-a-stated-bound) remains the scanner's stated out-of-scope bound. The confinement SHALL therefore observe an external import of `c` **exactly when** the internal rules would have ignored that import as external — one definition of "external," never a divergent one.
 
 The rule is **use-only**, matching the scanner: an `extern crate c;` declaration SHALL NOT be observed (bound: external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound), noted here because FFI crates occasionally still use `extern crate`. Because the scanner is cfg-blind and scans in-`src` inline modules, a `#[cfg(…)] use c::…` — including one inside a `#[cfg(test)] mod tests { … }` — outside the permitted subtree SHALL be observed and react, regardless of the active build configuration; this is aligned with the rule's intent (confinement is a source-location property, independent of platform), and consistent with how the internal rules already treat cfg-gated and test-module imports. Integration tests under `tests/` are a separate compilation target outside the lib/bin root and SHALL NOT be scanned.
 
@@ -126,7 +126,7 @@ The rule is **use-only**, matching the scanner: an `extern crate c;` declaration
 #### Scenario: A submodule-bare and an explicit-external import of the confined crate are observed
 
 - **WHEN** a file in `crate::service` (a submodule) declares `use libc::c_int;`, and another file declares `use ::libc::c_void;`, under the confinement of `libc` to `crate::ffi`
-- **THEN** the system emits a violation for each, because a submodule's bare first segment reaches only the extern prelude and a leading-`::` path is the explicit external form — both are external imports of `libc` outside the permitted subtree
+- **THEN** the system emits a violation for each, because no scope in `crate::service` binds `libc`, so its bare first segment reaches the extern prelude, and a leading-`::` path is the explicit external form — both are external imports of `libc` outside the permitted subtree
 
 #### Scenario: cfg-gated code is observed as written — a stated bound
 
@@ -140,11 +140,16 @@ The rule is **use-only**, matching the scanner: an `extern crate c;` declaration
 - **THEN** the system emits one violation per compilation unit the import reaches, each carrying that unit's own identity, because every compiled root is resolved as its own corpus and neither root's module graph is read as the other's
 - **PINNED-BY** `confine_external_crate_evaluates_each_unit_at_a_coincident_conventional_path`
 
+#### Scenario: A confined-crate use aliased to underscore is observed
+- **WHEN** a file in `crate::service` declares `use libc as _;`, under a boundary confining `libc` to `crate::ffi`
+- **THEN** the system reports `crate::service`: the alias binds no name, and the use still imports `libc`
+- **PINNED-BY** `confine_observes_a_use_aliased_to_underscore`
+
 #### Scenario: A confined-crate use inside a string or macro body is not observed — a stated bound
 
 - **WHEN** a file in `crate::service` contains a string literal or a macro body whose text is `use libc::c_int;`, and no real `use libc::…` outside it
-- **THEN** the system reports no violation, because comments, string literals, and macro bodies are stripped before scanning, matching the scanner's stated bounds
-- **PINNED-BY** `confine_ignores_a_use_inside_a_string_literal`
+- **THEN** the system reports no violation, because a comment is no token, a string literal is one literal token, and no `use` written inside a macro's group is recorded, matching the scanner's stated bounds
+- **PINNED-BY** `confine_ignores_a_use_inside_a_string_literal_or_macro_body`
 
 #### Scenario: An `extern crate` declaration is not observed — a stated bound
 

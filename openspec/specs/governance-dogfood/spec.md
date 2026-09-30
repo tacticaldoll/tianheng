@@ -220,7 +220,7 @@ calling only the lower-level projection helper.
 
 ### Requirement: False-negative closure reaction fixtures
 
-The repository SHALL maintain isolated test fixtures under `crates/tianheng/tests/fixtures/` and integrated example checks for transparent macro unstripping (`cfg_if!`) and ancestor glob hazard reactions. The test harness SHALL assert that a `cfg_if!`-wrapped violation and an ancestor glob hazard violation both react with an enforced exit code 1 when checked through the shell facade.
+The repository SHALL maintain isolated test fixtures under `crates/tianheng/tests/fixtures/` and integrated example checks for a transparent macro's body read as items (`cfg_if!`) and ancestor glob hazard reactions. The test harness SHALL assert that a `cfg_if!`-wrapped violation and an ancestor glob hazard violation both react with an enforced exit code 1 when checked through the shell facade.
 
 #### Scenario: Transparent macro violation fixture reacts with exit 1
 

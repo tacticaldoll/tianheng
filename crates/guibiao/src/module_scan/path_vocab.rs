@@ -1,10 +1,9 @@
-//! Shared path and keyword primitives for the source scanner — the small foundation the
-//! `use`-scan ([`super::use_scan`]) and module-graph walk ([`super::reachability`]) both stand
-//! on, so neither sibling depends laterally on the other. Path canonicalization (raw-identifier
-//! reduction and `::`-delimited containment) and the `mod`-keyword boundary test; pure string /
-//! byte processing over [`super::lexer`]'s token primitives, no model type.
+//! Shared path vocabulary for the source scanner — the small foundation every reader above the token tree
+//! stands on: raw-identifier canonicalization, `::`-delimited containment, `self`/`super` folding, the spelling
+//! of a block's path segment, and the prefix spelling a confinement is declared in. Pure string processing over
+//! [`super::token_tree`]'s identifier bytes, no model type.
 
-use super::lexer::{is_ident_byte, keyword_starts_at};
+use super::token_tree::{Edition, is_ident_byte};
 
 /// Canonicalize one path segment by stripping a leading raw-identifier marker
 /// (`r#name` -> `name`). Rust resolves `mod r#type;` to the source file `type.rs`,
@@ -83,21 +82,23 @@ pub(crate) fn canonical_module_spelling(written: &str) -> Result<String, Option<
     Err(is_canonical_spelling(&candidate).then_some(candidate))
 }
 
+/// Whether a symbol path's first segment, as written, can never name a crate or module.
+///
+/// The set is the Rust Reference's identifier grammar rather than a keyword list: `_` is not an
+/// identifier, so neither `_` nor `r#_` names anything; `crate`, `self`, `super` and `Self` cannot be
+/// written raw; bare `self`, `super` and `Self` are relative to a module or type a declaration does not
+/// have; and `crate` stands only at the start of a path, so after a leading `::` it names nothing. Bare
+/// `crate` is the crate-root form. Every other head — a keyword in some edition or not — names the crate
+/// or module of that name, written bare or raw.
 fn is_disallowed_symbol_head(head: &str, is_global: bool) -> bool {
-    if is_global && head == "crate" {
-        return true;
+    match head.strip_prefix("r#") {
+        Some(name) => matches!(name, "_" | "crate" | "self" | "super" | "Self"),
+        None => matches!(head, "_" | "self" | "super" | "Self") || (is_global && head == "crate"),
     }
-    if head == "crate" {
-        return false;
-    }
-    if head.starts_with("r#") {
-        return false;
-    }
-    super::lexer::is_rust_keyword(head.as_bytes())
 }
 
 /// Whether `written` is `::`-separated identifiers (optionally starting with `::` for external
-/// crates) not starting at a keyword (`Self`, `self`, `super`, etc.).
+/// crates) whose first segment can name a crate or module ([`is_disallowed_symbol_head`]).
 fn is_symbol_path_spelling(written: &str) -> bool {
     let is_global = written.starts_with("::");
     let raw = if is_global {
@@ -119,26 +120,58 @@ fn is_symbol_path_spelling(written: &str) -> bool {
         && segments.all(is_identifier)
 }
 
+/// Whether an inline-call prefix was written from the extern-crate root (`::std::time`) or bare
+/// (`std::time`). Both name one crate, so the root form is not part of a prefix's identity; it is kept
+/// for the readers that judge what the written first segment may name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PrefixRoot {
+    Bare,
+    Global,
+}
+
+/// An inline-call prefix in its one canonical form: `::`-separated segments with no leading `::` and
+/// no `r#`, and the root form it was written in. `std::time` and `::std::time` are one `path`, which is
+/// what a prefix's rule key, its violations' target and the call matcher all read, so the three cannot
+/// disagree about which prefix a finding belongs to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SymbolPrefix {
+    pub path: String,
+    pub root: PrefixRoot,
+}
+
+impl SymbolPrefix {
+    /// The canonical form of any written prefix. Total, so the model can key a rule on it before the
+    /// spelling is judged; [`canonical_symbol_path_spelling`] is what refuses a spelling.
+    pub(crate) fn of(written: &str) -> Self {
+        match written.strip_prefix("::") {
+            Some(rest) => SymbolPrefix {
+                path: canonical_module_path(rest),
+                root: PrefixRoot::Global,
+            },
+            None => SymbolPrefix {
+                path: canonical_module_path(written),
+                root: PrefixRoot::Bare,
+            },
+        }
+    }
+}
+
 /// The canonical spelling of a written symbol path, or the spelling it most plausibly meant.
 ///
 /// A symbol path — an inline-call prefix — is compared with resolved paths segment by segment, so it
 /// has one accepted spelling: `::`-separated identifiers, optionally starting with `::` to explicitly
-/// name an external crate, each read by the [`is_identifier`] a module path is read by, not starting
-/// at a keyword (`Self`, `self`, `super`, etc.). Which first segments name something is the caller's
-/// question, since it needs what the crate declares. `r#x` and `x` are one identifier, so the
-/// accepted form carries no raw prefix. Every other spelling is refused, and the refusal carries the
-/// written path's non-empty, trimmed segments, raw prefixes removed, as the suggestion — or `None`
-/// when that is no accepted spelling either.
-pub(crate) fn canonical_symbol_path_spelling(written: &str) -> Result<String, Option<String>> {
+/// name an external crate, each read by the [`is_identifier`] a module path is read by, with a first
+/// segment outside the finite set that can never name a crate or module
+/// ([`is_disallowed_symbol_head`]). Which of the remaining first segments name something is the
+/// caller's question, since it needs what the crate declares. `r#x` and `x` are one identifier, so the
+/// accepted form is a [`SymbolPrefix`], raw prefixes and the leading `::` removed. Every other spelling
+/// is refused, and the refusal carries the written path's non-empty, trimmed segments, raw prefixes
+/// removed, as the suggestion — or `None` when that is no accepted spelling either.
+pub(crate) fn canonical_symbol_path_spelling(
+    written: &str,
+) -> Result<SymbolPrefix, Option<String>> {
     if is_symbol_path_spelling(written) {
-        let is_global = written.starts_with("::");
-        let raw = written.strip_prefix("::").unwrap_or(written);
-        let canonical = canonical_module_path(raw);
-        return Ok(if is_global {
-            format!("::{canonical}")
-        } else {
-            canonical
-        });
+        return Ok(SymbolPrefix::of(written));
     }
     let is_global = written.trim().starts_with("::");
     let segments: Vec<&str> = written
@@ -188,143 +221,94 @@ pub(crate) fn path_within(path: &str, prefix: &str) -> bool {
     path == prefix || path.starts_with(&format!("{prefix}::"))
 }
 
-/// Whether a standalone `mod` keyword begins at `i` (bounded by non-identifier bytes) —
-/// the head of a possible module declaration, not a substring like `module`.
-pub(super) fn is_mod_declaration_keyword(bytes: &[u8], i: usize) -> bool {
-    keyword_starts_at(bytes, i, b"mod")
+/// The path segment standing for block `id` of table `table` in the path of a module declared in that block. It
+/// begins with `{`, which no identifier does, so no path written in source and no prefix names a module through
+/// it, and it names the block by its file's table and its scope, so two blocks' modules of one name are two
+/// modules — in one file, or in two cfg-exclusive files of one module, which each number their blocks from their
+/// own start. This and [`is_block_segment`] are the one owner of the spelling.
+pub(super) fn block_segment(table: usize, id: u32) -> String {
+    format!("{{block#{table}.{id}}}")
 }
 
-/// If an inline module declaration `mod <ident> {` begins at `i` (a standalone `mod` keyword whose
-/// name is followed, after optional whitespace, by `{`), return `(name_start, name_end,
-/// index_of_opening_brace)`; otherwise `None` — a `mod name;` with no body, or not a declaration.
-/// Only an inline body encloses nested items. The single home of the inline-`mod` boundary test the
-/// `use`-scan ([`super::use_scan`]) and symbol-scan ([`super::symbol_scan`]) walks share, so the two
-/// cannot drift (the twin-drift bug class).
-pub(super) fn inline_mod_at(bytes: &[u8], i: usize) -> Option<(usize, usize, usize)> {
-    if !is_mod_declaration_keyword(bytes, i) {
-        return None;
-    }
-    let mut j = i + 3;
-    while j < bytes.len() && bytes[j].is_ascii_whitespace() {
-        j += 1;
-    }
-    let name_start = j;
-    while j < bytes.len() && !bytes[j].is_ascii_whitespace() && bytes[j] != b';' && bytes[j] != b'{'
-    {
-        j += 1;
-    }
-    let name_end = j;
-    if name_end == name_start {
-        return None;
-    }
-    while j < bytes.len() && bytes[j].is_ascii_whitespace() {
-        j += 1;
-    }
-    if bytes.get(j) == Some(&b'{') {
-        Some((name_start, name_end, j))
-    } else {
-        None
-    }
+/// Whether `segment` is a [`block_segment`].
+pub(super) fn is_block_segment(segment: &str) -> bool {
+    segment.starts_with('{')
 }
 
-/// The one lexical walk shared by symbol readers that need the module enclosing a byte position.
-/// `contexts[i]` is an index into `modules` for the inline-module path at byte `i`; `sites` records
-/// each inline `mod name {` with the brace depth and enclosing module it had when encountered.
-/// Keeping the stack here makes glob, path-occurrence, and definition readers agree on inline
-/// nesting instead of carrying three copies of the same push/pop walk. An index per byte avoids
-/// cloning a module `String` for every source byte.
-pub(super) struct InlineModuleScan {
-    pub contexts: Vec<u32>,
-    pub modules: Vec<String>,
-    pub module_tops: Vec<usize>,
-    pub sites: Vec<InlineModuleSite>,
-}
-
-pub(super) struct InlineModuleSite {
-    pub at: usize,
-    pub name: String,
-    pub brace: usize,
-    pub module_top: usize,
-    pub enclosing: u32,
-}
-
-pub(super) fn scan_inline_modules(source: &str, base: &str) -> InlineModuleScan {
-    let bytes = source.as_bytes();
-    let mut contexts = vec![0u32; bytes.len() + 1];
-    let mut module_tops = vec![0usize; bytes.len() + 1];
-    let mut modules = vec![base.to_string()];
-    let mut module_indices = std::collections::HashMap::from([(base.to_string(), 0u32)]);
-    let mut sites = Vec::new();
-    let mut i = 0;
-    let mut depth = 0usize;
-    let mut mod_stack: Vec<(u32, usize)> = Vec::new();
-    let mut current = 0u32;
-    while i < bytes.len() {
-        contexts[i] = current;
-        module_tops[i] = mod_stack.last().map_or(0, |(_, d)| d + 1);
-        if let Some((name_start, name_end, brace)) = inline_mod_at(bytes, i) {
-            let name = canonical_segment(&String::from_utf8_lossy(&bytes[name_start..name_end]))
-                .to_string();
-            let path = format!("{}::{name}", modules[current as usize]);
-            let next = if let Some(&index) = module_indices.get(&path) {
-                index
+/// `path` as a refusal shows it: each [`block_segment`] written `{block}`, since its table and scope numbers name
+/// nothing a reader can find in the source. A segment already readable — `{block}`, or the `{block 2}` a second
+/// block-declared module of one name is governed as — is kept.
+pub(super) fn readable_module(path: &str) -> String {
+    path.split("::")
+        .map(|segment| {
+            if segment.starts_with("{block#") {
+                "{block}"
             } else {
-                let index = u32::try_from(modules.len()).expect("inline module table exceeds u32");
-                modules.push(path.clone());
-                module_indices.insert(path, index);
-                index
-            };
-            sites.push(InlineModuleSite {
-                at: i,
-                name: name.clone(),
-                brace,
-                module_top: mod_stack.last().map_or(0, |(_, d)| d + 1),
-                enclosing: current,
-            });
-            mod_stack.push((next, depth));
-            current = next;
-            i = brace;
+                segment
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("::")
+}
+
+/// Each module path of one file as an identity, in the order the file declares them: [`readable_module`]'s form,
+/// and where two modules read alike — two functions each declaring a `mod m` — each after the first has its last
+/// block segment numbered, `{block 2}`, so two modules are two identities. The number counts only modules that
+/// read alike, so a block holding no module, or one holding a module of another name, moves none of them.
+/// [`readable_module`] is for a refusal a reader repairs from; this is for a value a baseline keys on.
+pub(super) fn identity_modules<'a>(
+    modules: impl IntoIterator<Item = &'a str>,
+) -> std::collections::BTreeMap<String, String> {
+    let mut seen: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+    let mut identities = std::collections::BTreeMap::new();
+    for module in modules {
+        if identities.contains_key(module) {
             continue;
         }
-        match bytes[i] {
-            b'{' => depth += 1,
-            b'}' => {
-                depth = depth.saturating_sub(1);
-                while mod_stack.last().is_some_and(|(_, d)| *d == depth) {
-                    mod_stack.pop();
-                }
-                current = mod_stack.last().map_or(0, |(index, _)| *index);
+        let readable = readable_module(module);
+        let count = seen.entry(readable.clone()).or_default();
+        *count += 1;
+        let identity = match readable.rfind("{block}") {
+            Some(at) if *count > 1 => {
+                format!(
+                    "{}{{block {count}}}{}",
+                    &readable[..at],
+                    &readable[at + "{block}".len()..]
+                )
             }
-            _ => {}
-        }
-        i += 1;
+            _ => readable,
+        };
+        identities.insert(module.to_string(), identity);
     }
-    contexts[bytes.len()] = current;
-    module_tops[bytes.len()] = mod_stack.last().map_or(0, |(_, d)| d + 1);
-    InlineModuleScan {
-        contexts,
-        modules,
-        module_tops,
-        sites,
-    }
+    identities
 }
 
-/// Whether a bare head names a crate-root module that **shadows** the extern prelude. Only at the
-/// crate root itself (`current_module == "crate"`) is a sibling `mod` in scope, so a bare
-/// `use foo::…` / path there resolves to the local `crate::foo`; in any submodule the same bare head
-/// reaches only the extern prelude (an external crate). The single home of that shadow rule the
-/// `use`-scan and symbol-scan share, so no copy can drift.
-pub(super) fn is_crate_root_shadow(
-    current_module: &str,
-    head: &str,
-    root_modules: &[String],
-) -> bool {
-    current_module == "crate" && root_modules.iter().any(|m| m == head)
+/// Whether `path` runs through a [`block_segment`]: it names an item of a module declared in a block, which
+/// no path outside that block names.
+pub(super) fn names_a_block_item(path: &str) -> bool {
+    path.split("::").any(is_block_segment)
+}
+
+/// `path` with the block segments it ends in removed: the module a block-declared module's parent is.
+pub(super) fn strip_block_segments(path: &str) -> &str {
+    let mut path = path;
+    while let Some((parent, last)) = path.rsplit_once("::") {
+        if !is_block_segment(last) {
+            break;
+        }
+        path = parent;
+    }
+    path
 }
 
 /// Canonicalize and fold module path segments, resolving embedded `self` and `super`
 /// segments anywhere in the path (e.g. `["crate", "a", "b", "super", "c"]` -> `["crate", "a", "c"]`).
 /// Returns `None` if `super` over-pops past the `crate` root or if the path is not crate-rooted.
+///
+/// A `super` in a module declared in a block names the module the block stands in: the block is not a
+/// module, so the block segments a `super` leaves last are popped with it. Measured on rustc 1.96.0,
+/// edition 2021: `fn g() { struct Y; mod m { fn h() { super::Y; } } }` is refused with `E0433`, while
+/// `super::Z` for a `Z` of the enclosing module compiles.
 pub(super) fn fold_canonical_segments(segments: &[&str]) -> Option<String> {
     let mut stack: Vec<&str> = Vec::new();
     for &raw_seg in segments {
@@ -339,6 +323,12 @@ pub(super) fn fold_canonical_segments(segments: &[&str]) -> Option<String> {
                     return None;
                 }
                 stack.pop();
+                while stack
+                    .last()
+                    .is_some_and(|segment| is_block_segment(segment))
+                {
+                    stack.pop();
+                }
             }
             other => stack.push(other),
         }
@@ -357,10 +347,9 @@ pub(super) fn fold_canonical_segments(segments: &[&str]) -> Option<String> {
 /// the source does not compile), so it must never be mistaken for an outward edge. Any other head
 /// (`parts[0]` not `self`/`super`, or empty) also returns `None` — the caller resolves those.
 ///
-/// The single home of the `super`-pop loop and its over-pop guard, which the `use`-scan
-/// ([`super::use_scan`]) and symbol-scan ([`super::symbol_scan`]) resolvers share — so a fix to that
-/// subtle edge cannot silently diverge across them (the twin-drift bug class). guibiao-internal;
-/// crosses no dimension boundary.
+/// The single home of the `super`-pop loop and its over-pop guard, which the import scan ([`super::use_scan`]), the
+/// resolver ([`super::resolve`]) and the visibility reading ([`super::item_head`]) share — so a fix to that subtle edge
+/// cannot silently diverge across them. guibiao-internal; crosses no dimension boundary.
 pub(super) fn resolve_self_super(current_module: &str, parts: &[&str]) -> Option<String> {
     let first = parts.first().copied()?;
     if first != "self" && first != "super" {
@@ -374,58 +363,76 @@ pub(super) fn resolve_self_super(current_module: &str, parts: &[&str]) -> Option
     fold_canonical_segments(&full)
 }
 
-/// Content inside the first `{ … }` of `s` (which must start with `{`), honoring nesting. The single
-/// home of the brace-body extractor the `use`-scan ([`super::use_scan`]) and symbol-scan
-/// ([`super::symbol_scan`]) use-tree parsers share, so the two cannot drift (the twin-drift bug
-/// class).
-pub(super) fn brace_content(s: &str) -> String {
-    let mut depth = 0i32;
-    let mut out = String::new();
-    for ch in s.chars() {
-        match ch {
-            '{' => {
-                depth += 1;
-                if depth == 1 {
-                    continue;
-                }
-            }
-            '}' => {
-                depth -= 1;
-                if depth == 0 {
-                    break;
-                }
-            }
-            _ => {}
-        }
-        out.push(ch);
-    }
-    out
+/// Where a written path stands: a `use` path — a `use` leaf, a `pub use` or a glob — or any other path:
+/// an expression, or a `type` alias's target.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub(super) enum PathSite {
+    Use,
+    Expr,
 }
 
-/// Split on commas at brace depth 0 — the use-tree group splitter both scanners share (see
-/// [`brace_content`]).
-pub(super) fn split_top_commas(s: &str) -> Vec<String> {
-    let mut parts = Vec::new();
-    let mut depth = 0i32;
-    let mut current = String::new();
-    for ch in s.chars() {
-        match ch {
-            '{' => {
-                depth += 1;
-                current.push(ch);
-            }
-            '}' => {
-                depth -= 1;
-                current.push(ch);
-            }
-            ',' if depth == 0 => parts.push(std::mem::take(&mut current)),
-            _ => current.push(ch),
+/// What a written path's first segment roots it at, before any scope is read: the one classification
+/// every written path — a `use` leaf, a glob, a `type` alias's target, an occurrence — starts from.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum WrittenRoot {
+    /// `crate::…`, or a `self`/`super` path folded against its module: crate-rooted.
+    Crate(String),
+    /// `::head::…` in edition 2018 and later: the crate named `head`, a sysroot crate or a dependency.
+    Extern { head: String, rest: Vec<String> },
+    /// In edition 2015, a `use` path or a path beginning with `::`: `head` is looked up in the crate
+    /// root's scope, where an `extern crate` is itself an item, and names a crate where nothing there
+    /// binds it.
+    FromCrateRoot { head: String, rest: Vec<String> },
+    /// A bare head, looked up in the scope the path is written in — in edition 2018 and later a `use`
+    /// path's too, as a uniform path.
+    Bare { head: String, rest: Vec<String> },
+    /// Nothing a path can start from: no segment, a `super` past the crate root, or `::self`,
+    /// `::super`, `::Self`.
+    Invalid,
+}
+
+/// Classify the path `written` at `module`. Only the root is decided here; what a bare head names is
+/// the resolver's lookup, never a guess from the head's spelling.
+///
+/// A bare `::`, the base of a `use ::*;` glob, names the crate root in edition 2015, where a `::`-rooted path starts
+/// there, and nothing in later editions, where it starts at the extern prelude a glob cannot read.
+pub(super) fn written_root(
+    written: &str,
+    module: &str,
+    site: PathSite,
+    edition: Edition,
+) -> WrittenRoot {
+    let raw = written.trim();
+    let global = raw.starts_with("::");
+    let parts: Vec<String> = raw
+        .trim_start_matches("::")
+        .split("::")
+        .map(|s| canonical_module_path(s.trim()))
+        .filter(|s| !s.is_empty())
+        .collect();
+    let Some((head, rest)) = parts.split_first() else {
+        return if global && edition == Edition::Rust2015 {
+            WrittenRoot::Crate("crate".to_string())
+        } else {
+            WrittenRoot::Invalid
+        };
+    };
+    let parts_str: Vec<&str> = parts.iter().map(String::as_str).collect();
+    let (head, rest) = (head.clone(), rest.to_vec());
+    match head.as_str() {
+        "crate" => {
+            fold_canonical_segments(&parts_str).map_or(WrittenRoot::Invalid, WrittenRoot::Crate)
         }
+        "self" | "super" | "Self" if global => WrittenRoot::Invalid,
+        "self" | "super" => {
+            resolve_self_super(module, &parts_str).map_or(WrittenRoot::Invalid, WrittenRoot::Crate)
+        }
+        _ if edition == Edition::Rust2015 && (global || site == PathSite::Use) => {
+            WrittenRoot::FromCrateRoot { head, rest }
+        }
+        _ if global => WrittenRoot::Extern { head, rest },
+        _ => WrittenRoot::Bare { head, rest },
     }
-    if !current.trim().is_empty() {
-        parts.push(current);
-    }
-    parts
 }
 
 #[cfg(test)]

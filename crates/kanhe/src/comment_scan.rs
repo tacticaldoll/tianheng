@@ -3,10 +3,10 @@
 //!
 //! This is a **finder**, not a stripper: [`crate::comment_scan::line_comments`] returns
 //! the positions and content of every `//` comment, rather than removing them. The skip
-//! helpers below are copied from 圭表's `module_scan/lexer.rs` (whose copies are
-//! `pub(super)` inside `module_scan` and so not reachable from 勘合, which may not depend
+//! helpers below follow the lexical rules 圭表's `module_scan/token_tree.rs` reads by (that one
+//! is `pub(super)` inside `module_scan` and so not reachable from 勘合, which may not depend
 //! on 圭表); the two answer different questions through the same lexical rules — that one
-//! strips, this one finds. Both recognize the same lexical forms, but this finder slices
+//! tokenizes, this one finds. Both recognize the same lexical forms, but this finder slices
 //! skipped spans to count physical newlines. Its skip helpers return the first unread
 //! byte or the end of input, never a position past it.
 

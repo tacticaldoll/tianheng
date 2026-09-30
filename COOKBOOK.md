@@ -256,18 +256,17 @@ prefer the `use`, or baseline the glob finding.
 )
 ```
 
-By default `must_not_call_inline` catches a sysroot head (`std::time::…`) but resolves a
-fully-qualified *external* head (`chrono::…` with no `use`) as a local path and lets it pass — a
+By default `must_not_call_inline` catches a sysroot head (`std::time::…`) but a fully-qualified
+*external* head (`chrono::…` with no `use`), which no scope binds, names nothing and passes — a
 stated bound. `.strict_external()` closes it: a bare head matching a **declared dependency** is
 resolved as that crate, so the fully-qualified call reacts (and an external-crate glob
 `use chrono::*;` reacts fail-closed). It composes with `.ending_with([…])` / `.strict_prefix_only()`,
-and the default (flag off) is byte-identical — opt-in, no baseline churn. Stated bounds under the
-flag (**any** prefix): an `extern crate dep as alias;` rename (it catches external calls by the
-crate's *real* name, not a local alias — so `chr::Utc::now()` via `extern crate chrono as chr;` is
-not observed), a glob-brought name *except via the glob-hazard reaction*, and a `mod` token inside a
-macro body. One additional **over-reaction** bound applies **only** under a single-segment bare-crate
-prefix (`"rand"`, never a multi-segment `chrono::Utc`): a local `let`/parameter/closure binding, or
-the definition site of an associated/nested `fn` named like the crate, may false-positive.
+and the default (flag off) is byte-identical — opt-in, no baseline churn. An `extern crate chrono
+as chr;` binds `chr` as `use chrono as chr;` does, so `chr::Utc::now()` reacts with or without the flag.
+Stated bounds under the flag (**any** prefix): a glob-brought name *except via the glob-hazard
+reaction*, and a `mod` token inside a macro body. One additional **over-reaction** bound applies **only** under a single-segment bare-crate
+prefix (`"rand"`, never a multi-segment `chrono::Utc`): a local `let`/parameter/closure binding named
+like the crate may false-positive. A `fn` item's own name is its definition, never a call.
 
 ---
 

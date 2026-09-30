@@ -27,7 +27,38 @@ A module boundary SHALL be declared in Rust, targeting a crate and a module path
 
 ### Requirement: Module imports observed from source use declarations
 
-The system SHALL observe module imports by scanning the target crate's source `use` declarations. It SHALL resolve `crate`, `self`, and `super` paths to absolute `crate::…` module paths, expand grouped (`{a, b}`) and glob (`::*`) forms, and ignore paths whose first segment is an external crate. A first segment that names a crate-root module SHALL be resolved to `crate::…` **only when the importing file is the crate root**: there a sibling `mod` is in scope and shadows the extern prelude, so a bare `use foo::…` is the local module. In a submodule a bare first segment reaches only the extern prelude — it is an external crate, or a compile error — and SHALL be treated as external, even when a crate-root module of that name exists. The crate-root module names used for this resolution SHALL be observed from the crate's own source as **declared modules** — a `mod name;` or `mod name { … }` declaration in the crate-root file(s) — not from the mere existence of a like-named source file: an undeclared orphan source file (e.g. a stray `src/foo.rs` that no `mod foo;` declares) does NOT make its name a crate-root module, because Rust does not bring an undeclared file into scope and a bare `use foo::…` then resolves through the extern prelude. A path written with a leading `::` (`use ::name::…`) is the explicit external/global form and SHALL be treated as external even when its first segment matches a crate-root module. Text inside comments and string literals SHALL NOT be treated as a `use` (or `mod`) declaration: it is removed before scanning, so neither a `//` inside a string nor a `use …;` written inside a string affects the result. Bare path expressions and macro-generated imports SHALL be out of scope (see the scanner decision in `PROJECT.md`); the rule enforces only what real `use` declarations observe. In particular, a `use` written inside a macro body — a `macro_rules!` definition OR a macro invocation (`ident! {…}` / `(…)` / `[…]`) — is a macro-generated import: the `macro_rules!` definition (its name and balanced body) and any macro invocation's balanced `{}`/`()`/`[]` body are removed before scanning, so such a `use` SHALL NOT be observed. A `use` token that is **not an import statement** — specifically a **precise-capturing bound** (`-> impl Trait + use<'a, T>`, stable Rust), where the `use` token is immediately followed (after optional whitespace) by `<` — SHALL NOT be treated as an import and SHALL NOT consume a following real `use` declaration; a `use` *statement* is always followed by a path (an identifier, `{`, `*`, `::`, or `crate`/`self`/`super`), never `<`, so the following-token `<` is the discriminator, and skipping the bound keeps the next real `use` observable (never a silent drop). Comments, string literals, and char literals — normal, byte, and raw string forms, and a char literal's full scalar value regardless of its UTF-8 byte length — SHALL be removed before scanning, so that a character a char literal contains (including `{` or `}`) is never mistaken for a real structural brace by the reachability walk. Modules SHALL be file-based **and reachable from the crate root via `mod` declarations**: a source file that no `mod` declaration brings into scope — an undeclared orphan, at the crate root or anywhere in a subtree — is not a module of the crate, is not governed, and its imports SHALL NOT be observed, matching the compiler (which never compiles it). A governed module path that matches no reachable source file SHALL be a constitution error (exit 2), never a silent pass. A governed source file that exists but cannot be read SHALL likewise be a scan error (exit 2), never silently skipped — an unreadable file is "cannot judge", not "nothing to judge", and skipping it could hide a real violation. A governed source directory that cannot be traversed SHALL likewise be a scan error (exit 2), naming the directory, never silently skipped — the same "cannot judge, not nothing to judge" rule, because a skipped subtree could hide a real violation.
+The system SHALL observe module imports by scanning the target crate's source `use` declarations. It SHALL resolve `crate`, `self`, and `super` paths to absolute `crate::…` module paths, expand grouped (`{a, b}`) and glob (`::*`) forms, and ignore paths whose first segment is an external crate. In edition 2018 and later a `use` path is a uniform path: a bare first segment SHALL be read as what the scope the `use` stands in binds or declares under that name — a `mod`, an item, another import, or a name a glob brings — and only a head that scope does not bind SHALL be an external crate. The head SHALL be read through the same resolver the inline confinements read, over every file of the compilation unit, and only the head: a path is internal as its head names it, and a re-export the rest of the path runs through is not followed, since an import of `crate::support::X` imports `crate::support` whatever `X` re-exports, and a head a glob brings is bound as the glob's module followed by the head, whatever that module binds it as. So at the crate root a sibling `mod foo` makes a bare `use foo::…` the local module, and in a submodule a bare head reaches that submodule's own children and imports but not the crate root's modules. A module name enters a scope by its **declaration** — a `mod name;` or `mod name { … }` — not by the mere existence of a like-named source file: an undeclared orphan source file (e.g. a stray `src/foo.rs` that no `mod foo;` declares) is in no scope, and a bare `use foo::…` then resolves through the extern prelude. In edition 2018 and later, a path written with a leading `::` (`use ::name::…`) is the explicit external/global form and SHALL be treated as external even when its first segment matches a crate-root module; in edition 2015 a `use` path, with or without the `::`, is read from the crate root. Text inside comments and string literals SHALL NOT be treated as a `use` (or `mod`) declaration: a comment is dropped and a literal is one token when the file is read, so neither a `//` inside a string nor a `use …;` written inside a string affects the result. Bare path expressions and macro-generated imports SHALL be out of scope (see the scanner decision in `PROJECT.md`); the rule enforces only what real `use` declarations observe. In particular, a `use` written inside a macro body — a `macro_rules!` definition OR a macro invocation (`ident! {…}` / `(…)` / `[…]`) — is a macro-generated import: the `macro_rules!` definition (its name and balanced body) and any macro invocation's balanced `{}`/`()`/`[]` body are one node whose group no `use` enumeration reads, so such a `use` SHALL NOT be observed. A `use` token that is **not an import statement** — specifically a **precise-capturing bound** (`-> impl Trait + use<'a, T>`, stable Rust), where the `use` token is immediately followed (after optional whitespace) by `<` — SHALL NOT be treated as an import and SHALL NOT consume a following real `use` declaration; a `use` *statement* is always followed by a path (an identifier, `{`, `*`, `::`, or `crate`/`self`/`super`), never `<`, so the following-token `<` is the discriminator, and skipping the bound keeps the next real `use` observable (never a silent drop). Comments SHALL be dropped, and string literals and char literals — normal, byte, and raw string forms, and a char literal's full scalar value regardless of its UTF-8 byte length — SHALL each be read as one token, so that a character a char literal contains (including `{` or `}`) is never mistaken for a real structural brace by the reachability walk. Modules SHALL be file-based **and reachable from the crate root via `mod` declarations**: a source file that no `mod` declaration brings into scope — an undeclared orphan, at the crate root or anywhere in a subtree — is not a module of the crate, is not governed, and its imports SHALL NOT be observed, matching the compiler (which never compiles it). A governed module path that matches no reachable source file SHALL be a constitution error (exit 2), never a silent pass. A governed source file that exists but cannot be read SHALL likewise be a scan error (exit 2), never silently skipped — an unreadable file is "cannot judge", not "nothing to judge", and skipping it could hide a real violation. A governed source directory that cannot be traversed SHALL likewise be a scan error (exit 2), naming the directory, never silently skipped — the same "cannot judge, not nothing to judge" rule, because a skipped subtree could hide a real violation. A file-form `mod` a block declares SHALL be followed through its direct or `cfg_attr` path attribute, since it has no conventional file, and one whose every path names no file SHALL be a scan error (exit 2). A `#[path]` SHALL resolve from the directory of the path the declaring file was opened by, so a file reached through a symlink resolves its paths beside the symlink rather than beside its target. A crate root's tokens SHALL start past a UTF-8 byte-order mark and past a shebang line, which a file opening with `#!` holds unless the next token past whitespace and comments — nested block comments included — is a `[`.
+
+#### Scenario: A cfg_attr path module a block declares is governed
+- **WHEN** a crate root writes `fn f() -> u32 { #[cfg_attr(unix, path = "x.rs")] mod m; m::h() }` and `x.rs` calls `std::process::id()`; or the same with no `x.rs`
+- **THEN** the system reports `std::process::id in crate::{block}::m` for the first, and a scan error (exit 2) for the second: a block's file-form `mod` names no conventional file, so a `cfg_attr` path no file backs leaves no configuration that builds it
+- **PINNED-BY** `a_cfg_attr_path_module_a_block_declares_is_governed`
+
+#### Scenario: A path in a symlinked file resolves from the symlink's directory
+- **WHEN** `src/a.rs` is a symlink to `../elsewhere/a.rs`, which holds `#[path = "x.rs"] pub mod k;`, and `src/x.rs` exists
+- **THEN** the system governs `src/x.rs` as `crate::a::k`: rustc 1.96.0 resolves the `#[path]` from the directory of the path it opened `a.rs` by, and refuses the crate when `x.rs` lies beside the symlink's target instead
+- **PINNED-BY** `a_path_in_a_symlinked_file_resolves_from_the_symlinks_directory`
+
+#### Scenario: A path module a block declares is governed
+- **WHEN** a crate root writes `fn f() -> u32 { #[path = "x.rs"] mod m; m::h() }` and `fn g() -> u32 { #[path = "y.rs"] mod m; m::h() }`, `x.rs` calls `std::process::id()`, or instead holds `pub use std::process::id as h;`
+- **THEN** the system governs `x.rs` as `crate::{block}::m` and `y.rs` as `crate::{block 2}::m`, numbered among the modules of that name the blocks of `crate` declare in source order, reports `std::process::id in crate::{block}::m` for the call in `x.rs`, and `std::process::id in crate` for `m::h()` through the re-export: rustc compiles a file-form `mod` a block declares with a `#[path]`, and a path through it from its block reads that file's scope
+- **PINNED-BY** `a_path_module_a_block_declares_is_governed`
+- **PINNED-BY** `block_declared_path_modules_are_numbered_apart`
+
+#### Scenario: A crate root after a shebang line declares its modules
+- **WHEN** a crate root opens with `#!/usr/bin/env run` above `pub mod core;` and `pub mod x;`, `src/core.rs` imports `crate::x::Y`, and a boundary forbids `crate::core` to import `crate::x`
+- **THEN** the system reports `crate::x::Y`: rustc strips a shebang line, which a file opening with `#!` holds unless the next token past whitespace and comments is a `[`
+- **PINNED-BY** `a_crate_root_after_a_shebang_line_declares_its_modules`
+
+#### Scenario: A crate root after a byte-order mark or a commented inner attribute declares its modules
+- **WHEN** a crate root opens with a UTF-8 byte-order mark before `pub mod m;`, or writes `#! /* /* n */ */ [allow(dead_code)] pub mod m;`, and `src/m.rs` calls `std::process::id()`, under a boundary confining `std::process` over `crate::m`
+- **THEN** the system reports `std::process::id in crate::m` for each: rustc strips the mark before anything else, and a block comment between `#!` and `[` nests, so that line is an inner attribute and no shebang
+- **PINNED-BY** `a_crate_root_after_a_byte_order_mark_or_a_commented_inner_attribute_declares_its_modules`
+
+#### Scenario: A use aliased to underscore is an import
+- **WHEN** `crate::core` declares `use crate::forbidden as _;`, or `use crate::forbidden as f;`, under a boundary forbidding `crate::core` to import `crate::forbidden`
+- **THEN** the system reports `crate::forbidden` for each: an `as _` alias binds no name and imports its path like any other
+- **PINNED-BY** `a_use_aliased_to_underscore_is_an_import`
 
 #### Scenario: A grouped use of crate paths is observed
 
@@ -67,7 +98,22 @@ The system SHALL observe module imports by scanning the target crate's source `u
 #### Scenario: A bare use in a submodule is external even when it matches a crate-root module
 
 - **WHEN** a file in a submodule (not the crate root) declares `use serde::Deserialize;` and `serde` is also a crate-root module of the target crate
-- **THEN** the system treats the import as external and does not observe `crate::serde::Deserialize`, because a submodule's bare first segment reaches only the extern prelude
+- **THEN** the system treats the import as external and does not observe `crate::serde::Deserialize`, because a submodule's bare first segment names what its own scope binds, and the crate root's modules are not in it
+
+#### Scenario: An import through a re-export imports the module it names
+- **WHEN** `crate::support` declares `pub use crate::forbidden::x;`, `crate::core` declares `use crate::support::x;`, and a boundary restricts `crate::core`'s imports to `crate::support`; or `crate::support` declares `pub use crate::forbidden as fmod;` and `crate::core` declares `use crate::support::*;` and `use fmod::x;`
+- **THEN** the system reports nothing for either: the import names `crate::support` — for the second, `crate::support::fmod::x`, the head the glob brings bound as the glob's module followed by the head — and the re-export its path runs through is not followed
+- **PINNED-BY** `an_import_through_a_re_export_imports_the_module_it_names`
+
+#### Scenario: A name bound in one namespace and brought by a glob in the other imports both
+- **WHEN** `crate::sub` declares `pub type x = crate::m::T;`, `pub use crate::g::*;` for `crate::g` holding `pub fn x() {}`, and `pub use x as y;`, and a boundary restricts `crate::sub`'s imports to `crate::g`
+- **THEN** the system reports `crate::m::T`: the import names the alias in the type namespace beside the glob-brought function in the value namespace, and both are read
+- **PINNED-BY** `a_name_bound_in_one_namespace_and_brought_in_the_other_imports_both`
+
+#### Scenario: A bare use in a submodule names that submodule's own child
+- **WHEN** `crate::a` declares `pub mod inner { pub struct X; }` and `use inner::X;`, under a boundary forbidding `crate::a` to import `crate::a::inner`
+- **THEN** the system reports `crate::a::inner::X`: a uniform path's head names what the scope it stands in declares
+- **PINNED-BY** `a_use_heads_its_path_from_the_scope_it_stands_in`
 
 #### Scenario: A leading-colon path is external even when its head is a crate-root module
 
@@ -87,12 +133,12 @@ The system SHALL observe module imports by scanning the target crate's source `u
 #### Scenario: A use written inside a macro_rules body is not observed
 
 - **WHEN** a file declares `macro_rules! m { () => { use crate::projection::Thing; }; }` and no real `use` of that path outside the macro
-- **THEN** the system does not observe an import of `crate::projection`, because the `macro_rules!` body is a macro-generated import and is removed before scanning
+- **THEN** the system does not observe an import of `crate::projection`, because the `macro_rules!` body is a macro-generated import and is not read for `use` statements
 
 #### Scenario: A use written inside a macro invocation body is not observed
 
 - **WHEN** a file declares `some_macro! { use crate::projection::Thing; }` and no real `use` of that path outside the macro
-- **THEN** the system does not observe an import of `crate::projection`, because a macro invocation body is a macro-generated import and is removed before scanning
+- **THEN** the system does not observe an import of `crate::projection`, because a macro invocation body is a macro-generated import and is not read for `use` statements
 
 #### Scenario: A precise-capturing use bound is not an import and does not swallow the next use
 
@@ -113,14 +159,14 @@ The system SHALL observe module imports by scanning the target crate's source `u
 - **WHEN** a source file contains a non-ASCII char literal immediately adjacent to a `'{'` or `'}'` char literal (e.g. `['«','{']`, no separating space)
 - **THEN** neither literal's payload is mistaken for a real structural brace, and every `mod` declared after it remains reachable and governed exactly as if the literals were not present
 
-### Requirement: Transparent control-flow macro body unstripping
+### Requirement: A transparent control-flow macro's body is read as items
 
-The system SHALL recognize transparent control-flow macros (specifically `cfg_if!`) during macro body stripping and SHALL NOT remove their inner structural body contents. Enclosed `use` import declarations, `mod` module declarations, and inline symbol call paths inside `cfg_if!` macro bodies SHALL be observed by `use_scan`, `reachability`, and `symbol_scan` as real items, matching the system's cfg-blind union-scanning policy. Other code-generating or declarative macro bodies (`macro_rules!` definitions and non-transparent macro invocations) SHALL continue to be stripped as macro-generated items.
+The system SHALL recognize transparent control-flow macros (specifically `cfg_if!`) and SHALL read their inner structural body contents. Enclosed `use` import declarations, `mod` module declarations, and inline symbol call paths inside `cfg_if!` macro bodies SHALL be observed by `use_scan`, `reachability`, and `symbol_scan` as real items, matching the system's cfg-blind union-scanning policy. Other code-generating or declarative macro bodies (`macro_rules!` definitions and non-transparent macro invocations) SHALL be passed over as macro-generated items.
 
 #### Scenario: A use declaration inside a cfg_if macro body is observed
 
 - **WHEN** a governed file contains a `cfg_if!` macro invocation containing `use crate::projection::Thing;` and a boundary forbids `crate::projection`
-- **THEN** the system observes `crate::projection::Thing` inside the `cfg_if!` body and emits an enforced violation (exit 1), rather than silently stripping the import
+- **THEN** the system observes `crate::projection::Thing` inside the `cfg_if!` body and emits an enforced violation (exit 1), rather than passing over the import as macro-generated
 
 #### Scenario: An inline mod declaration inside a cfg_if macro body is reachable
 
@@ -385,21 +431,51 @@ prefix is held to its own, which `inline-symbol-path-confinement` states.
 
 ### Requirement: Imports are attributed to their enclosing inline module
 
-The system SHALL attribute each `use` declaration to the module that lexically encloses it, including an inline `mod name { … }` submodule, rather than to the containing file's module. A `self`/`super` path SHALL be resolved against that enclosing module, and a bare first segment inside an inline submodule SHALL be treated as external even when the file itself is the crate root, matching how the compiler resolves it. A `mod name;` declaration with no inline body does not enclose any `use` and SHALL NOT change attribution.
+The system SHALL attribute each `use` declaration to the module that lexically encloses it, including an inline `mod name { … }` submodule, rather than to the containing file's module. A `self`/`super` path SHALL be resolved against that enclosing module, and in edition 2018 and later a bare first segment inside an inline submodule SHALL be read in that submodule's scope, so a crate-root module's name there is external unless the submodule itself binds it, even when the file itself is the crate root, matching how the compiler resolves it. In edition 2015 a `use` path is read from the crate root, so a first segment naming a crate-root module SHALL be read as that module wherever the `use` stands. A block encloses no module of its own, so a `use` in a function body SHALL be attributed to the module the function stands in; a module declared in a block SHALL be named through that block, written `{block}` (`crate::a::{block}::m`), and SHALL NOT be attributed to a same-named module its file declares at module level, which rustc keeps apart from it. Two such modules of one file that would be named alike SHALL be two importers, each after the first in source order numbering its last block, `crate::a::{block 2}::m`, since an importer is part of a finding's identity and one identity for two would let a baseline accepting one hide the other. A `mod name;` declaration with no inline body does not enclose any `use` and SHALL NOT change attribution. Every reader of a file SHALL read it in the edition of the target whose compilation unit it belongs to, which is the target's own `edition` where its `[lib]` or `[[bin]]` table declares one and the package's otherwise, so in edition 2015, where `dyn` is an identifier, `mod dyn { … }` encloses the `use`s written in it. Targets sharing one root in different editions SHALL be a constitution error (exit 2), since rustc compiles that root once in each.
 
 #### Scenario: A self import inside an inline submodule resolves against that submodule
 
 - **WHEN** the crate-root file declares `mod inner { use self::leaf::Thing; }`
 - **THEN** the import is observed as `crate::inner::leaf::Thing`, not `crate::leaf::Thing`, because it is attributed to the enclosing inline module `crate::inner`
 
+#### Scenario: An import in a block's module is not its same-named file module's
+- **WHEN** `crate::a` declares `pub mod m;` and, in one function body, `mod m { use crate::x::Y; }`, in another `mod n { use super::super::x::Y; }` and in a third `mod m { use crate::x::Y; }`, under a boundary forbidding `crate::x` to be imported by `crate::a::m` or by `crate::a`
+- **THEN** the system reports nothing under `crate::a::m`, and `crate::a::{block}::m`, `crate::a::{block}::n` and `crate::a::{block 2}::m` under `crate::a`
+- **PINNED-BY** `an_import_in_a_block_module_is_not_its_same_named_file_modules`
+
+#### Scenario: An import is attributed in the target's edition
+- **WHEN** an edition-2015 crate root declares `mod dyn { use crate::a::X; }` and a boundary forbids `crate::dyn` from importing `crate::a`
+- **THEN** the system reports the import, attributed to `crate::dyn`
+- **PINNED-BY** `an_import_scan_reads_the_targets_edition`
+
+#### Scenario: The module graph is walked in the target's edition
+- **WHEN** an edition-2015 crate root declares `mod dyn;`, `src/dyn.rs` imports `crate::a::X`, and a boundary forbids `crate::dyn` from importing `crate::a`
+- **THEN** the system governs `src/dyn.rs` as `crate::dyn` and reports `crate::a::X`
+- **PINNED-BY** `the_module_graph_is_walked_in_the_targets_edition`
+
+#### Scenario: A target declaring its own edition is read in it
+- **WHEN** an edition-2024 package's `[lib]` declares `edition = "2015"`, `src/sub.rs` writes `use clock::now;` beside a crate-root `pub mod clock;`, and a boundary forbids `crate::sub` from importing `crate::clock`; or a `[[bin]]` in the package's edition shares that library's root
+- **THEN** the system reports `crate::clock::now` for the first, and exits 2 naming both editions for the second
+- **PINNED-BY** `a_target_is_read_in_its_own_edition`
+
+#### Scenario: An edition-2015 use path is read from the crate root
+- **WHEN** an edition-2015 crate root declares `pub mod kernel;` and `pub mod core;`, `src/core.rs` writes `use kernel::Thing;` or `use ::kernel::Thing;`, and a boundary forbids `crate::core` from importing `crate::kernel`
+- **THEN** the system reports `crate::kernel::Thing`, because a 2015 `use` path starts at the crate root rather than at the extern prelude
+- **PINNED-BY** `an_edition_2015_use_path_is_read_from_the_crate_root`
+
 ### Requirement: Module declarations inside macro bodies are not observed
 
-The system SHALL NOT observe a `mod` declaration written inside a macro body — a `macro_rules!` definition or a macro invocation (`ident! {…}` / `(…)` / `[…]`) — as a real module of the crate, the same out-of-scope rule already applied to a `use` inside a macro body. The macro body SHALL be removed before scanning for `mod` declarations, so a `mod` token inside a `()`/`[]`-delimited macro invocation is not mistaken for a crate-root module declaration.
+The system SHALL NOT observe a `mod` declaration written inside a macro body — a `macro_rules!` definition or a macro invocation (`ident! {…}` / `(…)` / `[…]`) — as a real module of the crate, the same out-of-scope rule already applied to a `use` inside a macro body. A macro invocation SHALL be read as one node whose group is passed over when `mod` declarations are scanned, so a `mod` token inside a `()`/`[]`-delimited macro invocation is not mistaken for a crate-root module declaration. A braced macro invocation standing as an item SHALL end what stands before the next item, whatever its path's segments are — an identifier, `crate`, `self`, `super` or `Self` — so the `mod` declaration after it is declared.
 
 #### Scenario: A mod inside a macro invocation is not a declared module
 
 - **WHEN** the crate-root file declares `some_macro!( mod ghost; );` and no real `mod ghost;` outside the macro
 - **THEN** the system does not treat `crate::ghost` as a declared, reachable module, so a bare `use ghost::…` elsewhere stays external
+
+#### Scenario: A mod after a braced macro called through a keyword-headed path is declared
+- **WHEN** a crate root writes `crate::m!{}`, `self::m!{}` or `#[allow(unused)] crate::m!{}` before `mod q;`, or an inline `mod z { super::m!{} mod q; }`, and a boundary forbids the declared `q` from importing `crate::a`
+- **THEN** the system governs `q`'s file and reports its `use crate::a::X;`
+- **PINNED-BY** `a_mod_after_a_braced_macro_called_through_a_keyword_headed_path_is_declared`
 
 ### Requirement: A governed target is a file-based module
 
@@ -434,7 +510,7 @@ A same-named conventional source file (`name.rs` / `name/mod.rs`) that sits besi
 
 ### Requirement: A plain module declaration resolves to exactly one conventional file
 
-A plain `mod name;` declaration SHALL resolve to exactly one conventional source file — `name.rs` or `name/mod.rs` — and the system SHALL react rather than guess in every other outcome, never silently dropping the module from the reachable set (which would hide every import beneath it, the false negative the core contract forbids). When **both** forms are present the system SHALL report a constitution error (exit 2) naming both resolved paths and the exactly-one-file rule, regardless of any `cfg_attr(path)` candidate also present on the same declaration — the ambiguity test SHALL precede the absent-file tolerance below and SHALL NOT be overridden by it, so a declaration whose predicate is off — which rustc strips before module resolution, leaving a crate that compiles cleanly and raises no E0761 — is still a constitution error: the scanner is cfg-blind and cannot know which arm is live, and treating one arm's ambiguity as resolvable would require evaluating `cfg`. When **neither** form is present the system SHALL report a constitution error (exit 2) naming both expected paths, EXCEPT when the declaration is **cfg-conditional**, in which case the module may legitimately have no file in the current configuration and SHALL be skipped rather than errored. A declaration SHALL be cfg-conditional from any of three sources, which the system SHALL treat identically because they express one intent — "this declaration may legitimately have no conventional file in the active configuration": a **bare** `#[cfg(...)]` attribute preceding the item; membership in a transparent control-flow macro arm (a `mod` written directly inside a `cfg_if!` arm, whose predicate lives in the macro's `if #[cfg(..)]` header rather than on the item — every such arm is conditionally compiled by construction, the trailing `else` on its predicate's negation); or the declaration carrying one or more `cfg_attr(..., path = "…")` remap attributes of which **at least one candidate physically resolves to a real file on disk**. A `#[cfg_attr(...)]` wrapper that carries no `path` meta at all, or whose every `path` remap candidate is absent from disk, SHALL NOT make a declaration cfg-conditional on that basis alone: `cfg_attr` never removes the item, it only conditionally applies its wrapped attribute, so with no resolved candidate to back it a missing conventional file beneath it is a genuine compile error (E0583) in every configuration — the same blind, existence-only test the plain-file check itself already uses, extended to a resolved conditional remap target, never a predicate-exhaustiveness proof the scanner cannot perform. The same cfg-conditional test SHALL govern an absent `#[path]` remap target, so the two absence outcomes cannot drift apart. Either constitution error SHALL abort the whole reachability walk rather than excluding one module, since a crate whose module graph cannot be resolved cannot be judged. This is the static dimension's own independently-implemented policy for these outcomes; the runtime dimension states the same rules for its own probe-coverage walker (三儀 ⊥ 三儀: the same rule, not the same function).
+A plain `mod name;` declaration SHALL resolve to exactly one conventional source file — `name.rs` or `name/mod.rs` — and the system SHALL react rather than guess in every other outcome, never silently dropping the module from the reachable set (which would hide every import beneath it, the false negative the core contract forbids). When **both** forms are present the system SHALL report a constitution error (exit 2) naming both resolved paths and the exactly-one-file rule, regardless of any `cfg_attr(path)` candidate also present on the same declaration — the ambiguity test SHALL precede the absent-file tolerance below and SHALL NOT be overridden by it, so a declaration whose predicate is off — which rustc strips before module resolution, leaving a crate that compiles cleanly and raises no E0761 — is still a constitution error: the scanner is cfg-blind and cannot know which arm is live, and treating one arm's ambiguity as resolvable would require evaluating `cfg`. When **neither** form is present the system SHALL report a constitution error (exit 2) naming both expected paths, EXCEPT when the declaration is **cfg-conditional**, in which case the module may legitimately have no file in the current configuration and SHALL be skipped rather than errored. A declaration SHALL be cfg-conditional from any of three sources, which the system SHALL treat identically because they express one intent — "this declaration may legitimately have no conventional file in the active configuration": a **bare** `#[cfg(...)]` attribute preceding the item; membership in a transparent control-flow macro arm (a `mod` written directly inside a `cfg_if!` arm, whose predicate lives in the macro's `if #[cfg(..)]` header rather than on the item — every such arm is conditionally compiled by construction, the trailing `else` on its predicate's negation); or the declaration carrying one or more `cfg_attr(..., path = "…")` remap attributes of which **at least one candidate physically resolves to a real file on disk**. A `#[cfg_attr(...)]` wrapper that carries no `path` meta at all, or whose every `path` remap candidate is absent from disk, SHALL NOT make a declaration cfg-conditional on that basis alone: `cfg_attr` removes the item only where the attribute it applies is a `cfg`, and otherwise only conditionally applies its wrapped attribute, so with no resolved candidate to back it a missing conventional file beneath it is a genuine compile error (E0583) in every configuration — the same blind, existence-only test the plain-file check itself already uses, extended to a resolved conditional remap target, never a predicate-exhaustiveness proof the scanner cannot perform. The same cfg-conditional test SHALL govern an absent `#[path]` remap target, so the two absence outcomes cannot drift apart. Either constitution error SHALL abort the whole reachability walk rather than excluding one module, since a crate whose module graph cannot be resolved cannot be judged. This is the static dimension's own independently-implemented policy for these outcomes; the runtime dimension states the same rules for its own probe-coverage walker (三儀 ⊥ 三儀: the same rule, not the same function).
 
 **An attribute is the name it spells, and the built-in is the single-segment path.** A raw-identifier spelling — `r#path`, `r#cfg`, `r#cfg_attr`, at the attribute's own name position or inside a `cfg_attr`'s argument list — SHALL be read as the built-in it names, because `r#` changes an identifier's lexical spelling and not the name it spells and none of those three is a keyword. A **keyword** is the opposite case and SHALL NOT be folded into this rule: `r#mut` is an identifier named `mut` and is precisely not the keyword, so a reader matching Rust keywords compares as written. Conversely a segment reached through `::` is somebody else's attribute and SHALL carry no module target, and that narrowing governs the applied `path` meta as much as the `cfg_attr` wrapping it.
 
@@ -468,6 +544,12 @@ A plain `mod name;` declaration SHALL resolve to exactly one conventional source
 - **WHEN** a crate declares `#[cfg(feature = "extra")] mod child;` and neither conventional file exists
 - **THEN** the system skips the declaration rather than erroring, since an off predicate legitimately leaves the module with no file in this configuration
 
+#### Scenario: An inner attribute is no attribute of the mod after it
+- **WHEN** a crate root writes `#![cfg(unix)]` and then `mod c;`, and no file backs `crate::c`; or the attribute before `mod c;` is `#![path = "x.rs"]`, or `mod tests { #![cfg(test)] mod c; }`
+- **THEN** the system reports a scan error for the missing file, and the attribute reader reads neither the `cfg` as making `c` conditional nor the `path` as remapping it: an inner attribute applies to the item it is written in, not to the `mod` after it. rustc refuses the crate-root rows (`E0583`) in every build, and the `mod tests` row wherever `tests` is compiled, since there its `cfg(test)` removes `tests` itself
+- **PINNED-BY** `an_inner_attribute_is_no_attribute_of_the_mod_after_it`
+- **PINNED-BY** `both_readers_take_the_attribute_name_from_one_position`
+
 #### Scenario: A missing file for a module declared inside a cfg_if arm is tolerated
 
 - **WHEN** a crate declares `cfg_if! { if #[cfg(unix)] { pub mod unix_impl; } else { pub mod windows_impl; } }`, `src/unix_impl.rs` exists, and `src/windows_impl.rs` does not
@@ -481,7 +563,7 @@ A plain `mod name;` declaration SHALL resolve to exactly one conventional source
 #### Scenario: A cfg_attr-wrapped missing file with no path meta is not tolerated
 
 - **WHEN** a crate declares `#[cfg_attr(unix, allow(dead_code))] mod child;` and neither conventional file exists
-- **THEN** the system reports the missing-file constitution error (exit 2), because this `cfg_attr` carries no `path` remap at all — `cfg_attr` never removes the item, so with no candidate to back it the absent file is a genuine compile error in every configuration, and tolerating it would be a silent pass over source that cannot build
+- **THEN** the system reports the missing-file constitution error (exit 2), because this `cfg_attr` carries no `path` remap and applies no `cfg` — such a `cfg_attr` never removes the item, so with no candidate to back it the absent file is a genuine compile error in every configuration, and tolerating it would be a silent pass over source that cannot build
 
 #### Scenario: A single resolved cfg_attr(path) candidate tolerates a missing conventional file
 
@@ -536,11 +618,11 @@ A plain `mod name;` declaration SHALL resolve to exactly one conventional source
 
 ### Requirement: An unconditional path-remapped module is followed to its target
 
-The system SHALL follow a file-form module declared with an **unconditional, direct** `#[path = "…"]` attribute (`mod foo;`) to its author-chosen target: the target's imports SHALL be observed under the declared module's logical path, and the module SHALL be a governable target at that path — matching 渾儀 (semantic) and 漏刻 (runtime), which already follow this same relocation, so all three observation dimensions agree on what rustc actually compiles. The target is resolved relative to `path_base`: the declaring file's own directory, with each enclosing inline `mod` name accumulated onto it (rustc's rule) — the crate root's own directory for a `#[path]` written there, or `<accumulated dir>/<name>` for one written inside an inline `mod name { … }`. A `#[path]`-loaded file is itself mod-rs-like, so a `#[path]` or conventional child written inside it resolves from ITS OWN directory in turn. A same-named conventional file beside the remapped declaration (e.g. `foo.rs` beside a `#[path = "weird.rs"] mod foo;`) remains an orphan Rust never compiles as that module — it SHALL NOT be governed in the remap's target place, the same "not compiled ⇒ not governed" rule as an undeclared orphan and an inline-only shadow, now applied to the remap case instead of excluding the whole logical path.
+The system SHALL follow a file-form module declared with an **unconditional, direct** `#[path = "…"]` attribute (`mod foo;`) to its author-chosen target: the target's imports SHALL be observed under the declared module's logical path, and the module SHALL be a governable target at that path — matching 渾儀 (semantic) and 漏刻 (runtime), which follow the same relocation for a declaration carrying one direct path attribute. The target is resolved relative to `path_base`: the declaring file's own directory, with each enclosing inline `mod` name accumulated onto it (rustc's rule) — the crate root's own directory for a `#[path]` written there, or `<accumulated dir>/<name>` for one written inside an inline `mod name { … }`. A `#[path]`-loaded file is itself mod-rs-like, so a `#[path]` or conventional child written inside it resolves from ITS OWN directory in turn. A same-named conventional file beside the remapped declaration (e.g. `foo.rs` beside a `#[path = "weird.rs"] mod foo;`) remains an orphan Rust never compiles as that module — it SHALL NOT be governed in the remap's target place, the same "not compiled ⇒ not governed" rule as an undeclared orphan and an inline-only shadow, now applied to the remap case instead of excluding the whole logical path.
 
 An unconditional target that does not exist on disk is a genuine broken reference (rustc itself errors on it) and SHALL be a scan error (exit 2), never a silent skip. A `#[path]` chain that resolves back to a source file already open on the path from the crate root (only possible through `#[path]`, since ordinary conventional/inline nesting is bounded by the crate's finite file list) SHALL likewise be a scan error, never an unbounded walk — tracked by the set of files open on the *current descent path*, not a monotonic whole-crate visited set, so two sibling or cousin declarations legitimately sharing one `#[path]` target (rustc compiles the same file twice, as two distinct modules) is never misreported as a cycle.
 
-The scanner SHALL recognize both a direct `#[path = "…"]` and a `path = "…"` meta recursively wrapped in one or more `#[cfg_attr(predicate, …)]` attributes. When a direct `#[path = "…"]` attribute is present, it SHALL take precedence over any sibling `cfg_attr` paths on the same declaration. When no direct `#[path = "…"]` attribute is present and one or more `cfg_attr(..., path = "...")` attributes are recognized, the scanner SHALL collect all candidate remapped targets and perform a union-scan across all candidate target files that physically exist on disk (`path.exists()`). Candidate files that do not exist on disk SHALL be safely skipped without triggering a scan error (treating them as absent under the active compilation target). An unconditional `#[path]` attribute on an inline module (`mod foo { … }`) does not relocate the module's own content (rustc treats the attribute as a no-op for that purpose — the body already IS the module) and SHALL NOT make that inline module disappear from reachability, but it DOES relocate the base directory the inline body's OWN file-form children resolve from, exactly as it would for a file-form declaration — the system SHALL follow it there too, resolved from the declaring source's own `path_base`.
+The scanner SHALL recognize both a direct `#[path = "…"]` and a `path = "…"` meta recursively wrapped in one or more `#[cfg_attr(predicate, …)]` attributes. rustc compiles the first path attribute written on a declaration and reports every later one as unused, so which of them the scanner reads SHALL be decided by position, leaving only a `cfg_attr` predicate to the build, which this cfg-blind scanner does not evaluate. The first direct `#[path = "…"]` SHALL be the direct remap. A `cfg_attr(..., path = "...")` target written before it, or on a declaration with no direct one, SHALL be a candidate, since it is the first attribute wherever its predicate holds, and the scanner SHALL perform a union-scan across the direct target and every candidate target file that physically exists on disk (`path.exists()`). A path attribute written after the first direct one, direct or `cfg_attr`, is never compiled, and SHALL NOT be read: neither followed nor refused. A direct `#[path]` written after a `cfg_attr` candidate is the first attribute only where that candidate's predicate is false, so its target SHALL be tolerated absent where some candidate's file exists — the test a lone `cfg_attr` path already meets — and SHALL be the missing-file scan error where none does, since no configuration then builds. A `cfg_attr` that applies a `cfg` — `#[cfg_attr(pred, cfg(…))]` — can remove the item, and SHALL make the declaration cfg-conditional as a bare `#[cfg]` does. Candidate files that do not exist on disk SHALL be safely skipped without triggering a scan error (treating them as absent under the active compilation target). An unconditional `#[path]` attribute on an inline module (`mod foo { … }`) does not relocate the module's own content (rustc treats the attribute as a no-op for that purpose — the body already IS the module) and SHALL NOT make that inline module disappear from reachability, but it DOES relocate the base directory the inline body's OWN file-form children resolve from, exactly as it would for a file-form declaration — the system SHALL follow it there too, resolved from the declaring source's own `path_base`.
 
 #### Scenario: A path-remapped module's imports are observed at its real target
 
@@ -551,6 +633,19 @@ The scanner SHALL recognize both a direct `#[path = "…"]` and a `path = "…"`
 
 - **WHEN** a boundary targets `crate::foo`, declared via `#[path = "weird/place.rs"] mod foo;`, and `weird/place.rs` contains a forbidden import
 - **THEN** the system reports the violation naming `crate::foo` and the file `weird/place.rs` — never a constitution error, and never governing a same-named conventional orphan in its place
+
+#### Scenario: A declaration a predicate may remove or redirect tolerates its absent file
+
+- **WHEN** a crate root declares `#[cfg_attr(unix, path = "b.rs")] #[path = "a.rs"] mod m;` with only `b.rs` present, or `#[cfg_attr(all(), cfg(any()))] mod m;` with no `m.rs`
+- **THEN** the system governs `b.rs` as `crate::m` in the first and nothing in the second, and reports no scan error in either: rustc 1.96.0 builds both on unix. With neither `a.rs` nor `b.rs`, the first is the scan error naming `a.rs`, since no configuration builds it
+- **PINNED-BY** `a_declaration_a_predicate_may_remove_or_redirect_tolerates_its_absent_file`
+- **PINNED-BY** `a_direct_path_after_a_candidate_no_file_backs_is_a_scan_error`
+
+#### Scenario: A path attribute is read by its position
+
+- **WHEN** a crate root declares `mod m;` after `#[path = "a.rs"] #[path = "b.rs"]`, after `#[path = "a.rs"] #[cfg_attr(unix, path = "b.rs")]`, or after `#[cfg_attr(unix, path = "b.rs")] #[path = "a.rs"]`, with `a.rs` present and `b.rs` present or absent
+- **THEN** the system governs `a.rs` as `crate::m` in every row, governs `b.rs` as `crate::m` only in the `cfg_attr`-first row and only where it exists, and reports no scan error in any row: a path after the first direct one is never compiled, which rustc 1.96.0 confirms by building each direct-first row with `b.rs` absent and reporting the later attribute unused
+- **PINNED-BY** `a_path_attribute_is_read_by_its_position`
 
 #### Scenario: A conventional orphan beside a path-remapped declaration is not governed
 
@@ -748,7 +843,10 @@ a measured stack-safety cap, and past that cap SHALL fail loud (a constitution e
 rather than silently dropping the sub-tree from observation. A real, compilable `use` nested past
 the cap would otherwise vanish entirely from the imported-path set with no report —
 `Outcome::Clean` when a real violation exists, the false negative the core contract forbids.
-Nesting comfortably under the cap SHALL be observed exactly as a shallower tree would be.
+Nesting comfortably under the cap SHALL be observed exactly as a shallower tree would be. A tree is
+refused only when it is nested past the cap, so the refusal's statement of the cap is true of the
+tree it names: a tree nested as deep as the cap is read. The refusal SHALL name the file the tree
+is written in.
 
 #### Scenario: A use tree nested past the depth cap is a scan error
 
@@ -756,6 +854,11 @@ Nesting comfortably under the cap SHALL be observed exactly as a shallower tree 
   scanner supports
 - **THEN** the system reports a constitution error (exit 2) naming the depth bound it could not
   judge past, rather than silently omitting the tree's imports from observation
+
+#### Scenario: A use tree as deep as the cap is read, and one level past it is refused
+- **WHEN** `crate::b` imports `crate::a::X` through `use crate::{…{a::X}…};` nested 128 braces deep, or 129, under `must_not_import("crate::a")`
+- **THEN** 128 braces reports `crate::a::X`, and 129 is a constitution error (exit 2) naming the cap of 128 brace levels and `src/b.rs`, the file it was met in
+- **PINNED-BY** `an_import_rule_reads_a_use_tree_128_braces_deep_and_refuses_129`
 
 #### Scenario: A use tree nested just under the depth cap is still observed
 
@@ -767,11 +870,13 @@ Nesting comfortably under the cap SHALL be observed exactly as a shallower tree 
 
 The scanner SHALL treat a `cfg_attr(…, path = "…")` remap on an **inline** `mod name { … }` as naming
 the **base directory** that body's own file-form children resolve from, exactly as it already does for
-an unconditional `#[path]` on the same shape. A direct `#[path]` SHALL continue to take precedence and
-to relocate that base outright; with no direct attribute, every `cfg_attr` target SHALL be a
-**candidate** base rather than the base, because the scanner does not evaluate `cfg` and cannot know
-which arm a given build compiles — preferring one would silently drop every child beneath the other,
-the false negative the core contract forbids.
+an unconditional `#[path]` on the same shape. The first direct `#[path]` SHALL relocate that base, and every
+`cfg_attr` target written before it, or with no direct one, SHALL be a **candidate** base whose directory, where
+it exists, is read as well, because rustc takes the first path attribute written and the scanner does not
+evaluate `cfg`, so it cannot know which a given build compiles — preferring one would silently drop every child
+beneath the other, the false negative the core contract forbids. A path written after the first direct one is
+never compiled and SHALL NOT be read. A candidate directory that exists without a child the body declares is the
+missing-file scan error it is beside two `cfg_attr` bases, since the configuration selecting it does not build.
 
 Each candidate base — every `cfg_attr` target **and** the conventional directory — SHALL be descended
 only when it exists as a directory. Descending an absent one would spuriously fail loud on the body's
@@ -780,11 +885,10 @@ candidate already backs them. When **no** candidate exists as a directory, the c
 be descended anyway, so a nested reference genuinely broken on every platform still fails loud exactly
 as it did before this tolerance existed.
 
-Without this, the walk resolved such a body's children from the conventional base alone and reported a
-missing-module constitution error (exit 2) on source that compiles cleanly under real rustc — refusing
-to judge a crate rather than judging it. This is 漏刻's own already-stated rule for the identical shape,
-implemented independently (三儀 ⊥ 三儀: the same rule, not the same function), so the two dimensions
-cannot disagree about what rustc compiles.
+Resolving such a body's children from the conventional base alone would report a missing-module constitution
+error (exit 2) on source that compiles cleanly under real rustc — refusing to judge a crate rather than judging
+it. 漏刻 states a rule for the same shape and implements it independently (三儀 ⊥ 三儀: the same rule, not the
+same function); where the two readings of path attributes still differ is tracked in `BACKLOG.md`.
 
 #### Scenario: A conditional remap on an inline module is followed to its child base
 
@@ -793,6 +897,11 @@ cannot disagree about what rustc compiles.
   module
 - **THEN** the system observes that import and reacts (exit 1) attributed to `unix_dir/y.rs`, rather
   than reporting a missing-module constitution error for `src/x/y.rs` on a crate that builds
+
+#### Scenario: An inline module's path bases are read by their position
+- **WHEN** a crate root declares `mod m { pub mod k; }` after `#[cfg_attr(unix, path = "c")] #[path = "d"]`, after `#[path = "d"] #[cfg_attr(unix, path = "c")]`, or after `#[path = "d"] #[path = "c"]`, with `src/d/k.rs` present and `src/c/k.rs` present or absent beside an existing `src/c/`
+- **THEN** in the `cfg_attr`-first order the system governs both `c/k.rs` and `d/k.rs` as `crate::m::k` where both exist, and reports the missing-file scan error naming `c/k.rs` where only `c/` does, as rustc 1.96.0 refuses it with `E0583` on unix; in the direct-first orders it governs `d/k.rs` alone and reports no scan error, which rustc 1.96.0 confirms by building them with no `c/k.rs`
+- **PINNED-BY** `a_path_attribute_is_read_by_its_position`
 
 #### Scenario: Every present conditional base of an inline module is descended
 

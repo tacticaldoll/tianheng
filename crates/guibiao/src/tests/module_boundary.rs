@@ -578,10 +578,10 @@ pub(super) fn a_dual_backed_module_declared_inside_a_cfg_if_arm_is_still_a_scan_
 }
 
 /// The `cfg_attr` half of the cfg-conditional rule, which nothing in 圭表 previously pinned even
-/// though the requirement asserts it: `cfg_attr` never REMOVES the item, it only conditionally applies
-/// its wrapped attribute, so a missing file beneath it is a genuine compile error (E0583) on every
-/// configuration and must not be tolerated. Without this test, an `attr_prefix_has_bare_cfg` that
-/// accidentally matched `cfg_attr` would turn a real build failure into a silent skip.
+/// though the requirement asserts it: a `cfg_attr` applying no `cfg` never REMOVES the item, it only
+/// conditionally applies its wrapped attribute, so a missing file beneath it is a genuine compile error (E0583)
+/// on every configuration and must not be tolerated. Without this test, a bare-`cfg` arm of `attributes_before`
+/// that accidentally matched `cfg_attr` would turn a real build failure into a silent skip.
 #[test]
 pub(super) fn a_cfg_attr_decorated_missing_module_file_is_not_tolerated() {
     let (result, _violations) = run_module_check(

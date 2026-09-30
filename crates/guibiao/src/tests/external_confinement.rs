@@ -210,25 +210,51 @@ pub(super) fn confine_observes_submodule_bare_and_leading_colon_forms() {
     );
 }
 
+/// `use libc as _;` imports the confined crate and binds no name, which is still an import of `libc` outside the
+/// permitted module.
 #[test]
-pub(super) fn confine_ignores_a_use_inside_a_string_literal() {
+pub(super) fn confine_observes_a_use_aliased_to_underscore() {
     let (result, violations) = run_module_check(
-        "confine-string",
+        "confine-as-underscore",
         &[
             ("lib.rs", "pub mod ffi;\npub mod service;\n"),
             ("ffi.rs", "\n"),
-            (
-                "service.rs",
-                "pub fn f() { let _s = \"use libc::c_int;\"; }\n",
-            ),
+            ("service.rs", "#[allow(unused_imports)]\nuse libc as _;\n"),
         ],
         confine("crate::ffi", "libc"),
     );
     assert!(result.is_ok(), "{result:?}");
-    assert!(
-        violations.is_empty(),
-        "a use inside a string literal is stripped before scanning: {violations:?}"
-    );
+    let findings: Vec<&str> = violations.iter().map(|v| v.finding.as_str()).collect();
+    assert_eq!(findings, ["crate::service"], "{violations:?}");
+}
+
+/// A `use` inside a string literal or a macro body is not an import: a string literal is one literal token, and no
+/// `use` reader records a `use` written inside a macro's group — a `macro_rules!` definition or an invocation.
+#[test]
+pub(super) fn confine_ignores_a_use_inside_a_string_literal_or_macro_body() {
+    for (name, service) in [
+        (
+            "confine-string",
+            "pub fn f() { let _s = \"use libc::c_int;\"; }\n",
+        ),
+        (
+            "confine-macro-rules",
+            "macro_rules! m { () => { use libc::c_int; }; }\n",
+        ),
+        ("confine-macro-call", "some_macro! { use libc::c_int; }\n"),
+    ] {
+        let (result, violations) = run_module_check(
+            name,
+            &[
+                ("lib.rs", "pub mod ffi;\npub mod service;\n"),
+                ("ffi.rs", "\n"),
+                ("service.rs", service),
+            ],
+            confine("crate::ffi", "libc"),
+        );
+        assert!(result.is_ok(), "{name}: {result:?}");
+        assert!(violations.is_empty(), "{name}: no use: {violations:?}");
+    }
 }
 
 #[test]

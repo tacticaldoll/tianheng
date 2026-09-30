@@ -527,6 +527,96 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH
 
+- **An item inserted between another item's `///` and its `fn` takes that item's doc.** *Class:* WATCH.
+  *Observed pressure:* four instances across two reviews of one pull request, each a new test or helper
+  placed just above an existing `fn` and so under its doc block, leaving the existing item undocumented
+  and the new one described as something else. *Observation source:* `cargo clippy -p guibiao --lib -- -W
+  clippy::missing_docs_in_private_items`, which names every private item with no doc, an item whose doc a new
+  one took among them. *Current reaction or bound:* none. That lint is the decidable instrument; measured when
+  this entry was written, it named 363 items, so adopting it means documenting those first. A text reader deciding that a doc describes a different item than the one it sits on is a
+  judgement over prose, which *Do not add a detector over prose* declines. *Risk:* no false negative; a
+  reader of the doc is misled about which item it describes. *Promotion trigger:* a later review finds
+  the shape again, which makes documenting guibiao's private items and turning the lint on a READY-PATCH.
+  *Version class:* patch. *Authority:* AGENTS.md's doc-comment rules.
+
+- **渾儀 and 漏刻 may read an inline module's children from its direct `#[path]` base alone.** *Class:* WATCH.
+  *Observed pressure:* none from an adopter. *Observation source:* rustc compiles the first path attribute
+  written, so `#[cfg_attr(unix, path = "c")] #[path = "d"] mod m { pub mod k; }` reads `c/k.rs` on unix —
+  measured against rustc 1.96.0, edition 2021, where a call to an item only `c/k.rs` defines compiles. 圭表 read
+  `d/` alone there and left `c/k.rs` ungoverned; it now reads each base by its position
+  (`a_path_attribute_is_read_by_its_position`). 渾儀's
+  `module_resolve` selects `vec![relocated]` whenever `direct_path_value` answers, which is the shape 圭表 had,
+  **read from the code and not yet demonstrated** by a failing fixture; 漏刻's audit walk is unread for it.
+  *Current reaction or bound:* none in either dimension. *Risk:* a false negative in each dimension where it
+  holds, reachable only by a `cfg_attr` path written before a direct one on an inline module. *Promotion
+  trigger:* a fixture in 渾儀 or 漏刻 that governs `d/k.rs` and not `c/k.rs` for that declaration, which makes it
+  READY-PATCH for that dimension with the fixture as its pin. *Version class:* minor for each dimension it
+  closes, since closing a false negative earns one. *Authority:* `module-boundary` for 圭表's requirement, which
+  the semantic and runtime specs say they match on `#[path]` relocation.
+
+- **漏刻 may compile the last of several direct `#[path]` attributes where rustc compiles the first.**
+  *Class:* WATCH. *Observed pressure:* none from an adopter. *Observation source:* rustc 1.96.0 compiles the
+  first path attribute written on a declaration and reports each later one unused, so `#[path = "a.rs"]
+  #[path = "b.rs"] mod m;` compiles `a.rs`; 漏刻's attribute reader keeps the last (`audit/scan/lexer.rs`, the
+  `b"path"` arm overwriting `attrs.path`) — read from the code, not yet run. *Current reaction or bound:* none.
+  *Risk:* a false negative in 漏刻 over `a.rs`, and a judgement of `b.rs`, which the build does not contain,
+  reachable only by a declaration writing two direct path attributes. *Promotion trigger:* a 漏刻 fixture
+  `#[path = "a.rs"] #[path = "b.rs"] mod m;` with a violation only in `a.rs` that 漏刻 reports clean, which
+  makes it READY-PATCH with that fixture as its pin. *Version class:* minor, since closing a false negative
+  earns one. *Authority:* `module-boundary`'s path-attribute requirement, which the runtime spec says it
+  matches on `#[path]` relocation.
+
+- **A path in a pattern position is read as a call.** *Class:* WATCH. *Observed pressure:* none from an
+  adopter. *Observation source:* a path's role is read from the tokens beside it, so `let P(x) = p`, a match arm
+  `E::A(x) =>`, a parameter `P(x): P`, `matches!(e, E::A(_))` and a destructuring assignment `P(x) = p` each
+  report under a prefix naming `P` or `E`; telling a pattern from a call needs an expression and pattern reader,
+  which is the shape whose own defects hid real calls, silently. *Current reaction or bound:*
+  `inline-symbol-path-confinement/a-path-in-a-pattern-position-is-read-as-a-call-a-stated-bound`, pinned by
+  `a_path_in_a_pattern_position_is_read_as_a_call`. *Risk:* a false positive only, under a prefix naming the
+  type a pattern destructures; `Some(..)`, `Ok(..)` and `Err(..)` name nothing, since the prelude is not read.
+  *Promotion trigger:* an adopter reporting the over-reaction, or a reader of patterns that can be shown never to
+  hide a call. *Version class:* patch — it removes findings. *Authority:* `inline-symbol-path-confinement`.
+
+- **An import's presence is not remembered across a cut cycle, and nothing shows it would differ.** *Class:*
+  WATCH. *Observed pressure:* none. *Observation source:* `CrateScopes`'s presence memo in
+  `crates/guibiao/src/module_scan/resolve.rs` stores an import's answer only when the walk that produced it cut
+  no cycle, since an answer read past a cut depends on the walk it was entered from. No fixture has been found
+  where remembering across a cut changes a verdict, so the withholding is hardening that no test can pin.
+  *Current reaction or bound:* none; the rule that a gap existing only in an argument gets prose and a trigger.
+  *Risk:* none to verdicts while no such fixture exists; the cost is a presence re-read per cut-affected lookup.
+  *Promotion trigger:* a unit, compiled by rustc, whose verdict differs when the memo stores an answer read past
+  a cut — the test is to delete the `walk.cuts == cuts` condition and run that unit — or a measured scan time
+  on a real crate dominated by those re-reads. *Version class:* patch — a verdict correction in the first case,
+  performance in the second. *Authority:* `inline-symbol-path-confinement`.
+
+- **A shared syn-free lexical layer.** *Class:* WATCH. *Observed pressure:* none from an adopter.
+  *Observation source:* hand-written Rust lexers stand in these crates — `crates/guibiao/src/module_scan/token_tree.rs`,
+  the only reader of source bytes in `guibiao`, `crates/louke/src/audit/scan/lexer.rs` and
+  `crates/kanhe/src/comment_scan.rs`. The keyword table `token_tree.rs` holds and the one
+  `louke`'s `is_rust_keyword` matches name the same words; measured by comparing the two word lists as sets,
+  neither holds a word the other lacks. No test holds the copies together. *Current reaction or bound:* inside
+  `guibiao`, the token tree imports no other `guibiao` module, held by the self-law boundary on
+  `crate::module_scan::token_tree`; across crates, none. *Risk:* a defect repaired in one lexer stays in the
+  others. *Promotion trigger:* a measured disagreement between two of the lexers on one input, or one defect class
+  repaired in one and found unrepaired in another. *Version class:* internal; a new crate is a law amendment that
+  widens `guibiao`'s and `louke`'s dependency allowlists. *Authority:* `PROJECT.md`'s `xingbiao` criterion —
+  what the tokens in a file mean belongs to the dimension asking, and a widening that cannot be argued across it is
+  a new crate's job — with 三儀 ⊥ 三儀 for `louke`.
+
+- **A prelude name called bare is not read as its standard-library path.** *Class:* WATCH. *Observed
+  pressure:* none from an adopter. *Observation source:* `drop(x)`, `Some(..)` and `Box::new(..)`
+  resolve through the std prelude, which `guibiao` does not read, so `must_not_call_inline("std::mem")` does
+  not see `drop(x)` — nor did 0.7.1, which read it as `{module}::drop`. The producer of the set is the
+  toolchain's own prelude source, `library/std/src/prelude/` under `rustc --print sysroot`'s
+  `lib/rustlib/src/rust/`: measured present, holding `mod.rs` and `v1.rs`, on rustc 1.96.0 stable with
+  rust-src installed. A copied name list would be a second list to hold against it. *Current reaction or
+  bound:* `inline-symbol-path-confinement/a-prelude-name-called-bare-is-not-read-as-its-std-path-a-stated-bound`,
+  pinned by `a_prelude_name_called_bare_is_not_read_as_its_std_path`. *Risk:* a boundary on a std module an
+  item of which the prelude re-exports passes a bare call of it. *Promotion trigger:* an adopter confining a
+  std module whose items the prelude re-exports (`std::mem`, `std::boxed`, `std::option`), or a second
+  reader needing the prelude's contents. *Version class:* minor — new observation depth that reacts by
+  default. *Authority:* `inline-symbol-path-confinement`.
+
 - **The dyn-trait collector does not read an `extern` block's foreign items.**
   *Class:* WATCH. *Observed pressure:* none — the shape compiles and nothing governs it, but no adopter has
   needed it governed. *Observation source:* in `crates/hunyi/src/collect/`, `collect_item_dyn_exposures` has

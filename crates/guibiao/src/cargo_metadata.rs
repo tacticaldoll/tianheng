@@ -7,6 +7,38 @@ pub(crate) use xingbiao::{
     cargo_metadata, compilation_unit_label, crate_roots, find_package, member_src_dirs,
 };
 
+/// The manifest edition the compilation unit rooted at `root_file` is read in: that of the targets rooted there,
+/// since rustc compiles each target in its own edition. `cargo metadata` reports a target's `[lib]` or `[[bin]]`
+/// `edition` on the target and the package's own beside it — measured under cargo 1.96.0, a 2024 package with
+/// `[lib] edition = "2015"` reports `2015` on its library target and `2024` on the package, and builds a 2015
+/// crate. A target reporting no edition reads as the package's. Targets sharing the root in different editions are
+/// compiled twice, once in each, so one reading cannot judge both and the root is refused.
+pub(crate) fn target_edition<'a>(
+    package: &'a Value,
+    root_file: &Path,
+    crate_package: &str,
+) -> Result<Option<&'a str>, String> {
+    let package_edition = package["edition"].as_str();
+    let mut editions: Vec<Option<&str>> = package["targets"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|target| target["src_path"].as_str().map(Path::new) == Some(root_file))
+        .map(|target| target["edition"].as_str().or(package_edition))
+        .collect();
+    editions.sort();
+    editions.dedup();
+    match editions.as_slice() {
+        [] => Ok(package_edition),
+        [edition] => Ok(*edition),
+        several => Err(crate::errors::root_in_several_editions_error(
+            crate_package,
+            root_file,
+            &several.iter().map(|e| e.unwrap_or("?")).collect::<Vec<_>>(),
+        )),
+    }
+}
+
 /// The membership set, or why it could not be read.
 ///
 /// **Typed apart, because an empty answer had several causes and reported one.** A `packages` array
@@ -157,7 +189,7 @@ pub(crate) fn dependencies(package: &Value, kind: DependencyKind) -> Vec<String>
 /// **Deliberately unfiltered by kind or source** (unlike [`dependencies`]/[`external_dependencies`]):
 /// dev-, build-, and path dependencies are all included. A broader name set makes MORE heads resolve
 /// as external, never fewer — the fail-safe direction for the one forbidden bug (a false negative) —
-/// while the local-precedence ladder still keeps any genuinely-local item local. The only cost is a
+/// while the scope lookup still keeps any genuinely-local item local. The only cost is a
 /// possible reaction on a dev/build-dep name used inside scanned test code.
 pub(crate) fn dependency_import_names(package: &Value) -> Vec<String> {
     let mut names: Vec<String> = package["dependencies"]

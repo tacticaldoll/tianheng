@@ -182,6 +182,15 @@ pub fn constitution() -> Constitution {
                 ),
         )
         .boundary(
+            ModuleBoundary::in_crate("guibiao")
+                .module("crate::module_scan::token_tree")
+                .restrict_imports_to(Vec::<String>::new())
+                .because(
+                    "guibiao's token tree imports no other guibiao module, so lexing a file depends on no \
+                     reader of its tokens",
+                ),
+        )
+        .boundary(
             ModuleBoundary::in_crate("hunyi")
                 .module("crate")
                 .must_not_call_inline("std::fs")

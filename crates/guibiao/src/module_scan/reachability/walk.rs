@@ -1,9 +1,10 @@
 //! Reachability graph traversal and physical-source resolution.
 
-use super::super::lexer::{clean_with_positions, read_path_string};
-use super::declarations::declared_modules_in;
+use super::super::token_tree::{Edition, TokenTree};
+use super::declarations::{block_path_modules, declared_modules_in};
 use super::paths::module_path_of;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::cell::OnceCell;
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
@@ -20,6 +21,7 @@ enum ScanSource {
         child_base: PathBuf,
         ancestors: HashSet<PathBuf>,
     },
+    /// An inline module's body, by the token indices of its `{` and `}` in the file's tree.
     Body {
         file: PathBuf,
         start: usize,
@@ -32,17 +34,16 @@ enum ScanSource {
 
 struct LoadedSource {
     file: PathBuf,
-    text: String,
-    cleaned: String,
-    positions: Vec<usize>,
-    range: Range<usize>,
+    /// The token range whose top-level declarations this source holds: the whole file, or an inline body between
+    /// its braces. `None` is the whole file, whose length is known only once it is lexed.
+    range: Option<Range<usize>>,
     path_base: PathBuf,
     child_base: PathBuf,
     ancestors: HashSet<PathBuf>,
 }
 
 impl ScanSource {
-    fn load(&self) -> Result<LoadedSource, String> {
+    fn load(&self) -> LoadedSource {
         let (file, range, path_base, child_base, ancestors) = match self {
             Self::File {
                 file,
@@ -57,22 +58,21 @@ impl ScanSource {
                 path_base,
                 child_base,
                 ancestors,
-            } => (file, Some(*start..*end), path_base, child_base, ancestors),
+            } => (
+                file,
+                Some(*start + 1..*end),
+                path_base,
+                child_base,
+                ancestors,
+            ),
         };
-        let text = std::fs::read_to_string(file)
-            .map_err(|err| format!("cannot read source file '{}': {err}", file.display()))?;
-        let (cleaned, positions) = clean_with_positions(&text);
-        let range = range.unwrap_or(0..cleaned.len());
-        Ok(LoadedSource {
+        LoadedSource {
             file: file.clone(),
-            text,
-            cleaned,
-            positions,
             range,
             path_base: path_base.clone(),
             child_base: child_base.clone(),
             ancestors: ancestors.clone(),
-        })
+        }
     }
 }
 
@@ -83,8 +83,10 @@ struct InlineBody {
     base: PathBuf,
     /// A **direct** `#[path]`'s base: it replaces the conventional one outright.
     relocated_base: Option<PathBuf>,
-    /// Every `cfg_attr(…, path = …)` base this declaration carries, when no direct attribute
-    /// overrides them. Candidates, not the base — see [`register_inline_sources`].
+    /// Every `cfg_attr(…, path = …)` base this declaration may compile, beside a direct one as without it: rustc takes
+    /// the first path attribute written, which a `cfg_attr` written before a direct one is where its predicate holds,
+    /// and one written after it never is, so the attribute reader keeps only the first kind. Candidates, not the
+    /// base — see [`register_inline_sources`].
     candidate_bases: Vec<PathBuf>,
     ancestors: HashSet<PathBuf>,
 }
@@ -124,34 +126,68 @@ struct ChildSources {
 
 /// Collect child module declarations across the given scan sources.
 ///
-/// A direct `#[path]` takes precedence over sibling `cfg_attr` paths and relocates the base outright.
-/// With no direct attribute, every `cfg_attr(…, path = …)` target is a candidate base unioned in
-/// [`register_inline_sources`]. For non-inline declarations, candidates that physically exist prove a
-/// configuration compiles via that remap, granting tolerance to absence of the conventional file.
-/// Unreadable targets return an error immediately via [`xingbiao::is_regular_file`].
-fn collect_children(scan_sources: &[ScanSource]) -> Result<BTreeMap<String, ChildSources>, String> {
+/// A direct `#[path]` relocates the base, and every `cfg_attr(…, path = …)` target written before it, or with no direct
+/// one at all, is a candidate base unioned in [`register_inline_sources`]: rustc compiles the first path attribute
+/// written, and whether a `cfg_attr` before the direct one applies is a predicate this scanner does not evaluate. A
+/// path written after the first direct one is never compiled, and the attribute reader drops it. For non-inline
+/// declarations, candidates that physically exist prove a configuration compiles via that remap, granting tolerance to
+/// absence of the conventional file. Unreadable targets return an error immediately via [`xingbiao::is_regular_file`].
+///
+/// A file of the crate is read and lexed once for the whole walk, into `texts` and `trees`: a file holding many inline
+/// modules is the source of each of them, and each reads its own range of the one token tree. A file the crate's file
+/// list does not hold is read and lexed where it is met.
+fn collect_children<'t>(
+    scan_sources: &[ScanSource],
+    edition: Edition,
+    texts: &'t HashMap<&PathBuf, OnceCell<String>>,
+    trees: &mut HashMap<PathBuf, TokenTree<'t>>,
+) -> Result<BTreeMap<String, ChildSources>, String> {
     let mut children: BTreeMap<String, ChildSources> = Default::default();
     for source in scan_sources {
-        let loaded = source.load()?;
-        for declared in declared_modules_in(&loaded.cleaned, loaded.range) {
+        let loaded = source.load();
+        let read = || {
+            std::fs::read_to_string(&loaded.file).map_err(|err| {
+                format!("cannot read source file '{}': {err}", loaded.file.display())
+            })
+        };
+        let (unlisted, unlisted_tree);
+        let tree = match texts.get(&loaded.file) {
+            Some(slot) => {
+                if !trees.contains_key(&loaded.file) {
+                    let text = match slot.get() {
+                        Some(text) => text,
+                        None => {
+                            let text = read()?;
+                            slot.get_or_init(|| text)
+                        }
+                    };
+                    trees.insert(loaded.file.clone(), TokenTree::lex(text, edition));
+                }
+                &trees[&loaded.file]
+            }
+            None => {
+                unlisted = read()?;
+                unlisted_tree = TokenTree::lex(&unlisted, edition);
+                &unlisted_tree
+            }
+        };
+        let range = loaded.range.clone().unwrap_or(0..tree.len());
+        for declared in declared_modules_in(tree, range.clone())
+            .into_iter()
+            .chain(block_path_modules(tree, range))
+        {
             let child_sources = children.entry(declared.name.clone()).or_default();
             if let Some((start, end)) = declared.body {
-                let base_at = |eq_cleaned: usize| -> Option<PathBuf> {
-                    let &orig_eq = loaded.positions.get(eq_cleaned)?;
-                    let rel =
-                        read_path_string(loaded.text.as_bytes(), orig_eq + 1, loaded.text.len())?;
-                    Some(loaded.path_base.join(rel))
-                };
-                let relocated_base = declared.direct_path_eq.and_then(base_at);
-                let candidate_bases: Vec<PathBuf> = match relocated_base {
-                    Some(_) => Vec::new(),
-                    None => declared
-                        .conditional_path_eqs
-                        .iter()
-                        .copied()
-                        .filter_map(base_at)
-                        .collect(),
-                };
+                let relocated_base = declared
+                    .direct_path
+                    .clone()
+                    .flatten()
+                    .map(|rel| loaded.path_base.join(rel));
+                let candidate_bases: Vec<PathBuf> = declared
+                    .conditional_paths
+                    .iter()
+                    .map(|rel| loaded.path_base.join(rel))
+                    .collect();
                 child_sources.bodies.push(InlineBody {
                     file: loaded.file.clone(),
                     start,
@@ -164,37 +200,38 @@ fn collect_children(scan_sources: &[ScanSource]) -> Result<BTreeMap<String, Chil
                 continue;
             }
             let mut resolved_conditional = Vec::new();
-            for &eq_cleaned in &declared.conditional_path_eqs {
-                if let Some(&orig_eq) = loaded.positions.get(eq_cleaned) {
-                    if let Some(rel) =
-                        read_path_string(loaded.text.as_bytes(), orig_eq + 1, loaded.text.len())
-                    {
-                        let candidate_target = loaded.path_base.join(&rel);
-                        if xingbiao::is_regular_file(&candidate_target)? {
-                            resolved_conditional.push(ConditionalPathSource {
-                                relative: PathBuf::from(rel),
-                                base: loaded.path_base.clone(),
-                                ancestors: loaded.ancestors.clone(),
-                            });
-                        }
-                    }
+            for rel in &declared.conditional_paths {
+                let candidate_target = loaded.path_base.join(rel);
+                if xingbiao::is_regular_file(&candidate_target)? {
+                    resolved_conditional.push(ConditionalPathSource {
+                        relative: PathBuf::from(rel),
+                        base: loaded.path_base.clone(),
+                        ancestors: loaded.ancestors.clone(),
+                    });
                 }
             }
             let has_backing_conditional_target = !resolved_conditional.is_empty();
             child_sources.conditional.extend(resolved_conditional);
 
-            if let Some(eq_cleaned) = declared.direct_path_eq {
-                if let Some(&orig_eq) = loaded.positions.get(eq_cleaned) {
-                    if let Some(rel) =
-                        read_path_string(loaded.text.as_bytes(), orig_eq + 1, loaded.text.len())
-                    {
-                        child_sources.direct.push(DirectPathSource {
-                            relative: PathBuf::from(rel),
-                            base: loaded.path_base.clone(),
-                            ancestors: loaded.ancestors.clone(),
-                            is_cfg_conditional: declared.is_cfg_conditional,
-                        });
-                    }
+            if let Some(written) = &declared.direct_path {
+                if let Some(rel) = written {
+                    child_sources.direct.push(DirectPathSource {
+                        relative: PathBuf::from(rel),
+                        base: loaded.path_base.clone(),
+                        ancestors: loaded.ancestors.clone(),
+                        is_cfg_conditional: declared.is_cfg_conditional
+                            || (declared.direct_path_is_conditional
+                                && has_backing_conditional_target),
+                    });
+                }
+            } else if declared.declared_in_block {
+                if !has_backing_conditional_target {
+                    return Err(format!(
+                        "module `{}` a block declares names no file that exists by any of its `cfg_attr` path \
+                         attributes, and a block's file-form `mod` has no conventional file, so no configuration \
+                         builds it",
+                        declared.name
+                    ));
                 }
             } else {
                 child_sources.seen_plain_file = true;
@@ -220,20 +257,20 @@ struct GraphSources {
 /// Register an inline `mod name { … }` body as a scan source, once per base its file-form children
 /// may resolve from.
 ///
-/// A **direct** `#[path]` relocates that base outright — one source, as before. A `cfg_attr`-wrapped
-/// one names a base per platform predicate, so every target is a **candidate**, unioned with the
-/// conventional directory: the scanner does not evaluate `cfg` and cannot know which arm a build
-/// compiles, so preferring one would silently drop the children beneath the other (the false negative
-/// the core contract forbids). A candidate is descended only when it **exists as a directory** —
-/// recursing into an absent one would spuriously fail loud on the body's other, unrelated nested
-/// items solely because one platform's directory is missing, even when another candidate already
-/// backs them. When no candidate exists at all, the conventional base is descended anyway, so a
-/// nested reference genuinely broken on every platform still fails loud exactly as it did before this
-/// tolerance existed.
+/// A **direct** `#[path]` relocates that base, and each `cfg_attr`-wrapped one written before it is a **candidate**
+/// read beside it. With no direct one, a `cfg_attr`-wrapped path names a base per platform predicate, so every target
+/// is a candidate, unioned with the conventional directory: the scanner does not evaluate `cfg` and cannot know which
+/// arm a build compiles, so preferring one would silently drop the children beneath the other (the false negative the
+/// core contract forbids). A candidate is descended only when it **exists as a directory** — recursing into an absent
+/// one would spuriously fail loud on the body's other, unrelated nested items solely because one platform's directory
+/// is missing, even when another candidate already backs them. When no candidate exists at all, the conventional base
+/// is descended anyway, so a nested reference genuinely broken on every platform still fails loud exactly as it did
+/// before this tolerance existed.
 ///
-/// This is 漏刻's own already-stated rule for the identical shape, implemented independently here
-/// (三儀 ⊥ 三儀: the same rule, not the same function), so the two dimensions cannot disagree about
-/// what rustc compiles.
+/// 漏刻 states a rule for the same shape and implements it independently (三儀 ⊥ 三儀: the same rule, not the
+/// same function). The two are not yet one answer: 漏刻 still takes the last of several direct `#[path]`
+/// attributes, where rustc and this walk take the first, which `BACKLOG.md` tracks with the inline-base
+/// question under the 渾儀 and 漏刻 WATCH entry.
 fn register_inline_sources(
     child: &str,
     child_path: &str,
@@ -244,7 +281,15 @@ fn register_inline_sources(
     for body in bodies {
         let conventional = body.base.join(child);
         let bases: Vec<PathBuf> = match &body.relocated_base {
-            Some(base) => vec![base.clone()],
+            Some(base) => {
+                let mut bases = vec![base.clone()];
+                for candidate in &body.candidate_bases {
+                    if xingbiao::is_directory(candidate)? && !bases.contains(candidate) {
+                        bases.push(candidate.clone());
+                    }
+                }
+                bases
+            }
             None if body.candidate_bases.is_empty() => vec![conventional],
             None => {
                 let mut present: Vec<PathBuf> = Vec::new();
@@ -286,6 +331,10 @@ fn register_inline_sources(
 /// Refuses ambiguity if both exist. If neither exists and the declaration is cfg-conditional, it is
 /// tolerated; otherwise an error is returned. An unreadable candidate fails immediately via
 /// [`xingbiao::is_regular_file`].
+///
+/// A source's `path_base` is the directory of the path it is opened by, as rustc resolves a `#[path]` in it, not the
+/// directory of a file a symlink there names — measured against rustc 1.96.0, `src/a.rs -> ../elsewhere/a.rs` holding
+/// `#[path = "x.rs"]` reads `src/x.rs`. The canonical path is kept for the cycle check alone.
 fn resolve_plain_sources(
     child: &str,
     child_path: &str,
@@ -352,7 +401,7 @@ fn resolve_plain_sources(
                     .remapped
                     .push((candidate.clone(), child_path.to_string()));
             }
-            let own_dir = canon
+            let own_dir = candidate
                 .parent()
                 .map(Path::to_path_buf)
                 .unwrap_or_else(|| base.clone());
@@ -383,6 +432,8 @@ enum RemapKind {
     Conditional,
 }
 
+/// The remapped file's `path_base` is the directory of the path it is opened by, not of a file a symlink there names,
+/// as [`resolve_plain_sources`] states.
 fn register_remapped_source(
     child_path: &str,
     target: PathBuf,
@@ -405,7 +456,7 @@ fn register_remapped_source(
     graph
         .remapped
         .push((target.clone(), child_path.to_string()));
-    let own_dir = canon.parent().map(Path::to_path_buf).unwrap_or(base);
+    let own_dir = target.parent().map(Path::to_path_buf).unwrap_or(base);
     let mut ancestors = target_ancestors;
     ancestors.insert(canon);
     graph
@@ -556,6 +607,7 @@ pub(crate) fn reachable_modules(
     src_dir: &Path,
     files: &[PathBuf],
     root_relative: Option<&Path>,
+    edition: Edition,
 ) -> Result<
     (
         std::collections::BTreeSet<String>,
@@ -577,12 +629,15 @@ pub(crate) fn reachable_modules(
             .by_module
             .insert("crate".to_string(), root_scan_sources(root_files, src_dir)?);
     }
+    let texts: HashMap<&PathBuf, OnceCell<String>> =
+        files.iter().map(|file| (file, OnceCell::new())).collect();
+    let mut trees = HashMap::new();
     let mut queue = vec!["crate".to_string()];
     while let Some(module) = queue.pop() {
         let Some(scan_sources) = graph.by_module.get(&module).cloned() else {
             continue;
         };
-        let children = collect_children(&scan_sources)?;
+        let children = collect_children(&scan_sources, edition, &texts, &mut trees)?;
         for (child, child_sources) in children {
             let ChildSources {
                 seen_plain_file,

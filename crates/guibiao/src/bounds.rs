@@ -54,9 +54,11 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             ),
             "a confined-crate `use` written inside a string literal or a macro body",
             Extent::OutOfReach {
-                because: "comments, string literals and macro bodies are stripped before scanning".into(),
+                because: "a comment is no token, a string literal is one literal token, and no `use` reader records a `use` \
+                          written inside a macro's group other than a `cfg_if!` arm"
+                    .into(),
             },
-            "confine_ignores_a_use_inside_a_string_literal",
+            "confine_ignores_a_use_inside_a_string_literal_or_macro_body",
         ),
         BoundDecl::pinned(
             BoundId::new(
@@ -82,16 +84,17 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             }),
             "inline_a_verb_outside_the_declared_set_is_a_bound",
         ),
-        BoundDecl::pinned(
+        BoundDecl::pinned_by_many(
             BoundId::new(
                 "inline-symbol-path-confinement/a-receiver-method-read-is-a-documented-bound",
             ),
-            "a read reached through a method call on a receiver",
+            "a read reached through a method call on a receiver, or through a path beginning with `<`",
             Extent::OutOfReach {
-                because: "no type inference is performed on the receiver, so the confined path is never \
-                          resolved from the call site".into(),
+                because: "no type inference is performed on the receiver or the qualified type, so the confined \
+                          path is never resolved from the call site".into(),
             },
             "inline_receiver_method_read_is_a_bound",
+            ["inline_qualified_path_is_the_type_directed_bound"],
         ),
         BoundDecl::pinned(
             BoundId::new(
@@ -118,18 +121,6 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
-                "inline-symbol-path-confinement/an-extern-crate-rename-is-a-stated-bound-under-strict-external",
-            ),
-            "a call reached through an `extern crate … as` alias head under strict-external",
-            Extent::Reached(Reached::UnderReacts {
-                because: "the use-map is built from `use` declarations only, so an `extern crate` rename \
-                          binds an alias the resolver does not know".into(),
-                owner: Owner::Engine,
-            }),
-            "inline_strict_external_extern_crate_rename_is_a_stated_bound",
-        ),
-        BoundDecl::pinned(
-            BoundId::new(
                 "inline-symbol-path-confinement/a-prefix-segment-past-what-guibiao-reads-is-not-verified-a-stated-bound",
             ),
             "an inline-call prefix misspelled after a crate's name or after an item of the crate, or starting at a \
@@ -148,8 +139,8 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             ),
             "a `crate::` inline-call prefix naming an item a macro invocation defines",
             Extent::Reached(Reached::RefusesToJudge {
-                because: "macro bodies are stripped before items are collected, so the item is absent from the set \
-                          the prefix is held to and the prefix is refused as naming nothing"
+                because: "no declaration inside a macro invocation's group is recorded, so the item is absent from \
+                          the set the prefix is held to and the prefix is refused as naming nothing"
                     .into(),
             }),
             "a_prefix_naming_a_macro_generated_item_is_refused",
@@ -178,6 +169,104 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                 owner: Owner::Engine,
             }),
             "an_example_root_is_not_governed",
+        ),
+        BoundDecl::pinned_by_many(
+            BoundId::new(
+                "inline-symbol-path-confinement/a-macro-generated-item-called-bare-in-its-own-module-is-not-observed-a-stated-bound",
+            ),
+            "a bare call, in its own module, of an item a macro invocation generates",
+            Extent::Reached(Reached::UnderReacts {
+                because: "no declaration inside a macro invocation's group is recorded, so the \
+                          generated item is not in the scope table and a head no scope binds names nothing; a crate-rooted path naming \
+                          it from another module still reacts"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "a_macro_generated_item_called_bare_in_its_module_is_a_bound",
+            ["a_crate_rooted_call_of_a_macro_generated_item_reports"],
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "inline-symbol-path-confinement/a-prelude-name-called-bare-is-not-read-as-its-std-path-a-stated-bound",
+            ),
+            "a bare call of a prelude name — `drop(x)`, `Some(..)`, `Box::new(..)` — under a standard-library prefix",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the prelude's contents are not read, so a head no scope binds names nothing rather \
+                          than the standard-library path the prelude would give it"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "a_prelude_name_called_bare_is_not_read_as_its_std_path",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "inline-symbol-path-confinement/a-path-in-a-pattern-position-is-read-as-a-call-a-stated-bound",
+            ),
+            "a tuple-struct or tuple-variant path in a pattern position — a `let`, `if let`, `while let` or \
+             let-else pattern, a `for` loop's, a match arm's, a `fn` or closure parameter's, a macro's arguments, \
+             a destructuring assignment's left side",
+            Extent::Reached(Reached::OverReacts {
+                because: "a path's role is read from the tokens beside it, and a tuple-struct or tuple-variant \
+                          pattern followed by its parenthesized fields is written as a call is, so no reading of \
+                          the tokens tells the pattern from the call"
+                    .into(),
+            }),
+            "a_path_in_a_pattern_position_is_read_as_a_call",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "inline-symbol-path-confinement/a-qualified-path-after-a-closing-brace-is-read-as-a-rooted-path-a-stated-bound",
+            ),
+            "under `.strict_external()`, the tail of a qualified path opening a statement right after a `}` — \
+             `if c {} <W>::md5x();`",
+            Extent::Reached(Reached::OverReacts {
+                because: "a `}` ends a block-like operand as well as a statement, and is read as an operand's \
+                          end so a comparison after a block never opens a qualified path; the `<` after it is \
+                          then a comparison, and the tail after its `>` is read as a rooted path, which names a \
+                          dependency where its first segment is one"
+                    .into(),
+            }),
+            "a_qualified_path_after_a_closing_brace_is_read_as_a_rooted_path",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "inline-symbol-path-confinement/a-qualified-path-a-shift-opens-in-a-generic-list-is-read-as-a-rooted-path-a-stated-bound",
+            ),
+            "under `.strict_prefix_only()` and `.strict_external()`, the tail of a qualified path the second `<` of \
+             a `<<` opens in a generic list — `Vec<<u8 as Tr>::md5x>`",
+            Extent::Reached(Reached::OverReacts {
+                because: "the token before the `<<` ends an operand, as in `1 << n > ::std::process::id() && n > 0`, \
+                          so the `<<` is read as a shift and the tail after the inner `>` as a rooted path, which \
+                          names a dependency where its first segment is one; telling the list from the shift needs a \
+                          type from a value"
+                    .into(),
+            }),
+            "a_qualified_path_a_shift_opens_in_a_generic_list_is_read_as_a_rooted_path",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "inline-symbol-path-confinement/a-generic-parameter-named-like-an-import-is-read-as-the-import-a-stated-bound",
+            ),
+            "a head naming a generic parameter that shares its name with a `use` of the enclosing module",
+            Extent::Reached(Reached::OverReacts {
+                because: "generic parameter lists are not read, so the head is resolved through whatever the \
+                          module binds under that name"
+                    .into(),
+            }),
+            "inline_generic_parameter_named_like_an_import_is_read_as_the_import",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "inline-symbol-path-confinement/a-local-binding-named-like-an-import-is-read-as-the-import-a-stated-bound",
+            ),
+            "a bare head naming a `fn` or closure parameter, or a `let` binding, that shares its name with an import in \
+             scope",
+            Extent::Reached(Reached::OverReacts {
+                because: "parameters and `let` bindings are not recorded in the scope table, so the head is resolved \
+                          through whatever the enclosing scopes bind under that name"
+                    .into(),
+            }),
+            "a_local_binding_named_like_an_import_is_read_as_the_import",
         ),
         BoundDecl::pinned(
             BoundId::new(
