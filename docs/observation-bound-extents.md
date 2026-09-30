@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**60 of 127 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**60 of 128 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -430,7 +430,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_macro_invocation_pub_item_is_a_documented_bound`
 
-## over-reacts (20)
+## over-reacts (21)
 
 ### `crate-dependency-boundary/an-optional-dependency-edge-is-observed-as-a-declared-one-a-stated-bound`
 
@@ -511,6 +511,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the rule tests for whitespace or line start, so text bash discards survives into the executed region and commentary can satisfy a property about executed text
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_shell_marker_after_a_metacharacter_stays_in_the_region`
+
+### `repository-checks/a-spawn-marker-inside-a-string-literal-is-read-as-a-spawn-a-stated-bound`
+
+> a spawn marker inside a string literal of a test target, after a byte that is neither a quote nor an identifier character
+
+- **because**: a string literal's contents are executed text, and the position rule excludes only a marker a quote or an identifier character precedes
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `a_spawn_marker_inside_a_string_literal_is_read_as_a_spawn`
 
 ### `runtime-origin-assertion/a-composite-shape-yields-a-truncated-origin-a-stated-bound`
 

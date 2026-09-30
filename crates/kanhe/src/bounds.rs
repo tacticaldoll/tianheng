@@ -286,6 +286,19 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
+                "repository-checks/a-spawn-marker-inside-a-string-literal-is-read-as-a-spawn-a-stated-bound",
+            ),
+            "a spawn marker inside a string literal of a test target, after a byte that is neither a quote nor an \
+             identifier character",
+            Extent::Reached(Reached::OverReacts {
+                because: "a string literal's contents are executed text, and the position rule excludes only a \
+                          marker a quote or an identifier character precedes"
+                    .into(),
+            }),
+            "a_spawn_marker_inside_a_string_literal_is_read_as_a_spawn",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
                 "repository-checks/a-shell-comment-opened-by-a-metacharacter-stays-in-the-executed-region-a-stated-bound",
             ),
             "a shell comment marker written straight after an unquoted metacharacter, where bash opens a \
