@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**27 of 127 declared bounds have no pinning test.** That figure is the register's
+**27 of 128 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -529,6 +529,12 @@ fallback used where no manifest exists, which the register spec describes.
 > nothing reads it. The corpus is Rust comments, where an identical adjacent pair has one cause; Markdown repeats identical adjacent lines for its own reasons — a table's rule row, two list items that read the same — so the same rule there reports text its author wrote. The prose corpora carry the weight this check exists to protect, which makes this the stop worth revisiting first if a shape with no false positive is found for them
 
 - **pinned by**: `a_repeated_paragraph_in_a_prose_file_is_outside_the_corpus`
+
+### `repository-checks/a-spawn-marker-inside-a-string-literal-is-read-as-a-spawn-a-stated-bound`
+
+> the detector reads it as a spawn, a stated bound: the literal's contents are executed text, and the position rule excludes only a marker a quote or an identifier character precedes. The direction is the over-reacting one — the target is named, or its fixture spelled otherwise — and closing it needs a reader of Rust literals the executed region does not model
+
+- **pinned by**: `a_spawn_marker_inside_a_string_literal_is_read_as_a_spawn`
 
 ## runtime-origin-assertion
 

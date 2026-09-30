@@ -249,6 +249,17 @@ fn no_test_target_spawns_a_process_unnamed() {
 ///
 /// One owner because two directions ask it now. It was a closure inside the first, which is where a second
 /// caller copies from.
+/// The position rule reads a string literal's text as executed, so a marker inside one that a space or any other
+/// non-quote, non-identifier byte precedes is read as a call: `let s = "a Command::new(x)";` names a spawn, where
+/// `"Command::new(x)"`, the marker the literal opens with, does not. Executed Rust text is what a `//` comment
+/// leaves, and a literal's contents are part of it. A fixture holding such source text is therefore declared as
+/// spawning, or spelled otherwise.
+#[test]
+fn a_spawn_marker_inside_a_string_literal_is_read_as_a_spawn() {
+    assert!(opens(r#"let s = "a Command::new(x)";"#, "Command::new("));
+    assert!(!opens(r#"let s = "Command::new(x)";"#, "Command::new("));
+}
+
 fn opens(line: &str, marker: &str) -> bool {
     line.match_indices(marker).any(|(at, _)| {
         at == 0 || {

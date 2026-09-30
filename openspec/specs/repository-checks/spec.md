@@ -3208,7 +3208,9 @@ is done; spawning a process has one syntactic form and needs no knowledge of the
 
 The detector SHALL read executed text, and SHALL recognize the call by position: not preceded by a quote, so
 the check does not match its own marker literals, and not preceded by an identifier character, so a
-different type's constructor is not read as a spawn.
+different type's constructor is not read as a spawn. A string literal's contents are executed text, so a marker
+inside one that neither precedes is read as a call — a declared over-reaction (bound:
+repository-checks/a-spawn-marker-inside-a-string-literal-is-read-as-a-spawn-a-stated-bound).
 
 The purpose recorded beside each path is prose with no producer — a reader's aid for whoever adds the next
 one. What this requirement holds is membership.
@@ -3224,6 +3226,16 @@ one. What this requirement holds is membership.
 - **WHEN** a named target no longer spawns a process
 - **THEN** the check fails, because a name that outlives its reason certifies nothing
 - **PINNED-BY** `no_test_target_spawns_a_process_unnamed`
+
+#### Scenario: A spawn marker inside a string literal is read as a spawn — a stated bound
+
+- **WHEN** a test target's executed line holds a string literal whose text carries the marker after a space or
+  any other byte that is neither a quote nor an identifier character, as `let s = "a Command::new(x)";` does
+- **THEN** the detector reads it as a spawn, a stated bound: the literal's contents are executed text, and the
+  position rule excludes only a marker a quote or an identifier character precedes. The direction is the
+  over-reacting one — the target is named, or its fixture spelled otherwise — and closing it needs a reader
+  of Rust literals the executed region does not model
+- **PINNED-BY** `a_spawn_marker_inside_a_string_literal_is_read_as_a_spawn`
 
 ### Requirement: The isolation a builder claims SHALL be decided by a run, not by a list of names
 
