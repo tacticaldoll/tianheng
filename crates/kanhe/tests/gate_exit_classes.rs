@@ -197,32 +197,7 @@ fn no_test_target_spawns_a_process_unnamed() {
     for path in &paths {
         let text = std::fs::read_to_string(root.join(path))
             .unwrap_or_else(|err| panic!("cannot read {path}: {err}"));
-        // Executed text, so a doc comment naming a call is not read as one — and by position rather than by
-        // the bare marker, because this direction's own source is in the corpus it reads and holds both
-        // markers as literals. A call has a boundary before it where the literal has a quote, which is the
-        // argument `refusal_register` makes for `::expect(` against its own panic messages.
-        let source = Source::of(&text);
-        let executed = source.rust();
-        // **The whole module, not each spawning function it exports** — the fourth round of the defect the
-        // doc above predicts. `hermetic_git::fixture` is itself a call site's spelling, and a
-        // target whose only spawn were that would have gone undetected while `Command::new(` and
-        // `hermetic(` both passed over it. Naming the module closes every entry point it has and every one
-        // it gains. Two of its items — `failed` and `program_and_args` — spawn nothing, so a target reaching
-        // only those would be over-declared; over-declaring is the safe direction here, and no target does
-        // (measured: every file reaching this module also runs something through it).
-        //
-        // `hermetic(` stays beside it because an imported `hermetic` is spelled bare, with no module
-        // qualifier to match. `bash::` is the same case as `hermetic_git::`: the one `bash` the checks run is
-        // built in `support::bash`, and a target reaches it as `support::bash::…` or, having imported the
-        // module, as `bash::…` — both carry the module's name before `::`, which is what is matched. A rename
-        // of the module on import, `use support::bash as sh`, is not read here: no target writes one, and the
-        // builder is what constructs a `bash`, held by `hermetic_invocations`' reader, which binds renames.
-        if executed.lines().any(|line| {
-            opens(line, "Command::new(")
-                || opens(line, "hermetic_git::")
-                || opens(line, "hermetic(")
-                || opens(line, "bash::")
-        }) {
+        if spawns(&text) {
             reaching.insert(path.clone());
         }
     }
@@ -234,11 +209,37 @@ fn no_test_target_spawns_a_process_unnamed() {
     );
 }
 
-/// Every tracked Rust file under `crates`, enumerated **once** for the two directions that read it.
-///
-/// One enumeration because two would be two corpora that must agree, and a file the second forgot would be
-/// judged by one direction and not the other — the granularity defect this file's own directions exist to
-/// close, reintroduced one level up.
+/// Whether a test target's `text` spawns a process: any of the spawn markers opening a call on a line of its
+/// executed Rust, as [`no_test_target_spawns_a_process_unnamed`] asks of every test target.
+fn spawns(text: &str) -> bool {
+    // Executed text, so a doc comment naming a call is not read as one — and by position rather than by
+    // the bare marker, because the direction's own source is in the corpus it reads and holds both
+    // markers as literals. A call has a boundary before it where the literal has a quote, which is the
+    // argument `refusal_register` makes for `::expect(` against its own panic messages.
+    let source = Source::of(text);
+    let executed = source.rust();
+    // **The whole module, not each spawning function it exports** — the fourth round of the defect
+    // `no_test_target_spawns_a_process_unnamed`'s doc predicts. `hermetic_git::fixture` is itself a call
+    // site's spelling, and a target whose only spawn were that would have gone undetected while `Command::new(` and
+    // `hermetic(` both passed over it. Naming the module closes every entry point it has and every one
+    // it gains. Two of its items — `failed` and `program_and_args` — spawn nothing, so a target reaching
+    // only those would be over-declared; over-declaring is the safe direction here, and no target does
+    // (measured: every file reaching this module also runs something through it).
+    //
+    // `hermetic(` stays beside it because an imported `hermetic` is spelled bare, with no module
+    // qualifier to match. `bash::` is the same case as `hermetic_git::`: the one `bash` the checks run is
+    // built in `support::bash`, and a target reaches it as `support::bash::…` or, having imported the
+    // module, as `bash::…` — both carry the module's name before `::`, which is what is matched. A rename
+    // of the module on import, `use support::bash as sh`, is not read here: no target writes one, and the
+    // builder is what constructs a `bash`, held by `hermetic_invocations`' reader, which binds renames.
+    executed.lines().any(|line| {
+        opens(line, "Command::new(")
+            || opens(line, "hermetic_git::")
+            || opens(line, "hermetic(")
+            || opens(line, "bash::")
+    })
+}
+
 /// Whether `line` opens a call to `marker`, rather than merely containing its text.
 ///
 /// Not preceded by a quote, so a direction using this does not match its own marker literals — and not
@@ -249,17 +250,6 @@ fn no_test_target_spawns_a_process_unnamed() {
 ///
 /// One owner because two directions ask it now. It was a closure inside the first, which is where a second
 /// caller copies from.
-/// The position rule reads a string literal's text as executed, so a marker inside one that a space or any other
-/// non-quote, non-identifier byte precedes is read as a call: `let s = "a Command::new(x)";` names a spawn, where
-/// `"Command::new(x)"`, the marker the literal opens with, does not. Executed Rust text is what a `//` comment
-/// leaves, and a literal's contents are part of it. A fixture holding such source text is therefore declared as
-/// spawning, or spelled otherwise.
-#[test]
-fn a_spawn_marker_inside_a_string_literal_is_read_as_a_spawn() {
-    assert!(opens(r#"let s = "a Command::new(x)";"#, "Command::new("));
-    assert!(!opens(r#"let s = "Command::new(x)";"#, "Command::new("));
-}
-
 fn opens(line: &str, marker: &str) -> bool {
     line.match_indices(marker).any(|(at, _)| {
         at == 0 || {
@@ -269,6 +259,23 @@ fn opens(line: &str, marker: &str) -> bool {
     })
 }
 
+/// A string literal's contents are executed Rust text, since the Rust region cuts only at a `//` comment, and the
+/// position rule excludes a marker only where a quote or an identifier character precedes it. So through the
+/// detector itself, a source line `let s = "a Command::new(x)";` reads as a spawn, while `"Command::new(x)"`, the
+/// marker the literal opens with, and a `// a Command::new(x)` comment do not. A fixture holding such source text
+/// is therefore declared as spawning, or spelled otherwise.
+#[test]
+fn a_spawn_marker_inside_a_string_literal_is_read_as_a_spawn() {
+    assert!(spawns("let s = \"a Command::new(x)\";\n"));
+    assert!(!spawns("let s = \"Command::new(x)\";\n"));
+    assert!(!spawns("let s = 1; // a Command::new(x)\n"));
+}
+
+/// Every tracked Rust file under `crates`, enumerated **once** for the two directions that read it.
+///
+/// One enumeration because two would be two corpora that must agree, and a file the second forgot would be
+/// judged by one direction and not the other — the granularity defect this file's own directions exist to
+/// close, reintroduced one level up.
 fn tracked_rust(root: &Path) -> Vec<String> {
     let listing = kanhe::hermetic_git::tracked_paths(root, &["crates"]).unwrap_or_else(|failure| {
         panic!(
