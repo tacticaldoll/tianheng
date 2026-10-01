@@ -197,7 +197,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `inline-symbol-path-confinement/the-fully-qualified-external-call-is-a-stated-bound-under-the-default`
 
-> the system does NOT react (the fully-qualified un-`use`d external call is a stated non-observation under the default; behavior is unchanged from before this capability)
+> the system does NOT react (the fully-qualified un-`use`d external call is a stated non-observation under the default)
 
 - **pinned by**: `inline_strict_external_absent_fully_qualified_call_is_a_bound`
 

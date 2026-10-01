@@ -141,7 +141,7 @@ const DECLARED: [Boundary; 14] = [
     },
     Boundary {
         heading: "`guibiao::crate::module_scan::token_tree` (module)",
-        reason: "guibiao's token tree imports no other guibiao module, so lexing a file depends on no reader of its tokens",
+        reason: "guibiao's token tree imports no other guibiao module, so the readers of its tokens import it and it imports none of them",
         fields: &[
             "- **rule**: restrict imports to (only: )",
             "- **kind**: module · **severity**: enforce · **crate**: guibiao",

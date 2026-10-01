@@ -264,9 +264,12 @@ resolved as that crate, so the fully-qualified call reacts (and an external-crat
 and the default (flag off) is byte-identical — opt-in, no baseline churn. An `extern crate chrono
 as chr;` binds `chr` as `use chrono as chr;` does, so `chr::Utc::now()` reacts with or without the flag.
 Stated bounds under the flag (**any** prefix): a glob-brought name *except via the glob-hazard
-reaction*, and a `mod` token inside a macro body. One additional **over-reaction** bound applies **only** under a single-segment bare-crate
-prefix (`"rand"`, never a multi-segment `chrono::Utc`): a local `let`/parameter/closure binding named
-like the crate may false-positive. A `fn` item's own name is its definition, never a call.
+reaction*, and a `mod` token inside a macro body. One additional **over-reaction** bound of the flag applies
+**only** under a single-segment bare-crate prefix (`"rand"`, never a multi-segment `chrono::Utc`): a local
+`let`/parameter/closure binding named like the crate may false-positive. A `fn` item's own name is its
+definition, never a call. Independently of the flag, under any prefix, a local `let`/parameter/closure
+binding named like an import in scope is read as that import — `use crate::clock::now; fn s(now: fn()) {
+now(); }` reports under `crate::clock`.
 
 ---
 

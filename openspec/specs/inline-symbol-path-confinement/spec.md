@@ -891,8 +891,8 @@ brought in by a **glob** import except via the glob-hazard reaction — which un
 **extends to external-crate globs** (an external glob that can bring a prefix-resolving name into
 scope reacts fail-closed, as under the sysroot case). A bare head shadowed by a local module /
 definition / import (the local-precedence carve-out) likewise stays local — checked against the
-call's TRUE inline module, so a file-top item no longer masks an external call inside an inline
-`mod name { … }` submodule (that inline-submodule shadow is now CLOSED, at any nesting depth).
+call's TRUE inline module, so a file-top item does not mask an external call inside an inline
+`mod name { … }` submodule, at any nesting depth.
 Finally, strict-external only: a `mod name {` token or unbalanced braces **inside a
 macro-invocation body** opens a module scope for the calls inside that body, while no declaration
 inside a macro's group is recorded, so a call's true module may be mis-attributed — a stated bound. Two more follow from a head no scope binds naming nothing: (8) an item a macro
@@ -1191,7 +1191,7 @@ confinement without the flag, so no existing constitution's reaction changes.
 
 #### Scenario: The fully-qualified external call is a stated bound under the default
 - **WHEN** the same `chrono::Utc::now()` call is governed by `.must_not_call_inline("chrono::Utc")` **without** `.strict_external()`
-- **THEN** the system does NOT react (the fully-qualified un-`use`d external call is a stated non-observation under the default; behavior is unchanged from before this capability)
+- **THEN** the system does NOT react (the fully-qualified un-`use`d external call is a stated non-observation under the default)
 - **PINNED-BY** `inline_strict_external_absent_fully_qualified_call_is_a_bound`
 
 #### Scenario: A deep local module named like a dependency stays local under strict-external
@@ -1208,7 +1208,7 @@ confinement without the flag, so no existing constitution's reaction changes.
 
 #### Scenario: A local alias shadowing a dependency name stays local under strict-external
 - **WHEN** a boundary declares `.must_not_call_inline("time").strict_external()`, crate `app` depends on `time`, and `crate::core` declares `use crate::clock as time;` (a local alias) then calls `time::read()`
-- **THEN** the system resolves `time` through the local `use`-map (which precedes the dependency-name match) and does NOT react
+- **THEN** the system resolves `time` through its local `use` binding (which precedes the dependency-name match) and does NOT react
 
 #### Scenario: An external-crate glob reacts under strict-external
 - **WHEN** a boundary declares `.must_not_call_inline("chrono::Utc").strict_external()`, crate `app` depends on `chrono`, and `crate::core` declares `use chrono::*;`

@@ -744,11 +744,15 @@ impl InlineConfinementDraft {
     /// macro's group is recorded, so a call's true module may be mis-attributed. Rare and declared,
     /// never a silent pass.
     ///
-    /// One stated **over-**reaction bound, only under a **single-segment** bare crate prefix
+    /// One stated **over-**reaction bound is this flag's, only under a **single-segment** bare crate prefix
     /// (`must_not_call_inline("rand")`) — a multi-segment prefix (`chrono::Utc`) is immune, as is every
     /// prefix under the default, where a head no scope binds names nothing: 圭表's text scan cannot tell
-    /// a local binding from a call, so a local `let rand = …; rand()` may false-positive here. A `fn` item's own name (`fn rand(…)`) is read as its definition, never a call,
-    /// and module-top-level definitions resolve to the local item. Declared, not silent.
+    /// a local binding from a call, so a local `let rand = …; rand()` may false-positive here. A `fn` item's
+    /// own name (`fn rand(…)`) is read as its definition, never a call, and module-top-level definitions
+    /// resolve to the local item. Separately, and in every mode, a `fn` or closure parameter or a `let`
+    /// binding sharing its name with an import in scope is read as that import, so
+    /// `use crate::clock::now; fn s(now: fn()) { now(); }` reports under `crate::clock`. Both are declared,
+    /// not silent.
     ///
     /// Orthogonal to [`ending_with`](Self::ending_with) / [`strict_prefix_only`](Self::strict_prefix_only):
     /// it changes head *resolution*, not call-vs-mention breadth, and composes with either — it is

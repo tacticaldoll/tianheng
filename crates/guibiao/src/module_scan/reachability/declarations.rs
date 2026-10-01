@@ -19,11 +19,12 @@ pub(super) struct DeclaredModule {
     /// literal, `Some(None)` where it is written but its value cannot be read, which leaves the declaration no
     /// backing source rather than the conventional one; `None` where there is none.
     pub(super) direct_path: Option<Option<String>>,
-    /// Whether a `cfg_attr(…, path = …)` is written before the direct `#[path]`, so the direct one is the first path
-    /// attribute only where that predicate is false and its target may be absent on a build that compiles the
-    /// candidate — which the walk grants only where some candidate's file exists, the test a lone `cfg_attr` path
-    /// already meets, so a declaration no configuration backs still fails loud — measured against rustc 1.96.0, edition 2021, on unix: `#[cfg_attr(unix, path = "b.rs")]
-    /// #[path = "a.rs"] mod m;` builds with only `b.rs` on disk.
+    /// Whether a `cfg_attr(…, path = …)` is written before the direct `#[path]`. rustc compiles the first path
+    /// attribute written, so the direct one applies only where that predicate is false, and its target may be absent
+    /// on a build that compiles the candidate. The walk grants that absence only where some candidate's file exists —
+    /// the test a lone `cfg_attr` path already meets — so a declaration no configuration backs still fails loud.
+    /// Measured against rustc 1.96.0, edition 2021, on unix: `#[cfg_attr(unix, path = "b.rs")] #[path = "a.rs"]
+    /// mod m;` builds with only `b.rs` on disk.
     pub(super) direct_path_is_conditional: bool,
     /// Every readable `cfg_attr(…, path = "…")` value before the declaration, nested `cfg_attr`s included, in
     /// textual order.
@@ -65,7 +66,8 @@ struct PathAttributes {
     direct: Option<Option<String>>,
     direct_after_candidate: bool,
     conditional: Vec<(usize, String)>,
-    bare_cfg: bool,
+    /// Whether a `cfg` is written on the declaration, directly or applied through `cfg_attr`.
+    cfg_written: bool,
 }
 
 /// Scan the `mod` declarations at the top level of tokens `range` — a whole file, or an inline module's body
@@ -123,7 +125,7 @@ pub(super) fn declared_modules_in(
                         .map(|(_, value)| value)
                         .collect(),
                     is_cfg_conditional: body.is_none()
-                        && (attributes.bare_cfg || may_be_compiled_out(tree, head.start)),
+                        && (attributes.cfg_written || may_be_compiled_out(tree, head.start)),
                     declared_in_block: false,
                 },
             ));
@@ -174,7 +176,7 @@ fn may_be_compiled_out(tree: &TokenTree, at: usize) -> bool {
             macro_group_kind(tree, outer) == Some(GroupKind::CfgIf)
                 && classify_group(tree, open, Some(&GroupKind::CfgIf)) == GroupKind::CfgArm
         });
-        if arm || attributes_before(tree, owner_start(tree, open)).bare_cfg {
+        if arm || attributes_before(tree, owner_start(tree, open)).cfg_written {
             return true;
         }
         group = outer;
@@ -234,7 +236,7 @@ pub(super) fn block_path_modules(
                 .map(|(_, value)| value)
                 .collect(),
             is_cfg_conditional: body.is_none()
-                && (attributes.bare_cfg || may_be_compiled_out(tree, head.start)),
+                && (attributes.cfg_written || may_be_compiled_out(tree, head.start)),
             declared_in_block: true,
         });
     }
@@ -289,7 +291,7 @@ fn attributes_before(tree: &TokenTree, start: usize) -> PathAttributes {
                     found.conditional.push((start, value));
                 }
             }
-            (Some("cfg"), _) => found.bare_cfg = true,
+            (Some("cfg"), _) => found.cfg_written = true,
             (Some("cfg_attr"), after) if tree.kind(after) == Kind::Open(Delimiter::Parenthesis) => {
                 metas.extend(
                     cfg_attr_metas(tree, after)
@@ -342,11 +344,11 @@ mod tests {
         attributes_before(&tree, at)
     }
 
-    /// The `path` and the bare `cfg` reader take the attribute's name from one position, so they agree about the
+    /// The `path` and the `cfg` reader take the attribute's name from one position, so they agree about the
     /// same source whatever its spacing or raw spelling.
     #[test]
     fn both_readers_take_the_attribute_name_from_one_position() {
-        for (prefix, remaps, bare_cfg) in [
+        for (prefix, remaps, cfg_written) in [
             ("#[path = \"x.rs\"]", true, false),
             ("#[cfg(unix)]", false, true),
             ("# [ path = \"x.rs\"]", true, false),
@@ -365,7 +367,7 @@ mod tests {
             let remapped = found.direct.is_some() || !found.conditional.is_empty();
             assert_eq!(remapped, remaps, "the path reader's verdict on {prefix}");
             assert_eq!(
-                found.bare_cfg, bare_cfg,
+                found.cfg_written, cfg_written,
                 "the cfg reader's verdict on {prefix}"
             );
         }

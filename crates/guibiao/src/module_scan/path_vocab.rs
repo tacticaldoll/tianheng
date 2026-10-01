@@ -405,8 +405,8 @@ pub(super) fn fold_canonical_segments(segments: &[&str]) -> Option<String> {
 /// the source does not compile), so it must never be mistaken for an outward edge. Any other head
 /// (`parts[0]` not `self`/`super`, or empty) also returns `None` — the caller resolves those.
 ///
-/// The single home of the `super`-pop loop and its over-pop guard, which the import scan ([`super::use_scan`]), the
-/// resolver ([`super::resolve`]) and the visibility reading ([`super::item_head`]) share — so a fix to that subtle edge
+/// The single home of the `super`-pop loop and its over-pop guard: [`written_root`], the resolver's one dispatch of a
+/// written path's root, and the visibility reading ([`super::item_head`]) call it, so a fix to that subtle edge
 /// cannot silently diverge across them. guibiao-internal; crosses no dimension boundary.
 pub(super) fn resolve_self_super(current_module: &str, parts: &[&str]) -> Option<String> {
     let first = parts.first().copied()?;

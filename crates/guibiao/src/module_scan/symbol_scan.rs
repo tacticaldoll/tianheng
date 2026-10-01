@@ -400,8 +400,9 @@ pub(crate) fn value_namespace_item_names(
 ///
 /// [`CrateScopes::name`] answers, and this reader's policy is its match. Every path it names through a
 /// binding, a declared item, a sysroot crate or a crate-rooted path is observed. A crate named by its root
-/// (`::dep::…`) is observed under `.strict_external()` only, the same answer its bare spelling gets, so
-/// `dep::f()` and `::dep::f()` are reported in the same mode. A bare head no scope binds — so no local
+/// (`::dep::…`) is observed under `.strict_external()` only, as its bare spelling is, so `dep::f()` and
+/// `::dep::f()` are reported in the same mode; the root form names a crate whatever its name, so it is observed
+/// without the declared-dependency match a bare head needs. A bare head no scope binds — so no local
 /// module, item or import claims it, at any depth, in the scope the path stands in — is, under
 /// `.strict_external()`, the external crate where it names a declared dependency, and otherwise names
 /// nothing a prefix can reach: the scope table records every item a module declares, so a head it does not

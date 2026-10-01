@@ -2,8 +2,9 @@
 //!
 //! One forward pass lexes the original source — comments dropped, every literal one token, punctuation read by
 //! maximal munch — and pairs `(`, `[` and `{` with their closers before any reader runs, so a reader asks its
-//! question of whole tokens and paired groups and never of a byte. A `path ! group` macro call and an attribute are
-//! each one [`Node`], so what stands before an item is read from structure. Positions are token indices.
+//! question of whole tokens and paired groups and never of a byte. A macro call — a path's last segment, its `!` and
+//! its group, the segments before it being tokens of their own — and an attribute are each one [`Node`], so what
+//! stands before an item is read from structure. Positions are token indices.
 //!
 //! Nothing here recurses, so no nesting depth is refused. The module names no type of the crate it sits in: it
 //! reads Rust's lexical grammar, and what the tokens mean is each reader's own question.

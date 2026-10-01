@@ -193,8 +193,8 @@ pub fn constitution() -> Constitution {
                 .module("crate::module_scan::token_tree")
                 .restrict_imports_to(Vec::<String>::new())
                 .because(
-                    "guibiao's token tree imports no other guibiao module, so lexing a file depends on no \
-                     reader of its tokens",
+                    "guibiao's token tree imports no other guibiao module, so the readers of its tokens \
+                     import it and it imports none of them",
                 ),
         )
         .boundary(
