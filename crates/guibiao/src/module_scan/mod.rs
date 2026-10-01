@@ -9,8 +9,9 @@
 //! raw-identifier canonicalization, `::`-containment, `self`/`super` folding); the item-header grammar
 //! ([`item_head`]); the `use` trees ([`use_tree`]) and path [`occurrence`]s read over it; the [`scope_tree`]; the one
 //! [`resolve`]r; and the [`glob_hazard`].
-//! [`fs_walk`], [`reachability`] and [`symbol_scan`] read the file system; every other module is pure string,
-//! token, and path processing. It depends on no model type but the finding the inline scan
+//! [`fs_walk`] lists the file system, [`reachability`] probes it for the files a declaration may name, and
+//! [`source_texts`] reads it, each source path once per evaluation, for every reader of a file's text; every other
+//! module is pure string, token, and path processing. It depends on no model type but the finding the inline scan
 //! reports. Above those readers sits [`evaluation`]: one evaluation's scan of each compiled root,
 //! built once and shared by every module boundary judged over that root.
 
@@ -23,6 +24,7 @@ mod path_vocab;
 mod reachability;
 mod resolve;
 mod scope_tree;
+mod source_texts;
 mod symbol_scan;
 mod token_tree;
 mod use_scan;

@@ -6,8 +6,8 @@
 //! What the scan does not observe, or over-reacts to, is declared by [`crate::observation_bounds`], never a silent
 //! pass.
 //!
-//! This module is I/O and assembly: every judgement of the text is made by the layers below it, and every refusal
-//! it returns names the file it was met in.
+//! This module is assembly over the texts the evaluation has read: every judgement of the text is made by the layers
+//! below it, and every refusal it returns names the file it was met in.
 
 use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
@@ -22,6 +22,7 @@ use super::path_vocab::{
 };
 use super::resolve::{CrateScopes, Named, Namespace, with_rest};
 use super::scope_tree::{DeclKind, ScopeKind, ScopeTable};
+use super::source_texts::SourceTexts;
 use super::token_tree::{Edition, TokenTree};
 use super::use_scan::{
     FileUse, ImportedPath, classify_uses, external_imports, file_uses, internal_imports,
@@ -87,9 +88,11 @@ pub(crate) struct UnitScan {
 }
 
 impl UnitScan {
-    /// Read every reachable `(file, module)` pair of the unit, in a package of the given edition. An unreadable file
-    /// is refused here; a file whose text the scanner cannot judge is refused when a judgement reads it.
+    /// Read every reachable `(file, module)` pair of the unit, in a package of the given edition, each file's text
+    /// taken from `sources`, so a file the evaluation has already read is not read again. An unreadable file is refused
+    /// here; a file whose text the scanner cannot judge is refused when a judgement reads it.
     pub(crate) fn read(
+        sources: &SourceTexts,
         all_files: &[(PathBuf, String)],
         edition: Edition,
         proc_macro: bool,
@@ -97,9 +100,9 @@ impl UnitScan {
         let mut files = Vec::new();
         let mut tables = Vec::new();
         for (file, module) in all_files {
-            let raw = std::fs::read_to_string(file).map_err(|err| {
-                crate::errors::unreadable_governed_file_error(file, &err.to_string())
-            })?;
+            let raw = sources
+                .text(file)
+                .map_err(|err| crate::errors::unreadable_governed_file_error(file, &err))?;
             let (scan, table) = FileScan::read(&raw, file, module, edition, tables.len());
             files.push(scan);
             tables.push(table);

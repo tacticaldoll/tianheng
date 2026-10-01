@@ -1161,8 +1161,11 @@ once, shared by every module boundary judged over that root. Each file of a unit
 its `use` declarations classified at most once, on demand, so a file no rule reads is never classified and its
 refusal never decides the exit code. A boundary's own conditions — its governed set, its prefix and verbs, its
 strict and external modifiers — are applied when that boundary is judged and are never kept as a fact of the
-root. Sharing SHALL NOT change an outcome: a constitution judged through shared scans and through a scan per
-boundary yields the same outcome, in each order its boundaries are declared in.
+root. A source path is the path it was opened at, never canonicalized, since a relative `#[path]` resolves from
+the directory a file was opened in; one reading of it serves every root of every package and every module it is
+loaded as, and a path no root reaches is never read. Sharing SHALL NOT change an outcome: a constitution judged
+through shared scans and through a scan per boundary yields the same outcome, in each order its boundaries are
+declared in.
 
 #### Scenario: Many boundaries over one root build its scan once
 
@@ -1175,8 +1178,31 @@ boundary yields the same outcome, in each order its boundaries are declared in.
 #### Scenario: Shared and independent scans yield one outcome
 
 - **WHEN** one constitution is judged through scans shared per root and through a scan rebuilt per boundary,
-  in each order its boundaries are declared in
+  in each order its boundaries are declared in, among them inline boundaries entering one ring of imports at two
+  different bindings under different prefixes and strictness
 - **THEN** the two readings of one order yield the same outcome — the same violations with the same identities
   and severities, or the same refusal — and nothing is claimed across orders, where the first error an
   evaluation returns may be a different boundary's
 - **PINNED-BY** `shared_and_independent_scans_yield_one_outcome`
+
+#### Scenario: Each source path is read once, on demand
+
+- **WHEN** several module boundaries are judged over one root — import rules with an inbound rule's
+  value-namespace reading of its governed module, and the inline family with a strict confinement — and a
+  `#[path]` reaches a source outside the root's file list
+- **THEN** every source the evaluation reaches is read once, by the path it was opened at, the outside source
+  among them, and the set of paths read is exactly the set reached
+- **PINNED-BY** `each_source_path_is_read_once_on_demand`
+
+#### Scenario: A source two roots or two modules reach is read once
+
+- **WHEN** a file is compiled by two roots of one package, or loaded by two `#[path]` attributes as two modules
+- **THEN** the file is read once for all of them, and each root's and each module's position in it is judged as a
+  scan per boundary judges it
+- **PINNED-BY** `a_source_two_roots_or_two_modules_reach_is_read_once`
+
+#### Scenario: A source no root reaches is never read
+
+- **WHEN** a `.rs` file under a root's source directory that no `mod` declaration reaches cannot be read
+- **THEN** the evaluation never reads it, and its exit code is the one the reachable sources decide
+- **PINNED-BY** `a_source_no_root_reaches_is_never_read`

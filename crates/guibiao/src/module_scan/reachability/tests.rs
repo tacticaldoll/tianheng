@@ -1,5 +1,31 @@
 use super::*;
 use crate::module_scan::rust_files;
+use crate::module_scan::source_texts::SourceTexts;
+
+/// The walk of one fixture, as an evaluation of its own reads it: through a text set no other walk shares.
+#[allow(clippy::type_complexity)]
+fn reachable_modules(
+    src_dir: &Path,
+    files: &[PathBuf],
+    root_relative: Option<&Path>,
+    edition: crate::module_scan::Edition,
+) -> Result<
+    (
+        std::collections::BTreeSet<String>,
+        std::collections::BTreeMap<String, PathBuf>,
+        Vec<(PathBuf, String)>,
+        std::collections::BTreeSet<String>,
+    ),
+    String,
+> {
+    walk::reachable_modules(
+        &SourceTexts::default(),
+        src_dir,
+        files,
+        root_relative,
+        edition,
+    )
+}
 
 /// A unique, self-cleaning source tree for module-reachability fixtures.
 ///

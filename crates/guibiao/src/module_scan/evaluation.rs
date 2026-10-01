@@ -8,7 +8,9 @@
 //! and are never kept as a fact of the root — so two boundaries judging one root differently still
 //! read it alike. [`EvaluationScans`] keeps an evaluation's scans keyed by the package's name and
 //! the root's path exactly as the metadata reports it: the path is used as written, never
-//! canonicalized, which is the identity the walk itself reads by.
+//! canonicalized, which is the identity the walk itself reads by. It also keeps the evaluation's
+//! one [`SourceTexts`], shared by every root of every package, so a source two roots or two module
+//! positions reach is read once.
 
 use std::cell::{OnceCell, RefCell};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -21,6 +23,7 @@ use xuanji::ScanDepth;
 use crate::cargo_metadata::{RootReading, root_reading};
 use crate::errors::{missing_src_error, out_of_package_root_error, walk_refusal_in_unit};
 
+use super::source_texts::SourceTexts;
 use super::{
     UnitScan, governed_files, names_crate_by_path_alone, reachable_modules, rust_files,
     value_namespace_item_names,
@@ -72,13 +75,17 @@ pub(crate) struct RootScan {
     /// The unit's item definitions, collected the first time a boundary asks for them: an
     /// evaluation whose boundaries declare no inline confinement never pays for the collection.
     item_definitions: OnceCell<BTreeSet<String>>,
+    /// The evaluation's reading of each source path, which a judgement over this root reads a
+    /// governed module's files from rather than reading them again.
+    sources: Rc<SourceTexts>,
 }
 
 impl RootScan {
     /// Read the root's scan. The refusal order is the one a judgement over the scan must keep:
     /// the source walk's refusal first, then a file the unit scan cannot read, each ahead of
-    /// anything a boundary decides from what the walk found.
+    /// anything a boundary decides from what the walk found. Every source is read through `sources`.
     fn read(
+        sources: Rc<SourceTexts>,
         package: &Value,
         crate_package: &str,
         root_file: Option<&Path>,
@@ -106,11 +113,14 @@ impl RootScan {
             });
         }
         files.retain(|file| !names_crate_by_path_alone(file, &src_dir, root_relative.as_deref()));
-        let (reachable, inline_only, remapped, remap_shadowed) =
-            reachable_modules(&src_dir, &files, root_relative.as_deref(), reading.edition)
-                .map_err(|refusal| {
-                    walk_refusal_in_unit(crate_package, unit.as_deref(), &refusal)
-                })?;
+        let (reachable, inline_only, remapped, remap_shadowed) = reachable_modules(
+            &sources,
+            &src_dir,
+            &files,
+            root_relative.as_deref(),
+            reading.edition,
+        )
+        .map_err(|refusal| walk_refusal_in_unit(crate_package, unit.as_deref(), &refusal))?;
         let all_files = governed_files(
             &src_dir,
             &files,
@@ -122,7 +132,7 @@ impl RootScan {
             root_relative.as_deref(),
             ScanDepth::Subtree,
         );
-        let unit_scan = UnitScan::read(&all_files, reading.edition, reading.proc_macro)?;
+        let unit_scan = UnitScan::read(&sources, &all_files, reading.edition, reading.proc_macro)?;
         Ok(RootScan {
             src_dir,
             root_relative,
@@ -136,6 +146,7 @@ impl RootScan {
             all_files,
             unit_scan,
             item_definitions: OnceCell::new(),
+            sources,
         })
     }
 
@@ -167,6 +178,7 @@ impl RootScan {
     /// about the governed module itself. A module can be backed by more than one reachable file (a
     /// `#[path]` remap beside a conventional file, a `cfg_attr` union), so every backing file
     /// contributes, and inline descendants are excluded by the collector's own true-module keying.
+    /// Each file's text is the evaluation's one reading of it.
     pub(crate) fn governed_module_value_items(
         &self,
         governed_module: &str,
@@ -183,9 +195,10 @@ impl RootScan {
             self.root_relative.as_deref(),
             ScanDepth::Shallow,
         ) {
-            let raw = std::fs::read_to_string(&file).map_err(|err| {
-                crate::errors::unreadable_governed_file_error(&file, &err.to_string())
-            })?;
+            let raw = self
+                .sources
+                .text(&file)
+                .map_err(|err| crate::errors::unreadable_governed_file_error(&file, &err))?;
             items.extend(value_namespace_item_names(
                 &module,
                 &raw,
@@ -205,6 +218,8 @@ type RootKey = (String, Option<PathBuf>);
 /// once per evaluation however many boundaries are judged over them.
 pub(crate) struct EvaluationScans {
     scans: RefCell<HashMap<RootKey, Rc<RootScan>>>,
+    /// The evaluation's one reading of each source path, shared by every root scan it builds.
+    sources: Rc<SourceTexts>,
     /// Whether a lookup shares the scan it finds or builds again. Always [`Sharing::Shared`]
     /// outside tests; the independent form exists so a direction can hold the shared form to
     /// yielding one outcome with a scan built per boundary.
@@ -223,8 +238,8 @@ pub(crate) struct EvaluationScans {
 enum Sharing {
     /// The first lookup builds; every later lookup of the same root shares that scan.
     Shared,
-    /// Every lookup builds again and nothing is reused: a scan per boundary, as an evaluation
-    /// without sharing reads.
+    /// Every lookup builds again and nothing is reused — neither a root's scan nor a source's
+    /// text: a scan per boundary, as an evaluation without sharing reads.
     Independent,
 }
 
@@ -233,6 +248,7 @@ impl EvaluationScans {
     pub(crate) fn shared() -> Self {
         EvaluationScans {
             scans: RefCell::new(HashMap::new()),
+            sources: Rc::default(),
             #[cfg(test)]
             sharing: Sharing::Shared,
             #[cfg(test)]
@@ -247,6 +263,7 @@ impl EvaluationScans {
     pub(crate) fn independent() -> Self {
         EvaluationScans {
             scans: RefCell::new(HashMap::new()),
+            sources: Rc::default(),
             sharing: Sharing::Independent,
             builds: std::cell::Cell::new(0),
         }
@@ -291,7 +308,23 @@ impl EvaluationScans {
     ) -> Result<RootScan, String> {
         #[cfg(test)]
         self.builds.set(self.builds.get() + 1);
-        RootScan::read(package, crate_package, root_file, sibling_roots)
+        #[cfg(test)]
+        if self.sharing == Sharing::Independent {
+            return RootScan::read(
+                Rc::default(),
+                package,
+                crate_package,
+                root_file,
+                sibling_roots,
+            );
+        }
+        RootScan::read(
+            Rc::clone(&self.sources),
+            package,
+            crate_package,
+            root_file,
+            sibling_roots,
+        )
     }
 
     /// How many root scans this evaluation has built: one per root judged when every lookup
@@ -299,5 +332,13 @@ impl EvaluationScans {
     #[cfg(test)]
     pub(crate) fn roots_built(&self) -> usize {
         self.builds.get()
+    }
+
+    /// How many times this evaluation has read each source path from the file system, through the
+    /// text set every root scan it shares reads from. A scan built when nothing is reused reads
+    /// through a text set of its own, which this does not count.
+    #[cfg(test)]
+    pub(crate) fn source_reads(&self) -> HashMap<PathBuf, usize> {
+        self.sources.reads()
     }
 }

@@ -1,5 +1,7 @@
 use super::helpers::*;
 use crate::module_scan::EvaluationScans;
+use std::collections::{BTreeSet, HashMap};
+use std::path::PathBuf;
 
 /// Judge one constitution through both scan forms: shared (each root's scan built once — the
 /// production reading) and independent (a scan rebuilt at every lookup, none reused).
@@ -310,9 +312,44 @@ fn refused_inline_target() -> CorpusEntry {
     (ws, metadata, boundaries)
 }
 
+/// A ring of imports inside one module, read from two of its bindings: `x` and `y` each name a terminal of their own
+/// under `cfg(unix)` and each other otherwise, and `z` names `y`. A reading entering at `x` reads `y` one binding deep
+/// and cuts the ring where `y` comes back to `x`, so what it finds for `y` there lacks `x`'s terminal; a reading
+/// entering at `z` reads `y` at that same depth, from that same module, and its answer holds both terminals. Two inline
+/// boundaries enter at the two bindings, from two child modules, under different prefixes and strictness, so a cut
+/// answer the first kept for `y` would hide from the second the terminal its prefix names.
+fn import_ring() -> CorpusEntry {
+    let ws = TempWorkspace::new("eq-ring");
+    ws.write("lib.rs", "pub mod t0;\npub mod t1;\npub mod r;\n");
+    ws.write("t0.rs", "pub fn f() {}\n");
+    ws.write("t1.rs", "pub fn f() {}\n");
+    ws.write(
+        "r.rs",
+        "#[cfg(unix)]\npub use crate::t0 as x;\n#[cfg(not(unix))]\npub use y as x;\n\
+         #[cfg(unix)]\npub use crate::t1 as y;\n#[cfg(not(unix))]\npub use x as y;\n\
+         pub use y as z;\npub mod ra;\npub mod rb;\n",
+    );
+    ws.write("r/ra.rs", "pub fn run() { super::x::f(); }\n");
+    ws.write("r/rb.rs", "pub fn run() { super::z::f(); }\n");
+    let metadata = ws.metadata("x");
+    let boundaries = vec![
+        ModuleBoundary::in_crate("x")
+            .module("crate::r::ra")
+            .must_not_call_inline("crate::t1")
+            .because("ra does not reach the second terminal"),
+        ModuleBoundary::in_crate("x")
+            .module("crate::r::rb")
+            .must_not_call_inline("crate::t0")
+            .strict_prefix_only()
+            .because("rb does not even name the first terminal"),
+    ];
+    (ws, metadata, boundaries)
+}
+
 /// `module-boundary` scenario "Shared and independent scans yield one outcome": every constitution
 /// of the corpus — outbound, inbound with the value-namespace form, external confinement, the
-/// inline family with strict and strict-external, a two-root package, and two refused
+/// inline family with strict and strict-external, a ring of imports read from two of its bindings
+/// under different prefixes and strictness, a two-root package, and two refused
 /// constitutions — is judged through both scan forms, in each of two boundary orders, and the two
 /// readings of one order yield the same outcome: the same violations with the same identities and
 /// severities, or the same refusal. Nothing is claimed across orders: the first error an
@@ -335,6 +372,10 @@ pub(super) fn shared_and_independent_scans_yield_one_outcome() {
         Corpus {
             name: "inline",
             build: inline,
+        },
+        Corpus {
+            name: "import-ring",
+            build: import_ring,
         },
         Corpus {
             name: "several-roots",
@@ -379,5 +420,225 @@ pub(super) fn shared_and_independent_scans_yield_one_outcome() {
     assert!(
         saw_refusal,
         "the corpus is refused — without one, the equivalence shown is vacuous"
+    );
+}
+
+/// Each path in `paths`, read once: what an evaluation that reads every source it meets once, and
+/// no other, has read.
+fn read_once(paths: &[PathBuf]) -> HashMap<PathBuf, usize> {
+    paths.iter().map(|path| (path.clone(), 1)).collect()
+}
+
+/// `module-boundary` scenario "Each source path is read once, on demand": several boundaries over
+/// one root — import rules with an inbound rule's value-namespace reading of the governed module,
+/// and the inline family with a strict confinement — read each source they reach once, among them a
+/// source outside the root's file list that a `#[path]` reaches; the set read is exactly the set
+/// reached, held both ways.
+#[test]
+pub(super) fn each_source_path_is_read_once_on_demand() {
+    let ws = TempWorkspace::new("read-once");
+    ws.write(
+        "lib.rs",
+        "pub mod internal;\npub mod api;\npub mod core;\n#[path = \"../outside.rs\"]\npub mod outside;\n",
+    );
+    ws.write(
+        "internal.rs",
+        "pub mod foo { pub const INSIDE: u8 = 0; }\npub fn foo() {}\n",
+    );
+    ws.write("api.rs", "use crate::internal::foo;\npub fn a() {}\n");
+    ws.write(
+        "core.rs",
+        "use crate::internal::foo as f;\npub fn stamp() { let _ = std::process::id(); }\n",
+    );
+    ws.write_at("outside.rs", "pub fn o() { std::process::exit(0); }\n");
+    let metadata = ws.metadata("x");
+    let constitution = constitution_of(vec![
+        ModuleBoundary::in_crate("x")
+            .module("crate::internal")
+            .must_not_be_imported_by("crate::api")
+            .depth(ScanDepth::Shallow)
+            .because("internal is private to the crate"),
+        ModuleBoundary::in_crate("x")
+            .module("crate::internal")
+            .must_only_be_imported_by(vec!["crate::core"])
+            .because("only core reaches internal"),
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("std::process")
+            .because("core spawns no process"),
+        ModuleBoundary::in_crate("x")
+            .module("crate::core")
+            .must_not_call_inline("std::process")
+            .strict_prefix_only()
+            .because("core does not even name a process"),
+        ModuleBoundary::in_crate("x")
+            .module("crate::outside")
+            .must_not_call_inline("std::process")
+            .because("the outside module spawns no process"),
+    ]);
+    let scans = EvaluationScans::shared();
+    let outcome = crate::evaluate_with_scans(&constitution, &metadata, &scans);
+    assert_eq!(outcome.exit_code(), 1, "the boundaries react: {outcome:?}");
+    let src = ws.src();
+    assert_eq!(
+        scans.source_reads(),
+        read_once(&[
+            src.join("lib.rs"),
+            src.join("internal.rs"),
+            src.join("api.rs"),
+            src.join("core.rs"),
+            src.join("../outside.rs"),
+        ]),
+        "every source the boundaries reach is read once, by the path it was opened at, and no other is read"
+    );
+}
+
+/// `module-boundary` scenario "A source two roots or two modules reach is read once": a file two
+/// roots of one package compile is read once across both, and a file two `#[path]` attributes load
+/// as two modules is read once for both — while every module position it holds is judged as a scan
+/// per boundary, reading the file afresh, judges it.
+#[test]
+pub(super) fn a_source_two_roots_or_two_modules_reach_is_read_once() {
+    let ws = TempWorkspace::new("read-once-two-roots");
+    ws.write("lib.rs", "pub mod kernel;\npub mod common;\n");
+    ws.write("main.rs", "mod kernel;\nmod common;\nfn main() {}\n");
+    ws.write("kernel.rs", "pub struct K;\n");
+    ws.write("common.rs", "use crate::kernel::K;\n");
+    let metadata = serde_json::json!({
+        "packages": [{
+            "name": "x",
+            "targets": [
+                { "kind": ["lib"], "src_path": ws.src().join("lib.rs").to_string_lossy() },
+                { "kind": ["bin"], "src_path": ws.src().join("main.rs").to_string_lossy() },
+            ],
+        }],
+    });
+    let constitution = constitution_of(vec![
+        ModuleBoundary::in_crate("x")
+            .module("crate::common")
+            .must_not_import("crate::kernel")
+            .because("common does not reach the kernel"),
+    ]);
+    let scans = EvaluationScans::shared();
+    let outcome = crate::evaluate_with_scans(&constitution, &metadata, &scans);
+    let src = ws.src();
+    assert_eq!(
+        scans.source_reads(),
+        read_once(&[
+            src.join("lib.rs"),
+            src.join("main.rs"),
+            src.join("kernel.rs"),
+            src.join("common.rs"),
+        ]),
+        "a file both roots compile is read once across them"
+    );
+    let units: BTreeSet<String> = match &outcome {
+        Outcome::Violations(report) => report
+            .violations
+            .iter()
+            .flat_map(|violation| violation.fact().fields())
+            .filter(|(field, _)| *field == "unit")
+            .map(|(_, unit)| unit.to_string())
+            .collect(),
+        other => panic!("each root's common module reacts: {other:?}"),
+    };
+    assert_eq!(
+        units,
+        BTreeSet::from(["lib.rs".to_string(), "main.rs".to_string()]),
+        "each root judges its own position of the shared file: {outcome:?}"
+    );
+    assert_eq!(
+        outcome,
+        crate::evaluate_with_scans(&constitution, &metadata, &EvaluationScans::independent()),
+        "the shared reading judges each root as a reading per boundary does"
+    );
+
+    let ws = TempWorkspace::new("read-once-two-modules");
+    ws.write(
+        "lib.rs",
+        "#[path = \"twin.rs\"]\npub mod a;\n#[path = \"twin.rs\"]\npub mod b;\n",
+    );
+    ws.write("twin.rs", "pub fn t() { std::process::exit(0); }\n");
+    let metadata = ws.metadata("x");
+    let constitution = constitution_of(vec![
+        ModuleBoundary::in_crate("x")
+            .module("crate::a")
+            .must_not_call_inline("std::process")
+            .because("a spawns no process"),
+        ModuleBoundary::in_crate("x")
+            .module("crate::b")
+            .must_not_call_inline("std::process")
+            .strict_prefix_only()
+            .because("b does not even name a process"),
+    ]);
+    let scans = EvaluationScans::shared();
+    let outcome = crate::evaluate_with_scans(&constitution, &metadata, &scans);
+    let src = ws.src();
+    assert_eq!(
+        scans.source_reads(),
+        read_once(&[src.join("lib.rs"), src.join("twin.rs")]),
+        "a file loaded as two modules is read once for both"
+    );
+    let findings: BTreeSet<String> = match &outcome {
+        Outcome::Violations(report) => report
+            .violations
+            .iter()
+            .map(|violation| violation.finding.clone())
+            .collect(),
+        other => panic!("each module the file is loaded as reacts: {other:?}"),
+    };
+    assert_eq!(
+        findings,
+        BTreeSet::from([
+            "std::process::exit in crate::a".to_string(),
+            "std::process::exit in crate::b".to_string(),
+        ]),
+        "each module position of the one file is judged: {outcome:?}"
+    );
+    assert_eq!(
+        outcome,
+        crate::evaluate_with_scans(&constitution, &metadata, &EvaluationScans::independent()),
+        "the shared reading judges each module position as a reading per boundary does"
+    );
+}
+
+/// `module-boundary` scenario "A source no root reaches is never read": a `.rs` file under the
+/// source directory that no `mod` declaration reaches, and that cannot be read, is never asked for,
+/// so the evaluation's exit code is the one its reachable sources decide. Unix only and
+/// self-calibrating: it skips under a privileged user, where mode 0 is still readable.
+#[cfg(unix)]
+#[test]
+pub(super) fn a_source_no_root_reaches_is_never_read() {
+    let ws = TempWorkspace::new("read-never");
+    ws.write("lib.rs", "pub mod kernel;\npub mod projection;\n");
+    ws.write("kernel.rs", "use crate::projection::P;\npub struct K;\n");
+    ws.write("projection.rs", "pub struct P;\n");
+    let orphan = ws.write("orphan.rs", "use crate::kernel::K;\n");
+    let Some(_unreadable) = xingbiao::Unreadable::try_new(&orphan) else {
+        return;
+    };
+    let metadata = ws.metadata("x");
+    let constitution = constitution_of(vec![
+        ModuleBoundary::in_crate("x")
+            .module("crate::kernel")
+            .must_not_import("crate::projection")
+            .because("the kernel does not reach the projection"),
+    ]);
+    let scans = EvaluationScans::shared();
+    let outcome = crate::evaluate_with_scans(&constitution, &metadata, &scans);
+    assert_eq!(
+        outcome.exit_code(),
+        1,
+        "the reachable sources decide the exit code: {outcome:?}"
+    );
+    let src = ws.src();
+    assert_eq!(
+        scans.source_reads(),
+        read_once(&[
+            src.join("lib.rs"),
+            src.join("kernel.rs"),
+            src.join("projection.rs"),
+        ]),
+        "the unreachable, unreadable file is never read"
     );
 }
