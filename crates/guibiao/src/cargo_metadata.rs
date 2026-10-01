@@ -20,8 +20,10 @@ pub(crate) struct RootReading {
 /// `[[bin]]` `edition` on the target and the package's own beside it — measured under cargo 1.96.0, a 2024 package with
 /// `[lib] edition = "2015"` reports `2015` on its library target and `2024` on the package, and builds a 2015 crate. A
 /// target reporting no edition reads as the package's. Targets sharing the root in editions the scanner reads apart are
-/// compiled twice, once in each, so one reading cannot judge both and the root is refused; editions it reads alike,
-/// 2018 beside 2021, are one reading.
+/// compiled twice, once in each, so one reading cannot judge both and the root is refused; 2018 beside 2021, whose
+/// paths it reads alike, are one reading, in 2018: the two differ only in whether a `c` before a string opens a C
+/// string, and the 2018 reading lexes as code what the 2021 one could read as a string's contents, so it misses
+/// nothing the other reads.
 pub(crate) fn root_reading(
     package: &Value,
     root_file: Option<&Path>,
@@ -54,9 +56,11 @@ pub(crate) fn root_reading(
                 .iter()
                 .map(|edition| Edition::of(*edition))
                 .collect();
+            let paths_alike = |reading: &Edition| reading != &Edition::Rust2015;
             match readings.first() {
                 None => Edition::of(package_edition),
                 Some(first) if readings.iter().all(|reading| reading == first) => *first,
+                Some(_) if readings.iter().all(paths_alike) => Edition::Rust2018,
                 Some(_) => {
                     return Err(crate::errors::root_in_several_editions_error(
                         crate_package,

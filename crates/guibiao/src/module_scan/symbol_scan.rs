@@ -127,9 +127,10 @@ impl UnitScan {
     }
 
     /// Every file of the unit read into a table it can judge, or a refusal naming the first file that is not: resolving a
-    /// governed file's inline paths reads every file's scope table. An import rule reads a governed file's own `use`
-    /// trees and no other file's refusal, so a file an inbound rule's self-import exemption excuses never decides its
-    /// exit code.
+    /// governed file's inline paths reads every file's scope table. An import rule refuses a governed file's own
+    /// unreadable `use` tree, and another file's only where a head it resolves is read through that file's scopes, so a
+    /// file an inbound rule's self-import exemption excuses decides its exit code only where an import is read through
+    /// it.
     fn every_table_judged(&self) -> Result<(), String> {
         for (t, file) in self.files.iter().enumerate() {
             if let Some(refusal) = self.scopes.table(t).refusal() {

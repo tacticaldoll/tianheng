@@ -5,8 +5,8 @@
 //! **block**. [`classify_group`] decides which a group is, and what the others are: the body of an `impl`, `trait`,
 //! `enum`, `struct` or `union` holds members reached only through a path, so nothing written directly in it is
 //! recorded; an `extern` block and a `cfg_if!` with its arms hold items of the enclosing scope; a macro's group holds
-//! nothing the scanner reads as a declaration, and a block inside it holds the `use` statements written there, read as
-//! the block's bindings for the paths beside them in the body — `macro_rules! m { () => { use crate::clock::{self};
+//! nothing the scanner reads as a declaration, and a block or a module body inside it holds the `use` statements
+//! written there, read as its bindings for the paths beside them — `macro_rules! m { () => { use crate::clock::{self};
 //! clock::now(); } }` names `crate::clock::now`, as the expansion does.
 //!
 //! A `use`, a `type` alias or an item written directly in a scope binds for that whole scope, text before it
@@ -18,7 +18,7 @@ use std::collections::BTreeMap;
 use super::item_head::block_modules;
 use super::item_head::{
     GroupKind, ItemKeyword, Visibility, classify_group, heads_a_path, item_at_keyword,
-    macro_group_kind, macro_stands_as_an_item,
+    macro_group_kind, macro_stands_as_an_item, may_be_cfg_gated,
 };
 use super::occurrence::path_run;
 use super::path_vocab::block_segment;
@@ -127,9 +127,23 @@ pub(super) struct Scope {
     pub bindings: BTreeMap<String, Vec<Binding>>,
     pub declarations: BTreeMap<String, Vec<Declaration>>,
     pub globs: Vec<Glob>,
+    /// Every name with a binding or a declaration here that no configuration leaves out, by the namespaces it holds,
+    /// `(type, value)`: a binding counts in both, its target not read here. A name bound or declared only by what a
+    /// `cfg` gates ([`super::item_head::may_be_cfg_gated`]) is absent, so a glob of the scope may be what names it on
+    /// a build that compiles the gated one out.
+    pub ungated: BTreeMap<String, (bool, bool)>,
     /// Whether a macro invocation stands directly in this scope, where it may expand to items the scanner does not
     /// read.
     pub macro_items: bool,
+}
+
+impl Scope {
+    /// Record that `name` is bound or declared here, in the namespaces given, by an item no configuration leaves out.
+    fn mark_ungated(&mut self, name: &str, type_ns: bool, value_ns: bool) {
+        let held = self.ungated.entry(name.to_string()).or_default();
+        held.0 |= type_ns;
+        held.1 |= value_ns;
+    }
 }
 
 /// One file's scopes, with the innermost scope of every token of the tree it was built from, and the refusal of a
@@ -164,6 +178,7 @@ fn push_scope(
         bindings: BTreeMap::new(),
         declarations: BTreeMap::new(),
         globs: Vec::new(),
+        ungated: BTreeMap::new(),
         macro_items: false,
     });
     id
@@ -229,7 +244,7 @@ impl ScopeTable {
                     };
                     scope = push_scope(&mut scopes, Some(scope), ScopeKind::Module, module);
                     record = Some(scope);
-                    macro_block = None;
+                    macro_block = in_macro.then_some(scope);
                 }
                 GroupKind::Block => {
                     let module = scopes[scope as usize].module.clone();
@@ -319,6 +334,10 @@ impl ScopeTable {
                     continue;
                 }
             };
+            let gated = may_be_cfg_gated(
+                tree,
+                item_at_keyword(tree, statement.at).map_or(statement.at, |head| head.start),
+            );
             let entry = &mut self.scopes[scope as usize];
             for leaf in leaves {
                 let (path, binds, module_only) = match leaf {
@@ -333,6 +352,9 @@ impl ScopeTable {
                     }
                     UseLeaf::Empty(_) => continue,
                 };
+                if !gated {
+                    entry.mark_ungated(&binds, true, true);
+                }
                 entry
                     .bindings
                     .entry(binds)
@@ -385,8 +407,9 @@ impl ScopeTable {
             let Some(head) = item_at_keyword(tree, i) else {
                 continue;
             };
+            let gated = may_be_cfg_gated(tree, head.start);
             if head.keyword == ItemKeyword::ExternCrate {
-                self.record_extern_crate(tree, i, scope, head.visibility);
+                self.record_extern_crate(tree, i, scope, head.visibility, gated);
                 continue;
             }
             let Some(name_at) = head.name else {
@@ -412,6 +435,9 @@ impl ScopeTable {
                 let target = alias_target(tree, name_at + 1);
                 let aliased = target.is_some();
                 if let Some(written) = target {
+                    if !gated {
+                        entry.mark_ungated(&name, true, true);
+                    }
                     entry
                         .bindings
                         .entry(name.clone())
@@ -435,6 +461,9 @@ impl ScopeTable {
                 )),
                 (keyword, _) => DeclKind::Item(keyword),
             };
+            if !gated {
+                entry.mark_ungated(&name, type_ns, value_ns);
+            }
             entry
                 .declarations
                 .entry(name)
@@ -456,6 +485,7 @@ impl ScopeTable {
         at: usize,
         scope: u32,
         visibility: Visibility,
+        gated: bool,
     ) {
         let named = at + 2;
         if named >= tree.len() {
@@ -474,6 +504,9 @@ impl ScopeTable {
         } else {
             tree.text(named).to_string()
         };
+        if !gated {
+            self.scopes[scope as usize].mark_ungated(&binds, true, false);
+        }
         self.scopes[scope as usize]
             .declarations
             .entry(binds)

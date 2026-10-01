@@ -376,7 +376,9 @@ struct GraphSources {
 /// may resolve from.
 ///
 /// A **direct** `#[path]` relocates that base, and each `cfg_attr`-wrapped one written before it is a **candidate**
-/// read beside it. With no direct one, a `cfg_attr`-wrapped path names a base per platform predicate, so every target
+/// read beside it; with a candidate before it, the direct one applies only where the candidate's predicate is false,
+/// so it is descended as a candidate is — measured against rustc 1.96.0, edition 2021, on unix:
+/// `#[cfg_attr(unix, path = "b")] #[path = "a"] mod m { mod c; }` builds with only `b/c.rs` on disk. With no direct one, a `cfg_attr`-wrapped path names a base per platform predicate, so every target
 /// is a candidate, unioned with the conventional directory where that compiles — not inside a block, where a module
 /// compiled without its path attribute holds no file-form `mod` rustc accepts: the scanner does not evaluate `cfg` and
 /// cannot know which arm a build compiles, so preferring one would silently drop the children beneath the other (the
@@ -399,14 +401,19 @@ fn register_inline_sources(
     for body in bodies {
         let conventional = body.base.join(&body.directory);
         let bases: Vec<PathBuf> = match &body.relocated_base {
+            Some(base) if body.candidate_bases.is_empty() => vec![base.clone()],
             Some(base) => {
-                let mut bases = vec![base.clone()];
-                for candidate in &body.candidate_bases {
-                    if xingbiao::is_directory(candidate)? && !bases.contains(candidate) {
-                        bases.push(candidate.clone());
+                let mut present: Vec<PathBuf> = Vec::new();
+                for candidate in std::iter::once(base).chain(&body.candidate_bases) {
+                    if xingbiao::is_directory(candidate)? && !present.contains(candidate) {
+                        present.push(candidate.clone());
                     }
                 }
-                bases
+                if present.is_empty() {
+                    vec![base.clone()]
+                } else {
+                    present
+                }
             }
             None if body.candidate_bases.is_empty() => vec![conventional],
             None => {

@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**62 of 139 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**62 of 140 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -433,7 +433,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_macro_invocation_pub_item_is_a_documented_bound`
 
-## over-reacts (29)
+## over-reacts (30)
 
 ### `crate-dependency-boundary/an-optional-dependency-edge-is-observed-as-a-declared-one-a-stated-bound`
 
@@ -458,6 +458,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the predicate is never evaluated, so a dead arm is observed as live — cfg-blindness inherited from the module scanner, which reacts wider than the build
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `confine_external_crate_is_cfg_blind_to_unenabled_cfg_arms`
+
+### `inline-symbol-path-confinement/a-cfg-gated-name-beside-a-glob-is-read-with-the-glob-a-stated-bound`
+
+> a bare head a scope binds or declares only by items a `cfg` gates, which a glob of that scope also brings
+
+- **because**: the predicate is never evaluated, so on a build that compiles the gated item in, the head is resolved through the scope's globs as well as through it
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `a_cfg_gated_name_beside_a_glob_is_read_with_the_glob`
 
 ### `inline-symbol-path-confinement/a-generic-parameter-named-like-an-import-is-read-as-the-import-a-stated-bound`
 

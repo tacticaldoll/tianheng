@@ -192,8 +192,12 @@ them.
   under `.strict_prefix_only()`, a grouped `use` leaf, an edition-2015 `use`, a grouped `use` a macro's group
   holds, a `$crate::{…}` head included, a glob a macro's group holds, and a path after a comma in an enum discriminant's turbofish or qualified path; an import separated by a
   vertical tab or a `Pattern_White_Space` character past ASCII; and a call through a `type` alias of a
-  parenthesized path. Remove the entry `--disallow-stale` names for a `use` written inside an attribute's
-  arguments, and repair a `use` tree holding a token no path segment is, which is now a scan error (exit 2).
+  parenthesized path; a rooted path after `impl<…>` or a `for<'a>` binder; a path through cfg-exclusive local and
+  foreign candidates; a name bound only by cfg-gated items beside a glob; a `use` a module body inside a macro's group
+  holds; and code after a `c` before a string in an edition-2015 or 2018 crate. Remove the entry `--disallow-stale`
+  names for a `use` written inside an attribute's arguments, and repair a `use` tree holding a token no path segment
+  is, which is now a scan error (exit 2), as is an import read through a file holding a `use` tree nested past the
+  cap.
 
 - Rewrite an inline-call prefix under `std`, `core`, `alloc`, `proc_macro` or `test` that spells a character past
   ASCII, such as a soft hyphen or a word joiner copied in with the path, in the ASCII the sysroot's paths are written
@@ -510,6 +514,46 @@ them.
   crate and the compilation unit walked, `cannot walk crate 'x' in compilation unit 'lib.rs': …`, and names the file
   whose `mod` it refuses; a missing module file names every declaring source that found none, where the first alone
   was named. Exit codes are unchanged.
+
+- **BREAKING** — **圭表 reads a rooted path after `impl<…>` or a `for<'a>` binder.** A `<` after `impl`, or after a
+  `for` a lifetime follows, opens a generic parameter list rather than a qualified path, so the rooted path after its
+  `>` is read rather than taken for that path's tail: `impl<T> ::std::marker::Unpin for W<T>` now reports under
+  `.strict_prefix_only()`, and `F: for<'a> ::std::ops::Fn(&'a u8)` and `&dyn for<'a> ::std::ops::Fn(&'a u8)` report
+  in every mode. Each went unreported; address or baseline them.
+
+- **BREAKING** — **圭表 keeps a foreign glob's candidate beside a local one, and reads a cfg-gated name through the
+  scope's globs.** Under exclusive cfgs either answer can be the live one, so neither removes the other. A
+  crate-rooted path keeps what a glob of a crate whose contents are not read brings beside what the unit's own modules
+  bind — `crate::m::Command::new()` through cfg-exclusive globs of `crate::a` and `std::process` in `m`, through
+  cfg-exclusive files of `m`, or through a `struct exit` beside a glob of `std::process` under
+  `.strict_prefix_only()`. And a name a scope binds or declares only by items a `cfg` gates — a `cfg` on the item,
+  directly or through `cfg_attr`, or the item in a `cfg_if!` arm — is read through the scope's globs too, so
+  `use super::*;` beside `#[cfg(test)] use crate::mock::Command;` reports the `std::process::Command::new` the glob
+  brings outside tests. Each went unreported; where the gated item is the one compiled the glob's answer is an
+  over-reaction, declared as
+  `inline-symbol-path-confinement/a-cfg-gated-name-beside-a-glob-is-read-with-the-glob-a-stated-bound`. Address or
+  baseline what they report.
+
+- **BREAKING** — **圭表 binds a `use` a module body inside a macro's group holds.** `id! { mod m { use super::*;
+  pub fn f() { Instant::now(); } } }` reads `Instant` through the module's glob, as the expansion does, where the
+  call went unreported; 0.7.1 reported it. Address or baseline it.
+
+- **BREAKING** — **圭表 reads a `c` before a string as an identifier before edition 2021.** C string literals arrive
+  in 2021, so in an edition-2015 or 2018 crate `cr#"x"` is `cr`, `#` and a string, and the code after it is read,
+  where a raw C string ran to the next `"#` and took the code between with it. A root shared by a 2018 and a 2021
+  target is read in 2018, which lexes as code all the 2021 reading does. Address or baseline what it reports.
+
+- **BREAKING** — **圭表's import rules refuse an import read through another file's unreadable `use` tree.** A `use`
+  tree nested past the cap leaves its file's scopes without the bindings it makes, so an import whose head is read
+  through any scope of that file is a scan error (exit 2) naming the file the import is written in and the module it
+  reads through, where it was read without them and could go unreported; an import that never reads that file is
+  judged. Repair the tree it names.
+
+- **圭表 judges two shapes it refused on crates rustc builds.** A glob read later in a pass is read with no answer
+  remembered from earlier in that pass, so a unit whose globs read one another through a cfg-closed module settles
+  rather than being refused as one whose globs do not settle. And an inline module's direct `#[path]` written after a
+  `cfg_attr` path is descended only where its directory exists, as a candidate is, so
+  `#[cfg_attr(unix, path = "b")] #[path = "a"] mod m { mod c; }` with only `b/c.rs` is judged where it exited 2.
 
 ### Self-governance
 

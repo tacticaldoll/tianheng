@@ -1,8 +1,8 @@
 //! Extraction of top-level `mod` declarations and their cfg/path attributes, read from a file's [`TokenTree`].
 
 use super::super::item_head::{
-    BlockModule, GroupKind, attribute_path, cfg_attr_metas, classify_group, is_outer_attribute,
-    item_at_keyword, macro_group_kind, owner_start,
+    BlockModule, GroupKind, attribute_path, cfg_attr_metas, cfg_written_before, classify_group,
+    is_outer_attribute, item_at_keyword, macro_group_kind, owner_start,
 };
 use super::super::path_vocab::canonical_segment;
 use super::super::token_tree::{Delimiter, Kind, Node, TokenTree};
@@ -272,7 +272,10 @@ fn attributes_before(tree: &TokenTree, start: usize) -> PathAttributes {
         attributes.push((open + 1, close));
         k = node.first();
     }
-    let mut found = PathAttributes::default();
+    let mut found = PathAttributes {
+        cfg_written: cfg_written_before(tree, start),
+        ..PathAttributes::default()
+    };
     let mut direct_at = None;
     let mut metas: Vec<(usize, usize, bool)> = attributes
         .into_iter()
@@ -291,7 +294,6 @@ fn attributes_before(tree: &TokenTree, start: usize) -> PathAttributes {
                     found.conditional.push((start, value));
                 }
             }
-            (Some("cfg"), _) => found.cfg_written = true,
             (Some("cfg_attr"), after) if tree.kind(after) == Kind::Open(Delimiter::Parenthesis) => {
                 metas.extend(
                     cfg_attr_metas(tree, after)

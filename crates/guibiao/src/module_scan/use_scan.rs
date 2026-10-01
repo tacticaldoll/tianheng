@@ -124,7 +124,7 @@ pub(super) fn imported_module_paths(
     current_module: &str,
 ) -> Result<Vec<ImportedPath>, String> {
     let mut paths: Vec<ImportedPath> =
-        imports_with_importers(source, current_module, Edition::Rust2018)?
+        imports_with_importers(source, current_module, Edition::Rust2021)?
             .into_iter()
             .map(|(_importer, import)| import)
             .collect();

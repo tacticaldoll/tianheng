@@ -1274,20 +1274,6 @@ consumer for an undemonstrated deduplication.
   documenting guibiao's private items takes it. The same class across the workspace is the entry *A private
   item's doc comment can be stolen by an item inserted above it*, whose public half `deny(missing_docs)` holds.
 
-- **Item docs in 圭表's scanner say what the code no longer does.** *Class:* READY-PATCH — read, prose only.
-  *Observed pressure:* a static review read each 2026-09-30. *Observation source:* `path_vocab::resolve_self_super`
-  names `use_scan` among its sharers, while `item_head` and `written_root` alone call it;
-  `token_tree`'s module doc says a `path ! group` is one node, where a macro node is the path's last segment, `!` and
-  the group; `symbol_scan::resolve_written` says a `::`-rooted head gets its bare spelling's answer, where the root
-  form skips the dependency match; `declarations`' `bare_cfg` is set by a `cfg` applied through `cfg_attr` while its
-  name and doc say bare; `direct_path_is_conditional`'s doc needs narration to parse; and `resolve::glob_targets`
-  says a pass reads each glob from what the ones before it were just read as, while a changed reading forgets
-  nothing read earlier in that pass — the settled pass is consistent, so only the doc overstates. *Current reaction
-  or bound:* none, and by construction: which sentence a change falsified is a reading. *Risk:* the next reader
-  imitating a claim the code does not keep. *Promotion trigger:* the next change to the item, which corrects its doc
-  in that change. *Version class:* patch. *Authority:* AGENTS.md's *What earns a place in doc comments and
-  specification prose*.
-
 - **The ambient-ignore guard reads files where its property belongs to call sites, and says something false
   when one file holds both kinds.** *Class:* READY-PATCH — measured, and the correction touches no published
   surface. *Observed pressure:* `no_judgement_reads_an_ambient_ignore_file` decides per **file**: a file

@@ -140,6 +140,46 @@ pub(super) fn attribute_path<'t>(
     (single, k)
 }
 
+/// Whether a `cfg` is written among the outer attributes standing before the item whose header starts at `start`,
+/// directly or applied through a `cfg_attr`, nested ones included — so a build may compile the item out. The
+/// predicate is never evaluated.
+pub(super) fn cfg_written_before(tree: &TokenTree, start: usize) -> bool {
+    let mut metas = Vec::new();
+    let mut k = start;
+    while let Some(node @ Node::Attribute { open, close, .. }) = tree.node_before(k) {
+        if !is_outer_attribute(node) {
+            break;
+        }
+        metas.push((open + 1, close));
+        k = node.first();
+    }
+    while let Some((start, end)) = metas.pop() {
+        match attribute_path(tree, start, end) {
+            (Some("cfg"), _) => return true,
+            (Some("cfg_attr"), after) if tree.kind(after) == Kind::Open(Delimiter::Parenthesis) => {
+                metas.extend(cfg_attr_metas(tree, after));
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
+/// Whether the item whose header starts at `start` is one a configuration may leave out where another is compiled in:
+/// a `cfg` is written on it ([`cfg_written_before`]), or it stands directly in an arm of a `cfg_if!`, whose arms are
+/// exclusive. What encloses its scope is not asked, since a scope's lookups are made only where the scope is compiled.
+pub(super) fn may_be_cfg_gated(tree: &TokenTree, start: usize) -> bool {
+    cfg_written_before(tree, start)
+        || tree.enclosing(start).is_some_and(|open| {
+            tree.kind(open) == Kind::Open(Delimiter::Brace)
+                && tree
+                    .enclosing(open)
+                    .is_some_and(|outer| macro_group_kind(tree, outer) == Some(GroupKind::CfgIf))
+                && (matches!(tree.node_before(open), Some(Node::Attribute { .. }))
+                    || open.checked_sub(1).is_some_and(|e| tree.is(e, "else")))
+        })
+}
+
 /// The applied metas of the `cfg_attr(…)` whose `(` is at `open`: every comma-separated meta after its predicate, as
 /// token ranges. Each is an attribute in its own right, read by [`attribute_path`].
 pub(super) fn cfg_attr_metas(tree: &TokenTree, open: usize) -> Vec<(usize, usize)> {
@@ -754,11 +794,28 @@ fn ends_an_operand(tree: &TokenTree, i: usize) -> bool {
     }
 }
 
+/// Whether the `<` at `i` opens a generic parameter list rather than a path: after `impl` it always does
+/// (*Implementations*), and after `for` it opens a higher-ranked binder where a lifetime follows it, since a binder
+/// holds lifetimes alone (*Higher-ranked trait bounds*) — so `impl<T> ::m::Tr for W<T>` and `F: for<'a> ::m::Fn(&'a u8)`
+/// read `::m::…` as a rooted path, while `for <T as Tr>::C in …` still opens a qualified path.
+fn opens_a_generic_list(tree: &TokenTree, i: usize) -> bool {
+    let Some(prev) = i.checked_sub(1) else {
+        return false;
+    };
+    tree.kind(prev) == Kind::Keyword
+        && match tree.text(prev) {
+            "impl" => true,
+            "for" => i + 1 < tree.len() && tree.kind(i + 1) == Kind::Lifetime,
+            _ => false,
+        }
+}
+
 /// The `::` after the `>` closing the qualified path's `<…>` the `<` or `<<` at `i` opens, if it opens one: the
-/// token before it does not end an operand — a comparison needs a left operand — its `<…>` closes at its level, and
-/// a `::` follows. The one judgement of a `<` at a path's start.
+/// token before it does not end an operand — a comparison needs a left operand — nor opens a generic parameter list
+/// ([`opens_a_generic_list`]), its `<…>` closes at its level, and a `::` follows. The one judgement of a `<` at a
+/// path's start.
 pub(super) fn opens_a_qualified_path(tree: &TokenTree, i: usize) -> Option<usize> {
-    if ends_an_operand(tree, i) {
+    if ends_an_operand(tree, i) || opens_a_generic_list(tree, i) {
         return None;
     }
     let close = angle_group_end(tree, i)?;

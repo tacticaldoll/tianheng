@@ -1656,6 +1656,71 @@ fn a_path_attribute_is_read_by_its_position() {
     assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
 }
 
+/// An inline module's direct `#[path]` written after a `cfg_attr` path applies only where that predicate is false, so
+/// its base is descended as a candidate's is: only where it exists as a directory. `#[cfg_attr(unix, path = "c")]
+/// #[path = "d"] mod m { pub mod k; }` with only `c/k.rs` on disk governs `c/k.rs`, where the direct base `d/` was
+/// descended and its absent `d/k.rs` refused; with neither directory present the direct base is still descended, so
+/// a declaration no configuration backs is the missing-file error. rustc 1.96.0, edition 2021, on unix, builds the
+/// first.
+#[test]
+fn an_inline_modules_direct_path_after_a_candidate_is_descended_as_a_candidate() {
+    for (row, candidate_exists, expected) in [
+        (
+            "inline-cd-candidate-only",
+            true,
+            Ok(vec!["c/k.rs".to_string()]),
+        ),
+        ("inline-cd-neither", false, Err("d/k.rs")),
+    ] {
+        let tree = TempSrcTree::new(row);
+        let src = tree.src().to_path_buf();
+        if candidate_exists {
+            std::fs::create_dir_all(src.join("c")).expect("create c");
+            std::fs::write(src.join("c/k.rs"), "\n").expect("write c/k.rs");
+        }
+        std::fs::write(
+            src.join("lib.rs"),
+            "#[cfg_attr(unix, path = \"c\")]\n#[path = \"d\"]\nmod m { pub mod k; }\n",
+        )
+        .expect("write lib.rs");
+        let files = rust_files(&src).expect("list files");
+        let walked = reachable_modules(&src, &files, None, crate::module_scan::Edition::Rust2021);
+        let answer: Result<Vec<String>, String> =
+            walked.map(|(reachable, inline_only, remapped, remap_shadowed)| {
+                let mut governed: Vec<String> = governed_files(
+                    &src,
+                    &files,
+                    "crate",
+                    &reachable,
+                    &inline_only,
+                    &remapped,
+                    &remap_shadowed,
+                    None,
+                    ScanDepth::Subtree,
+                )
+                .into_iter()
+                .filter(|(_, m)| m == "crate::m::k")
+                .map(|(file, _)| {
+                    file.strip_prefix(&src)
+                        .expect("a governed file lies under src")
+                        .to_string_lossy()
+                        .replace('\\', "/")
+                })
+                .collect();
+                governed.sort();
+                governed
+            });
+        match (&answer, expected) {
+            (Ok(governed), Ok(files)) => assert_eq!(governed, &files, "{row}"),
+            (Err(err), Err(file)) => assert!(
+                err.contains(file) && err.contains("could not be located"),
+                "{row}: {err}"
+            ),
+            _ => panic!("{row}: {answer:?}"),
+        }
+    }
+}
+
 /// Two shapes whose declared file may be absent on a build rustc accepts, each measured against rustc 1.96.0, edition
 /// 2021, on unix. A direct `#[path]` written after a `cfg_attr` path is the first path attribute only where that
 /// predicate is false, so `#[cfg_attr(unix, path = "b.rs")] #[path = "a.rs"] mod m;` builds with only `b.rs`, which is

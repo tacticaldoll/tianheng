@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**27 of 139 declared bounds have no pinning test.** That figure is the register's
+**27 of 140 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -158,6 +158,12 @@ fallback used where no manifest exists, which the register spec describes.
 > the system reports `crate::forbidden::fmt in crate::core` and `crate::forbidden::swap in crate::core` respectively, each beside `glob crate::forbidden in crate::core`, with and without `.strict_external()`: rustc 1.96.0, edition 2021, calls the glob's `fmt`, since `std::fmt` names a module and no value, and calls `std::mem::swap`, which the scanner, not reading `std`, cannot tell holds a value — the second an over-reaction declared, not a precision claim
 
 - **pinned by**: `an_import_of_what_is_not_read_beside_a_glob_is_read_with_the_glob`
+
+### `inline-symbol-path-confinement/a-cfg-gated-name-beside-a-glob-is-read-with-the-glob-a-stated-bound`
+
+> the system reports `std::process::Command::new in crate`, with and without `.strict_external()`: rustc 1.96.0, edition 2021, compiles the gated import on every build and calls `crate::mock::Command::new`, and the scanner, which never evaluates a predicate, also reads `Command` through the glob — an over-reaction declared, not a precision claim
+
+- **pinned by**: `a_cfg_gated_name_beside_a_glob_is_read_with_the_glob`
 
 ### `inline-symbol-path-confinement/a-parenthesized-fn-bound-is-read-as-a-call-a-stated-bound`
 

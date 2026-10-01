@@ -42,7 +42,8 @@ generated policy file.
 By default (no narrowing modifier) the system SHALL react on an inline path resolving under the
 prefix **only when it is applied as a call** (`path(...)` or `path::<...>(...)`). A file's bytes SHALL be read by the token
 tree alone; the tree takes whitespace the Reference's *Whitespace* names, Unicode's
-`Pattern_White_Space`, as separating tokens, comments dropped, every literal one token, a multi-byte punctuation
+`Pattern_White_Space`, as separating tokens, comments dropped, every literal one token — a C string's `c` or `cr`
+prefix from edition 2021 only, a `c` before a string being an identifier before it — a multi-byte punctuation
 token read whole by maximal munch — the set the Rust Reference's *Tokens → Punctuation* table names, held both ways to
 a copy of that table the test carries — and `(`, `[` and `{` paired with their closers before any judgement is made; a raw identifier, a
 lifetime, `..`, `..=` and `->` are each one token, so the path after a range operator is a head and never a method's
@@ -57,8 +58,9 @@ qualified path; it closes at a `>` token, or at each `>` a `>>` or `>>=` holds a
 never at `->` or `=>`, and a group inside `(…)`, `[…]` or `{…}` is passed over whole, so `size_of::<fn() -> u8>()` is
 one path applied as a call. Counting a turbofish says where a path ends; its contents — types and const arguments,
 after a path or after a method — SHALL be read as any other tokens are. Everywhere else a `<` is punctuation. A `<` SHALL open a qualified path exactly where the
-token before it cannot end an operand — a comparison needs a left operand — where its `<…>` closes at its own level and
-a `::` follows; an operand ends with an identifier, a literal, a closing delimiter, `?`, `self`, `Self`, `super`,
+token before it cannot end an operand — a comparison needs a left operand — nor opens a generic parameter list, as
+`impl` always does and `for` does where a lifetime follows the `<`, a higher-ranked binder holding lifetimes alone —
+where its `<…>` closes at its own level and a `::` follows; an operand ends with an identifier, a literal, a closing delimiter, `?`, `self`, `Self`, `super`,
 `crate`, `true`, `false` or the `await` of a postfix `.await`. A `}` ends a block-like operand as well as a statement,
 and is read as an operand's end, so a comparison after a block never opens a qualified path; a qualified path opening
 a statement right after a `}` is then read as a comparison, a declared over-reaction (bound:
@@ -156,6 +158,11 @@ only by `.strict_prefix_only()` — a stated bound (bound: inline-symbol-path-co
 - **THEN** each reports `std::process::id in crate` in either mode
 - **PINNED-BY** `an_operand_keyword_ends_an_operand`
 - **PINNED-BY** `a_less_than_after_await_opens_no_qualified_path`
+
+#### Scenario: A less-than after impl or a binder's for opens no qualified path
+- **WHEN** `impl<T> ::std::marker::Unpin for W<T> {}` is written under a prefix `std::marker` with `.strict_prefix_only()`, and `F: for<'a> ::std::ops::Fn(&'a u8)` in a `where` clause, or `&dyn for<'a> ::std::ops::Fn(&'a u8)` as a parameter's type, under a prefix `std::ops`
+- **THEN** the first reports `std::marker::Unpin in crate`, and each of the others `std::ops::Fn in crate` in either mode: the `<` opens a generic parameter list, so the rooted path after its `>` is read rather than taken for a qualified path's tail
+- **PINNED-BY** `a_less_than_after_impl_or_a_binders_for_opens_no_qualified_path`
 
 #### Scenario: A type annotation under the prefix passes
 - **WHEN** `crate::core` contains `fn handle(ev: Event, now: std::time::Instant)` (a type annotation, no call)
@@ -262,7 +269,12 @@ select among distinct candidate bindings: where a scope binds a name more than o
 cfg-exclusive imports do, the occurrence SHALL react under each candidate that resolves under the
 prefix, and a candidate naming a block-local item SHALL NOT remove the others. A module scope's
 candidates for a name SHALL be every binding of it together with the item it declares under it: neither
-SHALL remove the other, since under exclusive cfgs either can be the live one. A crate-rooted path
+SHALL remove the other, since under exclusive cfgs either can be the live one. For the same reason a scope that
+binds or declares a name only by items a `cfg` gates — a `cfg` written on the item, directly or through `cfg_attr`,
+or the item standing in a `cfg_if!` arm — SHALL also read the name through its globs and join the answers, since a
+build compiling the gated item out reads the name from a glob; and what a glob of a crate whose contents are not
+read brings SHALL stay a candidate beside what the unit's own modules bind, for a path through the scope's module,
+whether the two meet in one scope's globs, in cfg-exclusive files of one module, or in a name's two namespaces. A crate-rooted path
 SHALL name itself and every path each binding on it names: where a segment names something a module binds
 rather than declares — an import, a `type` alias read in that module's own scope, or a name one of its
 globs brings — every path those bindings name is read on from it, to a fixed point, so a module's
@@ -295,8 +307,8 @@ path through it names what its bindings name, and an item it declares names noth
 path outside the block names it — a block is named by its file as well as its place in it, so two cfg-exclusive
 files of one module hold two blocks — and a `super` written in it SHALL name the module the block stands in — the block
 is not a module, as rustc resolves it. Only a block's item that is neither a module nor an `extern crate` SHALL be read
-as block-local. A `use` a block inside a macro's group holds SHALL bind that block's paths, as the expansion that
-emits the block does; a `use` written directly in the group binds in no scope, a declared bound, since where the
+as block-local. A `use` a block or a module body inside a macro's group holds SHALL bind that block's or module's
+paths, as the expansion that emits it does; a `use` written directly in the group binds in no scope, a declared bound, since where the
 macro expands it is not read. An item SHALL start after a `;`, a brace group, a braced macro invocation or an attribute, so an item
 written right after `thread_local! { … }` is declared, while a macro invocation that does not stand as an item — the
 self type of `impl Tr for t!() { … }` or of `impl Tr for t!{} { … }` — continues the header it stands in and is
@@ -594,6 +606,11 @@ outside the default policy and is observed under strict-external, whether it is 
 - **PINNED-BY** `a_literal_before_a_comparison_is_an_operand`
 - **PINNED-BY** `operands_and_qualified_paths_beside_literals_keep_their_answers`
 
+#### Scenario: A c before a string is an identifier before edition 2021
+- **WHEN** an edition-2018 package writes `m!(cr#"x");`, a call of `std::fs::canonicalize(".")`, and `m!("#");` after it, under a prefix `std::fs`
+- **THEN** the system reports `std::fs::canonicalize in crate` in either mode: `cr` is an identifier there, so no raw C string runs from it to the later `"#` over the call; rustc 1.96.0 builds the crate in edition 2018 and refuses it in 2021
+- **PINNED-BY** `a_c_before_a_string_is_an_identifier_before_edition_2021`
+
 #### Scenario: A multi-byte operator is one token
 - **WHEN** code writes any multi-byte operator of the Reference's punctuation table that stands between two operands — `&&`, `||`, `<<`, `>>`, `==`, `!=`, `>=`, `<=`, `..`, `..=` — before a rooted call or between a `<` and a `>` a rooted call follows, or any compound assignment of a call; or writes `a || check(1)` in a `let` initializer or in a closure's body, `b || n < 3 && n > ::std::process::id()`, or `1 << n > ::std::process::id()` — alone, before `&& n > 0`, as a tuple's first element or with an `as` cast, each of which puts a later `>` at its level
 - **THEN** the system reads each operator as one token and reports the call in either mode; a bitwise `|`, `&&`, an empty closure `|| …`, `|=`, `>>` and `<=` keep their answers
@@ -836,8 +853,8 @@ that may not even name the module. Narrowing and escalation are mutually exclusi
 - **PINNED-BY** `a_use_in_a_macros_group_is_judged_as_a_use_path_under_strict_prefix_only`
 
 #### Scenario: A use in a macro's block binds, and a glob in a macro's group is judged
-- **WHEN** `crate::core` invokes `macro_rules! m { () => { use crate::clock::{self}; clock::now(); }; }`, or the same with `use crate::clock::*; now();`, under `must_not_call_inline("crate::clock")`; or writes `id! { #[allow(unused_imports)] use crate::clock::*; }` under `.strict_prefix_only()`
-- **THEN** the system reports `crate::clock::now in crate::core`, `glob crate::clock in crate::core` and `glob crate::clock in crate::core` respectively: a `use` a block inside a macro's group holds binds that block's paths as the expansion does, and every glob a macro's group holds is judged under strict as a glob; rustc 1.96.0, edition 2021, builds each
+- **WHEN** `crate::core` invokes `macro_rules! m { () => { use crate::clock::{self}; clock::now(); }; }`, or the same with `use crate::clock::*; now();`, or writes `id! { mod m { use crate::clock::{self}; pub fn f() { clock::now(); } } }`, under `must_not_call_inline("crate::clock")`; or writes `id! { #[allow(unused_imports)] use crate::clock::*; }` under `.strict_prefix_only()`
+- **THEN** the system reports `crate::clock::now in crate::core`, `glob crate::clock in crate::core`, `crate::clock::now in crate::core` and `glob crate::clock in crate::core` respectively: a `use` a block or a module body inside a macro's group holds binds that block's or module's paths as the expansion does, and every glob a macro's group holds is judged under strict as a glob; rustc 1.96.0, edition 2021, builds each
 - **PINNED-BY** `a_use_in_a_macros_group_binds_and_globs_as_written`
 
 #### Scenario: A path in a discriminant's turbofish is read
@@ -968,6 +985,11 @@ scope.
 - **WHEN** `crate::core` writes `use crate::forbidden::*;` beside `use std::fmt;` and calls `fmt()`, or beside `use std::mem::swap;` and calls `swap(&mut a, &mut b)`, where `crate::forbidden` defines `fmt` and `swap` as functions, under a prefix `crate::forbidden`
 - **THEN** the system reports `crate::forbidden::fmt in crate::core` and `crate::forbidden::swap in crate::core` respectively, each beside `glob crate::forbidden in crate::core`, with and without `.strict_external()`: rustc 1.96.0, edition 2021, calls the glob's `fmt`, since `std::fmt` names a module and no value, and calls `std::mem::swap`, which the scanner, not reading `std`, cannot tell holds a value — the second an over-reaction declared, not a precision claim
 - **PINNED-BY** `an_import_of_what_is_not_read_beside_a_glob_is_read_with_the_glob`
+
+#### Scenario: A cfg-gated name beside a glob is read with the glob — a stated bound
+- **WHEN** the crate root writes `use std::process::Command;` and a `crate::mock::Command` with a `new`, and a module writes `use super::*;` beside `#[cfg(not(any()))] use crate::mock::Command;` and calls `Command::new("x")`, under a prefix `std::process`
+- **THEN** the system reports `std::process::Command::new in crate`, with and without `.strict_external()`: rustc 1.96.0, edition 2021, compiles the gated import on every build and calls `crate::mock::Command::new`, and the scanner, which never evaluates a predicate, also reads `Command` through the glob — an over-reaction declared, not a precision claim
+- **PINNED-BY** `a_cfg_gated_name_beside_a_glob_is_read_with_the_glob`
 
 #### Scenario: A parenthesized fn bound is read as a call — a stated bound
 - **WHEN** the crate root writes `pub fn f<F: std::ops::Fn(u8) -> u8>(g: F) -> u8 { g(1) }`, `pub fn h() -> impl std::ops::FnOnce() { || () }`, or `pub fn k(g: &dyn std::ops::FnMut(u8)) -> usize { … }`, under a prefix `std::ops`
@@ -1249,8 +1271,8 @@ A scope's answer for a name SHALL be read once per depth of the walk that asks i
 through the scope's globs, so a lattice of glob diamonds whose path count doubles per layer resolves in time its
 size bounds. What every glob of a compilation unit names SHALL be read together, to a fixed point, in passes
 starting from none, and a glob's own path SHALL never be read through the glob itself, as rustc never resolves a glob
-through what it imports: a pass reads each glob from what the globs before it in the same pass have just been read
-as, the passes read the unit's globs forwards and backwards in turn, and a pass that changes nothing ends the
+through what it imports — nor through an answer remembered while it still answered an earlier reading: a pass reads
+each glob from what the globs before it in the same pass have just been read as, the passes read the unit's globs forwards and backwards in turn, and a pass that changes nothing ends the
 reading, so a glob's path is read once per pass rather than once for each set of globs a walk could pass it through,
 and a chain of globs each read through another settles past the chain cap in either order. The passes are bounded by
 construction, by 64 or twice the unit's glob count plus two, whichever is more; a unit whose passes have not settled
@@ -1298,10 +1320,25 @@ for the lookup it answers rather than as a cycle the walk cut.
 - **THEN** the system reports the innermost `leaf` in `crate` for each, within ten seconds
 - **PINNED-BY** `globs_read_through_one_another_settle_however_long_their_chain`
 
+#### Scenario: A name bound only where a cfg gates it is read through the scope's globs
+- **WHEN** beside `use super::*;`, over a crate root's private `use std::process::Command;`, a module calls `Command::new("x")` and also imports `crate::mock::Command` under `#[cfg(test)]`, imports it in a `cfg_if!` arm, or declares `struct Command` under `#[cfg(any())]`; and, as a control, imports it with no `cfg`; under a prefix `std::process`
+- **THEN** each gated form reports `std::process::Command::new in crate`, with and without `.strict_external()`, and the control reports nothing: a build that compiles the gated item out calls the `std::process::Command` the glob brings
+- **PINNED-BY** `a_name_bound_only_where_a_cfg_gates_it_is_read_through_the_scopes_globs`
+
+#### Scenario: A crate-rooted path keeps a foreign glob's candidate beside a local one
+- **WHEN** `crate::user` calls `crate::m::Command::new("x")` where `m` globs `crate::a::*` under `#[cfg(any())]` and `std::process::*` under `#[cfg(not(any()))]`, or where `m` is two files under exclusive `cfg`s, one declaring `Command` and one globbing `std::process`; or mentions `crate::m::exit` where `m` declares a `struct exit` beside a glob of `std::process`, under `.strict_prefix_only()`
+- **THEN** the calls report `std::process::Command::new in crate::user`, with and without `.strict_external()`, and the mention `std::process::exit in crate::user`: what the foreign glob brings stays a candidate beside the local one
+- **PINNED-BY** `a_crate_rooted_path_keeps_a_foreign_globs_candidate_beside_a_local_one`
+
 #### Scenario: A glob is never read through itself
 - **WHEN** a module writes `use std::collections::*;` and `use self::hash_map::*;` and calls `std::process::id()`, under a prefix `std::process` with `.strict_external()`
 - **THEN** the system reports `std::process::id in crate`: the second glob's path names the `hash_map` the first brings, and is not read through what the second glob brings in turn
 - **PINNED-BY** `a_glob_is_never_read_through_itself`
+
+#### Scenario: A glob read later in a pass is not read through itself
+- **WHEN** a module `s` globs `crate::lib_a::*`, which brings a module `x` holding a cfg-closed `x`, and `self::x::*`, while a module `p` globs `crate::s::x::*`, and the crate calls `std::process::id()`, under a prefix `std::process` with `.strict_external()`
+- **THEN** the system reports `std::process::id in crate`: each glob is read with no answer remembered from an earlier read in its pass, so no glob is read through what it last answered, and the unit's globs settle
+- **PINNED-BY** `a_glob_read_later_in_a_pass_is_not_read_through_itself`
 
 #### Scenario: Globs whose readings grow more than once settle
 - **WHEN** a crate root writes `use c3::*;`, `use c2::*;`, `use c1::*;` and `use x::*;`, with `x` imported as `crate::p` under `cfg(unix)` and as `late::q` under `cfg(not(unix))`, `crate::p::c1::c2::c3` defining `leaf`, and calls `leaf()`, under a prefix `crate::p`

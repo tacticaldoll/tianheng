@@ -15,22 +15,24 @@ use std::ops::Range;
 
 use unicode_normalization::UnicodeNormalization;
 
-/// The editions whose keyword sets differ in a way a reader of paths can see: in 2015 `async`, `await`, `dyn` and
-/// `try` are identifiers.
+/// The editions whose grammar differs in a way a reader of paths can see: in 2015 `async`, `await`, `dyn` and `try`
+/// are identifiers, and a `use` path or a `::`-rooted path starts at the crate root; before 2021 a `c` before a string
+/// literal is an identifier of its own, since C string literals arrive in 2021.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Edition {
     Rust2015,
-    /// 2018 and every edition after it.
     Rust2018,
+    /// 2021 and every edition after it.
+    Rust2021,
 }
 
 impl Edition {
-    /// The edition a package's manifest names, as `cargo metadata` reports it: `2015`, or any later one.
+    /// The edition a package's manifest names, as `cargo metadata` reports it: `2015`, `2018`, or any later one.
     pub(crate) fn of(manifest_edition: Option<&str>) -> Self {
-        if manifest_edition == Some("2015") {
-            Edition::Rust2015
-        } else {
-            Edition::Rust2018
+        match manifest_edition {
+            Some("2015") => Edition::Rust2015,
+            Some("2018") => Edition::Rust2018,
+            _ => Edition::Rust2021,
         }
     }
 }
@@ -263,7 +265,7 @@ impl<'s> TokenTree<'s> {
                 i = block_comment_end(bytes, i);
                 continue;
             }
-            let (kind, end) = if let Some(end) = literal_end(bytes, i) {
+            let (kind, end) = if let Some(end) = literal_end(bytes, i, edition) {
                 (Kind::Literal, end)
             } else if b == b'r'
                 && bytes.get(i + 1) == Some(&b'#')
@@ -677,10 +679,14 @@ fn block_comment_end(bytes: &[u8], mut i: usize) -> usize {
     i.min(bytes.len())
 }
 
-/// Past the string or character literal starting at `i` — raw, byte and C forms included — or `None`.
-fn literal_end(bytes: &[u8], i: usize) -> Option<usize> {
+/// Past the string or character literal starting at `i` — raw, byte and, from 2021, C forms included — or `None`.
+/// Before 2021 a `c` is an identifier, so `cr#"x"` there is `cr`, `#` and the string `"x"`: measured against rustc
+/// 1.96.0, `m!(cr#"x"); …; m!("#");` compiles in edition 2018 with the code between read as code, and is refused in
+/// edition 2021.
+fn literal_end(bytes: &[u8], i: usize, edition: Edition) -> Option<usize> {
     let mut j = i;
-    if matches!(bytes.get(j), Some(b'b' | b'c')) {
+    if bytes.get(j) == Some(&b'b') || (bytes.get(j) == Some(&b'c') && edition == Edition::Rust2021)
+    {
         j += 1;
     }
     if bytes.get(j) == Some(&b'r') {
@@ -782,7 +788,7 @@ mod tests {
     use super::*;
 
     fn kinds(source: &str) -> Vec<(Kind, String)> {
-        let tree = TokenTree::lex(source, Edition::Rust2018);
+        let tree = TokenTree::lex(source, Edition::Rust2021);
         (0..tree.len())
             .map(|i| (tree.kind(i), tree.written(i).to_string()))
             .collect()
@@ -922,6 +928,16 @@ mod tests {
                 "{source}"
             );
         }
+    }
+
+    /// Before edition 2021 a `c` is an identifier, so `c"x"` is two tokens there.
+    #[test]
+    fn a_c_before_a_string_is_an_identifier_before_2021() {
+        let tree = TokenTree::lex("c\"x\"", Edition::Rust2018);
+        assert_eq!(
+            (0..tree.len()).map(|i| tree.kind(i)).collect::<Vec<_>>(),
+            [Kind::Ident, Kind::Literal]
+        );
     }
 
     #[test]

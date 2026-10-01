@@ -339,6 +339,18 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
+                "inline-symbol-path-confinement/a-cfg-gated-name-beside-a-glob-is-read-with-the-glob-a-stated-bound",
+            ),
+            "a bare head a scope binds or declares only by items a `cfg` gates, which a glob of that scope also brings",
+            Extent::Reached(Reached::OverReacts {
+                because: "the predicate is never evaluated, so on a build that compiles the gated item in, the head is \
+                          resolved through the scope's globs as well as through it"
+                    .into(),
+            }),
+            "a_cfg_gated_name_beside_a_glob_is_read_with_the_glob",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
                 "inline-symbol-path-confinement/a-glob-reacts-to-any-alias-or-re-export-beneath-its-resolved-module-a-stated-bound",
             ),
             "a glob import whose resolved module has, anywhere beneath it, a `type` alias or `pub use` of the confined \

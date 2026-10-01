@@ -108,11 +108,16 @@ enum Head {
     /// the paths its bindings name and the paths it declares, and for a name a glob brings the glob's module followed
     /// by the name. A fold of several answers joins them, so a name bound in one namespace and brought by a glob in
     /// the other keeps both.
+    ///
+    /// `foreign` holds what a glob of a crate whose contents are not read brings the name as, where a fold joined such
+    /// an answer with this one — cfg-exclusive globs or files, or the two namespaces of one lookup — since either can
+    /// be the live one; it is read as [`Head::Foreign`] is, by a path through the scope's module alone.
     Candidates {
         bound: Vec<Bound>,
         declared: Vec<Declared>,
         through: Vec<String>,
         heads: Vec<String>,
+        foreign: Vec<String>,
     },
     Local,
     /// Nothing the scope binds or declares, and nothing its globs of this compilation unit bring, but a glob of
@@ -267,6 +272,7 @@ fn brought_through(found: Head, quote: &str, target: &str, head: &str) -> Head {
             bound,
             declared,
             through,
+            foreign,
             ..
         } => Head::Candidates {
             bound: bound
@@ -283,6 +289,7 @@ fn brought_through(found: Head, quote: &str, target: &str, head: &str) -> Head {
                 .chain([format!("{target}::{head}")])
                 .collect(),
             heads: vec![format!("{target}::{head}")],
+            foreign,
         },
         other => other,
     }
@@ -631,13 +638,18 @@ impl CrateScopes {
         let module = &self.tables[t].scopes[scope as usize].module;
         let mut named_by =
             |head: Head, head_name: String, rest: Vec<String>, from_root: bool| match head {
-                Head::Candidates { heads, .. } if head_alone => {
-                    Named::Paths(heads.into_iter().map(|p| with_rest(p, &rest)).collect())
-                }
+                Head::Candidates { heads, foreign, .. } if head_alone => Named::Paths(
+                    heads
+                        .into_iter()
+                        .chain(foreign.into_iter().filter(|_| from_root))
+                        .map(|p| with_rest(p, &rest))
+                        .collect(),
+                ),
                 Head::Candidates {
                     bound,
                     declared,
                     through: passed,
+                    foreign,
                     ..
                 } => {
                     through.extend(passed.into_iter().map(|p| with_rest(p, &rest)));
@@ -646,6 +658,7 @@ impl CrateScopes {
                             .into_iter()
                             .map(|(path, _)| path)
                             .chain(declared.iter().map(|d| d.path().to_string()))
+                            .chain(foreign.into_iter().filter(|_| from_root))
                             .map(|p| with_rest(p, &rest))
                             .collect(),
                     )
@@ -723,6 +736,17 @@ impl CrateScopes {
         }
     }
 
+    /// Whether scope `id` binds or declares `head` in `ns` only by items a `cfg` gates, so no binding or declaration
+    /// of it there is compiled on every build.
+    fn held_only_where_gated(&self, t: usize, id: u32, head: &str, ns: Namespace) -> bool {
+        let held = self.tables[t].scopes[id as usize].ungated.get(head);
+        !held.is_some_and(|&(type_ns, value_ns)| match ns {
+            Namespace::Type => type_ns,
+            Namespace::Value => value_ns,
+            Namespace::Either => type_ns || value_ns,
+        })
+    }
+
     /// Whether block `id` holds `head` in `ns` only through imports whose target is not read in `ns` — neither
     /// declared nor bound there, nor aliased, and every import of it of [`Presence::Unknown`] — so the block may not
     /// hold it in `ns` at all. [`Namespace::Either`] asks each namespace, and one that may not be held is enough.
@@ -767,6 +791,7 @@ impl CrateScopes {
                 heads: declared.iter().map(|d| d.path().to_string()).collect(),
                 declared: declared.clone(),
                 through: Vec::new(),
+                foreign: Vec::new(),
             },
             _ => Head::Unbound,
         }
@@ -832,6 +857,16 @@ impl CrateScopes {
     /// rustc 1.96.0, edition 2021. Where such an import does hold the name, the glob's answer is an over-reaction,
     /// the declared bound
     /// `inline-symbol-path-confinement/an-import-of-what-is-not-read-beside-a-glob-is-read-with-the-glob-a-stated-bound`.
+    /// A scope binding or declaring the name only by what a `cfg` gates has its globs read too and the answers joined,
+    /// since on a build that compiles the gated item out the glob names it: `use super::*;` beside
+    /// `#[cfg(test)] use crate::mock::Command;` calls the `Command` the glob brings outside tests, measured against
+    /// rustc 1.96.0, edition 2021. On a build that compiles it in, the glob's answer is an over-reaction, the declared
+    /// bound `inline-symbol-path-confinement/a-cfg-gated-name-beside-a-glob-is-read-with-the-glob-a-stated-bound`.
+    ///
+    /// A scope of a file holding a `use` tree the scanner could not read is refused rather than read, since the
+    /// bindings that tree makes are missing from it, and an answer read without them could name less than rustc does:
+    /// so a lookup that passes through such a file refuses, whichever query asked it, while one that never reads it is
+    /// judged.
     fn scope_lookup_once(
         &self,
         t: usize,
@@ -841,10 +876,17 @@ impl CrateScopes {
         from: &str,
         walk: &mut Walk,
     ) -> Head {
+        if let Some(refusal) = self.tables[t].refusal() {
+            return Head::PastCap(format!(
+                "it reads names through `{}`, whose file holds a `use` tree the scanner cannot read: {refusal}",
+                self.tables[t].scopes[id as usize].module
+            ));
+        }
         match self.bound_here(t, id, head, ns, from, walk) {
             Some(answer @ Head::Candidates { .. })
                 if !self.tables[t].scopes[id as usize].globs.is_empty()
-                    && self.binds_only_what_is_not_read(t, id, head, ns, walk) =>
+                    && (self.held_only_where_gated(t, id, head, ns)
+                        || self.binds_only_what_is_not_read(t, id, head, ns, walk)) =>
             {
                 match self.through_globs(t, id, head, ns, from, walk) {
                     Head::Unbound => answer,
@@ -930,6 +972,7 @@ impl CrateScopes {
                 declared,
                 through,
                 heads,
+                foreign: Vec::new(),
             });
         }
         None
@@ -1194,10 +1237,11 @@ impl CrateScopes {
     /// A glob's own path may be read through another glob of the unit, and that one through the first, so every glob
     /// of the unit is read together, to a fixed point, in passes starting from none. A glob's own path is never read
     /// through the glob itself, which names nothing while it is read, as rustc never resolves a glob through what it
-    /// imports. A pass reads each glob from what the globs before it in the same pass have just been read as, and the
+    /// imports. Each glob is read with every remembered answer forgotten first, so it is read from the current readings of
+    /// the others — those the globs before it in the same pass have just been read as — and never through itself; the
     /// passes read the unit's globs in turn forwards and backwards, so a chain of globs each read through one written
-    /// before or after it settles within a few passes. Each pass starts by forgetting every answer read through the
-    /// pass before; one that changes nothing ends the reading, and every answer it read is from the settled readings.
+    /// before or after it settles within a few passes. A pass that changes nothing ends the reading, and every answer
+    /// it read is from the settled readings.
     /// Passes are bounded by [`MAX_RESOLUTION_CHAIN`] or twice the unit's globs plus two, whichever is more, past which
     /// every glob is refused, since a source whose globs name each other's names without settling is one the scanner
     /// cannot judge.
@@ -1237,7 +1281,6 @@ impl CrateScopes {
         let passes = MAX_RESOLUTION_CHAIN.max(2 * (every.len() + 1));
         let mut settled = false;
         for pass in 0..passes {
-            self.forget_readings();
             let mut changed = false;
             let order: Box<dyn Iterator<Item = &GlobKey>> = if pass % 2 == 0 {
                 Box::new(every.iter())
@@ -1284,9 +1327,12 @@ impl CrateScopes {
     }
 
     /// Read glob `key` once in the current pass, with the glob itself naming nothing while its own path is read, and
-    /// keep what it is read as; whether that changed. Answers read while the glob named nothing are forgotten, since
-    /// they hold less than the glob brings to any other reader.
+    /// keep what it is read as; whether that changed. Every answer remembered before the read is forgotten first, since
+    /// one remembered while this glob still answered its last reading would read the glob through itself; and answers
+    /// read while the glob named nothing are forgotten after it, since they hold less than the glob brings to any
+    /// other reader.
     fn read_in_pass(&self, key: GlobKey) -> bool {
+        self.forget_readings();
         *self.reading_glob.borrow_mut() = Some(key);
         self.read_itself.set(false);
         let reading = self.read_glob(key.0, key.1, key.2);
@@ -1408,9 +1454,14 @@ impl CrateScopes {
                     bound,
                     declared,
                     through,
+                    foreign,
                     ..
                 } => {
                     found.extend(through.into_iter().map(|path| with_rest(path, after)));
+                    if !foreign.is_empty() {
+                        found.extend(foreign.into_iter().map(|path| with_rest(path, after)));
+                        presence = presence.max(Presence::Unknown);
+                    }
                     for declaration in declared {
                         match declaration {
                             Declared::Module(inner) if !after.is_empty() => {
@@ -1524,11 +1575,13 @@ fn joined(heads: impl IntoIterator<Item = Head>) -> Head {
                 declared: d,
                 through: p,
                 heads: g,
+                foreign: f,
             } => {
                 bound.extend(b);
                 declared.extend(d);
                 through.extend(p);
                 alone.extend(g);
+                foreign.extend(f);
             }
             Head::Foreign(paths) => foreign.extend(paths),
             Head::Local => local = true,
@@ -1545,6 +1598,7 @@ fn joined(heads: impl IntoIterator<Item = Head>) -> Head {
             declared,
             through: sorted_unique(through),
             heads: sorted_unique(alone),
+            foreign: sorted_unique(foreign),
         }
     } else if local {
         Head::Local

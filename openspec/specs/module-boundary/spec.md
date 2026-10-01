@@ -470,7 +470,7 @@ The system SHALL attribute each `use` declaration to the module that lexically e
 
 #### Scenario: A target declaring its own edition is read in it
 - **WHEN** an edition-2024 package's `[lib]` declares `edition = "2015"`, `src/sub.rs` writes `use clock::now;` beside a crate-root `pub mod clock;`, and a boundary forbids `crate::sub` from importing `crate::clock`; or a `[[bin]]` in the package's edition shares that library's root
-- **THEN** the system reports `crate::clock::now` for the first, and exits 2 naming both editions for the second; a `[lib]` in 2018 and a `[[bin]]` in 2021 sharing one root are judged, since the scanner reads the two alike: `cargo check --all-targets` under rustc 1.96.0 builds that manifest, the binary holding a `main`, which is a measurement of the fixture rather than a step its pin runs
+- **THEN** the system reports `crate::clock::now` for the first, and exits 2 naming both editions for the second; a `[lib]` in 2018 and a `[[bin]]` in 2021 sharing one root are judged, in 2018, since the scanner reads their paths alike and the 2018 lexing reads as code all the 2021 one does: `cargo check --all-targets` under rustc 1.96.0 builds that manifest, the binary holding a `main`, which is a measurement of the fixture rather than a step its pin runs
 - **PINNED-BY** `a_target_is_read_in_its_own_edition`
 
 #### Scenario: An edition-2015 use path is read from the crate root
@@ -899,7 +899,10 @@ the cap would otherwise vanish entirely from the imported-path set with no repor
 Nesting comfortably under the cap SHALL be observed exactly as a shallower tree would be. A tree is
 refused only when it is nested past the cap, so the refusal's statement of the cap is true of the
 tree it names: a tree nested as deep as the cap is read. The refusal SHALL name the file the tree
-is written in.
+is written in. The bindings such a tree makes are missing from its file's scopes, so an import whose
+head is read through any scope of that file SHALL be refused as well, naming the file the import is
+written in and the module it reads through, rather than read without them; an import whose
+resolution never reads that file is judged.
 
 #### Scenario: A use tree nested past the depth cap is a scan error
 
@@ -912,6 +915,11 @@ is written in.
 - **WHEN** `crate::b` imports `crate::a::X` through `use crate::{…{a::X}…};` nested 128 braces deep, or 129, under `must_not_import("crate::a")`
 - **THEN** 128 braces reports `crate::a::X`, and 129 is a constitution error (exit 2) naming the cap of 128 brace levels and `src/b.rs`, the file it was met in
 - **PINNED-BY** `an_import_rule_reads_a_use_tree_128_braces_deep_and_refuses_129`
+
+#### Scenario: An import read through another file's unreadable use tree is refused
+- **WHEN** in an edition-2015 package `crate::a` writes `use hub::X;`, and the crate root binds `hub` only in `pub use crate::{…forbidden as hub…};` nested 130 braces deep, under `must_not_import("crate::forbidden")` on `crate::a`
+- **THEN** the system reports a constitution error (exit 2) naming `src/a.rs`, the module `crate` it reads through, and the cap of 128 brace levels, where the import went unreported; with `pub use forbidden as hub;` instead it reports `crate::forbidden::X`
+- **PINNED-BY** `an_import_read_through_another_files_unreadable_use_tree_is_refused`
 
 #### Scenario: A use tree nested just under the depth cap is still observed
 
@@ -929,14 +937,17 @@ it exists, is read as well, because rustc takes the first path attribute written
 evaluate `cfg`, so it cannot know which a given build compiles — preferring one would silently drop every child
 beneath the other, the false negative the core contract forbids. A path written after the first direct one is
 never compiled and SHALL NOT be read. A candidate directory that exists without a child the body declares is the
-missing-file scan error it is beside two `cfg_attr` bases, since the configuration selecting it does not build.
+missing-file scan error it is beside two `cfg_attr` bases, since the configuration selecting it does not build. A
+direct `#[path]` written after a candidate applies only where that candidate's predicate is false, so its base SHALL
+be descended as a candidate's is.
 
-Each candidate base — every `cfg_attr` target **and** the conventional directory — SHALL be descended
+Each candidate base — every `cfg_attr` target, a direct one written after a candidate, **and** the conventional
+directory — SHALL be descended
 only when it exists as a directory. Descending an absent one would spuriously fail loud on the body's
 other, unrelated nested items solely because one platform's directory is missing, even when another
 candidate already backs them. When **no** candidate exists as a directory, the conventional base SHALL
-be descended anyway, so a nested reference genuinely broken on every platform still fails loud exactly
-as it did before this tolerance existed.
+be descended anyway — the direct base where there is one — so a nested reference genuinely broken on every
+platform still fails loud.
 
 Resolving such a body's children from the conventional base alone would report a missing-module constitution
 error (exit 2) on source that compiles cleanly under real rustc — refusing to judge a crate rather than judging
@@ -955,6 +966,11 @@ same function); where the two readings of path attributes still differ is tracke
 - **WHEN** a crate root declares `mod m { pub mod k; }` after `#[cfg_attr(unix, path = "c")] #[path = "d"]`, after `#[path = "d"] #[cfg_attr(unix, path = "c")]`, or after `#[path = "d"] #[path = "c"]`, with `src/d/k.rs` present and `src/c/k.rs` present or absent beside an existing `src/c/`
 - **THEN** in the `cfg_attr`-first order the system governs both `c/k.rs` and `d/k.rs` as `crate::m::k` where both exist, and reports the missing-file scan error naming `c/k.rs` where only `c/` does, as rustc 1.96.0 refuses it with `E0583` on unix; in the direct-first orders it governs `d/k.rs` alone and reports no scan error, which rustc 1.96.0 confirms by building them with no `c/k.rs`
 - **PINNED-BY** `a_path_attribute_is_read_by_its_position`
+
+#### Scenario: An inline module's direct path after a candidate is descended as a candidate
+- **WHEN** a crate root declares `#[cfg_attr(unix, path = "c")] #[path = "d"] mod m { pub mod k; }` with only `src/c/k.rs` on disk, or with neither `src/c/` nor `src/d/`
+- **THEN** the system governs `c/k.rs` as `crate::m::k` and reports no scan error in the first, as rustc 1.96.0 builds it on unix, and in the second reports the missing-file scan error naming `d/k.rs`, since no configuration builds it
+- **PINNED-BY** `an_inline_modules_direct_path_after_a_candidate_is_descended_as_a_candidate`
 
 #### Scenario: Every present conditional base of an inline module is descended
 

@@ -1062,6 +1062,13 @@ macro_rules! spawn_call {
     };
 }
 
+/// A bare `Command` constructor call, assembled from two literals for the same reason as [`spawn_call!`].
+macro_rules! command_new_call {
+    () => {
+        concat!("Command", "::new(\"x\")")
+    };
+}
+
 const EXEC_SPAWNS: &str = concat!("pub fn run() { let _ = ", spawn_call!(), "; }\n");
 
 /// A bare `Command` constructor call, assembled from two literals for the reason [`spawn_call`] gives.
@@ -4224,8 +4231,10 @@ fn a_use_in_a_macros_group_is_judged_as_a_use_path_under_strict_prefix_only() {
 
 /// A `use` a block inside a macro's group holds binds the paths beside it, as it binds them in the expansion: under
 /// the default confinement `macro_rules! m { () => { use crate::clock::{self}; clock::now(); }; }` invoked in
-/// `crate::core` names `crate::clock::now`, and so does a glob there; and under `.strict_prefix_only()` a glob a macro's
-/// group holds outside any block is judged as the glob it is. rustc 1.96.0, edition 2021, builds each row.
+/// `crate::core` names `crate::clock::now`, and so does a glob there; a `use` a module body inside a macro's group
+/// holds binds that module's paths, so `id! { mod m { use crate::clock::{self}; pub fn f() { clock::now(); } } }` names
+/// it too; and under `.strict_prefix_only()` a glob a macro's group holds outside any block is judged as the glob it
+/// is. rustc 1.96.0, edition 2021, builds each row.
 #[test]
 fn a_use_in_a_macros_group_binds_and_globs_as_written() {
     let lib = "pub mod clock { pub fn now() {} }\npub mod core;\n";
@@ -4241,6 +4250,12 @@ fn a_use_in_a_macros_group_binds_and_globs_as_written() {
             "macro_rules! m { () => { use crate::clock::*; now(); }; }\npub fn f() { m!(); }\n",
             false,
             "glob crate::clock in crate::core",
+        ),
+        (
+            "macromoduleself",
+            "macro_rules! id { ($($t:tt)*) => { $($t)* }; }\nid! { mod m { use crate::clock::{self}; pub fn f() { clock::now(); } } }\n",
+            false,
+            "crate::clock::now in crate::core",
         ),
         (
             "macrogroupglob",
@@ -5846,6 +5861,71 @@ fn an_import_rule_reads_a_use_tree_128_braces_deep_and_refuses_129() {
     }
 }
 
+/// An import rule refuses an import whose head it reads through another file's unreadable `use` tree, rather than
+/// reading the head without the bindings that tree makes: in an edition-2015 package `crate::a` writes
+/// `use hub::X;`, and the crate root binds `hub` only in a `use` tree nested 130 braces deep. Read without that
+/// binding, the head named nothing and the import of `crate::forbidden::X` went unreported; so it is a scan error
+/// (exit 2) naming the module whose file holds the tree. Written with the binding at its own level, `pub use forbidden
+/// as hub;`, the import reports.
+#[test]
+fn an_import_read_through_another_files_unreadable_use_tree_is_refused() {
+    let law = |package: &str| {
+        Constitution::new("refused-root").boundary(
+            ModuleBoundary::in_crate(package)
+                .module("crate::a")
+                .must_not_import("crate::forbidden")
+                .because("a does not reach forbidden"),
+        )
+    };
+    let nested = format!("{}forbidden as hub{}", "{".repeat(130), "}".repeat(130));
+    let refused = files_probe(
+        "refusedroot",
+        "2015",
+        &[
+            (
+                "src/lib.rs",
+                &format!(
+                    "pub mod a;\npub mod forbidden {{ pub struct X; }}\npub use crate::{nested};\n"
+                ),
+            ),
+            ("src/a.rs", "use hub::X;\npub fn h(_x: X) {}\n"),
+        ],
+        &[],
+    );
+    match check(&law("refusedroot"), refused.manifest()) {
+        Outcome::ConstitutionError(message)
+            if message.contains("src/a.rs")
+                && message.contains("it reads names through `crate`")
+                && message.contains("nested past 128 brace levels") => {}
+        other => panic!(
+            "expected the import read through the unreadable tree to be refused, got {other:?}"
+        ),
+    }
+    let read = files_probe(
+        "refusedrootcontrol",
+        "2015",
+        &[
+            (
+                "src/lib.rs",
+                "pub mod a;\npub mod forbidden { pub struct X; }\npub use forbidden as hub;\n",
+            ),
+            ("src/a.rs", "use hub::X;\npub fn h(_x: X) {}\n"),
+        ],
+        &[],
+    );
+    match check(&law("refusedrootcontrol"), read.manifest()) {
+        Outcome::Violations(report) => assert_eq!(
+            report
+                .violations
+                .iter()
+                .map(|v| v.finding.as_str())
+                .collect::<Vec<_>>(),
+            ["crate::forbidden::X"]
+        ),
+        other => panic!("expected the control's import to react, got {other:?}"),
+    }
+}
+
 /// A binding holds a name only in the namespaces its target provides: a `type` alias names a type, and an import names
 /// what its target names in each namespace. So `support`'s alias `X` of a struct leaves the value `X` to its glob of
 /// `crate::v`, whose `fn X` a call `X()` reaches; and `support`'s import of `crate::v::X`, a function, leaves the type
@@ -6585,6 +6665,50 @@ fn a_less_than_after_await_opens_no_qualified_path() {
         "std::process",
         &["std::process::id in crate"],
     );
+}
+
+/// A `<` after `impl`, or after a `for` with a lifetime following it, opens a generic parameter list, never a
+/// qualified path, so a rooted path right after its `>` is read rather than taken for a qualified path's tail:
+/// `impl<T> ::std::marker::Unpin for W<T>` mentions `std::marker::Unpin`, and `F: for<'a> ::std::ops::Fn(&'a u8)` and
+/// `&dyn for<'a> ::std::ops::Fn(&'a u8)` each read `std::ops::Fn` as the call a parenthesized bound is read as.
+/// rustc 1.96.0, edition 2021, builds all three.
+#[test]
+fn a_less_than_after_impl_or_a_binders_for_opens_no_qualified_path() {
+    let probe = lib_probe(
+        "implgenerics",
+        "pub struct W<T>(T);\nimpl<T> ::std::marker::Unpin for W<T> {}\n",
+    );
+    let law = Constitution::new("implgenerics").boundary(
+        ModuleBoundary::in_crate("implgenerics")
+            .module("crate")
+            .must_not_call_inline("std::marker")
+            .strict_prefix_only()
+            .depth(xuanji::ScanDepth::Subtree)
+            .because("no mention of markers"),
+    );
+    match check(&law, probe.manifest()) {
+        Outcome::Violations(report) => assert_eq!(
+            report
+                .violations
+                .iter()
+                .map(|v| v.finding.as_str())
+                .collect::<Vec<_>>(),
+            ["std::marker::Unpin in crate"]
+        ),
+        other => panic!("expected the mention after `impl<T>` to react, got {other:?}"),
+    }
+    for (package, item) in [
+        (
+            "wherebinder",
+            "pub fn h<F>(_f: F) where F: for<'a> ::std::ops::Fn(&'a u8) {}\n",
+        ),
+        (
+            "dynbinder",
+            "pub fn k(_f: &dyn for<'a> ::std::ops::Fn(&'a u8)) {}\n",
+        ),
+    ] {
+        assert_crate_answers(package, item, "std::ops", &["std::ops::Fn in crate"]);
+    }
 }
 
 /// The verdict does not depend on the order modules are met in: a glob of `crate::p` reaches `std::process` through
@@ -8640,6 +8764,192 @@ fn a_glob_is_never_read_through_itself() {
     );
     assert_eq!(
         inline_findings(&probe, "globthroughitself", "crate", "std::process", true),
+        ["std::process::id in crate"]
+    );
+}
+
+/// Before edition 2021 a `c` before a string literal is an identifier, not a C string's prefix, so `cr#"x"` is `cr`, `#`
+/// and the string `"x"`, and the code after it is read: in an edition-2018 package `m!(cr#"x");` before a call of
+/// `std::fs::canonicalize` and `m!("#");` after it, the call reports. Read as a raw C string it ran to the `"#` and took
+/// the call with it. rustc 1.96.0 builds the crate in edition 2018 and refuses it in 2021.
+#[test]
+fn a_c_before_a_string_is_an_identifier_before_edition_2021() {
+    let probe = files_probe(
+        "cstring2018",
+        "2018",
+        &[(
+            "src/lib.rs",
+            "macro_rules! m { ($($t:tt)*) => {}; }\npub fn g() { m!(cr#\"x\"); let _ = std::fs::canonicalize(\".\"); m!(\"#\"); }\n",
+        )],
+        &[],
+    );
+    let found = ["std::fs::canonicalize in crate"];
+    assert_inline_answers(&probe, "cstring2018", "crate", "std::fs", &found, &found);
+}
+
+/// A crate-rooted path keeps what a glob of a crate whose contents are not read brings beside what the unit's own
+/// modules bind, since under exclusive cfgs either can be the live one: `crate::m::Command::new` reports under
+/// `std::process` where `m` globs `crate::a::*` under one `cfg` and `std::process::*` under its negation, where `m` is
+/// two files under exclusive `cfg`s, one declaring `Command` and one globbing `std::process`, and — read as a path
+/// mentioned, in both namespaces — where `m` declares a `struct exit` beside its glob of `std::process`. rustc 1.96.0,
+/// edition 2021, builds each.
+#[test]
+fn a_crate_rooted_path_keeps_a_foreign_globs_candidate_beside_a_local_one() {
+    let user = concat!(
+        "pub fn f() { let _ = crate::m::",
+        command_new_call!(),
+        "; }\n"
+    );
+    let found = ["std::process::Command::new in crate::user"];
+    let globs = RootProbe::new(
+        "foreignbesidelocalglob",
+        "",
+        &[
+            (
+                "src/lib.rs",
+                "#![allow(unused)]\npub mod a { pub struct Command; impl Command { pub fn new(_: &str) -> Self { Command } } }\n\
+                 pub mod m {\n    #[cfg(any())]\n    pub use crate::a::*;\n    #[cfg(not(any()))]\n    pub use std::process::*;\n}\npub mod user;\n",
+            ),
+            ("src/user.rs", user),
+        ],
+    );
+    assert_inline_answers(
+        &globs,
+        "foreignbesidelocalglob",
+        "crate::user",
+        "std::process",
+        &found,
+        &found,
+    );
+    let files = RootProbe::new(
+        "foreignbesidelocalfile",
+        "",
+        &[
+            (
+                "src/lib.rs",
+                "#![allow(unused)]\n#[cfg(any())]\n#[path = \"m_a.rs\"]\npub mod m;\n#[cfg(not(any()))]\n#[path = \"m_b.rs\"]\npub mod m;\npub mod user;\n",
+            ),
+            (
+                "src/m_a.rs",
+                "pub struct Command;\nimpl Command { pub fn new(_: &str) -> Self { Command } }\n",
+            ),
+            ("src/m_b.rs", "pub use std::process::*;\n"),
+            ("src/user.rs", user),
+        ],
+    );
+    assert_inline_answers(
+        &files,
+        "foreignbesidelocalfile",
+        "crate::user",
+        "std::process",
+        &found,
+        &found,
+    );
+    let namespaces = RootProbe::new(
+        "foreignbesidelocaltype",
+        "",
+        &[
+            (
+                "src/lib.rs",
+                "#![allow(unused, non_camel_case_types)]\npub mod m { pub struct exit {} pub use std::process::*; }\npub mod user;\n",
+            ),
+            (
+                "src/user.rs",
+                "pub fn f() { let g: fn(i32) -> ! = crate::m::exit; }\n",
+            ),
+        ],
+    );
+    let law = Constitution::new("foreignbesidelocaltype").boundary(
+        ModuleBoundary::in_crate("foreignbesidelocaltype")
+            .module("crate::user")
+            .must_not_call_inline("std::process")
+            .strict_prefix_only()
+            .because("no mention of processes"),
+    );
+    match check(&law, namespaces.manifest()) {
+        Outcome::Violations(report) => assert_eq!(
+            report
+                .violations
+                .iter()
+                .map(|v| v.finding.as_str())
+                .collect::<Vec<_>>(),
+            ["std::process::exit in crate::user"]
+        ),
+        other => panic!("expected the mention through `crate::m::exit` to react, got {other:?}"),
+    }
+}
+
+/// A name a scope binds or declares only by what a `cfg` gates is read through the scope's globs too, since a build
+/// that compiles the gated item out reads the name from the glob: beside `use super::*;`, over a crate root's private
+/// `use std::process::Command;`, a `Command::new` call reports under `std::process` where `Command` is also imported
+/// under `#[cfg(test)]`, imported in a `cfg_if!` arm, or declared under `#[cfg(any())]`. Imported with no `cfg`, the
+/// import shadows the glob on every build and nothing reports. rustc 1.96.0, edition 2021, builds each, the `cfg_if!`
+/// one with the `cfg-if` crate.
+#[test]
+fn a_name_bound_only_where_a_cfg_gates_it_is_read_through_the_scopes_globs() {
+    let call = concat!("    pub fn f() { let _ = ", command_new_call!(), "; }\n");
+    for (package, shadow, found) in [
+        (
+            "cfggatedimport",
+            "    #[cfg(test)]\n    use crate::mock::Command;\n",
+            &["std::process::Command::new in crate"][..],
+        ),
+        (
+            "cfggatedarm",
+            "    cfg_if::cfg_if! {\n        if #[cfg(test)] {\n            use crate::mock::Command;\n        }\n    }\n",
+            &["std::process::Command::new in crate"][..],
+        ),
+        (
+            "cfggateditem",
+            "    #[cfg(any())]\n    struct Command;\n",
+            &["std::process::Command::new in crate"][..],
+        ),
+        ("ungatedimport", "    use crate::mock::Command;\n", &[][..]),
+    ] {
+        assert_crate_answers(
+            package,
+            &format!(
+                "#![allow(unused)]\nuse std::process::Command;\npub mod mock {{ pub struct Command; impl Command {{ pub fn new(_: &str) -> Self {{ Command }} }} }}\npub mod agent {{\n    use super::*;\n{shadow}{call}}}\n"
+            ),
+            "std::process",
+            found,
+        );
+    }
+}
+
+/// The over-reaction the cfg-gated reading declares: where the gated import is the one compiled — `#[cfg(not(any()))]`
+/// holds on every build — the glob's `std::process::Command` is read beside it, and its `Command::new` reports,
+/// though rustc resolves `Command` to `crate::mock::Command` there. rustc 1.96.0, edition 2021, builds it with the call
+/// annotated as `crate::mock::Command`.
+#[test]
+fn a_cfg_gated_name_beside_a_glob_is_read_with_the_glob() {
+    assert_crate_answers(
+        "cfggatedlive",
+        concat!(
+            "#![allow(unused)]\nuse std::process::Command;\npub mod mock { pub struct Command; impl Command { pub fn new(_: &str) -> Self { Command } } }\n\
+             pub mod live {\n    use super::*;\n    #[cfg(not(any()))]\n    use crate::mock::Command;\n    pub fn f() { let _: crate::mock::Command = ",
+            command_new_call!(),
+            "; }\n}\n"
+        ),
+        "std::process",
+        &["std::process::Command::new in crate"],
+    );
+}
+
+/// A glob read later in a pass is not read through itself by an answer remembered earlier in that pass: `s` globs
+/// `crate::lib_a::*`, which brings a module `x` holding a cfg-closed `x`, and `self::x::*`, while `p` globs
+/// `crate::s::x::*`. Reading `p` first remembers `s`'s `x` as the glob `self::x::*` last answered, and reading that
+/// glob from the remembered answer named its own reading and grew every pass, so the unit was refused as one whose
+/// globs do not settle. Each glob is read with no answer remembered, so the unit is judged and the call reports.
+/// rustc 1.96.0 builds the crate, edition 2021.
+#[test]
+fn a_glob_read_later_in_a_pass_is_not_read_through_itself() {
+    let probe = lib_probe(
+        "globselfmemo",
+        "#![allow(unused)]\npub mod s {\n    pub use crate::lib_a::*;\n    pub use self::x::*;\n}\npub mod lib_a { pub mod x { #[cfg(any())] pub mod x { pub fn leaf2() {} } pub fn leaf() {} } }\npub mod p { pub use crate::s::x::*; }\npub fn g() -> u32 { std::process::id() }\n",
+    );
+    assert_eq!(
+        inline_findings(&probe, "globselfmemo", "crate", "std::process", true),
         ["std::process::id in crate"]
     );
 }
