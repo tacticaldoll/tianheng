@@ -1303,7 +1303,7 @@ for the lookup it answers rather than as a cycle the walk cut.
 
 #### Scenario: A cfg-closed re-export ring is read in time exponential in its length — a stated bound
 - **WHEN** modules `m0`…`m{n-1}` each write `#[cfg(unix)] pub use crate::m{i+1}::f;` and `#[cfg(not(unix))] pub use crate::forbidden::f;`, an `m{n}` writes `#[cfg(unix)] pub use crate::forbidden::f;` and `#[cfg(not(unix))] pub use crate::m0::f;`, and the crate root calls `m0::f()` under a prefix `crate::forbidden`, for a ring of eight links and one of eleven
-- **THEN** the system reports `crate::forbidden::f in crate` for each, within ten seconds, and the eleven-link reading takes at least four times as long as the eight-link one: an answer read past a cut cycle is not remembered, so each link is re-read once per path to it and the reading doubles per link, a declared bound on time rather than on the verdict; rustc 1.96.0, edition 2021, builds it on unix
+- **THEN** the resolver names `crate::forbidden::f` for each, and the eleven-link reading reads at least four times the scopes the eight-link one does: an answer read past a cut cycle is not remembered, so each link is re-read once per path to it and the reading doubles per link, a declared bound on time rather than on the verdict; rustc 1.96.0, edition 2021, builds it on unix
 - **PINNED-BY** `a_cfg_closed_re_export_ring_is_read_in_time_exponential_in_its_length`
 
 #### Scenario: A lattice of globs resolves once per scope

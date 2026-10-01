@@ -477,6 +477,10 @@ pub(super) struct CrateScopes {
     reading_glob: RefCell<Option<GlobKey>>,
     /// Whether the glob being read was asked for while it named nothing.
     read_itself: std::cell::Cell<bool>,
+    /// How many scopes have been read for a name, with no memo answering: the work a direction holding a reading's
+    /// cost observes, which a clock would confound with every cost beside it.
+    #[cfg(test)]
+    scope_reads: std::cell::Cell<usize>,
 }
 
 impl CrateScopes {
@@ -547,6 +551,8 @@ impl CrateScopes {
             reading_globs: RefCell::default(),
             reading_glob: RefCell::default(),
             read_itself: std::cell::Cell::default(),
+            #[cfg(test)]
+            scope_reads: std::cell::Cell::default(),
         }
     }
 
@@ -765,12 +771,14 @@ impl CrateScopes {
     /// outer scope binds it as: `use crate::forbidden::fmt; fn g() { use std::fmt; fmt(); }` calls
     /// `crate::forbidden::fmt`, measured against rustc 1.96.0, edition 2021. A block holding the name only by a
     /// `cfg`-gated item — an import, or an item of the block — walks on the same way, and a module scope of either kind
-    /// joins the extern prelude's answer. Where a scope it walked past held the name only by a gated item, the answer
-    /// is marked open, since on a build that compiles that item out the head may name what no scope binds — a sysroot
-    /// crate or a dependency, `#[cfg(any())] mod std {}` leaving `std::process::id()` to `std`: both are [`CrateScopes::may_not_hold_here`], the one judgement every lookup
-    /// asks of a scope, asked of every answer a scope binds or declares the name as. A name read in both namespaces is
-    /// looked up in each to the end of its chain before the two are joined, so a block's `struct now {}`, a type alone,
-    /// leaves a value `now` to the scope around the block.
+    /// joins the extern prelude's answer: both are [`CrateScopes::answer_ends_lookup`], the one judgement every lookup
+    /// asks of a scope's answer. A name read in both namespaces is looked up in each to the end of its chain before the
+    /// two are joined, so a block's `struct now {}`, a type alone, leaves a value `now` to the scope around the block.
+    ///
+    /// Where a scope the lookup walked past held the name only by a gated item, and the extern prelude does not answer
+    /// it for certain, the answer is marked open: on a build that compiles that item out the head may name what no scope
+    /// binds — a sysroot crate or a dependency — so `#[cfg(any())] mod std {}` leaves `std::process::id()` to `std`,
+    /// while a crate root's ungated `extern crate core as std;` answers `std` as `core`.
     fn lookup(&self, t: usize, scope: u32, head: &str, ns: Namespace, walk: &mut Walk) -> Head {
         if ns == Namespace::Either {
             return joined(
@@ -803,29 +811,16 @@ impl CrateScopes {
         if unsettled.is_empty() {
             return prelude;
         }
-        let answer = joined(unsettled.into_iter().chain([prelude]));
-        if !gated {
-            return answer;
+        let open = gated && !self.root_holds_extern_crate_for_certain(head, &prelude);
+        let mut answer = joined(unsettled.into_iter().chain([prelude]));
+        if open {
+            if let Head::Candidates { open, .. } = &mut answer {
+                *open = true;
+            } else if answer == Head::Local {
+                answer = Head::Unbound;
+            }
         }
-        match answer {
-            Head::Candidates {
-                bound,
-                declared,
-                through,
-                heads,
-                foreign,
-                ..
-            } => Head::Candidates {
-                bound,
-                declared,
-                through,
-                heads,
-                foreign,
-                open: true,
-            },
-            Head::Local => Head::Unbound,
-            other => other,
-        }
+        answer
     }
 
     /// Whether `answer`, what scope `id` gives for `head` in `ns`, ends a lookup there: every answer does except one
@@ -909,6 +904,21 @@ impl CrateScopes {
                     Ok(Presence::Unknown)
                 ),
                 Binding::Alias { .. } => false,
+            })
+    }
+
+    /// Whether the extern prelude's answer `prelude` for `head` holds on every build: the crate root binds it by an
+    /// `extern crate` no `cfg` gates, so `extern crate core as std;` answers `std` for certain and leaves no sysroot
+    /// `std` to read, while a gated one leaves the head open as a gated scope does.
+    fn root_holds_extern_crate_for_certain(&self, head: &str, prelude: &Head) -> bool {
+        matches!(prelude, Head::Candidates { .. })
+            && self.modules.get("crate").is_some_and(|scopes| {
+                scopes.iter().any(|&(t, s)| {
+                    self.tables[t].scopes[s as usize]
+                        .declarations
+                        .contains_key(head)
+                        && !self.held_only_where_gated(t, s, head, Namespace::Type)
+                })
             })
     }
 
@@ -1002,6 +1012,8 @@ impl CrateScopes {
         from: &str,
         walk: &mut Walk,
     ) -> Head {
+        #[cfg(test)]
+        self.scope_reads.set(self.scope_reads.get() + 1);
         match self.bound_here(t, id, head, ns, from, walk) {
             Some(answer)
                 if !self.tables[t].scopes[id as usize].globs.is_empty()
@@ -1020,10 +1032,12 @@ impl CrateScopes {
     /// What one scope binds or declares `head` as in `ns`, seen from `from`, or `None` where it binds and declares
     /// nothing `from` can see, which leaves the name to the scope's globs.
     ///
-    /// The one reader of a scope's own bindings, so it is where a scope of a file holding a `use` tree the scanner could
-    /// not read is refused rather than read: the bindings that tree makes are missing from it, and an answer read
+    /// The one lookup that reads a scope's own bindings, so it is where a scope of a file holding a `use` tree the
+    /// scanner could not read is refused rather than read: the bindings that tree makes are missing from it, and an answer read
     /// without them could name less than rustc does. A lookup that reaches such a scope — directly, or through a glob
-    /// into it — refuses, whichever query asked it, while one that never reads it is judged.
+    /// into it — refuses, whichever query asked it, while one that never reads it is judged. The glob hazard also walks a
+    /// scope's bindings, outside any lookup; it meets the same refusal before it runs, since `UnitScan::findings` refuses
+    /// a unit any of whose tables holds one.
     fn bound_here(
         &self,
         t: usize,
@@ -1782,6 +1796,60 @@ fn sorted_unique<T: Ord>(paths: impl IntoIterator<Item = T>) -> Vec<T> {
 mod tests {
     use super::super::token_tree::{Edition, TokenTree};
     use super::*;
+
+    /// The scopes a cfg-closed re-export ring of `links` links reads to answer `m0::f()`, and whether that answer names
+    /// `crate::forbidden::f`.
+    fn ring_reading(links: usize) -> (usize, bool) {
+        let mut source = String::from("pub mod forbidden { pub fn f() {} }\n");
+        for i in 0..links {
+            source.push_str(&format!(
+                "pub mod m{i} {{ #[cfg(unix)] pub use crate::m{}::f; #[cfg(not(unix))] pub use crate::forbidden::f; }}\n",
+                i + 1
+            ));
+        }
+        source.push_str(&format!(
+            "pub mod m{links} {{ #[cfg(unix)] pub use crate::forbidden::f; #[cfg(not(unix))] pub use crate::m0::f; }}\n\
+             pub fn g() {{ m0::f(); }}\n"
+        ));
+        let tree = TokenTree::lex(&source, Edition::Rust2021);
+        let offset = source.find("m0::f()").unwrap();
+        let token = (0..tree.len()).find(|&i| tree.start(i) >= offset).unwrap();
+        let scopes = CrateScopes::new(
+            vec![ScopeTable::build(&tree, "crate", 0)],
+            Edition::Rust2021,
+        );
+        let named = scopes.name(
+            0,
+            scopes.table(0).scope_at(token),
+            "m0::f",
+            PathSite::Expr,
+            Namespace::Value,
+        );
+        let reaches = matches!(&named, Named::Paths(paths) if paths.iter().any(|p| p == "crate::forbidden::f"));
+        (scopes.scope_reads.get(), reaches)
+    }
+
+    /// The declared bound `a-cfg-closed-re-export-ring-is-read-in-time-exponential-in-its-length`, held by the work
+    /// it names rather than by a clock: an answer read past a cut cycle is not remembered, so each link is re-read once
+    /// per path to it and eleven links read at least four times the scopes eight do, where doubling per link makes it
+    /// about eight. Both answers reach `crate::forbidden::f`. A repair that bounds the reading fails here, naming the
+    /// bound to retire; no mutation record pins it, since the bound states a cost no single perturbation turns without
+    /// repairing the defect.
+    #[test]
+    fn a_cfg_closed_re_export_ring_is_read_in_time_exponential_in_its_length() {
+        let (short, short_reaches) = ring_reading(8);
+        let (long, long_reaches) = ring_reading(11);
+        assert!(
+            short_reaches && long_reaches,
+            "both rings name crate::forbidden::f"
+        );
+        assert!(
+            long >= short * 4,
+            "eleven links read {long} scopes and eight {short}: the ring no longer doubles per link, so the declared \
+             bound a-cfg-closed-re-export-ring-is-read-in-time-exponential-in-its-length no longer holds and should be \
+             retired"
+        );
+    }
 
     /// What `head` at `at` in `source`, read as `crate::core` beneath a crate root declaring it, names.
     fn resolved(source: &str, at: &str, head: &str, ns: Namespace) -> Option<String> {

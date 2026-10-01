@@ -8891,62 +8891,6 @@ fn a_name_bound_in_one_namespace_and_brought_in_the_other_imports_both() {
     }
 }
 
-/// A cfg-closed re-export ring is judged, in time that doubles per link — the declared bound. Each `m{i}` re-exports
-/// `f` from the next module under `#[cfg(unix)]` and from `crate::forbidden` under its negation, and the last closes
-/// the ring back to `m0`, so `m0::f()` names `crate::forbidden::f` under either predicate and reports. An answer read
-/// past a cut cycle is not remembered, so each link is re-read once per path to it. The pin holds the cost as well as
-/// the verdict, so a repair that bounds it retires the bound rather than leaving it standing: eleven links take at
-/// least four times as long as eight, where doubling per link makes it about eight and a linear reading under one
-/// and a half; the eight-link reading is the fastest of three, so a loaded machine slows the denominator no more
-/// than the numerator. No mutation record pins it, since the bound states a cost no single perturbation turns without
-/// repairing the defect. rustc 1.96.0, edition 2021, builds it on unix.
-#[test]
-fn a_cfg_closed_re_export_ring_is_read_in_time_exponential_in_its_length() {
-    fn ring(links: usize) -> String {
-        let mut lib =
-            String::from("#![allow(unused_imports)]\npub mod forbidden { pub fn f() {} }\n");
-        for i in 0..links {
-            lib.push_str(&format!(
-                "pub mod m{i} {{ #[cfg(unix)] pub use crate::m{}::f; #[cfg(not(unix))] pub use crate::forbidden::f; }}\n",
-                i + 1
-            ));
-        }
-        lib.push_str(&format!(
-            "pub mod m{links} {{ #[cfg(unix)] pub use crate::forbidden::f; #[cfg(not(unix))] pub use crate::m0::f; }}\n\
-             pub fn g() {{ m0::f(); }}\n"
-        ));
-        lib
-    }
-    let timed = |package: &'static str, links: usize| {
-        let lib = ring(links);
-        answered_within(package, move || {
-            let probe = lib_probe(package, &lib);
-            let started = std::time::Instant::now();
-            let found = inline_findings(&probe, package, "crate", "crate::forbidden", false);
-            (started.elapsed(), found)
-        })
-    };
-    let mut short = std::time::Duration::MAX;
-    for _ in 0..3 {
-        let (elapsed, found) = timed("cfgring8", 8);
-        assert!(
-            found.iter().any(|f| f == "crate::forbidden::f in crate"),
-            "{found:?}"
-        );
-        short = short.min(elapsed);
-    }
-    let (long, found) = timed("cfgring11", 11);
-    assert!(
-        found.iter().any(|f| f == "crate::forbidden::f in crate"),
-        "{found:?}"
-    );
-    assert!(
-        long >= short * 4,
-        "eleven links took {long:?} and eight {short:?}: the ring no longer doubles per link, so the declared bound \
-         a-cfg-closed-re-export-ring-is-read-in-time-exponential-in-its-length no longer holds and should be retired"
-    );
-}
-
 /// Globs each read through the one before them settle past the chain cap: nested modules `a0::a1::…`, the innermost
 /// defining `leaf`, and a crate root globbing every one of them by its bare name, so each glob's head is a module the
 /// glob before it brings. A hundred and fifty of them settle within a few passes whether written in order or in
@@ -9224,7 +9168,8 @@ fn a_scope_holding_a_name_only_where_a_cfg_gates_it_ends_no_lookup() {
 /// it names a sysroot crate or a dependency. So `#[cfg(any())] mod std {}` leaves `std::process::id()` to `std`, which
 /// reports under `std::process`; and `#[cfg(any())] mod md5x {}` leaves `md5x::compute()` to the dependency, which
 /// reports under `.strict_external()`, where an un-`use`d dependency call is observed. A module written ungated
-/// shadows the crate and nothing reports. rustc 1.96.0, edition 2021, builds each.
+/// shadows the crate and nothing reports, and so does a crate root's `extern crate core as std;`, which answers `std`
+/// for certain — the call is `core::mem::drop` — unless that alias is gated too. rustc 1.96.0, edition 2021, builds each.
 #[test]
 fn a_head_held_only_by_a_gated_item_may_name_a_crate() {
     let core = |module: &str| {
@@ -9253,6 +9198,27 @@ fn a_head_held_only_by_a_gated_item_may_name_a_crate() {
             ],
         );
         assert_inline_answers(&probe, package, "crate::core", "std::process", found, found);
+    }
+    for (package, alias, found) in [
+        ("certainalias", "extern crate core as std;", &[][..]),
+        (
+            "gatedalias",
+            "#[cfg(any())]\nextern crate core as std;",
+            &["std::mem::drop in crate::core"][..],
+        ),
+    ] {
+        let probe = RootProbe::new(
+            package,
+            "",
+            &[
+                ("src/lib.rs", &format!("{alias}\npub mod core;\n")),
+                (
+                    "src/core.rs",
+                    "#[cfg(any())]\nmod std {}\npub fn run() {\n    std::mem::drop(1);\n}\n",
+                ),
+            ],
+        );
+        assert_inline_answers(&probe, package, "crate::core", "std::mem", found, found);
     }
     for (package, module, strict) in [
         (

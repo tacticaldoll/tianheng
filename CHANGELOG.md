@@ -566,7 +566,8 @@ them.
 - **BREAKING** — **圭表 reads a head every scope holds only by a gated item as a crate too.** `#[cfg(any())] mod std
   {}` beside `std::process::id()` left the call to the gated module and it went unreported under `std::process`; a
   build compiling the module out calls `std`. Such a head is now also read as what no scope binds — a sysroot crate,
-  and under `.strict_external()` a dependency — beside the gated module's paths. Address or baseline what it reports.
+  and under `.strict_external()` a dependency — beside the gated module's paths, unless the crate root's ungated
+  `extern crate` answers it, as `extern crate core as std;` answers `std` as `core`. Address or baseline what it reports.
 
 - **BREAKING** — **圭表's import rules refuse an import read through another file's unreadable `use` tree.** A `use`
   tree nested past the cap leaves its file's scopes without the bindings it makes, so an import whose head is read
