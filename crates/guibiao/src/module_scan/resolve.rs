@@ -134,11 +134,16 @@ enum Head {
 /// One scope a lookup through globs reaches, seen from a module: its table, its scope and that module.
 type GlobNode = (usize, u32, String);
 
-/// What [`CrateScopes::through_globs`] read of one scope: its answer, where the scope binds or declares the name or
-/// its answer is already kept, or the globs it reads the name through.
+/// What [`CrateScopes::through_globs`] read of one scope: its answer, where the scope binds or declares the name for
+/// certain or its answer is already kept, or the globs it reads the name through — beside `own`, what the scope binds
+/// or declares it as where that may not hold on every build ([`CrateScopes::may_not_hold_here`]), joined with what the
+/// globs bring.
 enum GlobRead {
     Answered(Head),
-    Globs(Vec<GlobEdge>),
+    Globs {
+        own: Option<Head>,
+        edges: Vec<GlobEdge>,
+    },
 }
 
 /// One glob of a scope a lookup through globs reads: into the scopes of a module of the unit, by their positions in
@@ -183,16 +188,16 @@ impl GlobGraph {
             .iter()
             .map(|read| match read {
                 GlobRead::Answered(answer) => answer.clone(),
-                GlobRead::Globs(_) => Head::Unbound,
+                GlobRead::Globs { own, .. } => own.clone().unwrap_or(Head::Unbound),
             })
             .collect();
         for _ in 0..=self.nodes.len() {
             let mut changed = false;
             for &n in &order {
-                let GlobRead::Globs(edges) = &self.reads[n] else {
+                let GlobRead::Globs { own, edges } = &self.reads[n] else {
                     continue;
                 };
-                let answer = match joined(edges.iter().map(|edge| match edge {
+                let globbed = match joined(edges.iter().map(|edge| match edge {
                     GlobEdge::Foreign(path) => Head::Foreign(vec![path.clone()]),
                     GlobEdge::Into {
                         quote,
@@ -207,6 +212,11 @@ impl GlobGraph {
                 })) {
                     Head::Local => Head::Unbound,
                     other => other,
+                };
+                let answer = match (own, globbed) {
+                    (None, globbed) => globbed,
+                    (Some(own), Head::Unbound) => own.clone(),
+                    (Some(own), globbed) => joined([own.clone(), globbed]),
                 };
                 if answer != answers[n] {
                     answers[n] = answer;
@@ -228,7 +238,7 @@ impl GlobGraph {
     fn children_first(&self) -> Vec<usize> {
         let children = |n: usize| -> Vec<usize> {
             match &self.reads[n] {
-                GlobRead::Globs(edges) => edges
+                GlobRead::Globs { edges, .. } => edges
                     .iter()
                     .flat_map(|edge| match edge {
                         GlobEdge::Into { into, .. } => into.clone(),
@@ -706,7 +716,9 @@ impl CrateScopes {
     /// namespace alone, as `std::fmt` names a module and no value, so rustc reads `fmt()` past it from the scope around
     /// the block. Its answer is kept and the chain walks on, the answers joined, so the call reports under what the
     /// outer scope binds it as: `use crate::forbidden::fmt; fn g() { use std::fmt; fmt(); }` calls
-    /// `crate::forbidden::fmt`, measured against rustc 1.96.0, edition 2021.
+    /// `crate::forbidden::fmt`, measured against rustc 1.96.0, edition 2021. A block holding the name only by a
+    /// `cfg`-gated item walks on the same way, and a module scope of either kind joins the extern prelude's answer:
+    /// both are [`CrateScopes::may_not_hold_here`], the one judgement every lookup asks of a scope.
     fn lookup(&self, t: usize, scope: u32, head: &str, ns: Namespace, walk: &mut Walk) -> Head {
         let mut current = Some(scope);
         let mut unsettled = Vec::new();
@@ -718,11 +730,13 @@ impl CrateScopes {
                 }
                 Head::Unbound | Head::Foreign(_) => break,
                 answer @ Head::Candidates { .. }
-                    if entry.kind == ScopeKind::Block
-                        && self.binds_only_what_is_not_read(t, id, head, ns, walk) =>
+                    if self.may_not_hold_here(t, id, head, ns, walk) =>
                 {
                     unsettled.push(answer);
-                    current = entry.parent;
+                    current = match entry.kind {
+                        ScopeKind::Block => entry.parent,
+                        ScopeKind::Module => None,
+                    };
                 }
                 answer if unsettled.is_empty() => return answer,
                 answer => return joined(unsettled.into_iter().chain([answer])),
@@ -736,15 +750,35 @@ impl CrateScopes {
         }
     }
 
+    /// Whether what scope `id` binds or declares `head` as in `ns` may not hold on every build, so the lookup reads on
+    /// past it and joins what it finds: the scope holds the name only by items a `cfg` gates
+    /// ([`CrateScopes::held_only_where_gated`]), or only through imports of what is not read
+    /// ([`CrateScopes::binds_only_what_is_not_read`]). The one answer to whether a scope's answer ends a lookup, read
+    /// alike where the lookup walks out of a block, where it reads a scope's own globs, and where a lookup through globs
+    /// reaches the scope.
+    fn may_not_hold_here(
+        &self,
+        t: usize,
+        id: u32,
+        head: &str,
+        ns: Namespace,
+        walk: &mut Walk,
+    ) -> bool {
+        self.held_only_where_gated(t, id, head, ns)
+            || self.binds_only_what_is_not_read(t, id, head, ns, walk)
+    }
+
     /// Whether scope `id` binds or declares `head` in `ns` only by items a `cfg` gates, so no binding or declaration
     /// of it there is compiled on every build.
     fn held_only_where_gated(&self, t: usize, id: u32, head: &str, ns: Namespace) -> bool {
-        let held = self.tables[t].scopes[id as usize].ungated.get(head);
-        !held.is_some_and(|&(type_ns, value_ns)| match ns {
-            Namespace::Type => type_ns,
-            Namespace::Value => value_ns,
-            Namespace::Either => type_ns || value_ns,
-        })
+        let entry = &self.tables[t].scopes[id as usize];
+        let held = entry.ungated.get(head);
+        (entry.bindings.contains_key(head) || entry.declarations.contains_key(head))
+            && !held.is_some_and(|&(type_ns, value_ns)| match ns {
+                Namespace::Type => type_ns,
+                Namespace::Value => value_ns,
+                Namespace::Either => type_ns || value_ns,
+            })
     }
 
     /// Whether block `id` holds `head` in `ns` only through imports whose target is not read in `ns` — neither
@@ -885,8 +919,7 @@ impl CrateScopes {
         match self.bound_here(t, id, head, ns, from, walk) {
             Some(answer @ Head::Candidates { .. })
                 if !self.tables[t].scopes[id as usize].globs.is_empty()
-                    && (self.held_only_where_gated(t, id, head, ns)
-                        || self.binds_only_what_is_not_read(t, id, head, ns, walk)) =>
+                    && self.may_not_hold_here(t, id, head, ns, walk) =>
             {
                 match self.through_globs(t, id, head, ns, from, walk) {
                     Head::Unbound => answer,
@@ -1012,6 +1045,17 @@ impl CrateScopes {
                 let memo = (t, id, head.to_string(), ns, from.clone(), depth, itself);
                 let held = self.looked.borrow().get(&memo).cloned();
                 match held.or_else(|| self.bound_here(t, id, head, ns, &from, walk)) {
+                    Some(answer @ Head::Candidates { .. })
+                        if self.may_not_hold_here(t, id, head, ns, walk) =>
+                    {
+                        match self.glob_edges(&mut graph, t, id, head, &from) {
+                            GlobRead::Globs { edges, .. } => GlobRead::Globs {
+                                own: Some(answer),
+                                edges,
+                            },
+                            refused => refused,
+                        }
+                    }
                     Some(answer) => GlobRead::Answered(answer),
                     None => self.glob_edges(&mut graph, t, id, head, &from),
                 }
@@ -1026,7 +1070,7 @@ impl CrateScopes {
             let mut looked = self.looked.borrow_mut();
             for (n, (t, id, from)) in graph.nodes.iter().enumerate() {
                 if n != start
-                    && matches!(graph.reads[n], GlobRead::Globs(_))
+                    && matches!(graph.reads[n], GlobRead::Globs { .. })
                     && !matches!(answers[n], Head::PastCap(_))
                 {
                     let itself = walk.reads_itself(&(*t, *id, head.to_string()));
@@ -1080,7 +1124,7 @@ impl CrateScopes {
                 }
             }
         }
-        GlobRead::Globs(edges)
+        GlobRead::Globs { own: None, edges }
     }
 
     /// [`CrateScopes::scope_lookup`] in every scope of `module`, seen from `from`, their answers joined.

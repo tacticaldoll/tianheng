@@ -193,7 +193,8 @@ them.
   holds, a `$crate::{…}` head included, a glob a macro's group holds, and a path after a comma in an enum discriminant's turbofish or qualified path; an import separated by a
   vertical tab or a `Pattern_White_Space` character past ASCII; and a call through a `type` alias of a
   parenthesized path; a rooted path after `impl<…>` or a `for<'a>` binder; a path through cfg-exclusive local and
-  foreign candidates; a name bound only by cfg-gated items beside a glob; a `use` a module body inside a macro's group
+  foreign candidates; a name bound only by cfg-gated items beside a glob, in a block or through a glob's relay;
+  under `.strict_prefix_only()`, a single identifier read as a value; a `use` a module body inside a macro's group
   holds; and code after a `c` before a string in an edition-2015 or 2018 crate. Remove the entry `--disallow-stale`
   names for a `use` written inside an attribute's arguments, and repair a `use` tree holding a token no path segment
   is, which is now a scan error (exit 2), as is an import read through a file holding a `use` tree nested past the
@@ -529,10 +530,21 @@ them.
   `.strict_prefix_only()`. And a name a scope binds or declares only by items a `cfg` gates — a `cfg` on the item,
   directly or through `cfg_attr`, or the item in a `cfg_if!` arm — is read through the scope's globs too, so
   `use super::*;` beside `#[cfg(test)] use crate::mock::Command;` reports the `std::process::Command::new` the glob
-  brings outside tests. Each went unreported; where the gated item is the one compiled the glob's answer is an
-  over-reaction, declared as
+  brings outside tests. Whether a scope's answer ends a lookup is one judgement wherever the lookup meets the scope,
+  so a gated name ends none: `use crate::clock::now;` beside a block's `#[cfg(any())] use crate::mock::now;` calls
+  `clock`'s `now`, and so does `use crate::bridge::now;` where `bridge` globs a module holding a gated
+  `pub use crate::mock::now;` beside `pub use crate::clock::*;`. Each went unreported; where the gated item is the
+  one compiled the other answer is an over-reaction, declared as
   `inline-symbol-path-confinement/a-cfg-gated-name-beside-a-glob-is-read-with-the-glob-a-stated-bound`. Address or
   baseline what they report.
+
+- **BREAKING** — **圭表 reads a single identifier as a mention under `.strict_prefix_only()`.** A single identifier
+  that names something is a path mentioned, so `let g: fn() = now;` reports `crate::clock::now` under a strict
+  confinement of it, where only a call, a rooted path or a path of several segments was read; a name being
+  introduced — an item's, a field's, a parameter's, a binding's, a `for` pattern's or a macro's — and a bare `self`
+  are not. A parameter or `let` binding named like an import or an item in scope is read as it, declared as
+  `inline-symbol-path-confinement/a-local-binding-named-like-an-import-is-read-as-the-import-a-stated-bound`, which
+  under strict now reaches a binding read as a value too. Address or baseline what it reports.
 
 - **BREAKING** — **圭表 binds a `use` a module body inside a macro's group holds.** `id! { mod m { use super::*;
   pub fn f() { Instant::now(); } } }` reads `Instant` through the module's glob, as the expansion does, where the
@@ -565,6 +577,14 @@ them.
   repository that count is held to the release snapshots preceding `HEAD`. A rewrite is refused naming its first
   differing line by its line in `HEAD`'s `CHANGELOG.md`.
 
+- **漏刻's lexing without an edition is a declared bound, held on the cross-dimension lexical ledger.**
+  `lexical_conformance.rs` gains a row holding 圭表 and 漏刻 to one reading of `Pattern_White_Space`, on which they
+  agree, and one on an edition-2018 `cr#"x"`, on which they do not: 漏刻 reads source roots with no edition and
+  takes the `r#"` for a raw string, so the probe after it is not seen. That is declared as
+  `runtime-origin-assertion/a-raw-string-after-an-identifier-character-is-read-as-one-in-every-edition-a-stated-bound`,
+  pinned by the ledger row and a mutation record, rather than closed by a shared lexer that would lack the same
+  input.
+
 - **Amendment: 圭表 may depend on `unicode-normalization`.** 圭表's allowlist of direct normal edges gains
   `unicode-normalization`, Unicode's Normalization Form C, so an identifier is compared as rustc compares it rather
   than by its bytes. `self_law_amendment.rs` names the change; its licence, `MIT OR Apache-2.0`, and that of
@@ -576,14 +596,6 @@ them.
   `syn` still is. `self_law_amendment.rs` names the change, and its licence was already reviewed in `deny.toml`.
 
 ## [0.7.1] - 2026-09-27
-
-- **漏刻's lexing without an edition is a declared bound, held on the cross-dimension lexical ledger.**
-  `lexical_conformance.rs` gains a row holding 圭表 and 漏刻 to one reading of `Pattern_White_Space`, on which they
-  agree, and one on an edition-2018 `cr#"x"`, on which they do not: 漏刻 reads source roots with no edition and
-  takes the `r#"` for a raw string, so the probe after it is not seen. That is declared as
-  `runtime-origin-assertion/a-raw-string-after-an-identifier-character-is-read-as-one-in-every-edition-a-stated-bound`,
-  pinned by the ledger row and a mutation record, rather than closed by a shared lexer that would lack the same
-  input.
 
 ### Static
 

@@ -268,7 +268,7 @@ reaction*, and a `mod` token inside a macro body. One additional **over-reaction
 **only** under a single-segment bare-crate prefix (`"rand"`, never a multi-segment `chrono::Utc`): a local
 `let`/parameter/closure binding named like the crate may false-positive. A `fn` item's own name is its
 definition, never a call. Independently of the flag, under any prefix, a local `let`/parameter/closure
-binding named like an import in scope is read as that import — `use crate::clock::now; fn s(now: fn()) {
+binding named like an import or an item in scope is read as that import or item — `use crate::clock::now; fn s(now: fn()) {
 now(); }` reports under `crate::clock`.
 
 ---

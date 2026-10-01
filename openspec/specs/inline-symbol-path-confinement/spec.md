@@ -50,7 +50,8 @@ lifetime, `..`, `..=` and `->` are each one token, so the path after a range ope
 receiver: `0..std::process::id()` is a call. A path occurrence SHALL be a token run — `::`? *head* ( `::` *segment* |
 `::` `<…>` )* — and its role SHALL be read from the tokens beside it alone: the name a `fn` item, a tuple struct or a
 tuple variant declares is its definition; a run followed by a parenthesized group is a call; anything else is a
-mention. No expression or pattern grammar is read, so where an expression ends decides nothing, and a tuple-struct or
+mention, a single identifier included, except where it introduces a name — after an item's or a binding's keyword or
+`for`, or before a lone `:`, a `!` or a `@` — or is a bare `self`, `Self`, `super` or `crate`. No expression or pattern grammar is read, so where an expression ends decides nothing, and a tuple-struct or
 tuple-variant pattern, written as a call is written, is read as a call — a declared over-reaction (bound:
 inline-symbol-path-confinement/a-path-in-a-pattern-position-is-read-as-a-call-a-stated-bound). A `<…>` group SHALL be
 counted in two places only, by one reading: after `::`, where the `<` is a turbofish, and at a `<` that opens a
@@ -272,7 +273,10 @@ candidates for a name SHALL be every binding of it together with the item it dec
 SHALL remove the other, since under exclusive cfgs either can be the live one. For the same reason a scope that
 binds or declares a name only by items a `cfg` gates — a `cfg` written on the item, directly or through `cfg_attr`,
 or the item standing in a `cfg_if!` arm — SHALL also read the name through its globs and join the answers, since a
-build compiling the gated item out reads the name from a glob; and what a glob of a crate whose contents are not
+build compiling the gated item out reads the name from a glob. Whether a scope's answer ends a lookup SHALL be one
+judgement wherever the lookup meets the scope — where it walks out of a block, where it reads the scope's own globs, and
+where a lookup through globs reaches the scope — so a block or a relayed module holding a name only by a gated item
+leaves it to the scope around the block or to the relay's globs; and what a glob of a crate whose contents are not
 read brings SHALL stay a candidate beside what the unit's own modules bind, for a path through the scope's module,
 whether the two meet in one scope's globs, in cfg-exclusive files of one module, or in a name's two namespaces. A crate-rooted path
 SHALL name itself and every path each binding on it names: where a segment names something a module binds
@@ -871,6 +875,11 @@ that may not even name the module. Narrowing and escalation are mutually exclusi
 - **WHEN** a boundary declares `.must_not_call_inline("std::time").strict_prefix_only()` and `crate::core` contains `now: std::time::Instant` (a type annotation)
 - **THEN** the system reacts (strict forbids mentions, not only calls)
 
+#### Scenario: A single identifier read as a value is mentioned under strict-prefix-only
+- **WHEN** `crate::clock` writes `pub fn now() {}` and `let g: fn() = now;` under `.must_not_call_inline("crate::clock::now").strict_prefix_only()` over `crate::clock`; and, as a control, writes `pub fn now() {}`, a field `pub now: u8`, a parameter `now: u8` and a `let now` binding and no use of them
+- **THEN** the first reports `crate::clock::now in crate::clock`, and the control reports nothing: a single identifier is a path mentioned where it names something, and a name being introduced — an item's, a field's, a parameter's, a binding's, a `for` pattern's or a macro's — is not, nor is a bare `self`; rustc 1.96.0, edition 2021, builds both
+- **PINNED-BY** `a_single_identifier_read_as_a_value_is_mentioned_under_strict_prefix_only`
+
 #### Scenario: Combining narrowing and strict is a constitution error
 - **WHEN** a boundary declares `.must_not_call_inline("std::time").ending_with(["now"]).strict_prefix_only()`
 - **THEN** the system reacts with exit 2 (a contradictory declaration), not a silent resolution
@@ -997,8 +1006,8 @@ scope.
 - **PINNED-BY** `a_parenthesized_fn_bound_is_read_as_a_call`
 
 #### Scenario: A local binding named like an import is read as the import — a stated bound
-- **WHEN** the crate root writes `use crate::clock::now;` beside `pub mod clock { pub fn now() {} }`, and a function calls `now()` where `now` is its own `fn` parameter, a `let` binding of a closure, or a closure's parameter, under a prefix `crate::clock`
-- **THEN** the system reports `crate::clock::now in crate` for each, with and without `.strict_external()`: Rust resolves `now` to the local binding, and the scanner, which records no parameter or `let` binding, reads the import — an over-reaction declared, not a precision claim
+- **WHEN** the crate root writes `use crate::clock::now;` beside `pub mod clock { pub fn now() {} }`, and a function calls `now()` where `now` is its own `fn` parameter, a `let` binding of a closure, or a closure's parameter; or the same function stands inside `clock` beside its `pub fn now() {}`; under a prefix `crate::clock`
+- **THEN** the system reports `crate::clock::now in crate` for each, with and without `.strict_external()`: Rust resolves `now` to the local binding, and the scanner, which records no parameter or `let` binding, reads the import or the item — an over-reaction declared, not a precision claim; under `.strict_prefix_only()` the same holds of the binding read as a value, `now` with no call
 - **PINNED-BY** `a_local_binding_named_like_an_import_is_read_as_the_import`
 
 #### Scenario: A path taken as a value is a documented bound under the default
@@ -1324,6 +1333,11 @@ for the lookup it answers rather than as a cycle the walk cut.
 - **WHEN** beside `use super::*;`, over a crate root's private `use std::process::Command;`, a module calls `Command::new("x")` and also imports `crate::mock::Command` under `#[cfg(test)]`, imports it in a `cfg_if!` arm, or declares `struct Command` under `#[cfg(any())]`; and, as a control, imports it with no `cfg`; under a prefix `std::process`
 - **THEN** each gated form reports `std::process::Command::new in crate`, with and without `.strict_external()`, and the control reports nothing: a build that compiles the gated item out calls the `std::process::Command` the glob brings
 - **PINNED-BY** `a_name_bound_only_where_a_cfg_gates_it_is_read_through_the_scopes_globs`
+
+#### Scenario: A scope holding a name only where a cfg gates it ends no lookup
+- **WHEN** `crate::core` writes `use crate::clock::now;` and a function whose block holds `#[cfg(any())] use crate::mock::now;` and calls `now()`; or writes `use crate::bridge::now;` and calls `now()`, where `bridge` globs `relay`, which holds `#[cfg(any())] pub use crate::mock::now;` beside `pub use crate::clock::*;`; and, as controls, each with the gated item written ungated; under a prefix `crate::clock`
+- **THEN** each gated form reports `crate::clock::now in crate::core`, with and without `.strict_external()`, and each control reports nothing: rustc 1.96.0, edition 2021, calls `crate::clock::now` where the gated item is compiled out, and the ungated item shadows it
+- **PINNED-BY** `a_scope_holding_a_name_only_where_a_cfg_gates_it_ends_no_lookup`
 
 #### Scenario: A crate-rooted path keeps a foreign glob's candidate beside a local one
 - **WHEN** `crate::user` calls `crate::m::Command::new("x")` where `m` globs `crate::a::*` under `#[cfg(any())]` and `std::process::*` under `#[cfg(not(any()))]`, or where `m` is two files under exclusive `cfg`s, one declaring `Command` and one globbing `std::process`; or mentions `crate::m::exit` where `m` declares a `struct exit` beside a glob of `std::process`, under `.strict_prefix_only()`

@@ -26,7 +26,8 @@ out of the family's own declarations, and the list below is their enumerator —
 it would be a second copy of a fact this document already carries in full:
 
 1. **out of reach** — the observation source never sees the shape (`external-crate-confinement`: a `use`
-   written in a comment, a string literal or a macro body is no `use` token; `runtime-origin-assertion`: source outside a
+   written in a comment or a string literal is no `use` token, and the import rules do not read one written in a
+   macro's group other than a `cfg_if!` arm; `runtime-origin-assertion`: source outside a
    member's library or binary targets; `semantic-dyn-trait-boundary`: a macro-generated `dyn`).
 2. **reached, refusing to judge** — exit 2 rather than a guess.
 3. **reached, deliberately not refusing** — `semantic-trait-impl-locality`: a cfg-gated module with an absent

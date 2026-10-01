@@ -196,7 +196,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 > a confined-crate `use` written inside a string literal or a macro body
 
-- **because**: a comment is no token, a string literal is one literal token, and no `use` reader records a `use` written inside a macro's group other than a `cfg_if!` arm
+- **because**: a comment is no token, a string literal is one literal token, and no import rule reads a `use` written inside a macro's group other than a `cfg_if!` arm
 - **its defence must show**: does not react
 - **pinned by**: `confine_ignores_a_use_inside_a_string_literal_or_macro_body`
 
@@ -469,9 +469,9 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 ### `inline-symbol-path-confinement/a-cfg-gated-name-beside-a-glob-is-read-with-the-glob-a-stated-bound`
 
-> a bare head a scope binds or declares only by items a `cfg` gates, which a glob of that scope also brings
+> a name a scope binds or declares only by items a `cfg` gates, which a glob of that scope, or the scope around a block, also names
 
-- **because**: the predicate is never evaluated, so on a build that compiles the gated item in, the head is resolved through the scope's globs as well as through it
+- **because**: the predicate is never evaluated, so on a build that compiles the gated item in, the name is resolved through what the lookup reads past the scope as well as through it
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_cfg_gated_name_beside_a_glob_is_read_with_the_glob`
 
@@ -493,7 +493,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 ### `inline-symbol-path-confinement/a-local-binding-named-like-an-import-is-read-as-the-import-a-stated-bound`
 
-> a bare head naming a `fn` or closure parameter, or a `let` binding, that shares its name with an import in scope
+> a bare head naming a `fn` or closure parameter, or a `let` binding, that shares its name with an import or an item in scope
 
 - **because**: parameters and `let` bindings are not recorded in the scope table, so the head is resolved through whatever the enclosing scopes bind under that name
 - **its defence must show**: reacts on a harmless shape

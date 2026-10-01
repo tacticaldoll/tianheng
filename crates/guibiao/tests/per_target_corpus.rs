@@ -4072,6 +4072,49 @@ fn a_path_in_a_discriminants_turbofish_is_read() {
     }
 }
 
+/// Under `.strict_prefix_only()` a single identifier read as a value is a path mentioned, so `let g: fn() = now;` in
+/// `crate::clock` reports `crate::clock::now`, where it went unreported because only a call, a rooted path or a path
+/// of several segments was an occurrence. A name being introduced is not a mention: `pub fn now() {}`, a field
+/// `now: u8`, a parameter `now: u8` and a `let now` binding report nothing. rustc 1.96.0, edition 2021, builds both.
+#[test]
+fn a_single_identifier_read_as_a_value_is_mentioned_under_strict_prefix_only() {
+    for (package, clock, found) in [
+        (
+            "singlevaluemention",
+            "pub fn now() {}\npub fn run() {\n    let g: fn() = now;\n    g();\n}\n",
+            &["crate::clock::now in crate::clock"][..],
+        ),
+        (
+            "singlenameintroduced",
+            "pub fn now() {}\npub struct S { pub now: u8 }\npub fn f(now: u8) {}\npub fn h() { let now = 1u8; }\n",
+            &[][..],
+        ),
+    ] {
+        let probe = RootProbe::new(
+            package,
+            "",
+            &[("src/lib.rs", "pub mod clock;\n"), ("src/clock.rs", clock)],
+        );
+        let law = Constitution::new("single-mention").boundary(
+            ModuleBoundary::in_crate(package)
+                .module("crate::clock")
+                .must_not_call_inline("crate::clock::now")
+                .strict_prefix_only()
+                .because("now is not mentioned"),
+        );
+        let got: Vec<String> = match check(&law, probe.manifest()) {
+            Outcome::Violations(report) => report
+                .violations
+                .iter()
+                .map(|v| v.finding.clone())
+                .collect(),
+            Outcome::Clean(_) => Vec::new(),
+            other => panic!("{package}: {other:?}"),
+        };
+        assert_eq!(got, found, "{package}");
+    }
+}
+
 /// Whitespace is Unicode's `Pattern_White_Space`, as the Reference states: a vertical tab, which
 /// `u8::is_ascii_whitespace` leaves out, and five characters past ASCII separate tokens as a space does, so
 /// `use crate::forbidden::{\u{b}Thing\u{b}};` imports `crate::forbidden::Thing` and the name is read without either.
@@ -7896,8 +7939,8 @@ fn a_lattice_of_globs_is_read_once_per_scope() {
 }
 
 /// Rust resolves a head naming a `fn` parameter, a `let` binding or a closure parameter to that binding; the scanner
-/// records none of them, so `now()` there is read through the module's `use crate::clock::now;` — the declared
-/// over-reaction. Each row is compiled by rustc 1.96.0, edition 2021.
+/// records none of them, so `now()` there is read through the module's `use crate::clock::now;`, or through the item
+/// `now` the module declares — the declared over-reaction. Each row is compiled by rustc 1.96.0, edition 2021.
 #[test]
 fn a_local_binding_named_like_an_import_is_read_as_the_import() {
     let mut mismatches = Vec::new();
@@ -7913,6 +7956,18 @@ fn a_local_binding_named_like_an_import_is_read_as_the_import() {
             "pub mod clock {{ pub fn now() {{}} }}\n#[allow(unused_imports)] use crate::clock::now;\n{body}\n"
         );
         let probe = lib_probe(package, &lib);
+        answer_mismatches(
+            &probe,
+            package,
+            "crate",
+            "crate::clock",
+            &["crate::clock::now in crate"],
+            &mut mismatches,
+        );
+        let package = format!("{package}item");
+        let lib = format!("pub mod clock {{\n    pub fn now() {{}}\n    {body}\n}}\n");
+        let probe = lib_probe(&package, &lib);
+        let package = package.as_str();
         answer_mismatches(
             &probe,
             package,
@@ -8914,6 +8969,53 @@ fn a_name_bound_only_where_a_cfg_gates_it_is_read_through_the_scopes_globs() {
             "std::process",
             found,
         );
+    }
+}
+
+/// Whether a scope's answer ends a lookup is one judgement wherever the lookup meets the scope: a name a scope holds
+/// only by a `cfg`-gated item does not end it, so a block holding `#[cfg(any())] use crate::mock::now;` leaves `now()`
+/// to the module's `use crate::clock::now;`, and a module `relay` holding a gated `pub use crate::mock::now;` beside
+/// `pub use crate::clock::*;` brings `clock`'s `now` through `bridge`'s glob of it to `use crate::bridge::now;`. Each
+/// went unreported, the block case read where the lookup walks out of a block and the relay case where a lookup
+/// through globs reaches a scope. With the gated item written ungated, it shadows the outer name and nothing reports.
+/// rustc 1.96.0, edition 2021, builds each.
+#[test]
+fn a_scope_holding_a_name_only_where_a_cfg_gates_it_ends_no_lookup() {
+    let items = "#![allow(unused)]\npub mod clock { pub fn now() {} }\npub mod mock { pub fn now() {} }\npub mod core;\n";
+    let relay = |gate: &str| {
+        format!(
+            "pub mod relay {{\n    {gate}pub use crate::mock::now;\n    pub use crate::clock::*;\n}}\n\
+             pub mod bridge {{\n    pub use crate::relay::*;\n}}\n"
+        )
+    };
+    for (package, lib, core, found) in [
+        (
+            "gatedblockshadow",
+            items.to_string(),
+            "use crate::clock::now;\npub fn run() {\n    #[cfg(any())]\n    use crate::mock::now;\n    now();\n}\n",
+            &["crate::clock::now in crate::core"][..],
+        ),
+        (
+            "ungatedblockshadow",
+            items.to_string(),
+            "use crate::clock::now;\npub fn run() {\n    use crate::mock::now;\n    now();\n}\n",
+            &[][..],
+        ),
+        (
+            "gatedrelay",
+            format!("{items}{}", relay("#[cfg(any())]\n    ")),
+            "use crate::bridge::now;\npub fn run() { now(); }\n",
+            &["crate::clock::now in crate::core"][..],
+        ),
+        (
+            "ungatedrelay",
+            format!("{items}{}", relay("")),
+            "use crate::bridge::now;\npub fn run() { now(); }\n",
+            &[][..],
+        ),
+    ] {
+        let probe = RootProbe::new(package, "", &[("src/lib.rs", &lib), ("src/core.rs", core)]);
+        assert_inline_answers(&probe, package, "crate::core", "crate::clock", found, found);
     }
 }
 

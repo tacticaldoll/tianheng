@@ -750,7 +750,7 @@ impl InlineConfinementDraft {
     /// a local binding from a call, so a local `let rand = …; rand()` may false-positive here. A `fn` item's
     /// own name (`fn rand(…)`) is read as its definition, never a call, and module-top-level definitions
     /// resolve to the local item. Separately, and in every mode, a `fn` or closure parameter or a `let`
-    /// binding sharing its name with an import in scope is read as that import, so
+    /// binding sharing its name with an import or an item in scope is read as that import or item, so
     /// `use crate::clock::now; fn s(now: fn()) { now(); }` reports under `crate::clock`. Both are declared,
     /// not silent.
     ///

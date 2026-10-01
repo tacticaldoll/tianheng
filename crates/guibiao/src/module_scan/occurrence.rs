@@ -74,6 +74,27 @@ pub(super) fn path_run(tree: &TokenTree, head: usize) -> PathRun {
 /// one reader of use trees, whose leaves a strict confinement judges as `use` paths — a grouped `use crate::{a::b};`
 /// holds no path `a::b`, and in edition 2015 a `use` path starts at the crate root where an expression's does not.
 /// `statements` spans each such statement, `(use, ;)`, in source order.
+/// The words before a single identifier that make it a name being introduced rather than a path: an item's or a
+/// binding's name, or a `for` loop's pattern.
+const INTRODUCING_WORDS: [&str; 13] = [
+    "fn", "struct", "enum", "union", "trait", "type", "mod", "const", "static", "let", "mut",
+    "ref", "for",
+];
+
+/// Whether the single identifier at `head`, ending before `end`, is a path mentioned rather than a name introduced: an
+/// identifier, not a keyword segment, since a bare `self` is a receiver and not a path to its module; not after
+/// [`INTRODUCING_WORDS`]; and not followed by a lone `:`, which makes it a field, a parameter, a binding or a generic
+/// parameter being declared or initialized, by `!`, which makes it a macro's name, or by `@`, which binds a pattern.
+/// So under a strict confinement `let g: fn() = now;` mentions `now`, while `pub now: u8`, `fn f(now: u8)`,
+/// `S { now: 1 }`, `const NOW: u8` and `now!()` do not.
+fn names_a_single_segment_path(tree: &TokenTree, head: usize, end: usize) -> bool {
+    matches!(tree.kind(head), Kind::Ident | Kind::RawIdent)
+        && !head
+            .checked_sub(1)
+            .is_some_and(|before| INTRODUCING_WORDS.contains(&tree.text(before)))
+        && !(end < tree.len() && (tree.is(end, ":") || tree.is(end, "!") || tree.is(end, "@")))
+}
+
 pub(super) fn occurrences(tree: &TokenTree, statements: &[(usize, usize)]) -> Vec<Occurrence> {
     let mut scan = Scan {
         tree,
@@ -214,7 +235,12 @@ impl Scan<'_, '_> {
                         .is_some_and(|p| tree.is(p, "fn") || tree.is(p, "struct")));
             let applied = end < to && tree.kind(end) == Kind::Open(Delimiter::Parenthesis);
             let is_call = applied && !defines;
-            if is_call || (!defines && (rooted || segments.len() > 1)) {
+            if is_call
+                || (!defines
+                    && (rooted
+                        || segments.len() > 1
+                        || names_a_single_segment_path(tree, head, end)))
+            {
                 let joined = segments.join("::");
                 self.out.push(Occurrence {
                     at: start,
@@ -248,6 +274,15 @@ mod tests {
             .collect()
     }
 
+    /// The calls alone, for a direction whose subject is what reads as a call.
+    fn calls(source: &str) -> Vec<String> {
+        read(source)
+            .into_iter()
+            .filter(|(_, is_call)| *is_call)
+            .map(|(path, _)| path)
+            .collect()
+    }
+
     #[test]
     fn a_role_is_read_from_the_tokens_beside_a_run() {
         assert_eq!(
@@ -256,46 +291,68 @@ mod tests {
                 ("a::b".to_string(), true),
                 ("Vec::new".to_string(), true),
                 ("::std::x::y".to_string(), false),
+                ("x".to_string(), false),
                 ("P".to_string(), true),
                 ("match".to_string(), true),
+                ("x".to_string(), false),
+                ("u8".to_string(), false),
+            ]
+        );
+    }
+
+    /// A single identifier is a path mentioned where it names something, and not where it introduces a name: `now`
+    /// read as a value and `Instant` as a type are mentions, while an item's name, a field's, a parameter's, a
+    /// binding's, a `for` pattern's, a macro's and a bare `self` are not.
+    #[test]
+    fn a_single_identifier_is_a_mention_only_where_it_names_something() {
+        assert_eq!(
+            read(
+                "fn f(p: Instant) { let g: fn() = now; let mut m = 1; for k in v {} S { field: 1 }; m!(); self.x; }\n\
+                 struct S { field: u8 } const C: u8 = 1; static D: u8 = 1; type T = U; mod n {} trait R {}"
+            ),
+            [
+                ("Instant".to_string(), false),
+                ("now".to_string(), false),
+                ("v".to_string(), false),
+                ("S".to_string(), false),
+                ("u8".to_string(), false),
+                ("u8".to_string(), false),
+                ("u8".to_string(), false),
+                ("U".to_string(), false),
             ]
         );
     }
 
     #[test]
     fn a_definition_is_not_a_call() {
+        let read = read("pub fn g() {} pub struct P(pub u8); enum E { A(u8), #[x] B(u8) }");
         assert!(
-            read("pub fn g() {} pub struct P(pub u8); enum E { A(u8), #[x] B(u8) }").is_empty()
+            read.iter().all(|(path, is_call)| path == "u8" && !is_call),
+            "{read:?}"
         );
     }
 
     #[test]
     fn a_qualified_paths_tail_is_not_read_and_a_comparison_opens_no_group() {
-        assert!(read("fn g() { <W>::md5x(); return <W>::f(); }").is_empty());
+        assert!(calls("fn g() { <W>::md5x(); return <W>::f(); }").is_empty());
         assert_eq!(
-            read(
+            calls(
                 "fn g() { a < b && c > ::std::process::id(); x.await < b && c > ::std::process::id() }"
             ),
-            [
-                ("::std::process::id".to_string(), true),
-                ("::std::process::id".to_string(), true),
-            ]
+            ["::std::process::id", "::std::process::id"]
         );
         assert_eq!(
-            read("fn g() { let b = { 1 } < n && k > ::std::process::id(); }"),
-            [("::std::process::id".to_string(), true)]
+            calls("fn g() { let b = { 1 } < n && k > ::std::process::id(); }"),
+            ["::std::process::id"]
         );
     }
 
     #[test]
     fn an_attributes_name_and_predicate_are_passed_over() {
         assert!(
-            read("#[cfg(any(unix, not(x)))] #![allow(y)] #[cfg_attr(a::b(), c::d(e))] fn g() {}")
+            calls("#[cfg(any(unix, not(x)))] #![allow(y)] #[cfg_attr(a::b(), c::d(e))] fn g() {}")
                 .is_empty()
         );
-        assert_eq!(
-            read("#[m::attr(x = a::b())] fn g() {}"),
-            [("a::b".to_string(), true)]
-        );
+        assert_eq!(calls("#[m::attr(x = a::b())] fn g() {}"), ["a::b"]);
     }
 }
