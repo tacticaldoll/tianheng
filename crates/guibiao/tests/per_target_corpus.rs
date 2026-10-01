@@ -6007,6 +6007,63 @@ fn an_import_read_through_another_files_unreadable_use_tree_is_refused() {
     }
 }
 
+/// The refusal of a file holding an unreadable `use` tree is met through a glob as it is met directly: `crate::client`
+/// writes `use crate::bad::*;` and `use hub::X;`, and `bad` binds `hub` only in a `use` tree nested 129 braces deep.
+/// Read through the glob without that tree's bindings, `hub` named nothing and the import went unreported as an
+/// external crate's; it is a scan error (exit 2) naming the module read through. With `pub use crate::forbidden as
+/// hub;` in `bad` the import names `crate::bad::hub::X` — the module the glob brings `hub` from, the re-export not
+/// followed — and reports, beside the glob's own `crate::bad`, under a rule forbidding `crate::bad`. rustc 1.96.0, edition 2021, builds both.
+#[test]
+fn an_import_read_through_a_glob_into_an_unreadable_file_is_refused() {
+    let law = |package: &str| {
+        Constitution::new("refused-glob").boundary(
+            ModuleBoundary::in_crate(package)
+                .module("crate::client")
+                .must_not_import("crate::bad")
+                .because("the client does not reach bad"),
+        )
+    };
+    let lib = "pub mod forbidden { pub struct X; }\npub mod bad;\npub mod client;\n";
+    let client =
+        "#[allow(unused_imports)]\nuse crate::bad::*;\n#[allow(unused_imports)]\nuse hub::X;\n";
+    let nested = format!("{}forbidden as hub{}", "{".repeat(129), "}".repeat(129));
+    let refused = RootProbe::new(
+        "refusedglob",
+        "",
+        &[
+            ("src/lib.rs", lib),
+            ("src/bad.rs", &format!("pub use crate::{nested};\n")),
+            ("src/client.rs", client),
+        ],
+    );
+    match check(&law("refusedglob"), refused.manifest()) {
+        Outcome::ConstitutionError(message)
+            if message.contains("src/client.rs")
+                && message.contains("it reads names through `crate::bad`") => {}
+        other => panic!("expected the import read through the glob to be refused, got {other:?}"),
+    }
+    let read = RootProbe::new(
+        "refusedglobcontrol",
+        "",
+        &[
+            ("src/lib.rs", lib),
+            ("src/bad.rs", "pub use crate::forbidden as hub;\n"),
+            ("src/client.rs", client),
+        ],
+    );
+    match check(&law("refusedglobcontrol"), read.manifest()) {
+        Outcome::Violations(report) => assert_eq!(
+            report
+                .violations
+                .iter()
+                .map(|v| v.finding.as_str())
+                .collect::<Vec<_>>(),
+            ["crate::bad", "crate::bad::hub::X"]
+        ),
+        other => panic!("expected the control's import to react, got {other:?}"),
+    }
+}
+
 /// A binding holds a name only in the namespaces its target provides: a `type` alias names a type, and an import names
 /// what its target names in each namespace. So `support`'s alias `X` of a struct leaves the value `X` to its glob of
 /// `crate::v`, whose `fn X` a call `X()` reaches; and `support`'s import of `crate::v::X`, a function, leaves the type
@@ -8837,29 +8894,56 @@ fn a_name_bound_in_one_namespace_and_brought_in_the_other_imports_both() {
 /// A cfg-closed re-export ring is judged, in time that doubles per link — the declared bound. Each `m{i}` re-exports
 /// `f` from the next module under `#[cfg(unix)]` and from `crate::forbidden` under its negation, and the last closes
 /// the ring back to `m0`, so `m0::f()` names `crate::forbidden::f` under either predicate and reports. An answer read
-/// past a cut cycle is not remembered, so each link is re-read once per path to it; six links are read well within
-/// the bound, where a ring of twenty is not. rustc 1.96.0, edition 2021, builds it on unix.
+/// past a cut cycle is not remembered, so each link is re-read once per path to it. The pin holds the cost as well as
+/// the verdict, so a repair that bounds it retires the bound rather than leaving it standing: eleven links take at
+/// least four times as long as eight, where doubling per link makes it about eight and a linear reading under one
+/// and a half; the eight-link reading is the fastest of three, so a loaded machine slows the denominator no more
+/// than the numerator. No mutation record pins it, since the bound states a cost no single perturbation turns without
+/// repairing the defect. rustc 1.96.0, edition 2021, builds it on unix.
 #[test]
 fn a_cfg_closed_re_export_ring_is_read_in_time_exponential_in_its_length() {
-    let links = 6;
-    let mut lib = String::from("#![allow(unused_imports)]\npub mod forbidden { pub fn f() {} }\n");
-    for i in 0..links {
+    fn ring(links: usize) -> String {
+        let mut lib =
+            String::from("#![allow(unused_imports)]\npub mod forbidden { pub fn f() {} }\n");
+        for i in 0..links {
+            lib.push_str(&format!(
+                "pub mod m{i} {{ #[cfg(unix)] pub use crate::m{}::f; #[cfg(not(unix))] pub use crate::forbidden::f; }}\n",
+                i + 1
+            ));
+        }
         lib.push_str(&format!(
-            "pub mod m{i} {{ #[cfg(unix)] pub use crate::m{}::f; #[cfg(not(unix))] pub use crate::forbidden::f; }}\n",
-            i + 1
+            "pub mod m{links} {{ #[cfg(unix)] pub use crate::forbidden::f; #[cfg(not(unix))] pub use crate::m0::f; }}\n\
+             pub fn g() {{ m0::f(); }}\n"
         ));
+        lib
     }
-    lib.push_str(&format!(
-        "pub mod m{links} {{ #[cfg(unix)] pub use crate::forbidden::f; #[cfg(not(unix))] pub use crate::m0::f; }}\n\
-         pub fn g() {{ m0::f(); }}\n"
-    ));
-    let found = answered_within("cfgring", move || {
-        let probe = lib_probe("cfgring", &lib);
-        inline_findings(&probe, "cfgring", "crate", "crate::forbidden", false)
-    });
+    let timed = |package: &'static str, links: usize| {
+        let lib = ring(links);
+        answered_within(package, move || {
+            let probe = lib_probe(package, &lib);
+            let started = std::time::Instant::now();
+            let found = inline_findings(&probe, package, "crate", "crate::forbidden", false);
+            (started.elapsed(), found)
+        })
+    };
+    let mut short = std::time::Duration::MAX;
+    for _ in 0..3 {
+        let (elapsed, found) = timed("cfgring8", 8);
+        assert!(
+            found.iter().any(|f| f == "crate::forbidden::f in crate"),
+            "{found:?}"
+        );
+        short = short.min(elapsed);
+    }
+    let (long, found) = timed("cfgring11", 11);
     assert!(
         found.iter().any(|f| f == "crate::forbidden::f in crate"),
         "{found:?}"
+    );
+    assert!(
+        long >= short * 4,
+        "eleven links took {long:?} and eight {short:?}: the ring no longer doubles per link, so the declared bound \
+         a-cfg-closed-re-export-ring-is-read-in-time-exponential-in-its-length no longer holds and should be retired"
     );
 }
 
@@ -9133,6 +9217,70 @@ fn a_scope_holding_a_name_only_where_a_cfg_gates_it_ends_no_lookup() {
     ] {
         let probe = RootProbe::new(package, "", &[("src/lib.rs", &lib), ("src/core.rs", core)]);
         assert_inline_answers(&probe, package, "crate::core", "crate::clock", found, found);
+    }
+}
+
+/// A head a scope holds only by a gated item may also name what no scope binds: on a build that compiles the item out
+/// it names a sysroot crate or a dependency. So `#[cfg(any())] mod std {}` leaves `std::process::id()` to `std`, which
+/// reports under `std::process`; and `#[cfg(any())] mod md5x {}` leaves `md5x::compute()` to the dependency, which
+/// reports under `.strict_external()`, where an un-`use`d dependency call is observed. A module written ungated
+/// shadows the crate and nothing reports. rustc 1.96.0, edition 2021, builds each.
+#[test]
+fn a_head_held_only_by_a_gated_item_may_name_a_crate() {
+    let core = |module: &str| {
+        format!(
+            "#[allow(unused)]\n{module}\npub fn run() {{\n    let _ = std::process::id();\n}}\n"
+        )
+    };
+    for (package, module, found) in [
+        (
+            "gatedstd",
+            "#[cfg(any())]\nmod std {}",
+            &["std::process::id in crate::core"][..],
+        ),
+        (
+            "ungatedstd",
+            "mod std { pub mod process { pub fn id() -> u32 { 0 } } }",
+            &[][..],
+        ),
+    ] {
+        let probe = RootProbe::new(
+            package,
+            "",
+            &[
+                ("src/lib.rs", "pub mod core;\n"),
+                ("src/core.rs", &core(module)),
+            ],
+        );
+        assert_inline_answers(&probe, package, "crate::core", "std::process", found, found);
+    }
+    for (package, module, strict) in [
+        (
+            "gateddependency",
+            "#[cfg(any())]\nmod md5x {}",
+            &["md5x::compute in crate::core"][..],
+        ),
+        (
+            "ungateddependency",
+            "mod md5x { pub fn compute() -> u32 { 0 } }",
+            &[][..],
+        ),
+    ] {
+        let probe = files_probe(
+            package,
+            "2021",
+            &[
+                ("src/lib.rs", "pub mod core;\n"),
+                (
+                    "src/core.rs",
+                    &format!(
+                        "#[allow(unused)]\n{module}\npub fn run() {{\n    let _ = md5x::compute();\n}}\n"
+                    ),
+                ),
+            ],
+            &["md5x"],
+        );
+        assert_inline_answers(&probe, package, "crate::core", "md5x", &[], strict);
     }
 }
 

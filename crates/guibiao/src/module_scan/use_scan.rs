@@ -93,7 +93,7 @@ fn file_alone(
     source: &str,
     current_module: &str,
     edition: Edition,
-) -> Result<Vec<(String, UseTarget, bool, bool)>, String> {
+) -> Result<Vec<ClassifiedLeaf>, String> {
     let tree = TokenTree::lex(source, edition);
     let table = ScopeTable::build(&tree, current_module, 0);
     let uses = file_uses(super::use_tree::use_statements(&tree), &table);
@@ -177,33 +177,41 @@ fn classify(
             .map_or(path, |(head, _)| head)
             .to_string()
     };
+    let target_of = |path: &str| {
+        if path == "crate" || path.starts_with("crate::") {
+            UseTarget::Internal(readable_module(path))
+        } else {
+            UseTarget::External(head_of(path))
+        }
+    };
     Ok(
         match scopes.head_names(t, scope, written, PathSite::Use, ns) {
-            Named::Paths(paths) => paths
-                .into_iter()
-                .map(|path| {
-                    if path == "crate" || path.starts_with("crate::") {
-                        UseTarget::Internal(readable_module(&path))
-                    } else {
-                        UseTarget::External(head_of(&path))
-                    }
-                })
-                .collect(),
+            Named::Paths(paths) => paths.iter().map(|path| target_of(path)).collect(),
             Named::External(path) => vec![UseTarget::External(head_of(&path))],
-            Named::Unbound { head, .. } => vec![UseTarget::External(head)],
+            Named::Unbound { head, also, .. } => std::iter::once(UseTarget::External(head))
+                .chain(also.iter().map(|path| target_of(path)))
+                .collect(),
             Named::Local | Named::Invalid => Vec::new(),
             Named::PastCap(refusal) => return Err(refusal),
         },
     )
 }
 
-/// Each leaf of one file's `use` statements, classified: the importer's identity, what the leaf names, and whether
+/// One leaf of a file's `use` statements, classified: the importer's identity, one thing the leaf names, and whether
 /// it is a glob base or a `{self}` leaf.
+pub(super) struct ClassifiedLeaf {
+    importer: String,
+    target: UseTarget,
+    is_glob: bool,
+    is_self_leaf: bool,
+}
+
+/// Each leaf of one file's `use` statements, classified.
 pub(super) fn classify_uses(
     scopes: &CrateScopes,
     t: usize,
     uses: &[FileUse],
-) -> Result<Vec<(String, UseTarget, bool, bool)>, String> {
+) -> Result<Vec<ClassifiedLeaf>, String> {
     let mut out = Vec::new();
     for file_use in uses {
         let leaves = file_use.leaves.as_ref().map_err(Clone::clone)?;
@@ -215,7 +223,12 @@ pub(super) fn classify_uses(
                 UseLeaf::Empty(_) => continue,
             };
             for target in classify(scopes, t, file_use.scope, written, ns)? {
-                out.push((file_use.importer.clone(), target, is_glob, is_self_leaf));
+                out.push(ClassifiedLeaf {
+                    importer: file_use.importer.clone(),
+                    target,
+                    is_glob,
+                    is_self_leaf,
+                });
             }
         }
     }
@@ -247,18 +260,16 @@ pub(super) fn file_uses(statements: Vec<UseStatement>, table: &ScopeTable) -> Ve
 }
 
 /// Internal imports of classified leaves, paired with their importer, sorted and deduplicated.
-pub(super) fn internal_imports(
-    classified: Vec<(String, UseTarget, bool, bool)>,
-) -> Vec<(String, ImportedPath)> {
+pub(super) fn internal_imports(classified: Vec<ClassifiedLeaf>) -> Vec<(String, ImportedPath)> {
     let mut pairs: Vec<(String, ImportedPath)> = classified
         .into_iter()
-        .filter_map(|(importer, target, is_glob, is_self_leaf)| match target {
+        .filter_map(|leaf| match leaf.target {
             UseTarget::Internal(path) => Some((
-                importer,
+                leaf.importer,
                 ImportedPath {
                     path,
-                    is_glob,
-                    is_self_leaf,
+                    is_glob: leaf.is_glob,
+                    is_self_leaf: leaf.is_self_leaf,
                 },
             )),
             UseTarget::External(_) => None,
@@ -270,13 +281,11 @@ pub(super) fn internal_imports(
 }
 
 /// External crates of classified leaves, paired with their importer, sorted and deduplicated.
-pub(super) fn external_imports(
-    classified: Vec<(String, UseTarget, bool, bool)>,
-) -> Vec<(String, String)> {
+pub(super) fn external_imports(classified: Vec<ClassifiedLeaf>) -> Vec<(String, String)> {
     let mut pairs: Vec<(String, String)> = classified
         .into_iter()
-        .filter_map(|(importer, target, ..)| match target {
-            UseTarget::External(head) => Some((importer, head)),
+        .filter_map(|leaf| match leaf.target {
+            UseTarget::External(head) => Some((leaf.importer, head)),
             UseTarget::Internal(_) => None,
         })
         .collect();

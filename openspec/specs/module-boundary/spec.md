@@ -901,8 +901,9 @@ refused only when it is nested past the cap, so the refusal's statement of the c
 tree it names: a tree nested as deep as the cap is read. The refusal SHALL name the file the tree
 is written in. The bindings such a tree makes are missing from its file's scopes, so an import whose
 head is read through any scope of that file SHALL be refused as well, naming the file the import is
-written in and the module it reads through, rather than read without them; an import whose
-resolution never reads that file is judged.
+written in and the module it reads through, rather than read without them — whether the head
+reaches that file's scopes directly or through a glob into them; an import whose resolution
+never reads that file is judged.
 
 #### Scenario: A use tree nested past the depth cap is a scan error
 
@@ -920,6 +921,11 @@ resolution never reads that file is judged.
 - **WHEN** in an edition-2015 package `crate::a` writes `use hub::X;`, and the crate root binds `hub` only in `pub use crate::{…forbidden as hub…};` nested 130 braces deep, under `must_not_import("crate::forbidden")` on `crate::a`
 - **THEN** the system reports a constitution error (exit 2) naming `src/a.rs`, the module `crate` it reads through, and the cap of 128 brace levels, where the import went unreported; with `pub use forbidden as hub;` instead it reports `crate::forbidden::X`
 - **PINNED-BY** `an_import_read_through_another_files_unreadable_use_tree_is_refused`
+
+#### Scenario: An import read through a glob into an unreadable file is refused
+- **WHEN** `crate::client` writes `use crate::bad::*;` and `use hub::X;`, and `crate::bad` binds `hub` only in `pub use crate::{…forbidden as hub…};` nested 129 braces deep, under `must_not_import("crate::bad")` on `crate::client`; and, as a control, `crate::bad` writes `pub use crate::forbidden as hub;`
+- **THEN** the system reports a constitution error (exit 2) naming `src/client.rs` and the module `crate::bad` it reads through, and the control reports `crate::bad` and `crate::bad::hub::X`: the import names the module the glob brings `hub` from, the re-export not followed
+- **PINNED-BY** `an_import_read_through_a_glob_into_an_unreadable_file_is_refused`
 
 #### Scenario: A use tree nested just under the depth cap is still observed
 

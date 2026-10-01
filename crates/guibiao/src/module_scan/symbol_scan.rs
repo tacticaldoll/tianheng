@@ -425,11 +425,11 @@ fn resolve_written(
     match scopes.name(t, scope, written, site, ns) {
         Named::Paths(paths) => Ok(paths),
         Named::External(path) => Ok(external_dependencies.map(|_| path).into_iter().collect()),
-        Named::Unbound { head, rest } => {
+        Named::Unbound { head, rest, also } => {
             let dependency =
                 external_dependencies.is_some_and(|dependencies| dependencies.contains(&head));
             let path = with_rest(head, &rest);
-            Ok(dependency.then_some(path).into_iter().collect())
+            Ok(also.into_iter().chain(dependency.then_some(path)).collect())
         }
         Named::Local | Named::Invalid => Ok(Vec::new()),
         Named::PastCap(refusal) => Err(refusal),

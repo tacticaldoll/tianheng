@@ -563,11 +563,16 @@ them.
   where a raw C string ran to the next `"#` and took the code between with it. A root shared by a 2018 and a 2021
   target is read in 2018, which lexes as code all the 2021 reading does. Address or baseline what it reports.
 
+- **BREAKING** — **圭表 reads a head every scope holds only by a gated item as a crate too.** `#[cfg(any())] mod std
+  {}` beside `std::process::id()` left the call to the gated module and it went unreported under `std::process`; a
+  build compiling the module out calls `std`. Such a head is now also read as what no scope binds — a sysroot crate,
+  and under `.strict_external()` a dependency — beside the gated module's paths. Address or baseline what it reports.
+
 - **BREAKING** — **圭表's import rules refuse an import read through another file's unreadable `use` tree.** A `use`
   tree nested past the cap leaves its file's scopes without the bindings it makes, so an import whose head is read
   through any scope of that file is a scan error (exit 2) naming the file the import is written in and the module it
-  reads through, where it was read without them and could go unreported; an import that never reads that file is
-  judged. Repair the tree it names.
+  reads through, where it was read without them and could go unreported — directly, or through a glob into that
+  file's scopes; an import that never reads that file is judged. Repair the tree it names.
 
 - **圭表 judges two shapes it refused on crates rustc builds.** A glob read later in a pass is read with no answer
   remembered from earlier in that pass, so a unit whose globs read one another through a cfg-closed module settles

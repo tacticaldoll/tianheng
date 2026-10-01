@@ -725,7 +725,8 @@ consumer for an undemonstrated deduplication.
   because the re-reads stand under different frames; keying a frame by its chain of bindings rather than by its
   instance is the untried repair. *Current reaction or bound:* declared as
   `inline-symbol-path-confinement/a-cfg-closed-re-export-ring-is-read-in-time-exponential-in-its-length-a-stated-bound`,
-  pinned by a six-link ring read within ten seconds; the chain cap of 64 bounds the depth, not the time. *Risk:* a scan that does not finish on such a ring, never a wrong verdict. *Promotion trigger:* a crate an
+  pinned by eight- and eleven-link rings whose readings the pin holds to at least a fourfold ratio, so a repair
+  that bounds the time fails the pin and retires the bound; the chain cap of 64 bounds the depth, not the time. *Risk:* a scan that does not finish on such a ring, never a wrong verdict. *Promotion trigger:* a crate an
   adopter builds whose scan time is dominated by these re-reads, or a repair keyed by the chain that bounds the ring
   above with no verdict moving in the corpus. *Version class:* patch — performance. *Authority:*
   `inline-symbol-path-confinement`'s time-bound requirement.

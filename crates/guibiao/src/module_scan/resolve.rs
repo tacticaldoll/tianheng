@@ -59,8 +59,14 @@ pub(super) enum Named {
     /// A crate the path names by its root (`::dep::…`, and in edition 2015 a root path no crate-root
     /// name claims), without the `::`.
     External(String),
-    /// A bare head no scope between the path and its module binds, and that names no sysroot crate.
-    Unbound { head: String, rest: Vec<String> },
+    /// A bare head no scope between the path and its module binds for certain, and that names no sysroot crate:
+    /// a crate the head may name, judged by the reader's policy, beside `also`, what scopes binding the head only
+    /// where that may not hold named it as — empty where no scope binds it at all.
+    Unbound {
+        head: String,
+        rest: Vec<String>,
+        also: Vec<String>,
+    },
     /// A block-local item. It is named by no path outside its block, so no prefix reaches it.
     Local,
     /// Nothing a path can start from.
@@ -118,6 +124,10 @@ enum Head {
         through: Vec<String>,
         heads: Vec<String>,
         foreign: Vec<String>,
+        /// Whether the lookup read past every scope on its chain without one ending it, every answer here one that
+        /// may not hold on every build, so the head may also name what no scope binds: a sysroot crate or a
+        /// dependency.
+        open: bool,
     },
     Local,
     /// Nothing the scope binds or declares, and nothing its globs of this compilation unit bring, but a glob of
@@ -300,6 +310,7 @@ fn brought_through(found: Head, quote: &str, target: &str, head: &str) -> Head {
                 .collect(),
             heads: vec![format!("{target}::{head}")],
             foreign,
+            open: false,
         },
         other => other,
     }
@@ -592,27 +603,50 @@ impl CrateScopes {
             &mut Walk::default(),
             false,
         ) {
-            Named::Paths(paths) => {
-                let mut denoted = through;
-                let mut past_cap = None;
-                for path in &paths {
-                    match self.denote(path, ns) {
-                        Ok(found) => denoted.extend(found),
-                        Err(refusal) => past_cap = least(past_cap, refusal),
-                    }
-                }
-                let reached = !denoted.is_empty();
-                denoted.retain(|path| !names_a_block_item(path));
-                match past_cap {
-                    Some(refusal) => Named::PastCap(refusal),
-                    None if reached && denoted.is_empty() => Named::Local,
-                    None => Named::Paths(sorted_unique(denoted)),
+            Named::Paths(paths) => match self.denote_all(through, &paths, ns) {
+                Err(refusal) => Named::PastCap(refusal),
+                Ok(None) => Named::Local,
+                Ok(Some(denoted)) => Named::Paths(denoted),
+            },
+            Named::Unbound { head, rest, also } if !also.is_empty() => {
+                match self.denote_all(through, &also, ns) {
+                    Err(refusal) => Named::PastCap(refusal),
+                    Ok(denoted) => Named::Unbound {
+                        head,
+                        rest,
+                        also: denoted.unwrap_or_default(),
+                    },
                 }
             }
             other => other,
         };
         self.named.borrow_mut().insert(key, named.clone());
         named
+    }
+
+    /// Every path `paths` name, each read through [`CrateScopes::denote`], beside `through`, the paths the reading
+    /// passed: `None` where every path reached names a block's item, which no path outside its block names, and a
+    /// refusal where any path's reading refused.
+    fn denote_all(
+        &self,
+        through: Vec<String>,
+        paths: &[String],
+        ns: Namespace,
+    ) -> Result<Option<Vec<String>>, String> {
+        let mut denoted = through;
+        let mut past_cap = None;
+        for path in paths {
+            match self.denote(path, ns) {
+                Ok(found) => denoted.extend(found),
+                Err(refusal) => past_cap = least(past_cap, refusal),
+            }
+        }
+        if let Some(refusal) = past_cap {
+            return Err(refusal);
+        }
+        let reached = !denoted.is_empty();
+        denoted.retain(|path| !names_a_block_item(path));
+        Ok((!reached || !denoted.is_empty()).then(|| sorted_unique(denoted)))
     }
 
     /// Every path the crate-rooted `path`, its last segment read in `ns`, names: each segment a module binds
@@ -648,30 +682,42 @@ impl CrateScopes {
         let module = &self.tables[t].scopes[scope as usize].module;
         let mut named_by =
             |head: Head, head_name: String, rest: Vec<String>, from_root: bool| match head {
-                Head::Candidates { heads, foreign, .. } if head_alone => Named::Paths(
-                    heads
-                        .into_iter()
-                        .chain(foreign.into_iter().filter(|_| from_root))
-                        .map(|p| with_rest(p, &rest))
-                        .collect(),
-                ),
                 Head::Candidates {
                     bound,
                     declared,
                     through: passed,
+                    heads,
                     foreign,
-                    ..
+                    open,
                 } => {
-                    through.extend(passed.into_iter().map(|p| with_rest(p, &rest)));
-                    Named::Paths(
+                    let named: Vec<String> = if head_alone {
+                        heads
+                    } else {
+                        through.extend(passed.into_iter().map(|p| with_rest(p, &rest)));
                         bound
                             .into_iter()
                             .map(|(path, _)| path)
                             .chain(declared.iter().map(|d| d.path().to_string()))
-                            .chain(foreign.into_iter().filter(|_| from_root))
-                            .map(|p| with_rest(p, &rest))
-                            .collect(),
-                    )
+                            .collect()
+                    }
+                    .into_iter()
+                    .chain(foreign.into_iter().filter(|_| from_root))
+                    .map(|p| with_rest(p, &rest))
+                    .collect();
+                    match open {
+                        false => Named::Paths(named),
+                        true if self.extern_prelude_holds(&head_name) => Named::Paths(
+                            named
+                                .into_iter()
+                                .chain([with_rest(head_name, &rest)])
+                                .collect(),
+                        ),
+                        true => Named::Unbound {
+                            head: head_name,
+                            rest,
+                            also: named,
+                        },
+                    }
                 }
                 Head::Foreign(paths) if from_root => {
                     Named::Paths(paths.into_iter().map(|p| with_rest(p, &rest)).collect())
@@ -685,6 +731,7 @@ impl CrateScopes {
                 Head::Unbound | Head::Foreign(_) => Named::Unbound {
                     head: head_name,
                     rest,
+                    also: Vec::new(),
                 },
             };
         let last_ns = |rest: &[String]| if rest.is_empty() { ns } else { Namespace::Type };
@@ -718,7 +765,9 @@ impl CrateScopes {
     /// outer scope binds it as: `use crate::forbidden::fmt; fn g() { use std::fmt; fmt(); }` calls
     /// `crate::forbidden::fmt`, measured against rustc 1.96.0, edition 2021. A block holding the name only by a
     /// `cfg`-gated item — an import, or an item of the block — walks on the same way, and a module scope of either kind
-    /// joins the extern prelude's answer: both are [`CrateScopes::may_not_hold_here`], the one judgement every lookup
+    /// joins the extern prelude's answer. Where a scope it walked past held the name only by a gated item, the answer
+    /// is marked open, since on a build that compiles that item out the head may name what no scope binds — a sysroot
+    /// crate or a dependency, `#[cfg(any())] mod std {}` leaving `std::process::id()` to `std`: both are [`CrateScopes::may_not_hold_here`], the one judgement every lookup
     /// asks of a scope, asked of every answer a scope binds or declares the name as. A name read in both namespaces is
     /// looked up in each to the end of its chain before the two are joined, so a block's `struct now {}`, a type alone,
     /// leaves a value `now` to the scope around the block.
@@ -730,6 +779,7 @@ impl CrateScopes {
         }
         let mut current = Some(scope);
         let mut unsettled = Vec::new();
+        let mut gated = false;
         while let Some(id) = current {
             let entry = &self.tables[t].scopes[id as usize];
             match self.scope_lookup(t, id, head, ns, &entry.module, walk) {
@@ -738,6 +788,7 @@ impl CrateScopes {
                 }
                 Head::Unbound | Head::Foreign(_) => break,
                 answer if !self.answer_ends_lookup(&answer, t, id, head, ns, walk) => {
+                    gated |= self.held_only_where_gated(t, id, head, ns);
                     unsettled.push(answer);
                     current = match entry.kind {
                         ScopeKind::Block => entry.parent,
@@ -750,9 +801,30 @@ impl CrateScopes {
         }
         let prelude = self.in_extern_prelude(head, ns);
         if unsettled.is_empty() {
-            prelude
-        } else {
-            joined(unsettled.into_iter().chain([prelude]))
+            return prelude;
+        }
+        let answer = joined(unsettled.into_iter().chain([prelude]));
+        if !gated {
+            return answer;
+        }
+        match answer {
+            Head::Candidates {
+                bound,
+                declared,
+                through,
+                heads,
+                foreign,
+                ..
+            } => Head::Candidates {
+                bound,
+                declared,
+                through,
+                heads,
+                foreign,
+                open: true,
+            },
+            Head::Local => Head::Unbound,
+            other => other,
         }
     }
 
@@ -850,6 +922,7 @@ impl CrateScopes {
                 declared: declared.clone(),
                 through: Vec::new(),
                 foreign: Vec::new(),
+                open: false,
             },
             _ => Head::Unbound,
         }
@@ -920,11 +993,6 @@ impl CrateScopes {
     /// `#[cfg(test)] use crate::mock::Command;` calls the `Command` the glob brings outside tests, measured against
     /// rustc 1.96.0, edition 2021. On a build that compiles it in, the glob's answer is an over-reaction, the declared
     /// bound `inline-symbol-path-confinement/a-cfg-gated-name-beside-a-glob-is-read-with-the-glob-a-stated-bound`.
-    ///
-    /// A scope of a file holding a `use` tree the scanner could not read is refused rather than read, since the
-    /// bindings that tree makes are missing from it, and an answer read without them could name less than rustc does:
-    /// so a lookup that passes through such a file refuses, whichever query asked it, while one that never reads it is
-    /// judged.
     fn scope_lookup_once(
         &self,
         t: usize,
@@ -934,12 +1002,6 @@ impl CrateScopes {
         from: &str,
         walk: &mut Walk,
     ) -> Head {
-        if let Some(refusal) = self.tables[t].refusal() {
-            return Head::PastCap(format!(
-                "it reads names through `{}`, whose file holds a `use` tree the scanner cannot read: {refusal}",
-                self.tables[t].scopes[id as usize].module
-            ));
-        }
         match self.bound_here(t, id, head, ns, from, walk) {
             Some(answer)
                 if !self.tables[t].scopes[id as usize].globs.is_empty()
@@ -957,6 +1019,11 @@ impl CrateScopes {
 
     /// What one scope binds or declares `head` as in `ns`, seen from `from`, or `None` where it binds and declares
     /// nothing `from` can see, which leaves the name to the scope's globs.
+    ///
+    /// The one reader of a scope's own bindings, so it is where a scope of a file holding a `use` tree the scanner could
+    /// not read is refused rather than read: the bindings that tree makes are missing from it, and an answer read
+    /// without them could name less than rustc does. A lookup that reaches such a scope — directly, or through a glob
+    /// into it — refuses, whichever query asked it, while one that never reads it is judged.
     fn bound_here(
         &self,
         t: usize,
@@ -967,6 +1034,12 @@ impl CrateScopes {
         walk: &mut Walk,
     ) -> Option<Head> {
         let entry = &self.tables[t].scopes[id as usize];
+        if let Some(refusal) = self.tables[t].refusal() {
+            return Some(Head::PastCap(format!(
+                "it reads names through `{}`, whose file holds a `use` tree the scanner cannot read: {refusal}",
+                entry.module
+            )));
+        }
         let visible = |visibility: &Visibility| visibility.visible_from(&entry.module, from);
         let key = (t, id, head.to_string());
         let mut bindings: Vec<&Binding> = Vec::new();
@@ -1030,6 +1103,7 @@ impl CrateScopes {
                 through,
                 heads,
                 foreign: Vec::new(),
+                open: false,
             });
         }
         None
@@ -1288,9 +1362,12 @@ impl CrateScopes {
         match named {
             Named::Paths(paths) => BindingNames::Paths(paths, through),
             Named::External(path) => BindingNames::Paths(vec![path], through),
-            Named::Unbound { head, rest } => {
-                BindingNames::Paths(vec![with_rest(head, &rest)], through)
-            }
+            Named::Unbound { head, rest, also } => BindingNames::Paths(
+                std::iter::once(with_rest(head, &rest))
+                    .chain(also)
+                    .collect(),
+                through,
+            ),
             Named::Local => BindingNames::Local,
             Named::Invalid => BindingNames::Paths(Vec::new(), through),
             Named::PastCap(refusal) => BindingNames::PastCap(refusal),
@@ -1450,7 +1527,13 @@ impl CrateScopes {
                 Ok(found)
             }),
             Named::External(path) => Ok(vec![path]),
-            Named::Unbound { head, rest } => Ok(vec![with_rest(head, &rest)]),
+            Named::Unbound { head, rest, also } => {
+                also.iter()
+                    .try_fold(vec![with_rest(head, &rest)], |mut found, path| {
+                        found.extend(self.denote_in(path, Namespace::Type, &mut walk)?.paths);
+                        Ok(found)
+                    })
+            }
             Named::Local | Named::Invalid => Ok(Vec::new()),
             Named::PastCap(refusal) => Err(refusal),
         }
@@ -1633,6 +1716,7 @@ fn joined(heads: impl IntoIterator<Item = Head>) -> Head {
         false,
     );
     let mut refused: Option<String> = None;
+    let mut open = false;
     for head in heads {
         match head {
             Head::PastCap(refusal) => refused = least(refused, refusal),
@@ -1642,12 +1726,14 @@ fn joined(heads: impl IntoIterator<Item = Head>) -> Head {
                 through: p,
                 heads: g,
                 foreign: f,
+                open: o,
             } => {
                 bound.extend(b);
                 declared.extend(d);
                 through.extend(p);
                 alone.extend(g);
                 foreign.extend(f);
+                open |= o;
             }
             Head::Foreign(paths) => foreign.extend(paths),
             Head::Local => local = true,
@@ -1665,6 +1751,7 @@ fn joined(heads: impl IntoIterator<Item = Head>) -> Head {
             through: sorted_unique(through),
             heads: sorted_unique(alone),
             foreign: sorted_unique(foreign),
+            open,
         }
     } else if local {
         Head::Local
@@ -1707,6 +1794,7 @@ mod tests {
         let scopes = CrateScopes::new(vec![table, root], Edition::Rust2018);
         match scopes.name(0, scopes.table(0).scope_at(token), head, PathSite::Expr, ns) {
             Named::Paths(paths) => Some(paths.join(" | ")),
+            Named::Unbound { also, .. } if !also.is_empty() => Some(also.join(" | ")),
             Named::Local => Some("<local>".to_string()),
             _ => None,
         }

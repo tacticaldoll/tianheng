@@ -279,7 +279,9 @@ or the item standing in a `cfg_if!` arm — SHALL also read the name through its
 build compiling the gated item out reads the name from a glob. Whether a scope's answer ends a lookup SHALL be one
 judgement wherever the lookup meets the scope — where it walks out of a block, where it reads the scope's own globs, and
 where a lookup through globs reaches the scope — so a block or a relayed module holding a name only by a gated item
-leaves it to the scope around the block or to the relay's globs; and what a glob of a crate whose contents are not
+leaves it to the scope around the block or to the relay's globs; and a bare head every scope on its chain holds only
+so SHALL also be read as what no scope binds, a sysroot crate or a dependency, since a build compiling the gated item
+out reads it so; and what a glob of a crate whose contents are not
 read brings SHALL stay a candidate beside what the unit's own modules bind, for a path through the scope's module,
 whether the two meet in one scope's globs, in cfg-exclusive files of one module, or in a name's two namespaces. A crate-rooted path
 SHALL name itself and every path each binding on it names: where a segment names something a module binds
@@ -1300,8 +1302,8 @@ import SHALL be resolved without itself, as rustc resolves it, and that reading 
 for the lookup it answers rather than as a cycle the walk cut.
 
 #### Scenario: A cfg-closed re-export ring is read in time exponential in its length — a stated bound
-- **WHEN** six modules `m0`…`m5` each write `#[cfg(unix)] pub use crate::m{i+1}::f;` and `#[cfg(not(unix))] pub use crate::forbidden::f;`, an `m6` writes `#[cfg(unix)] pub use crate::forbidden::f;` and `#[cfg(not(unix))] pub use crate::m0::f;`, and the crate root calls `m0::f()` under a prefix `crate::forbidden`
-- **THEN** the system reports `crate::forbidden::f in crate` within ten seconds: an answer read past a cut cycle is not remembered, so each link is re-read once per path to it and the reading doubles per link, a declared bound on time rather than on the verdict; rustc 1.96.0, edition 2021, builds it on unix
+- **WHEN** modules `m0`…`m{n-1}` each write `#[cfg(unix)] pub use crate::m{i+1}::f;` and `#[cfg(not(unix))] pub use crate::forbidden::f;`, an `m{n}` writes `#[cfg(unix)] pub use crate::forbidden::f;` and `#[cfg(not(unix))] pub use crate::m0::f;`, and the crate root calls `m0::f()` under a prefix `crate::forbidden`, for a ring of eight links and one of eleven
+- **THEN** the system reports `crate::forbidden::f in crate` for each, within ten seconds, and the eleven-link reading takes at least four times as long as the eight-link one: an answer read past a cut cycle is not remembered, so each link is re-read once per path to it and the reading doubles per link, a declared bound on time rather than on the verdict; rustc 1.96.0, edition 2021, builds it on unix
 - **PINNED-BY** `a_cfg_closed_re_export_ring_is_read_in_time_exponential_in_its_length`
 
 #### Scenario: A lattice of globs resolves once per scope
@@ -1348,6 +1350,11 @@ for the lookup it answers rather than as a cycle the walk cut.
 - **WHEN** `crate::core` writes `use crate::clock::now;` and a function whose block holds `#[cfg(any())] use crate::mock::now;`, or `#[cfg(any())] fn now() {}`, and calls `now()`; or writes `use crate::bridge::now;` and calls `now()`, where `bridge` globs `relay`, which holds `#[cfg(any())] pub use crate::mock::now;` beside `pub use crate::clock::*;`; and, as controls, each with the gated item written ungated; under a prefix `crate::clock`
 - **THEN** each gated form reports `crate::clock::now in crate::core`, with and without `.strict_external()`, and each control reports nothing: rustc 1.96.0, edition 2021, calls `crate::clock::now` where the gated item is compiled out, and the ungated item shadows it
 - **PINNED-BY** `a_scope_holding_a_name_only_where_a_cfg_gates_it_ends_no_lookup`
+
+#### Scenario: A head held only by a gated item may name a crate
+- **WHEN** `crate::core` writes `#[cfg(any())] mod std {}` and calls `std::process::id()` under a prefix `std::process`; or, depending on `md5x`, writes `#[cfg(any())] mod md5x {}` and calls `md5x::compute()` under a prefix `md5x`; and, as controls, each module written ungated
+- **THEN** the first reports `std::process::id in crate::core` with and without `.strict_external()`, the second `md5x::compute in crate::core` under `.strict_external()` alone, where an un-`use`d dependency call is observed, and the controls report nothing: rustc 1.96.0, edition 2021, calls the crate where the module is compiled out and the module where it is not
+- **PINNED-BY** `a_head_held_only_by_a_gated_item_may_name_a_crate`
 
 #### Scenario: A crate-rooted path keeps a foreign glob's candidate beside a local one
 - **WHEN** `crate::user` calls `crate::m::Command::new("x")` where `m` globs `crate::a::*` under `#[cfg(any())]` and `std::process::*` under `#[cfg(not(any()))]`, or where `m` is two files under exclusive `cfg`s, one declaring `Command` and one globbing `std::process`; or mentions `crate::m::exit` where `m` declares a `struct exit` beside a glob of `std::process`, under `.strict_prefix_only()`

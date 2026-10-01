@@ -209,7 +209,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `inline-symbol-path-confinement/a-cfg-closed-re-export-ring-is-read-in-time-exponential-in-its-length-a-stated-bound`
 
-> the system reports `crate::forbidden::f in crate` within ten seconds: an answer read past a cut cycle is not remembered, so each link is re-read once per path to it and the reading doubles per link, a declared bound on time rather than on the verdict; rustc 1.96.0, edition 2021, builds it on unix
+> the system reports `crate::forbidden::f in crate` for each, within ten seconds, and the eleven-link reading takes at least four times as long as the eight-link one: an answer read past a cut cycle is not remembered, so each link is re-read once per path to it and the reading doubles per link, a declared bound on time rather than on the verdict; rustc 1.96.0, edition 2021, builds it on unix
 
 - **pinned by**: `a_cfg_closed_re_export_ring_is_read_in_time_exponential_in_its_length`
 
