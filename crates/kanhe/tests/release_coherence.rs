@@ -109,13 +109,35 @@ fn the_release_surfaces_are_coherent() {
     let Some(root) = workspace_root() else {
         return;
     };
-    match judge(&root) {
-        Ok(report) => eprintln!("{report}"),
+    let report = match judge(&root) {
+        Ok(report) => report,
         Err(refusal) => panic!(
             "release coherence ({:?}): {}",
             refusal.kind, refusal.message
         ),
-    }
+    };
+    eprintln!("{report}");
+    let held: usize = report
+        .split("; ")
+        .nth(1)
+        .and_then(|tail| tail.strip_suffix(" released section(s) held to their tags)"))
+        .and_then(|count| count.parse().ok())
+        .unwrap_or_else(|| {
+            panic!("the clean report names how many released sections it held: {report}")
+        });
+    let subjects = kanhe::hermetic_git::run_exact(&root, &[], &["log", "--format=%s", "HEAD"])
+        .expect("this repository's history is readable");
+    let snapshot = |subject: &&str| {
+        subject
+            .strip_prefix("chore(release): ")
+            .is_some_and(|version| kanhe::manifest::semver(version).is_some())
+    };
+    let earlier = subjects.lines().skip(1).filter(snapshot).count();
+    assert!(
+        held >= earlier,
+        "{earlier} release snapshots precede HEAD and {held} released sections were held: git answers an \
+         unlisted refs/tags as no tags, so a count below the snapshots is that answer — fetch the tags"
+    );
 }
 
 // --- the failure matrix -------------------------------------------------------------------------------------
@@ -169,6 +191,199 @@ fn a_release_section_dated_away_from_its_commit_is_a_violation() {
         "the refusal names both dates so an operator can see which to change: {}",
         refusal.message
     );
+}
+
+/// A released section reads at `HEAD` as it read at its own tag, since it records what that release carried: an
+/// entry written into the tagged `0.2.0` section is a violation naming the line it starts on, the same section left
+/// as tagged is coherent, and a tag whose tree holds no `CHANGELOG.md` cannot be judged against.
+#[test]
+fn a_released_section_rewritten_after_its_tag_is_a_violation() {
+    let root = scratch("released-section");
+    let fixture = fixture::build(&root, "released-section", "0.2.0");
+    git(&fixture.repo, &["tag", "v0.2.0"]);
+    let unchanged = judge(&fixture.repo);
+    let path = fixture.repo.join("CHANGELOG.md");
+    let text = std::fs::read_to_string(&path).expect("the fixture changelog is readable");
+    let heading = format!("## [0.2.0] - {FIXTURE_DAY}");
+    let at = text
+        .find(&heading)
+        .expect("the fixture dates its release section");
+    let body_start = at + text[at..].find("\n\n").expect("the heading ends its line") + 2;
+    let mut rewritten = text.clone();
+    rewritten.insert_str(body_start, "- **Written in after the release.**\n");
+    std::fs::write(&path, rewritten).expect("the fixture changelog is writable");
+    // Amended rather than committed on top, so the release commit stays HEAD and the state stays Snapshot.
+    git(&fixture.repo, &["add", "."]);
+    git(&fixture.repo, &["commit", "-q", "--amend", "--no-edit"]);
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(
+        unchanged.is_ok(),
+        "the tagged section left as tagged: {:?}",
+        unchanged.err()
+    );
+    let refusal = verdict.expect_err("a released section rewritten after its tag must be refused");
+    refusal::expect("release-coherence#released-section-rewritten", &refusal);
+    assert!(refusal.message.contains("v0.2.0"), "{}", refusal.message);
+}
+
+/// The subject is the tags rather than the sections `HEAD` still carries, and a section's raw lines rather than its
+/// prose: a fenced block written into the tagged `0.2.0` section is a rewrite, and so is a link-reference line closing
+/// a released section that is not the file's last; a tagged `0.1.0` section deleted from `HEAD` is refused as a
+/// released section that is no longer there once; and a clean run says how many sections it held.
+#[test]
+fn a_released_section_deleted_or_fenced_into_is_a_violation() {
+    let amend = |repo: &std::path::Path, edit: &dyn Fn(String) -> String| {
+        let path = repo.join("CHANGELOG.md");
+        let text = std::fs::read_to_string(&path).expect("the fixture changelog is readable");
+        std::fs::write(&path, edit(text)).expect("the fixture changelog is writable");
+        // Amended rather than committed on top, so the release commit stays HEAD and the state stays Snapshot.
+        git(repo, &["add", "."]);
+        git(repo, &["commit", "-q", "--amend", "--no-edit"]);
+    };
+    let notes = "- Release notes.\n";
+
+    let root = scratch("released-section-fenced");
+    let fixture = fixture::build(&root, "released-section-fenced", "0.2.0");
+    git(&fixture.repo, &["tag", "v0.2.0"]);
+    amend(&fixture.repo, &|text| {
+        text.replacen(
+            notes,
+            &format!("{notes}\n```text\nwritten in after the release\n```\n"),
+            1,
+        )
+    });
+    let fenced = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal =
+        fenced.expect_err("a fenced block written into a released section must be refused");
+    refusal::expect("release-coherence#released-section-rewritten", &refusal);
+
+    let root = scratch("released-section-deleted");
+    let fixture = fixture::build(&root, "released-section-deleted", "0.2.0");
+    let earlier = format!("## [0.1.0] - {FIXTURE_DAY}\n\n- Earlier notes.\n\n");
+    amend(&fixture.repo, &|text| {
+        text.replacen(notes, &format!("{notes}\n{earlier}"), 1)
+    });
+    git(&fixture.repo, &["tag", "v0.1.0"]);
+    git(&fixture.repo, &["tag", "v0.2.0"]);
+    let kept = judge(&fixture.repo);
+    amend(&fixture.repo, &|text| {
+        text.replacen(
+            &format!("{notes}\n{earlier}"),
+            &format!("{notes}\n[x]: y\n\n{earlier}"),
+            1,
+        )
+    });
+    let trailing = judge(&fixture.repo);
+    amend(&fixture.repo, &|text| text.replacen("[x]: y\n\n", "", 1));
+    git(&fixture.repo, &["tag", "-d", "v0.2.0"]);
+    amend(&fixture.repo, &|text| text.replacen(&earlier, "", 1));
+    let deleted = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    let kept = kept.expect("the tagged 0.1.0 and 0.2.0 sections kept");
+    assert!(
+        kept.contains("2 released section(s) held to their tags"),
+        "a clean run says how many tags it compared: {kept}"
+    );
+    let refusal = trailing.expect_err(
+        "a line closing a released section that is not the file's last must be compared",
+    );
+    refusal::expect("release-coherence#released-section-rewritten", &refusal);
+    let refusal = deleted.expect_err("a released section deleted from HEAD must be refused");
+    refusal::expect(
+        "release-coherence#released-section-not-one-at-head",
+        &refusal,
+    );
+    assert!(refusal.message.contains("v0.1.0"), "{}", refusal.message);
+}
+
+/// Each line is compared with its own ending, and the refusal locates the first that differs by its line in `HEAD`'s
+/// `CHANGELOG.md`, which is where an operator opens it — not by its offset inside the section.
+#[test]
+fn a_released_line_rewritten_to_another_ending_is_located_in_the_file() {
+    let notes = "- Release notes.\n";
+    let root = scratch("released-section-crlf");
+    let fixture = fixture::build(&root, "released-section-crlf", "0.2.0");
+    git(&fixture.repo, &["tag", "v0.2.0"]);
+    let path = fixture.repo.join("CHANGELOG.md");
+    let text = std::fs::read_to_string(&path).expect("the fixture changelog is readable");
+    let line = text
+        .lines()
+        .position(|line| line == notes.trim_end())
+        .expect("the fixture's released section carries its notes")
+        + 1;
+    std::fs::write(&path, text.replacen(notes, "- Release notes.\r\n", 1))
+        .expect("the fixture changelog is writable");
+    git(&fixture.repo, &["add", "."]);
+    git(&fixture.repo, &["commit", "-q", "--amend", "--no-edit"]);
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal = verdict.expect_err("a released line rewritten to end in CRLF must be refused");
+    refusal::expect("release-coherence#released-section-rewritten", &refusal);
+    assert!(
+        refusal
+            .message
+            .contains(&format!("from line {line} of HEAD's CHANGELOG.md on")),
+        "the refusal names the file line {line}: {}",
+        refusal.message
+    );
+}
+
+/// A tag whose tree holds no `CHANGELOG.md` leaves the section for its release nothing to be held to, which is a
+/// cannot-judge rather than a clean answer.
+#[test]
+fn a_tag_holding_no_changelog_cannot_be_judged_against() {
+    let root = scratch("tag-without-changelog");
+    let fixture = fixture::build(&root, "tag-without-changelog", "0.2.0");
+    let empty = kanhe::hermetic_git::read(
+        &fixture.repo,
+        "the empty tree",
+        "git",
+        &["hash-object", "-t", "tree", "-w", "/dev/null"],
+    );
+    git(&fixture.repo, &["tag", "v0.2.0", empty.trim()]);
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal = verdict.expect_err("a tag without a changelog cannot be judged against");
+    refusal::expect("release-coherence#released-changelog-unreadable", &refusal);
+}
+
+/// A tag whose `CHANGELOG.md` carries no section for its own version leaves the section at `HEAD` nothing to be held
+/// to, which is a cannot-judge rather than a clean answer.
+#[test]
+fn a_tag_whose_changelog_lacks_its_section_cannot_be_judged_against() {
+    let root = scratch("tag-without-section");
+    let fixture = fixture::build(&root, "tag-without-section", "0.2.0");
+    let branch = kanhe::hermetic_git::read(
+        &fixture.repo,
+        "the fixture's branch",
+        "git",
+        &["rev-parse", "--abbrev-ref", "HEAD"],
+    );
+    git(&fixture.repo, &["checkout", "-q", "--orphan", "elsewhere"]);
+    std::fs::write(
+        fixture.repo.join("CHANGELOG.md"),
+        "# Changelog\n\n## [Unreleased]\n",
+    )
+    .expect("the fixture changelog is writable");
+    git(&fixture.repo, &["add", "."]);
+    git(
+        &fixture.repo,
+        &[
+            "commit",
+            "-q",
+            "-m",
+            "chore: a tree whose changelog has no release section",
+        ],
+    );
+    git(&fixture.repo, &["tag", "v0.2.0"]);
+    git(&fixture.repo, &["checkout", "-q", "-f", branch.trim()]);
+    let verdict = judge(&fixture.repo);
+    let _ = std::fs::remove_dir_all(&root);
+    let refusal =
+        verdict.expect_err("a tag whose changelog lacks its section cannot be judged against");
+    refusal::expect("repository-checks#the-only-found-none", &refusal);
 }
 
 #[test]

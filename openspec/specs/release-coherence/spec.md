@@ -901,3 +901,58 @@ fourth was prepared with a date four days behind the day it would be cut on, and
   other than the release commit's
 - **THEN** release coherence fails naming both dates, so an operator can see which to change
 - **PINNED-BY** `a_release_section_dated_away_from_its_commit_is_a_violation`
+
+### Requirement: A released section reads as it read at its tag
+
+Every `vX.Y.Z` tag SHALL have exactly one section of its version at `HEAD`, and that section SHALL read as the one
+section of that version in the tag's `CHANGELOG.md`, line for line with each line's own ending, from its heading to
+the next section's heading, since it is the record of what that release carried: an entry written into it — a fenced block included —
+describes the release as carrying what it did not, and a released section deleted or renamed leaves the release
+with no record. The subject is the tags, so a section `HEAD` no longer carries is judged as surely as one it does. A
+dated section with no tag is the release being prepared and SHALL NOT be held. The link references closing the file
+belong to no section, since each release rewrites them, and that block at the end of the file SHALL NOT be compared,
+while every other section is compared to its last line. A rewritten section SHALL be refused naming the first line
+that differs by its line in `HEAD`'s `CHANGELOG.md`. A clean run SHALL say how many released sections it held,
+so a run that compared none says so, and this repository's own run SHALL hold at least as many as there are
+`chore(release): X.Y.Z` snapshots preceding `HEAD` in its history, since git answers an unlisted `refs/tags` as no
+tags. A tag whose tree yields no `CHANGELOG.md`, or a `CHANGELOG.md` holding other than
+one section for the tag's version, SHALL be a cannot-judge, never a clean answer. Two sections of one version at
+`HEAD` are refused before this is read, by the section-shape requirement, so the several-at-`HEAD` half of *exactly
+one* is reached only as none.
+
+#### Scenario: A released section rewritten after its tag
+
+- **WHEN** a fixture's `0.2.0` release is tagged `v0.2.0` and its dated section then gains an entry; or the same
+  section is left as tagged; or `v0.2.0` names a tree holding no `CHANGELOG.md`
+- **THEN** release coherence fails as a violation naming the tag, passes, and fails as a cannot-judge,
+  respectively
+- **PINNED-BY** `a_released_section_rewritten_after_its_tag_is_a_violation`
+- **PINNED-BY** `a_tag_holding_no_changelog_cannot_be_judged_against`
+
+#### Scenario: A released section deleted, or fenced into
+
+- **WHEN** a fixture's tagged `0.2.0` section gains a fenced block; or `0.1.0` and `0.2.0` sections are tagged and left
+  in place, or the `0.2.0` section, above `0.1.0`, gains a closing line `[x]: y`, or the `0.1.0` section is deleted
+  from `HEAD`
+- **THEN** release coherence fails as a rewrite; passes, saying `2 released section(s) held to their tags`; fails as a
+  rewrite; and fails as a violation naming `v0.1.0`, respectively
+- **PINNED-BY** `a_released_section_deleted_or_fenced_into_is_a_violation`
+
+#### Scenario: A released line rewritten to another ending
+
+- **WHEN** a fixture's tagged `0.2.0` section has its notes line rewritten to end in `\r\n`
+- **THEN** release coherence fails as a rewrite, naming that line's number in `HEAD`'s `CHANGELOG.md`
+- **PINNED-BY** `a_released_line_rewritten_to_another_ending_is_located_in_the_file`
+
+#### Scenario: This repository's count of released sections is held to its release snapshots
+
+- **WHEN** release coherence runs over this repository and holds fewer released sections than there are release
+  snapshots preceding `HEAD`
+- **THEN** the gate's own direction fails, naming both counts
+- **PINNED-BY** `the_release_surfaces_are_coherent`
+
+#### Scenario: A tag whose changelog lacks its own section
+
+- **WHEN** `v0.2.0` names a commit whose `CHANGELOG.md` holds `[Unreleased]` and no `0.2.0` section
+- **THEN** release coherence fails as a cannot-judge, finding no section to hold `HEAD`'s to
+- **PINNED-BY** `a_tag_whose_changelog_lacks_its_section_cannot_be_judged_against`

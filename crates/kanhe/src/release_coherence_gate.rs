@@ -1017,11 +1017,126 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
     )?;
     require_section_shape(&changelog_sections)?;
     require_adopter_narrative(repo, &changelog_sections, &version, &spine)?;
+    let released = require_released_sections_unchanged(repo, &changelog_text, &changelog_sections)?;
 
     Ok(format!(
-        "ok release coherence ({}: {version})",
+        "ok release coherence ({}: {version}; {released} released section(s) held to their tags)",
         spine.state.label()
     ))
+}
+
+/// A released section is a record of its release: it says what that release carried, so it reads at `HEAD` as it
+/// read at its own tag. The subject is the **tags**, not the sections `HEAD` still carries: each `vX.Y.Z` tag's
+/// section is held to exactly one section of that name at `HEAD`, line for line with each line's own ending, from its
+/// heading to the next section's, so a released section deleted or renamed is refused as surely as one rewritten, and
+/// a fenced block inside one is compared rather than passed over. A dated section with no tag yet is the release being
+/// prepared, and the link references closing the file are no section's, since each release rewrites them — only that
+/// block, at the end of the file, is set aside. An entry written into a released section describes that release as
+/// carrying what it did not, and nothing else reads the dated sections for it. The count of sections held is
+/// returned, so a clean run says how many tags it compared: none is what an unlisted `refs/tags` answers.
+fn require_released_sections_unchanged(
+    repo: &Path,
+    changelog: &str,
+    sections: &[Section],
+) -> Result<usize, Refusal> {
+    let tags = git(repo, &["tag", "--list", "v*"]).map_err(|why| {
+        cannot_judge_at(
+            "release-coherence#release-tags-unreadable",
+            format!(
+                "git did not list this repository's release tags ({why:?}), so which dated sections are records \
+                 of a release cannot be decided"
+            ),
+        )
+    })?;
+    let mut held = 0;
+    for tag in tags.lines() {
+        let Some(version) = tag
+            .strip_prefix('v')
+            .filter(|version| semver(version).is_some())
+        else {
+            continue;
+        };
+        let name = format!("## [{version}]");
+        let released = crate::hermetic_git::run_exact(repo, &[], &["show", &format!("{tag}:CHANGELOG.md")])
+            .map_err(|why| {
+                cannot_judge_at(
+                    "release-coherence#released-changelog-unreadable",
+                    format!(
+                        "the tag {tag} exists and its CHANGELOG.md could not be read ({why:?}), so whether the \
+                         section for {version} still reads as released cannot be decided"
+                    ),
+                )
+            })?;
+        let released_sections = crate::sections::cut(
+            Source::of(released.as_str()).prose().numbered_lines(),
+            section_of,
+        );
+        let then = crate::selection::the_only(
+            &format!("section for {version} in the CHANGELOG.md {tag} carries"),
+            released_sections
+                .iter()
+                .filter(|section| section.name == name),
+        )?;
+        let then = section_lines(&released, &released_sections, then);
+        let at_head: Vec<&Section> = sections
+            .iter()
+            .filter(|section| section.name == name)
+            .collect();
+        let [now] = at_head.as_slice() else {
+            return Err(violation_at(
+                "release-coherence#released-section-not-one-at-head",
+                format!(
+                    "CHANGELOG.md carries {} sections for {version}, which {tag} released: a released section \
+                     is the record of that release, so it stays, once, under the heading it was released with",
+                    at_head.len()
+                ),
+            ));
+        };
+        let start = now.start;
+        let now = section_lines(changelog, sections, now);
+        if let Some(first) =
+            (0..now.len().max(then.len())).find(|&line| now.get(line) != then.get(line))
+        {
+            return Err(violation_at(
+                "release-coherence#released-section-rewritten",
+                format!(
+                    "CHANGELOG.md's section for {version} no longer reads as it did at {tag}, from line {} of \
+                     HEAD's CHANGELOG.md on: a released section is the record of that release, so a change written \
+                     into it belongs under [Unreleased]",
+                    start + first
+                ),
+            ));
+        }
+        held += 1;
+    }
+    Ok(held)
+}
+
+/// The lines of `section`, one of `sections` cut from `text`, each with its own line ending: its heading through the
+/// line before the next section's heading. The last section also runs to the end of the file, where the blank lines
+/// and link references closing it are no section's and are set aside; every other section is taken whole.
+fn section_lines<'t>(text: &'t str, sections: &[Section], section: &Section) -> Vec<&'t str> {
+    let end = sections
+        .iter()
+        .map(|other| other.start)
+        .find(|&start| start > section.start);
+    let is_link_reference = |line: &str| line.starts_with('[') && line.contains("]: ");
+    let mut lines: Vec<&str> = text
+        .split_inclusive('\n')
+        .enumerate()
+        .skip(section.start - 1)
+        .take_while(|&(index, _)| end.is_none_or(|end| index + 1 < end))
+        .map(|(_, line)| line)
+        .collect();
+    if end.is_none() {
+        while lines
+            .last()
+            .is_some_and(|line| line.trim().is_empty() || is_link_reference(line))
+        {
+            lines.pop();
+        }
+    }
+    lines
 }
 
 /// The entries of a directory, with a failure to yield one **propagated** rather than dropped.
