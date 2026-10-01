@@ -89,6 +89,13 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 - **rule**: inline symbol path confined to module (confined_prefix: std::fs; ending_with: canonicalize)
 - **kind**: module · **severity**: enforce · **crate**: guibiao
 
+### `guibiao::crate::module_scan::source_texts` (module)
+
+> guibiao reads a source file's contents in module_scan::source_texts alone; every other module takes a source's text from it
+
+- **rule**: inline symbol path permitted only in module (confined_prefix: std::fs; ending_with: read_to_string, read, open)
+- **kind**: module · **severity**: enforce · **crate**: guibiao
+
 ### `guibiao::crate::module_scan::token_tree` (module)
 
 > guibiao's token tree imports no other guibiao module, so the readers of its tokens import it and it imports none of them
