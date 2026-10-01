@@ -734,11 +734,16 @@ consumer for an undemonstrated deduplication.
   the only reader of source bytes in `guibiao`, `crates/louke/src/audit/scan/lexer.rs` and
   `crates/kanhe/src/comment_scan.rs`. The keyword table `token_tree.rs` holds and the one
   `louke`'s `is_rust_keyword` matches name the same words; measured by comparing the two word lists as sets,
-  neither holds a word the other lacks. No test holds the copies together. *Current reaction or bound:* inside
-  `guibiao`, the token tree imports no other `guibiao` module, held by the self-law boundary on
-  `crate::module_scan::token_tree`; across crates, none. *Risk:* a defect repaired in one lexer stays in the
-  others. *Promotion trigger:* a measured disagreement between two of the lexers on one input, or one defect class
-  repaired in one and found unrepaired in another. *Version class:* internal; a new crate is a law amendment that
+  neither holds a word the other lacks. *Current reaction or bound:* inside `guibiao`, the token tree imports no
+  other `guibiao` module, held by the self-law boundary on `crate::module_scan::token_tree`; across the two
+  dimensions, `crates/tianheng/tests/lexical_conformance.rs` feeds one input to `guibiao` and `louke` per row and
+  asserts they agree, and `kanhe`'s finder reads only this repository's own sources. The trigger fired when
+  `guibiao` was taught `Pattern_White_Space` and the edition-2021 C string prefix: on the ledger the two agree on
+  the first, and disagree on the second because `louke` reads source roots with no edition, a disagreement
+  declared as `runtime-origin-assertion/a-raw-string-after-an-identifier-character-is-read-as-one-in-every-edition-a-stated-bound`
+  and pinned on the ledger, rather than closed by a shared layer that would carry the same missing input.
+  *Risk:* a defect repaired in one lexer stays in the others. *Promotion trigger:* a ledger row on which the two
+  disagree for a reason other than an input one of them lacks. *Version class:* internal; a new crate is a law amendment that
   widens `guibiao`'s and `louke`'s dependency allowlists. *Authority:* `PROJECT.md`'s `xingbiao` criterion —
   what the tokens in a file mean belongs to the dimension asking, and a widening that cannot be argued across it is
   a new crate's job — with 三儀 ⊥ 三儀 for `louke`.

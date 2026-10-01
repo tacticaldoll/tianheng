@@ -577,6 +577,14 @@ them.
 
 ## [0.7.1] - 2026-09-27
 
+- **漏刻's lexing without an edition is a declared bound, held on the cross-dimension lexical ledger.**
+  `lexical_conformance.rs` gains a row holding 圭表 and 漏刻 to one reading of `Pattern_White_Space`, on which they
+  agree, and one on an edition-2018 `cr#"x"`, on which they do not: 漏刻 reads source roots with no edition and
+  takes the `r#"` for a raw string, so the probe after it is not seen. That is declared as
+  `runtime-origin-assertion/a-raw-string-after-an-identifier-character-is-read-as-one-in-every-edition-a-stated-bound`,
+  pinned by the ledger row and a mutation record, rather than closed by a shared lexer that would lack the same
+  input.
+
 ### Static
 
 - **圭表 can permit an inline call only within one module: `confine_inline_call(prefix)`.**

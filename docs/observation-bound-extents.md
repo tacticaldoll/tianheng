@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**62 of 140 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**62 of 141 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -190,7 +190,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `an_interior_mutable_const_is_not_a_static`
 
-## out of reach (30)
+## out of reach (31)
 
 ### `external-crate-confinement/a-confined-crate-use-inside-a-string-or-macro-body-is-not-observed-a-stated-bound`
 
@@ -272,6 +272,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: a squash merge runs on GitHub's servers, so no local commit exists and no hook runs, and both values of the repository's squash-title setting append the serial; the check guards the sanctioned path to a merge, and a browser reaches no wrapper
 - **its defence must show**: does not react
 - **pinned by**: `a_merge_made_outside_the_wrapper_is_not_observed`
+
+### `runtime-origin-assertion/a-raw-string-after-an-identifier-character-is-read-as-one-in-every-edition-a-stated-bound`
+
+> a probe written after `cr#"` in an edition-2015 or 2018 crate, before a later `"#`
+
+- **because**: the audit reads source roots with no edition, and takes an `r#"` for a raw string whatever precedes it, so before edition 2021, where `cr` is an identifier, the code up to the next `"#` is read as the string's contents
+- **its defence must show**: does not react
+- **pinned by**: `louke_reads_a_raw_string_after_an_identifier_character_in_every_edition`
 
 ### `runtime-origin-assertion/source-outside-a-member-s-library-or-binary-target-subtree-is-out-of-scope-a-stated-bound`
 

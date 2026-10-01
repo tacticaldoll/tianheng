@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**27 of 140 declared bounds have no pinning test.** That figure is the register's
+**27 of 141 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -647,6 +647,12 @@ fallback used where no manifest exists, which the register spec describes.
 > the root-file run reports the seam covered, while the directory run reports it unprobed — the stated bound of the legacy corpus, recorded rather than presented as equivalent coverage
 
 - **pinned by**: `a_symlinked_subdirectory_is_descended_from_a_root_file_and_not_from_a_directory`
+
+### `runtime-origin-assertion/a-raw-string-after-an-identifier-character-is-read-as-one-in-every-edition-a-stated-bound`
+
+> 圭表 reports the `use`, and the probe audit does not see the probe and reports the seam unprobed: the audit reads `cr#"` as the start of a raw string in every edition, a stated bound; rustc 1.96.0 builds the crate in edition 2018 and refuses it in 2021
+
+- **pinned by**: `louke_reads_a_raw_string_after_an_identifier_character_in_every_edition`
 
 ## self-law-projection
 
