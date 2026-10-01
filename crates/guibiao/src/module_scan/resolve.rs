@@ -717,9 +717,17 @@ impl CrateScopes {
     /// the block. Its answer is kept and the chain walks on, the answers joined, so the call reports under what the
     /// outer scope binds it as: `use crate::forbidden::fmt; fn g() { use std::fmt; fmt(); }` calls
     /// `crate::forbidden::fmt`, measured against rustc 1.96.0, edition 2021. A block holding the name only by a
-    /// `cfg`-gated item walks on the same way, and a module scope of either kind joins the extern prelude's answer:
-    /// both are [`CrateScopes::may_not_hold_here`], the one judgement every lookup asks of a scope.
+    /// `cfg`-gated item — an import, or an item of the block — walks on the same way, and a module scope of either kind
+    /// joins the extern prelude's answer: both are [`CrateScopes::may_not_hold_here`], the one judgement every lookup
+    /// asks of a scope, asked of every answer a scope binds or declares the name as. A name read in both namespaces is
+    /// looked up in each to the end of its chain before the two are joined, so a block's `struct now {}`, a type alone,
+    /// leaves a value `now` to the scope around the block.
     fn lookup(&self, t: usize, scope: u32, head: &str, ns: Namespace, walk: &mut Walk) -> Head {
+        if ns == Namespace::Either {
+            return joined(
+                [Namespace::Type, Namespace::Value].map(|ns| self.lookup(t, scope, head, ns, walk)),
+            );
+        }
         let mut current = Some(scope);
         let mut unsettled = Vec::new();
         while let Some(id) = current {
@@ -729,7 +737,7 @@ impl CrateScopes {
                     current = entry.parent;
                 }
                 Head::Unbound | Head::Foreign(_) => break,
-                answer @ Head::Candidates { .. }
+                answer @ (Head::Candidates { .. } | Head::Local)
                     if self.may_not_hold_here(t, id, head, ns, walk) =>
                 {
                     unsettled.push(answer);

@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**62 of 141 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**62 of 142 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -138,7 +138,15 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **pinned by**: `repeated_extern_block_shares_one_identity`
 - **pinned by**: `repeated_unrenderable_items_share_one_identity`
 
-## declines to refuse (2)
+## declines to refuse (3)
+
+### `inline-symbol-path-confinement/a-cfg-closed-re-export-ring-is-read-in-time-exponential-in-its-length-a-stated-bound`
+
+> a ring of modules each re-exporting a name from the next under one `cfg` and from elsewhere under its negation, the last closing it
+
+- **because**: an answer read past a cut cycle depends on the walk it was entered from and is not remembered, so each link is re-read once per path to it and the reading doubles per link; no budget refuses it, and the chain cap bounds the depth rather than the time
+- **its defence must show**: does not refuse
+- **pinned by**: `a_cfg_closed_re_export_ring_is_read_in_time_exponential_in_its_length`
 
 ### `inline-symbol-path-confinement/a-prefix-segment-past-what-guibiao-reads-is-not-verified-a-stated-bound`
 

@@ -50,8 +50,11 @@ lifetime, `..`, `..=` and `->` are each one token, so the path after a range ope
 receiver: `0..std::process::id()` is a call. A path occurrence SHALL be a token run — `::`? *head* ( `::` *segment* |
 `::` `<…>` )* — and its role SHALL be read from the tokens beside it alone: the name a `fn` item, a tuple struct or a
 tuple variant declares is its definition; a run followed by a parenthesized group is a call; anything else is a
-mention, a single identifier included, except where it introduces a name — after an item's or a binding's keyword or
-`for`, or before a lone `:`, a `!` or a `@` — or is a bare `self`, `Self`, `super` or `crate`. No expression or pattern grammar is read, so where an expression ends decides nothing, and a tuple-struct or
+mention, a single identifier included, except where it introduces a name — after an item's or a binding's keyword,
+`for` or a binding's `mut`, a `mut` no `&`, `&&` or `*` stands before, or before a lone `:`, a `!` or a `@` — or is a
+bare `self`, `Self`, `super` or `crate`. A name read in both namespaces SHALL be looked up in each through the whole
+chain of scopes before the two answers are joined, so a scope holding it in one namespace does not end the other's
+lookup. No expression or pattern grammar is read, so where an expression ends decides nothing, and a tuple-struct or
 tuple-variant pattern, written as a call is written, is read as a call — a declared over-reaction (bound:
 inline-symbol-path-confinement/a-path-in-a-pattern-position-is-read-as-a-call-a-stated-bound). A `<…>` group SHALL be
 counted in two places only, by one reading: after `::`, where the `<` is a turbofish, and at a `<` that opens a
@@ -876,8 +879,8 @@ that may not even name the module. Narrowing and escalation are mutually exclusi
 - **THEN** the system reacts (strict forbids mentions, not only calls)
 
 #### Scenario: A single identifier read as a value is mentioned under strict-prefix-only
-- **WHEN** `crate::clock` writes `pub fn now() {}` and `let g: fn() = now;` under `.must_not_call_inline("crate::clock::now").strict_prefix_only()` over `crate::clock`; and, as a control, writes `pub fn now() {}`, a field `pub now: u8`, a parameter `now: u8` and a `let now` binding and no use of them
-- **THEN** the first reports `crate::clock::now in crate::clock`, and the control reports nothing: a single identifier is a path mentioned where it names something, and a name being introduced — an item's, a field's, a parameter's, a binding's, a `for` pattern's or a macro's — is not, nor is a bare `self`; rustc 1.96.0, edition 2021, builds both
+- **WHEN** `crate::clock` writes `pub fn now() {}` and `let g: fn() = now;` under `.must_not_call_inline("crate::clock::now").strict_prefix_only()` over `crate::clock`, the same beside a block's `struct now {}`, or `let _ = &mut Clock;` beside a `pub struct Clock;` under a prefix `crate::clock::Clock`; and, as controls, the same `now` beside a block's `fn now() {}`, and `pub fn now() {}`, a field `pub now: u8`, a parameter `now: u8` and `let now` and `let mut later` bindings and no use of them
+- **THEN** the first three report `crate::clock::now in crate::clock`, `crate::clock::now in crate::clock` and `crate::clock::Clock in crate::clock`, and the controls report nothing: a type alone does not end a value's lookup, a `&mut` is a reference's and not a binding's, and a single identifier is a path mentioned where it names something, and a name being introduced — an item's, a field's, a parameter's, a binding's, a `for` pattern's or a macro's — is not, nor is a bare `self`; rustc 1.96.0, edition 2021, builds both
 - **PINNED-BY** `a_single_identifier_read_as_a_value_is_mentioned_under_strict_prefix_only`
 
 #### Scenario: Combining narrowing and strict is a constitution error
@@ -1290,9 +1293,16 @@ its chain of globs reaches once, and settle what each answers to a fixed point, 
 scope ends there and a chain of globs meets neither the chain cap nor a depth of recursion. A large source SHALL be
 read in time its size bounds, which the scenarios below measure for the shapes found to break it: a crate root's
 many globs, modules globbing one another, a long chain of globs, a long list of brace groups, many inline modules
-nested or side by side, many modules each globbed, and a chain through a re-export named as its own path's head. An
+nested or side by side, many modules each globbed, and a chain through a re-export named as its own path's head. A
+ring of re-exports cfg-exclusive at every link is the shape known to break it, and is judged in time that doubles per
+link rather than refused, a declared bound. An
 import SHALL be resolved without itself, as rustc resolves it, and that reading SHALL be kept as the scope's answer
 for the lookup it answers rather than as a cycle the walk cut.
+
+#### Scenario: A cfg-closed re-export ring is read in time exponential in its length — a stated bound
+- **WHEN** six modules `m0`…`m5` each write `#[cfg(unix)] pub use crate::m{i+1}::f;` and `#[cfg(not(unix))] pub use crate::forbidden::f;`, an `m6` writes `#[cfg(unix)] pub use crate::forbidden::f;` and `#[cfg(not(unix))] pub use crate::m0::f;`, and the crate root calls `m0::f()` under a prefix `crate::forbidden`
+- **THEN** the system reports `crate::forbidden::f in crate` within ten seconds: an answer read past a cut cycle is not remembered, so each link is re-read once per path to it and the reading doubles per link, a declared bound on time rather than on the verdict; rustc 1.96.0, edition 2021, builds it on unix
+- **PINNED-BY** `a_cfg_closed_re_export_ring_is_read_in_time_exponential_in_its_length`
 
 #### Scenario: A lattice of globs resolves once per scope
 - **WHEN** the crate root globs the first layer of thirty layers of modules, each layer's two modules globbing both of the next layer's, whose last layer defines `leaf`, and calls `leaf()` under a prefix naming the last layer's first module
@@ -1335,7 +1345,7 @@ for the lookup it answers rather than as a cycle the walk cut.
 - **PINNED-BY** `a_name_bound_only_where_a_cfg_gates_it_is_read_through_the_scopes_globs`
 
 #### Scenario: A scope holding a name only where a cfg gates it ends no lookup
-- **WHEN** `crate::core` writes `use crate::clock::now;` and a function whose block holds `#[cfg(any())] use crate::mock::now;` and calls `now()`; or writes `use crate::bridge::now;` and calls `now()`, where `bridge` globs `relay`, which holds `#[cfg(any())] pub use crate::mock::now;` beside `pub use crate::clock::*;`; and, as controls, each with the gated item written ungated; under a prefix `crate::clock`
+- **WHEN** `crate::core` writes `use crate::clock::now;` and a function whose block holds `#[cfg(any())] use crate::mock::now;`, or `#[cfg(any())] fn now() {}`, and calls `now()`; or writes `use crate::bridge::now;` and calls `now()`, where `bridge` globs `relay`, which holds `#[cfg(any())] pub use crate::mock::now;` beside `pub use crate::clock::*;`; and, as controls, each with the gated item written ungated; under a prefix `crate::clock`
 - **THEN** each gated form reports `crate::clock::now in crate::core`, with and without `.strict_external()`, and each control reports nothing: rustc 1.96.0, edition 2021, calls `crate::clock::now` where the gated item is compiled out, and the ungated item shadows it
 - **PINNED-BY** `a_scope_holding_a_name_only_where_a_cfg_gates_it_ends_no_lookup`
 

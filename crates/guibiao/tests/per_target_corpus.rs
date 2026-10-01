@@ -4075,19 +4075,42 @@ fn a_path_in_a_discriminants_turbofish_is_read() {
 /// Under `.strict_prefix_only()` a single identifier read as a value is a path mentioned, so `let g: fn() = now;` in
 /// `crate::clock` reports `crate::clock::now`, where it went unreported because only a call, a rooted path or a path
 /// of several segments was an occurrence. A name being introduced is not a mention: `pub fn now() {}`, a field
-/// `now: u8`, a parameter `now: u8` and a `let now` binding report nothing. rustc 1.96.0, edition 2021, builds both.
+/// `now: u8`, a parameter `now: u8` and a `let now` or `let mut later` binding report nothing. A block's `struct now
+/// {}` holds the name as a type alone, so the value `now` is still the module's function, while a block's `fn now()
+/// {}` shadows it; and `&mut Clock` mentions the unit struct `Clock`, its `mut` a reference's and not a binding's.
+/// rustc 1.96.0, edition 2021, builds every row.
 #[test]
 fn a_single_identifier_read_as_a_value_is_mentioned_under_strict_prefix_only() {
-    for (package, clock, found) in [
+    for (package, clock, prefix, found) in [
         (
             "singlevaluemention",
             "pub fn now() {}\npub fn run() {\n    let g: fn() = now;\n    g();\n}\n",
+            "crate::clock::now",
             &["crate::clock::now in crate::clock"][..],
         ),
         (
             "singlenameintroduced",
-            "pub fn now() {}\npub struct S { pub now: u8 }\npub fn f(now: u8) {}\npub fn h() { let now = 1u8; }\n",
+            "pub fn now() {}\npub struct S { pub now: u8 }\npub fn f(now: u8) {}\npub fn h() { let now = 1u8; let mut later = 2u8; later += 1; }\n",
+            "crate::clock::now",
             &[][..],
+        ),
+        (
+            "typeonlyshadow",
+            "pub fn now() {}\n#[allow(non_camel_case_types)]\npub fn run() {\n    struct now {}\n    let g: fn() = now;\n    g();\n}\n",
+            "crate::clock::now",
+            &["crate::clock::now in crate::clock"][..],
+        ),
+        (
+            "valueshadow",
+            "pub fn now() {}\npub fn run() {\n    fn now() {}\n    let g: fn() = now;\n    g();\n}\n",
+            "crate::clock::now",
+            &[][..],
+        ),
+        (
+            "mutreference",
+            "pub struct Clock;\npub fn run() {\n    let _ = &mut Clock;\n}\n",
+            "crate::clock::Clock",
+            &["crate::clock::Clock in crate::clock"][..],
         ),
     ] {
         let probe = RootProbe::new(
@@ -4098,9 +4121,9 @@ fn a_single_identifier_read_as_a_value_is_mentioned_under_strict_prefix_only() {
         let law = Constitution::new("single-mention").boundary(
             ModuleBoundary::in_crate(package)
                 .module("crate::clock")
-                .must_not_call_inline("crate::clock::now")
+                .must_not_call_inline(prefix)
                 .strict_prefix_only()
-                .because("now is not mentioned"),
+                .because("the prefix is not mentioned"),
         );
         let got: Vec<String> = match check(&law, probe.manifest()) {
             Outcome::Violations(report) => report
@@ -8771,6 +8794,35 @@ fn a_name_bound_in_one_namespace_and_brought_in_the_other_imports_both() {
     }
 }
 
+/// A cfg-closed re-export ring is judged, in time that doubles per link — the declared bound. Each `m{i}` re-exports
+/// `f` from the next module under `#[cfg(unix)]` and from `crate::forbidden` under its negation, and the last closes
+/// the ring back to `m0`, so `m0::f()` names `crate::forbidden::f` under either predicate and reports. An answer read
+/// past a cut cycle is not remembered, so each link is re-read once per path to it; six links are read well within
+/// the bound, where a ring of twenty is not. rustc 1.96.0, edition 2021, builds it on unix.
+#[test]
+fn a_cfg_closed_re_export_ring_is_read_in_time_exponential_in_its_length() {
+    let links = 6;
+    let mut lib = String::from("#![allow(unused_imports)]\npub mod forbidden { pub fn f() {} }\n");
+    for i in 0..links {
+        lib.push_str(&format!(
+            "pub mod m{i} {{ #[cfg(unix)] pub use crate::m{}::f; #[cfg(not(unix))] pub use crate::forbidden::f; }}\n",
+            i + 1
+        ));
+    }
+    lib.push_str(&format!(
+        "pub mod m{links} {{ #[cfg(unix)] pub use crate::forbidden::f; #[cfg(not(unix))] pub use crate::m0::f; }}\n\
+         pub fn g() {{ m0::f(); }}\n"
+    ));
+    let found = answered_within("cfgring", move || {
+        let probe = lib_probe("cfgring", &lib);
+        inline_findings(&probe, "cfgring", "crate", "crate::forbidden", false)
+    });
+    assert!(
+        found.iter().any(|f| f == "crate::forbidden::f in crate"),
+        "{found:?}"
+    );
+}
+
 /// Globs each read through the one before them settle past the chain cap: nested modules `a0::a1::…`, the innermost
 /// defining `leaf`, and a crate root globbing every one of them by its bare name, so each glob's head is a module the
 /// glob before it brings. A hundred and fifty of them settle within a few passes whether written in order or in
@@ -8973,8 +9025,8 @@ fn a_name_bound_only_where_a_cfg_gates_it_is_read_through_the_scopes_globs() {
 }
 
 /// Whether a scope's answer ends a lookup is one judgement wherever the lookup meets the scope: a name a scope holds
-/// only by a `cfg`-gated item does not end it, so a block holding `#[cfg(any())] use crate::mock::now;` leaves `now()`
-/// to the module's `use crate::clock::now;`, and a module `relay` holding a gated `pub use crate::mock::now;` beside
+/// only by a `cfg`-gated item does not end it, so a block holding `#[cfg(any())] use crate::mock::now;`, or a gated
+/// `fn now() {}` of its own, leaves `now()` to the module's `use crate::clock::now;`, and a module `relay` holding a gated `pub use crate::mock::now;` beside
 /// `pub use crate::clock::*;` brings `clock`'s `now` through `bridge`'s glob of it to `use crate::bridge::now;`. Each
 /// went unreported, the block case read where the lookup walks out of a block and the relay case where a lookup
 /// through globs reaches a scope. With the gated item written ungated, it shadows the outer name and nothing reports.
@@ -8999,6 +9051,18 @@ fn a_scope_holding_a_name_only_where_a_cfg_gates_it_ends_no_lookup() {
             "ungatedblockshadow",
             items.to_string(),
             "use crate::clock::now;\npub fn run() {\n    use crate::mock::now;\n    now();\n}\n",
+            &[][..],
+        ),
+        (
+            "gatedblockitem",
+            items.to_string(),
+            "use crate::clock::now;\npub fn run() {\n    #[cfg(any())]\n    fn now() {}\n    now();\n}\n",
+            &["crate::clock::now in crate::core"][..],
+        ),
+        (
+            "ungatedblockitem",
+            items.to_string(),
+            "use crate::clock::now;\npub fn run() {\n    fn now() {}\n    now();\n}\n",
             &[][..],
         ),
         (

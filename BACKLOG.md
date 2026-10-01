@@ -723,8 +723,9 @@ consumer for an undemonstrated deduplication.
   an answer read past a cut depends on the walk it was entered from, so every link of the ring is re-read once per
   path to it. A memo per walk keyed by the frame an answer was read under was tried and did not bound the ring,
   because the re-reads stand under different frames; keying a frame by its chain of bindings rather than by its
-  instance is the untried repair. *Current reaction or bound:* none; the chain cap of 64 bounds the depth, not the
-  time. *Risk:* a scan that does not finish on such a ring, never a wrong verdict. *Promotion trigger:* a crate an
+  instance is the untried repair. *Current reaction or bound:* declared as
+  `inline-symbol-path-confinement/a-cfg-closed-re-export-ring-is-read-in-time-exponential-in-its-length-a-stated-bound`,
+  pinned by a six-link ring read within ten seconds; the chain cap of 64 bounds the depth, not the time. *Risk:* a scan that does not finish on such a ring, never a wrong verdict. *Promotion trigger:* a crate an
   adopter builds whose scan time is dominated by these re-reads, or a repair keyed by the chain that bounds the ring
   above with no verdict moving in the corpus. *Version class:* patch — performance. *Authority:*
   `inline-symbol-path-confinement`'s time-bound requirement.

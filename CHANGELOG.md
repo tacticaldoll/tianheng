@@ -531,20 +531,27 @@ them.
   directly or through `cfg_attr`, or the item in a `cfg_if!` arm — is read through the scope's globs too, so
   `use super::*;` beside `#[cfg(test)] use crate::mock::Command;` reports the `std::process::Command::new` the glob
   brings outside tests. Whether a scope's answer ends a lookup is one judgement wherever the lookup meets the scope,
-  so a gated name ends none: `use crate::clock::now;` beside a block's `#[cfg(any())] use crate::mock::now;` calls
-  `clock`'s `now`, and so does `use crate::bridge::now;` where `bridge` globs a module holding a gated
+  so a gated name ends none: `use crate::clock::now;` beside a block's `#[cfg(any())] use crate::mock::now;`, or a
+  block's `#[cfg(any())] fn now() {}`, calls `clock`'s `now`, and so does `use crate::bridge::now;` where `bridge` globs a module holding a gated
   `pub use crate::mock::now;` beside `pub use crate::clock::*;`. Each went unreported; where the gated item is the
   one compiled the other answer is an over-reaction, declared as
   `inline-symbol-path-confinement/a-cfg-gated-name-beside-a-glob-is-read-with-the-glob-a-stated-bound`. Address or
   baseline what they report.
 
 - **BREAKING** — **圭表 reads a single identifier as a mention under `.strict_prefix_only()`.** A single identifier
-  that names something is a path mentioned, so `let g: fn() = now;` reports `crate::clock::now` under a strict
-  confinement of it, where only a call, a rooted path or a path of several segments was read; a name being
+  that names something is a path mentioned, so `let g: fn() = now;` and `&mut Clock` report under a strict
+  confinement of them, where only a call, a rooted path or a path of several segments was read; a name being
   introduced — an item's, a field's, a parameter's, a binding's, a `for` pattern's or a macro's — and a bare `self`
-  are not. A parameter or `let` binding named like an import or an item in scope is read as it, declared as
+  are not. A name read in both namespaces is looked up in each through every scope before the two are joined, so a
+  block's `struct now {}` no longer ends the lookup of a value `now`. A parameter or `let` binding named like an import or an item in scope is read as it, declared as
   `inline-symbol-path-confinement/a-local-binding-named-like-an-import-is-read-as-the-import-a-stated-bound`, which
   under strict now reaches a binding read as a value too. Address or baseline what it reports.
+
+- **圭表 declares the time a cfg-closed re-export ring takes.** A ring of modules each re-exporting a name from the
+  next under one `cfg` and from elsewhere under its negation is judged, in time that doubles per link, rather than
+  refused; declared as
+  `inline-symbol-path-confinement/a-cfg-closed-re-export-ring-is-read-in-time-exponential-in-its-length-a-stated-bound`.
+  Verdicts are unchanged.
 
 - **BREAKING** — **圭表 binds a `use` a module body inside a macro's group holds.** `id! { mod m { use super::*;
   pub fn f() { Instant::now(); } } }` reads `Instant` through the module's glob, as the expansion does, where the
@@ -577,6 +584,10 @@ them.
   repository that count is held to the release snapshots preceding `HEAD`. A rewrite is refused naming its first
   differing line by its line in `HEAD`'s `CHANGELOG.md`.
 
+- **The MSRV build is CI-only.** `AGENTS.md`'s Definition of Done no longer runs the workspace suite on the pinned
+  toolchain locally; `ci.yml`'s `msrv` job does, and `scripts/merge-pr.sh` stops on a pull request whose checks did
+  not succeed. A report of the local list says the MSRV build was left to CI.
+
 - **漏刻's lexing without an edition is a declared bound, held on the cross-dimension lexical ledger.**
   `lexical_conformance.rs` gains a row holding 圭表 and 漏刻 to one reading of `Pattern_White_Space`, on which they
   agree, and one on an edition-2018 `cr#"x"`, on which they do not: 漏刻 reads source roots with no edition and
@@ -584,10 +595,6 @@ them.
   `runtime-origin-assertion/a-raw-string-after-an-identifier-character-is-read-as-one-in-every-edition-a-stated-bound`,
   pinned by the ledger row and a mutation record, rather than closed by a shared lexer that would lack the same
   input.
-- **The MSRV build is CI-only.** `AGENTS.md`'s Definition of Done no longer runs the workspace suite on the pinned
-  toolchain locally; `ci.yml`'s `msrv` job does, and `scripts/merge-pr.sh` stops on a pull request whose checks did
-  not succeed. A report of the local list says the MSRV build was left to CI.
-
 
 - **Amendment: 圭表 may depend on `unicode-normalization`.** 圭表's allowlist of direct normal edges gains
   `unicode-normalization`, Unicode's Normalization Form C, so an identifier is compared as rustc compares it rather

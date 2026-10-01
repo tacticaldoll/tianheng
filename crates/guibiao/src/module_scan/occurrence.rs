@@ -64,6 +64,37 @@ pub(super) fn path_run(tree: &TokenTree, head: usize) -> PathRun {
     }
 }
 
+/// The words before a single identifier that make it a name being introduced rather than a path: an item's or a
+/// binding's name, or a `for` loop's pattern. `mut` is not among them, since it also stands in `&mut` and `*mut`
+/// before a path; [`binds_after_mut`] reads it apart.
+const INTRODUCING_WORDS: [&str; 12] = [
+    "fn", "struct", "enum", "union", "trait", "type", "mod", "const", "static", "let", "ref", "for",
+];
+
+/// Whether the token at `at` is the `mut` of a binding — `let mut x`, `ref mut x`, `(mut x, …)` — rather than of a
+/// reference or a raw pointer, `&mut Clock` or `*mut T`, before which a path is written. No pattern grammar is read,
+/// so the binding is told from the reference by the one token before the `mut`.
+fn binds_after_mut(tree: &TokenTree, at: usize) -> bool {
+    tree.is(at, "mut")
+        && !at.checked_sub(1).is_some_and(|before| {
+            tree.is(before, "&") || tree.is(before, "&&") || tree.is(before, "*")
+        })
+}
+
+/// Whether the single identifier at `head`, ending before `end`, is a path mentioned rather than a name introduced: an
+/// identifier, not a keyword segment, since a bare `self` is a receiver and not a path to its module; not after
+/// [`INTRODUCING_WORDS`] or a binding's `mut`; and not followed by a lone `:`, which makes it a field, a parameter, a
+/// binding or a generic parameter being declared or initialized, by `!`, which makes it a macro's name, or by `@`,
+/// which binds a pattern. So under a strict confinement `let g: fn() = now;` and `&mut Clock` mention their paths,
+/// while `pub now: u8`, `fn f(now: u8)`, `S { now: 1 }`, `const NOW: u8`, `let mut now` and `now!()` do not.
+fn names_a_single_segment_path(tree: &TokenTree, head: usize, end: usize) -> bool {
+    matches!(tree.kind(head), Kind::Ident | Kind::RawIdent)
+        && !head.checked_sub(1).is_some_and(|before| {
+            INTRODUCING_WORDS.contains(&tree.text(before)) || binds_after_mut(tree, before)
+        })
+        && !(end < tree.len() && (tree.is(end, ":") || tree.is(end, "!") || tree.is(end, "@")))
+}
+
 /// Every call and path mention in `tree`. An attribute's arguments are read past its own path and a `cfg` or
 /// `cfg_attr` predicate, as [`attribute_arguments`] states. The identifier
 /// after a `.` is a field or a method, not a path. The tail of a qualified path — `<T>::f`, `<T as Trait>::f` — has
@@ -74,27 +105,6 @@ pub(super) fn path_run(tree: &TokenTree, head: usize) -> PathRun {
 /// one reader of use trees, whose leaves a strict confinement judges as `use` paths — a grouped `use crate::{a::b};`
 /// holds no path `a::b`, and in edition 2015 a `use` path starts at the crate root where an expression's does not.
 /// `statements` spans each such statement, `(use, ;)`, in source order.
-/// The words before a single identifier that make it a name being introduced rather than a path: an item's or a
-/// binding's name, or a `for` loop's pattern.
-const INTRODUCING_WORDS: [&str; 13] = [
-    "fn", "struct", "enum", "union", "trait", "type", "mod", "const", "static", "let", "mut",
-    "ref", "for",
-];
-
-/// Whether the single identifier at `head`, ending before `end`, is a path mentioned rather than a name introduced: an
-/// identifier, not a keyword segment, since a bare `self` is a receiver and not a path to its module; not after
-/// [`INTRODUCING_WORDS`]; and not followed by a lone `:`, which makes it a field, a parameter, a binding or a generic
-/// parameter being declared or initialized, by `!`, which makes it a macro's name, or by `@`, which binds a pattern.
-/// So under a strict confinement `let g: fn() = now;` mentions `now`, while `pub now: u8`, `fn f(now: u8)`,
-/// `S { now: 1 }`, `const NOW: u8` and `now!()` do not.
-fn names_a_single_segment_path(tree: &TokenTree, head: usize, end: usize) -> bool {
-    matches!(tree.kind(head), Kind::Ident | Kind::RawIdent)
-        && !head
-            .checked_sub(1)
-            .is_some_and(|before| INTRODUCING_WORDS.contains(&tree.text(before)))
-        && !(end < tree.len() && (tree.is(end, ":") || tree.is(end, "!") || tree.is(end, "@")))
-}
-
 pub(super) fn occurrences(tree: &TokenTree, statements: &[(usize, usize)]) -> Vec<Occurrence> {
     let mut scan = Scan {
         tree,
@@ -307,12 +317,13 @@ mod tests {
     fn a_single_identifier_is_a_mention_only_where_it_names_something() {
         assert_eq!(
             read(
-                "fn f(p: Instant) { let g: fn() = now; let mut m = 1; for k in v {} S { field: 1 }; m!(); self.x; }\n\
+                "fn f(p: Instant) { let g: fn() = now; let mut m = 1; let _ = &mut Clock; for k in v {} S { field: 1 }; m!(); self.x; }\n\
                  struct S { field: u8 } const C: u8 = 1; static D: u8 = 1; type T = U; mod n {} trait R {}"
             ),
             [
                 ("Instant".to_string(), false),
                 ("now".to_string(), false),
+                ("Clock".to_string(), false),
                 ("v".to_string(), false),
                 ("S".to_string(), false),
                 ("u8".to_string(), false),

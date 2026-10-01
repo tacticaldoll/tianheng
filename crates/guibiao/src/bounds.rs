@@ -339,6 +339,20 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
+                "inline-symbol-path-confinement/a-cfg-closed-re-export-ring-is-read-in-time-exponential-in-its-length-a-stated-bound",
+            ),
+            "a ring of modules each re-exporting a name from the next under one `cfg` and from elsewhere under its \
+             negation, the last closing it",
+            Extent::Reached(Reached::DeclinesToRefuse {
+                because: "an answer read past a cut cycle depends on the walk it was entered from and is not \
+                          remembered, so each link is re-read once per path to it and the reading doubles per link; \
+                          no budget refuses it, and the chain cap bounds the depth rather than the time"
+                    .into(),
+            }),
+            "a_cfg_closed_re_export_ring_is_read_in_time_exponential_in_its_length",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
                 "inline-symbol-path-confinement/a-cfg-gated-name-beside-a-glob-is-read-with-the-glob-a-stated-bound",
             ),
             "a name a scope binds or declares only by items a `cfg` gates, which a glob of that scope, or the scope \
