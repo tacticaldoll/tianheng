@@ -562,7 +562,8 @@ pub(super) fn each_source_path_is_read_once_on_demand() {
     );
 }
 
-/// A source compiled by two roots is read once across both, and each root retains its own findings.
+/// `module-boundary` scenario "A source two roots or two modules reach is read once": a source compiled
+/// by two roots is read once across both, and each root retains its own findings.
 #[test]
 pub(super) fn a_source_two_roots_reach_is_read_once() {
     let ws = TempWorkspace::new("read-once-two-roots");
@@ -620,7 +621,8 @@ pub(super) fn a_source_two_roots_reach_is_read_once() {
     );
 }
 
-/// One source loaded as two modules is read once, and both module positions retain their findings.
+/// `module-boundary` scenario "A source two roots or two modules reach is read once": one source loaded
+/// as two modules is read once, and both module positions retain their findings.
 #[test]
 pub(super) fn a_source_two_modules_reach_is_read_once() {
     let ws = TempWorkspace::new("read-once-two-modules");
@@ -713,8 +715,9 @@ pub(super) fn a_source_no_root_reaches_is_never_read() {
     );
 }
 
-/// Outbound, inbound and external rules share one classification per file and module across boundaries.
-/// The exact key set includes every pair a rule reads and excludes the protected subtree every rule skips.
+/// `module-boundary` scenario "A file's uses are classified once across rules and boundaries": outbound,
+/// inbound and external rules share one classification per file and module across boundaries. The exact
+/// key set includes every pair a rule reads and excludes the protected subtree every rule skips.
 #[test]
 pub(super) fn a_files_uses_are_classified_once_across_rules_and_boundaries() {
     let ws = TempWorkspace::new("classify-once");
