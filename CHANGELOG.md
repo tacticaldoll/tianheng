@@ -599,7 +599,7 @@ them.
 
 ### Self-governance
 
-- **Amendment: 圭表 reads a source file's contents in one module.** A self-law boundary confines guibiao's
+- **Amendment: 圭表's `std::fs` read and open calls are confined to one module.** A self-law boundary confines guibiao's
   `std::fs` calls ending in `read_to_string`, `read` or `open` to `crate::module_scan::source_texts`, so such a
   call anywhere else in guibiao is a violation of the self-governance gate. `self_law_amendment.rs` names the
   change.

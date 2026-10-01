@@ -1160,9 +1160,9 @@ SHALL build each compilation unit root's scan — its file list, its reachabilit
 once, shared by every module boundary judged over that root. Each file of a unit, read as one module, SHALL have
 its `use` declarations classified at most once, on demand, so a file no rule reads is never classified and its
 refusal never decides the exit code. A governed module's value-namespace items SHALL be read from the scope tables
-its unit's scan built, so each file's table is built once, as the module the unit reads it as. A boundary's own conditions — its governed set, its prefix and verbs, its
-strict and external modifiers — are applied when that boundary is judged and are never kept as a fact of the
-root. A source path is the path it was opened at, never canonicalized, since a relative `#[path]` resolves from
+its unit's scan built, so each file's table is built once, as the module the unit reads it as. A boundary's own
+conditions — its governed set, its prefix and verbs, its strict and external modifiers — are applied when that
+boundary is judged and are never kept as a fact of the root. A source path is the path it was opened at, never canonicalized, since a relative `#[path]` resolves from
 the directory a file was opened in; one reading of it serves every root of every package and every module it is
 loaded as, and a path no root reaches is never read. Sharing SHALL NOT change an outcome: a constitution judged
 through shared scans and through a scan per boundary yields the same outcome, in each order its boundaries are
