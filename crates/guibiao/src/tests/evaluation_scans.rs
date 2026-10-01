@@ -146,16 +146,16 @@ fn outbound() -> CorpusEntry {
 
 /// The inbound family: `crate::internal` binds `foo` in both namespaces (`mod foo` and `fn foo`),
 /// so the shallow rule reacts through the value-namespace reading of `use crate::internal::foo;`.
+/// `internal.rs` is not the unit's first file, and a block of it declares an inline module holding a
+/// `fn`, so the value-namespace inventory is read from a table whose number is not `0` and holds a
+/// block-declared module's item.
 fn inbound() -> CorpusEntry {
     let ws = TempWorkspace::new("eq-inbound");
     ws.write(
         "lib.rs",
         "pub mod internal;\npub mod api;\npub mod kernel;\n",
     );
-    ws.write(
-        "internal.rs",
-        "pub mod foo { pub const INSIDE: u8 = 0; }\npub fn foo() {}\n",
-    );
+    ws.write("internal.rs", INBOUND_INTERNAL);
     ws.write("api.rs", "use crate::internal::foo;\npub fn a() {}\n");
     ws.write(
         "kernel.rs",
@@ -174,6 +174,75 @@ fn inbound() -> CorpusEntry {
             .because("only the kernel reaches internal"),
     ];
     (ws, metadata, boundaries)
+}
+
+/// The governed module of the inbound family: `foo` in both namespaces, a block declaring an inline
+/// module whose `fn` is a value of that block-declared module, never of `crate::internal`, and a
+/// macro's group holding a block-declared module, whose path segment names its table's number.
+const INBOUND_INTERNAL: &str = "pub mod foo { pub const INSIDE: u8 = 0; }\npub fn foo() {}\n\
+     pub fn host() { mod nested { pub fn foo() {} } nested::foo(); }\n\
+     m! { fn g() { mod k { pub fn foo() {} } } }\n";
+
+/// `module-boundary` scenario "A governed module's value items are read from the unit's tables": an
+/// inbound boundary whose value-namespace reading of its governed module decides a violation builds
+/// each file's table once, as the module the unit reads it as, and the inventory builds none of its own.
+#[test]
+pub(super) fn a_governed_modules_value_items_are_read_from_the_units_tables() {
+    let (_ws, metadata, boundaries) = inbound();
+    let constitution = constitution_of(boundaries);
+    crate::module_scan::take_table_builds();
+    let outcome = crate::evaluate_with_scans(&constitution, &metadata, &EvaluationScans::shared());
+    let builds = crate::module_scan::take_table_builds();
+    let importers: BTreeSet<String> = match &outcome {
+        Outcome::Violations(report) => report
+            .violations
+            .iter()
+            .map(|violation| violation.finding.clone())
+            .collect(),
+        other => panic!("the value-namespace reading reacts: {other:?}"),
+    };
+    assert!(
+        importers
+            .iter()
+            .any(|finding| finding.contains("crate::api")),
+        "the shallow rule reacts on `crate::api` only through the governed module's value items: {importers:?}"
+    );
+    let mut per_module: HashMap<&str, usize> = HashMap::new();
+    for ((module, _table), count) in &builds {
+        *per_module.entry(module.as_str()).or_default() += count;
+    }
+    assert_eq!(
+        per_module,
+        HashMap::from([
+            ("crate", 1),
+            ("crate::internal", 1),
+            ("crate::api", 1),
+            ("crate::kernel", 1),
+        ]),
+        "each file's table is built once, as its module, and the inventory builds none: {builds:?}"
+    );
+    let package = &metadata["packages"][0];
+    let lib = PathBuf::from(package["targets"][0]["src_path"].as_str().unwrap());
+    let root = EvaluationScans::shared()
+        .root_scan(package, "x", Some(&lib), None)
+        .unwrap();
+    let items: BTreeSet<String> = root
+        .governed_module_value_items("crate::internal")
+        .unwrap()
+        .into_iter()
+        .collect();
+    assert_eq!(
+        items,
+        BTreeSet::from([
+            "crate::internal::foo".to_string(),
+            "crate::internal::foo::INSIDE".to_string(),
+            "crate::internal::host".to_string(),
+            "crate::internal::{block}::nested::foo".to_string(),
+        ]),
+        "the inventory holds the values of the governed module and of each inline module it declares, a \
+         block-declared module's among them, keyed by their true module, and no segment \
+         naming a table's number, which a macro's group alone would carry"
+    );
 }
 
 /// External-crate confinement beside an outbound rule over the same root, one of them clean.

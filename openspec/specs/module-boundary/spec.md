@@ -1159,7 +1159,8 @@ Within one evaluation of a constitution, 圭表 SHALL read each source path it m
 SHALL build each compilation unit root's scan — its file list, its reachability and its unit scan — at most
 once, shared by every module boundary judged over that root. Each file of a unit, read as one module, SHALL have
 its `use` declarations classified at most once, on demand, so a file no rule reads is never classified and its
-refusal never decides the exit code. A boundary's own conditions — its governed set, its prefix and verbs, its
+refusal never decides the exit code. A governed module's value-namespace items SHALL be read from the scope tables
+its unit's scan built, so each file's table is built once, as the module the unit reads it as. A boundary's own conditions — its governed set, its prefix and verbs, its
 strict and external modifiers — are applied when that boundary is judged and are never kept as a fact of the
 root. A source path is the path it was opened at, never canonicalized, since a relative `#[path]` resolves from
 the directory a file was opened in; one reading of it serves every root of every package and every module it is
@@ -1222,3 +1223,12 @@ declared in.
 - **THEN** the file is never classified and its refusal never decides the exit code; only the files a rule
   reads occur in the classification counts
 - **PINNED-BY** `shallow_inbound_rules_do_not_read_a_file_the_self_import_exemption_excuses`
+
+#### Scenario: A governed module's value items are read from the unit's tables
+
+- **WHEN** an inbound boundary's violation is decided by the value-namespace reading of its governed module, a
+  file of the unit other than its first, which declares an inline module in a block
+- **THEN** each file's scope table is built once, as the module the unit reads it as, and the inventory builds
+  none of its own; the items it reads are the governed module's values and each inline module's, keyed by their
+  true module
+- **PINNED-BY** `a_governed_modules_value_items_are_read_from_the_units_tables`

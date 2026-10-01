@@ -20,14 +20,11 @@ use std::rc::Rc;
 use serde_json::Value;
 use xuanji::ScanDepth;
 
-use crate::cargo_metadata::{RootReading, root_reading};
+use crate::cargo_metadata::root_reading;
 use crate::errors::{missing_src_error, out_of_package_root_error, walk_refusal_in_unit};
 
 use super::source_texts::SourceTexts;
-use super::{
-    UnitScan, governed_files, names_crate_by_path_alone, reachable_modules, rust_files,
-    value_namespace_item_names,
-};
+use super::{UnitScan, governed_files, names_crate_by_path_alone, reachable_modules, rust_files};
 
 /// The conventional source directory, `manifest_dir/src`, for metadata reporting no target — the one case a root
 /// is judged without a root file, since every package Cargo reports carries its targets.
@@ -49,9 +46,6 @@ pub(crate) struct RootScan {
     /// The root's compilation unit label, absent where the metadata reports no target and the
     /// conventional source directory stands in.
     pub(crate) unit: Option<String>,
-    /// The edition every file of the unit is lexed in, and whether one of the targets rooted here
-    /// is a proc-macro crate.
-    reading: RootReading,
     /// Every `.rs` file under `src_dir`, minus the package's sibling roots (each is its own
     /// compilation unit) and the files that name `crate` by their path alone.
     pub(crate) files: Vec<PathBuf>,
@@ -75,9 +69,6 @@ pub(crate) struct RootScan {
     /// The unit's item definitions, collected the first time a boundary asks for them: an
     /// evaluation whose boundaries declare no inline confinement never pays for the collection.
     item_definitions: OnceCell<BTreeSet<String>>,
-    /// The evaluation's reading of each source path, which a judgement over this root reads a
-    /// governed module's files from rather than reading them again.
-    sources: Rc<SourceTexts>,
 }
 
 impl RootScan {
@@ -137,7 +128,6 @@ impl RootScan {
             src_dir,
             root_relative,
             unit,
-            reading,
             files,
             reachable,
             inline_only,
@@ -146,7 +136,6 @@ impl RootScan {
             all_files,
             unit_scan,
             item_definitions: OnceCell::new(),
-            sources,
         })
     }
 
@@ -178,7 +167,8 @@ impl RootScan {
     /// about the governed module itself. A module can be backed by more than one reachable file (a
     /// `#[path]` remap beside a conventional file, a `cfg_attr` union), so every backing file
     /// contributes, and inline descendants are excluded by the collector's own true-module keying.
-    /// Each file's text is the evaluation's one reading of it.
+    /// Each file's names are read from the table the unit scan built for that file and module, so the
+    /// inventory reads no source and builds no table of its own.
     pub(crate) fn governed_module_value_items(
         &self,
         governed_module: &str,
@@ -195,15 +185,7 @@ impl RootScan {
             self.root_relative.as_deref(),
             ScanDepth::Shallow,
         ) {
-            let raw = self
-                .sources
-                .text(&file)
-                .map_err(|err| crate::errors::unreadable_governed_file_error(&file, &err))?;
-            items.extend(value_namespace_item_names(
-                &module,
-                &raw,
-                self.reading.edition,
-            ));
+            items.extend(self.unit_scan.value_items(&file, &module)?);
         }
         Ok(items)
     }

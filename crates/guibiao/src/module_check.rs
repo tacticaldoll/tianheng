@@ -112,7 +112,7 @@ fn hosts_only_permitted_importers(
 /// That gap used to be a **stated bound** — a recorded false negative — on the grounds that closing it
 /// "needs a value-namespace item observation this crate does not have". That premise was wrong: it does
 /// have one. [`also_binds_a_value_of_the_governed_module`] consults
-/// [`crate::module_scan::value_namespace_item_names`] and
+/// [`crate::module_scan::UnitScan::value_items`] and
 /// reacts only when the governed module really declares a `fn`/`const`/`static` of that name, which is
 /// why it does not become the broad false positive that reacting on both readings would have been — an
 /// ordinary `use m::child;` naming only a module still does not react, as `rule-model-surface` requires
@@ -146,7 +146,7 @@ fn resolve_import_module<'a>(
 /// longest reachable module, `m::foo`, which under `Shallow` anchored at `m` is only a descendant and
 /// does not react; yet the value reading reaches `m` itself and must. That was a recorded false
 /// negative, left because closing it "needs a value-namespace item observation guibiao does not have".
-/// It does have one: [`crate::module_scan::value_namespace_item_names`] reads exactly the
+/// It does have one: [`crate::module_scan::UnitScan::value_items`] reads exactly the
 /// `fn`/`const`/`static` names a
 /// module declares at its own top level, with the true-inline-module and top-level-only disciplines
 /// already established for the prefix existence check's item set.

@@ -37,7 +37,9 @@ pub(crate) use path_vocab::{
     canonical_symbol_path_spelling, package_name_to_import_ident, path_within, sysroot_crate,
 };
 pub(crate) use reachability::{governed_files, names_crate_by_path_alone, reachable_modules};
-pub(crate) use symbol_scan::{InlineFinding, UnitScan, value_namespace_item_names};
+#[cfg(test)]
+pub(crate) use scope_tree::take_table_builds;
+pub(crate) use symbol_scan::{InlineFinding, UnitScan};
 pub(crate) use token_tree::Edition;
 pub(crate) use use_scan::ImportedPath;
 

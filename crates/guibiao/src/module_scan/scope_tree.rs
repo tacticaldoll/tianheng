@@ -157,6 +157,20 @@ pub(super) struct ScopeTable {
     refusal: Option<String>,
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Every table this thread has built, counted by the module and the table number it was built as: the work a
+    /// direction holds an evaluation to building once per file and module, counted where a table is built.
+    static TABLE_BUILDS: std::cell::RefCell<std::collections::HashMap<(String, usize), usize>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// The tables this thread has built since it last asked, by module and table number, emptying the count.
+#[cfg(test)]
+pub(crate) fn take_table_builds() -> std::collections::HashMap<(String, usize), usize> {
+    TABLE_BUILDS.with(|builds| std::mem::take(&mut *builds.borrow_mut()))
+}
+
 /// What stands open while the tree is read forward: the group's kind, and outside it the scope, the recording scope,
 /// whether a macro's group encloses it, and the block inside one that records its `use` statements.
 struct Frame {
@@ -192,6 +206,13 @@ impl ScopeTable {
     /// `fn g() { mod k { #[path = "y.rs"] pub mod m; } k::m::s(); }` reaches the `s` that `y.rs` binds; one inside a
     /// macro's group has no label, since nothing there is recorded, and takes its block's own segment.
     pub(super) fn build(tree: &TokenTree, file_module: &str, table: usize) -> Self {
+        #[cfg(test)]
+        TABLE_BUILDS.with(|builds| {
+            *builds
+                .borrow_mut()
+                .entry((file_module.to_string(), table))
+                .or_default() += 1;
+        });
         let mut scopes = Vec::new();
         push_scope(
             &mut scopes,
