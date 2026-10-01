@@ -575,11 +575,14 @@ consumer for an undemonstrated deduplication.
 - **`check_one_root` and `CrateScopes::name_raw` take many arguments, and the both-modes loop is written
   several times.** *Class:* WATCH. *Observed pressure:* review structural causes, no defect. *Observation
   source:* `#[allow(clippy::too_many_arguments)]` on `name_raw` and on `check_one_root`'s callers in
-  `crates/guibiao/src/module_check.rs`; the loops over `[false, true]` for `.strict_external()` in
+  `crates/guibiao/src/module_check.rs`, whose resolver half has one cause: a scope is passed as two positions,
+  its table `t` and its id, through every lookup method, with a `u32::try_from(..).expect("scope table exceeds u32")`
+  at each place a scope's index is minted; the loops over `[false, true]` for `.strict_external()` in
   `crates/guibiao/tests/per_target_corpus.rs`, whose size is its own cost to every reader of it. *Current
   reaction or bound:* none. *Risk:* a new argument or mode added at one site and not another. *Promotion
   trigger:* the next change that edits `check_one_root`'s signature or adds a both-modes helper, which gathers
-  the arguments into one value and the loop into one helper in that change. *Version class:* patch.
+  the arguments into one value and the loop into one helper in that change, or the next lookup method added to
+  `CrateScopes`, which makes the scope one value minted in one place. *Version class:* patch.
   *Authority:* AGENTS.md's *one rule gets one implementation*.
 
 - **圭表 holds one rule in several places.** *Class:* WATCH. *Observed pressure:* none from an adopter; a static

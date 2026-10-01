@@ -808,10 +808,10 @@ impl CrateScopes {
             }
         }
         let prelude = self.in_extern_prelude(head, ns);
-        if unsettled.is_empty() {
-            return prelude;
-        }
-        let open = gated && !self.root_holds_extern_crate_for_certain(head, &prelude);
+        let open = match prelude {
+            Head::Candidates { .. } => !self.root_holds_extern_crate_for_certain(head),
+            _ => gated,
+        };
         let mut answer = joined(unsettled.into_iter().chain([prelude]));
         if open {
             if let Head::Candidates { open, .. } = &mut answer {
@@ -907,19 +907,18 @@ impl CrateScopes {
             })
     }
 
-    /// Whether the extern prelude's answer `prelude` for `head` holds on every build: the crate root binds it by an
-    /// `extern crate` no `cfg` gates, so `extern crate core as std;` answers `std` for certain and leaves no sysroot
-    /// `std` to read, while a gated one leaves the head open as a gated scope does.
-    fn root_holds_extern_crate_for_certain(&self, head: &str, prelude: &Head) -> bool {
-        matches!(prelude, Head::Candidates { .. })
-            && self.modules.get("crate").is_some_and(|scopes| {
-                scopes.iter().any(|&(t, s)| {
-                    self.tables[t].scopes[s as usize]
-                        .declarations
-                        .contains_key(head)
-                        && !self.held_only_where_gated(t, s, head, Namespace::Type)
-                })
+    /// Whether the extern prelude's answer for `head` holds on every build: the crate root binds it by an `extern crate`
+    /// no `cfg` gates, so `extern crate core as std;` answers `std` for certain and leaves no sysroot `std` to read,
+    /// while a gated one leaves the head open in every module, whether or not a scope of its own held it.
+    fn root_holds_extern_crate_for_certain(&self, head: &str) -> bool {
+        self.modules.get("crate").is_some_and(|scopes| {
+            scopes.iter().any(|&(t, s)| {
+                self.tables[t].scopes[s as usize]
+                    .declarations
+                    .contains_key(head)
+                    && !self.held_only_where_gated(t, s, head, Namespace::Type)
             })
+        })
     }
 
     /// What the crate root's `extern crate` items bind `head` as — the names they add to every module's

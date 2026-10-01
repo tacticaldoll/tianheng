@@ -548,6 +548,9 @@ them.
   `inline-symbol-path-confinement/a-local-binding-named-like-an-import-is-read-as-the-import-a-stated-bound`, which
   under strict now reaches a binding read as a value too. Address or baseline what it reports.
 
+- **圭表 reads a file cut off mid-item to its end.** A file ending at `pub type A =`, or after a `&` in an alias's
+  target, stopped the scan with a panic where it now answers 0, 1 or 2 as every other malformed file does.
+
 - **圭表 declares the time a cfg-closed re-export ring takes.** A ring of modules each re-exporting a name from the
   next under one `cfg` and from elsewhere under its negation is judged, in time that doubles per link, rather than
   refused; declared as
@@ -567,7 +570,9 @@ them.
   {}` beside `std::process::id()` left the call to the gated module and it went unreported under `std::process`; a
   build compiling the module out calls `std`. Such a head is now also read as what no scope binds — a sysroot crate,
   and under `.strict_external()` a dependency — beside the gated module's paths, unless the crate root's ungated
-  `extern crate` answers it, as `extern crate core as std;` answers `std` as `core`. Address or baseline what it reports.
+  `extern crate` answers it, as `extern crate core as std;` answers `std` as `core`. A root `extern crate` a `cfg`
+  gates leaves its name open the same way in every module, so beside `#[cfg(any())] extern crate core as std;` a
+  submodule's `std::process::id()` reports under `std::process` too. Address or baseline what it reports.
 
 - **BREAKING** — **圭表's import rules refuse an import read through another file's unreadable `use` tree.** A `use`
   tree nested past the cap leaves its file's scopes without the bindings it makes, so an import whose head is read

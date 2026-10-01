@@ -243,7 +243,7 @@ pub(super) struct FileUse {
     pub leaves: Result<Vec<UseLeaf>, String>,
 }
 
-/// Every `use` statement of the file `tree` holds, read against its scope `table`.
+/// Every statement of `statements`, read against its file's scope `table`.
 pub(super) fn file_uses(statements: Vec<UseStatement>, table: &ScopeTable) -> Vec<FileUse> {
     let identities = identity_modules(table.scopes.iter().map(|scope| scope.module.as_str()));
     statements

@@ -57,6 +57,9 @@ pub(super) enum Kind {
     Punct,
     Open(Delimiter),
     Close(Delimiter),
+    /// Past the last token: what [`TokenTree::kind`] answers there, so a reader stepping off the end of a cut-off file
+    /// reads a token that is none of the others. No token has it.
+    End,
 }
 
 #[derive(Clone, Debug)]
@@ -371,8 +374,9 @@ impl<'s> TokenTree<'s> {
         self.tokens.len()
     }
 
+    /// The token's kind, or [`Kind::End`] past the last token.
     pub(super) fn kind(&self, i: usize) -> Kind {
-        self.tokens[i].kind
+        self.tokens.get(i).map_or(Kind::End, |token| token.kind)
     }
 
     /// The token's text; a raw identifier's without its `r#`.
@@ -456,7 +460,7 @@ impl<'s> TokenTree<'s> {
             },
             Kind::Punct if self.text(i) == "#" => {
                 let open = if self.is(i + 1, "!") { i + 2 } else { i + 1 };
-                if open < self.len() && self.kind(open) == Kind::Open(Delimiter::Bracket) {
+                if self.kind(open) == Kind::Open(Delimiter::Bracket) {
                     Node::Attribute {
                         hash: i,
                         open,

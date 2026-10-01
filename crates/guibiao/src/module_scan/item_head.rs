@@ -513,12 +513,12 @@ fn item_keyword(tree: &TokenTree, j: usize) -> Option<ItemKeyword> {
         (Kind::Keyword, "use") => ItemKeyword::Use,
         (Kind::Keyword, "extern") if tree.is(j + 1, "crate") => ItemKeyword::ExternCrate,
         (Kind::Keyword, "extern") => {
-            let after = if j + 1 < tree.len() && tree.kind(j + 1) == Kind::Literal {
+            let after = if tree.kind(j + 1) == Kind::Literal {
                 j + 2
             } else {
                 j + 1
             };
-            (after < tree.len() && tree.kind(after) == Kind::Open(Delimiter::Brace))
+            (tree.kind(after) == Kind::Open(Delimiter::Brace))
                 .then_some(ItemKeyword::ExternBlock)?
         }
         (Kind::Ident, "union") if tree.is_word(j + 1) => ItemKeyword::Union,
@@ -531,7 +531,7 @@ fn item_keyword(tree: &TokenTree, j: usize) -> Option<ItemKeyword> {
 /// The visibility a `pub` at `pub_at` gives, and the index past it and its `(…)` if it has one.
 fn visibility_at(tree: &TokenTree, pub_at: usize) -> (Visibility, usize) {
     let open = pub_at + 1;
-    if open >= tree.len() || tree.kind(open) != Kind::Open(Delimiter::Parenthesis) {
+    if tree.kind(open) != Kind::Open(Delimiter::Parenthesis) {
         return (Visibility::Public, pub_at + 1);
     }
     let close = tree.partner(open);
@@ -568,7 +568,7 @@ fn item_from(tree: &TokenTree, start: usize) -> Option<ItemHead> {
             && matches!(tree.kind(j), Kind::Keyword | Kind::Ident)
         {
             j += 1;
-            if tree.is(j - 1, "extern") && j < tree.len() && tree.kind(j) == Kind::Literal {
+            if tree.is(j - 1, "extern") && tree.kind(j) == Kind::Literal {
                 j += 1;
             }
             continue;
@@ -790,7 +790,7 @@ fn ends_an_operand(tree: &TokenTree, i: usize) -> bool {
         Kind::Ident | Kind::RawIdent | Kind::Literal | Kind::Close(_) => true,
         Kind::Keyword => OPERAND_KEYWORDS.contains(&tree.text(prev)),
         Kind::Punct => tree.text(prev) == "?",
-        Kind::Lifetime | Kind::Open(_) => false,
+        Kind::Lifetime | Kind::Open(_) | Kind::End => false,
     }
 }
 
@@ -805,7 +805,7 @@ fn opens_a_generic_list(tree: &TokenTree, i: usize) -> bool {
     tree.kind(prev) == Kind::Keyword
         && match tree.text(prev) {
             "impl" => true,
-            "for" => i + 1 < tree.len() && tree.kind(i + 1) == Kind::Lifetime,
+            "for" => tree.kind(i + 1) == Kind::Lifetime,
             _ => false,
         }
 }

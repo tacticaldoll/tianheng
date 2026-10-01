@@ -9212,10 +9212,7 @@ fn a_head_held_only_by_a_gated_item_may_name_a_crate() {
             "",
             &[
                 ("src/lib.rs", &format!("{alias}\npub mod core;\n")),
-                (
-                    "src/core.rs",
-                    "#[cfg(any())]\nmod std {}\npub fn run() {\n    std::mem::drop(1);\n}\n",
-                ),
+                ("src/core.rs", "pub fn run() {\n    std::mem::drop(1);\n}\n"),
             ],
         );
         assert_inline_answers(&probe, package, "crate::core", "std::mem", found, found);

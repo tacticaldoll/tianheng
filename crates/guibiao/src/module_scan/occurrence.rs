@@ -85,7 +85,7 @@ fn names_a_single_segment_path(tree: &TokenTree, head: usize, end: usize) -> boo
         && !head
             .checked_sub(1)
             .is_some_and(|before| ITEM_KEYWORDS.contains(&tree.text(before)))
-        && !(end < tree.len() && (tree.is(end, ":") || tree.is(end, "!") || tree.is(end, "@")))
+        && !(tree.is(end, ":") || tree.is(end, "!") || tree.is(end, "@"))
 }
 
 /// Every call and path mention in `tree`. An attribute's arguments are read past its own path and a `cfg` or

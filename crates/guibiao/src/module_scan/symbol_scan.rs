@@ -45,6 +45,40 @@ struct FileScan {
     macro_uses: Vec<FileUse>,
 }
 
+impl FileScan {
+    /// Read `raw`, the text of `file` as `module`, into its scan and its scope table, the unit's `table`th: every
+    /// judgement of a file's text the unit makes is made here, so whatever text the file holds, it ends.
+    fn read(
+        raw: &str,
+        file: &Path,
+        module: &str,
+        edition: Edition,
+        table: usize,
+    ) -> (FileScan, ScopeTable) {
+        let tree = TokenTree::lex(raw, edition);
+        let table = ScopeTable::build(&tree, module, table);
+        let statements = use_statements(&tree);
+        let macro_statements: Vec<_> = macro_use_statements(&tree)
+            .into_iter()
+            .filter(|statement| statement.leaves.is_ok())
+            .collect();
+        let mut spans: Vec<(usize, usize)> = statements
+            .iter()
+            .chain(&macro_statements)
+            .map(|statement| (statement.at, statement.end))
+            .collect();
+        spans.sort_unstable();
+        let scan = FileScan {
+            file: file.to_path_buf(),
+            module: module.to_string(),
+            occurrences: occurrences(&tree, &spans),
+            uses: file_uses(statements, &table),
+            macro_uses: file_uses(macro_statements, &table),
+        };
+        (scan, table)
+    }
+}
+
 /// Every file of one compilation unit, each read once into its scope table and its occurrences, and the resolver
 /// over all of them: what the prefix existence check and the inline findings both read.
 pub(crate) struct UnitScan {
@@ -66,26 +100,8 @@ impl UnitScan {
             let raw = std::fs::read_to_string(file).map_err(|err| {
                 crate::errors::unreadable_governed_file_error(file, &err.to_string())
             })?;
-            let tree = TokenTree::lex(&raw, edition);
-            let table = ScopeTable::build(&tree, module, tables.len());
-            let statements = use_statements(&tree);
-            let macro_statements: Vec<_> = macro_use_statements(&tree)
-                .into_iter()
-                .filter(|statement| statement.leaves.is_ok())
-                .collect();
-            let mut spans: Vec<(usize, usize)> = statements
-                .iter()
-                .chain(&macro_statements)
-                .map(|statement| (statement.at, statement.end))
-                .collect();
-            spans.sort_unstable();
-            files.push(FileScan {
-                file: file.clone(),
-                module: module.clone(),
-                occurrences: occurrences(&tree, &spans),
-                uses: file_uses(statements, &table),
-                macro_uses: file_uses(macro_statements, &table),
-            });
+            let (scan, table) = FileScan::read(&raw, file, module, edition, tables.len());
+            files.push(scan);
             tables.push(table);
         }
         let scopes = CrateScopes::new(tables, edition);
@@ -460,5 +476,30 @@ fn should_react_on_occurrence(strict: bool, verbs: Option<&[String]>, resolved: 
         verbs.iter().any(|v| v == leaf)
     } else {
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A file cut off anywhere — mid-item, mid-path, after a `type A =` — is read to its end: a reader that steps past
+    /// the last token answers nothing there rather than indexing beyond it.
+    #[test]
+    fn a_file_cut_off_anywhere_is_read_to_its_end() {
+        let source = "#![allow(unused)]\n\
+            use crate::a::{b, c::*, d as e};\n\
+            pub type A<'a, T> = &'a mut (crate::x::Y<T>);\n\
+            type B = *const ::std::cell::Cell<u8>;\n\
+            #[cfg_attr(unix, path = \"u.rs\")] mod m;\n\
+            extern crate core as std;\n\
+            impl<T: crate::t::Tr> crate::t::Tr for S<T> where T: Copy {}\n\
+            macro_rules! m { ($x:expr) => { crate::q::f($x) }; }\n\
+            pub fn run() { let r#ref = 1; crate::z::<u8>::f(&mut r#ref); std::process::id(); }\n";
+        for cut in (0..=source.len()).filter(|&cut| source.is_char_boundary(cut)) {
+            for edition in [Edition::Rust2015, Edition::Rust2018, Edition::Rust2021] {
+                FileScan::read(&source[..cut], Path::new("lib.rs"), "crate", edition, 0);
+            }
+        }
     }
 }
