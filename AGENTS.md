@@ -1028,15 +1028,18 @@ TIANHENG_PIN_BITES=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test pin_b
                                            # would be the worse half of that trade
 TIANHENG_SPELLING_DIFFERENTIAL=1 cargo test -p tianheng --test attribute_spelling_differential   # the same trade, for
                                            # the same reason: it compiles one crate per generated spelling
-TIANHENG_WORKSPACE_TESTS=1 cargo +1.85 test --workspace --all-features   # the same trade again, for the MSRV. The
-                                           # name is the pinned toolchain: `ci.yml`'s `msrv` job pins it as its own
-                                           # `MSRV` and refuses if the declared `rust-version` has moved from that pin,
-                                           # and `dod_coherence` holds this line to the job's run lines, so the number
-                                           # lives in one place per side and this line is what a contributor runs with
-                                           # that toolchain installed. Env-shaped like its neighbours rather than gated
-                                           # by one; added because the same `if … && let …` compiled on the default
-                                           # toolchain, passed every line above, and failed CI's MSRV job, twice
 ```
+
+**The MSRV build is CI-only, and the merge is what holds it.** `ci.yml`'s `msrv` job runs the workspace suite on
+the pinned toolchain, pins that toolchain as its own `MSRV`, and refuses if the declared `rust-version` has moved
+from the pin; this list does not repeat it, because a second toolchain is a second full build beside the one
+`pin_bites` already makes, and on a workstation that is the difference between finishing and filling the disk.
+The cost is stated rather than hidden: what compiles on the default toolchain and not on the pinned one — an
+`if … && let …` is the shape that has been met — passes every line above and is red only in CI. So the local
+list never decides a merge on its own: `scripts/merge-pr.sh` reads the pull request's CI checks and stops on any
+that did not succeed, the MSRV job among them, and `dod_coherence` holds every line above to a CI step, so the
+local list stays a subset of what CI runs. A report of this list says the MSRV build was left to CI; *Definition
+of Done all green* claims this list, and the MSRV half is claimed by reading the job's conclusion.
 
 The self-governance dogfood gate (`crates/shengmo/tests/self_governance.rs`, which runs the product reaction under `cargo test`) and its projection
 (`self_law_projection_is_fresh`) must stay green — never weaken the law to pass it. So must

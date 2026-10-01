@@ -584,6 +584,10 @@ them.
   `runtime-origin-assertion/a-raw-string-after-an-identifier-character-is-read-as-one-in-every-edition-a-stated-bound`,
   pinned by the ledger row and a mutation record, rather than closed by a shared lexer that would lack the same
   input.
+- **The MSRV build is CI-only.** `AGENTS.md`'s Definition of Done no longer runs the workspace suite on the pinned
+  toolchain locally; `ci.yml`'s `msrv` job does, and `scripts/merge-pr.sh` stops on a pull request whose checks did
+  not succeed. A report of the local list says the MSRV build was left to CI.
+
 
 - **Amendment: 圭表 may depend on `unicode-normalization`.** 圭表's allowlist of direct normal edges gains
   `unicode-normalization`, Unicode's Normalization Form C, so an identifier is compared as rustc compares it rather
