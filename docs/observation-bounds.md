@@ -173,7 +173,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `inline-symbol-path-confinement/a-local-binding-named-like-an-import-is-read-as-the-import-a-stated-bound`
 
-> the system reports `crate::clock::now in crate` for each, with and without `.strict_external()`: Rust resolves `now` to the local binding, and the scanner, which records no parameter or `let` binding, reads the import or the item — an over-reaction declared, not a precision claim; under `.strict_prefix_only()` the same holds of the binding read as a value, `now` with no call
+> the system reports `crate::clock::now in crate` for each, with and without `.strict_external()`: Rust resolves `now` to the local binding, and the scanner, which records no parameter or `let` binding, reads the import or the item — an over-reaction declared, not a precision claim; under `.strict_prefix_only()` the same holds of the binding read as a value, `now` with no call, and of the name a `let` introduces, `let now = 1u8;` beside the module's `fn now`
 
 - **pinned by**: `a_local_binding_named_like_an_import_is_read_as_the_import`
 

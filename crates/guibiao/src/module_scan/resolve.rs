@@ -737,9 +737,7 @@ impl CrateScopes {
                     current = entry.parent;
                 }
                 Head::Unbound | Head::Foreign(_) => break,
-                answer @ (Head::Candidates { .. } | Head::Local)
-                    if self.may_not_hold_here(t, id, head, ns, walk) =>
-                {
+                answer if !self.answer_ends_lookup(&answer, t, id, head, ns, walk) => {
                     unsettled.push(answer);
                     current = match entry.kind {
                         ScopeKind::Block => entry.parent,
@@ -756,6 +754,24 @@ impl CrateScopes {
         } else {
             joined(unsettled.into_iter().chain([prelude]))
         }
+    }
+
+    /// Whether `answer`, what scope `id` gives for `head` in `ns`, ends a lookup there: every answer does except one
+    /// naming what the scope binds or declares — its candidates, or an item of a block — where that may not hold on
+    /// every build ([`CrateScopes::may_not_hold_here`]). The one place an answer's kind is asked, so where the lookup
+    /// walks out of a block, where it reads the scope's own globs, and where a lookup through globs reaches the scope,
+    /// one answer is read one way.
+    fn answer_ends_lookup(
+        &self,
+        answer: &Head,
+        t: usize,
+        id: u32,
+        head: &str,
+        ns: Namespace,
+        walk: &mut Walk,
+    ) -> bool {
+        !(matches!(answer, Head::Candidates { .. } | Head::Local)
+            && self.may_not_hold_here(t, id, head, ns, walk))
     }
 
     /// Whether what scope `id` binds or declares `head` as in `ns` may not hold on every build, so the lookup reads on
@@ -925,9 +941,9 @@ impl CrateScopes {
             ));
         }
         match self.bound_here(t, id, head, ns, from, walk) {
-            Some(answer @ Head::Candidates { .. })
+            Some(answer)
                 if !self.tables[t].scopes[id as usize].globs.is_empty()
-                    && self.may_not_hold_here(t, id, head, ns, walk) =>
+                    && !self.answer_ends_lookup(&answer, t, id, head, ns, walk) =>
             {
                 match self.through_globs(t, id, head, ns, from, walk) {
                     Head::Unbound => answer,
@@ -1053,9 +1069,7 @@ impl CrateScopes {
                 let memo = (t, id, head.to_string(), ns, from.clone(), depth, itself);
                 let held = self.looked.borrow().get(&memo).cloned();
                 match held.or_else(|| self.bound_here(t, id, head, ns, &from, walk)) {
-                    Some(answer @ Head::Candidates { .. })
-                        if self.may_not_hold_here(t, id, head, ns, walk) =>
-                    {
+                    Some(answer) if !self.answer_ends_lookup(&answer, t, id, head, ns, walk) => {
                         match self.glob_edges(&mut graph, t, id, head, &from) {
                             GlobRead::Globs { edges, .. } => GlobRead::Globs {
                                 own: Some(answer),

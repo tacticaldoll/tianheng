@@ -532,17 +532,18 @@ them.
   `use super::*;` beside `#[cfg(test)] use crate::mock::Command;` reports the `std::process::Command::new` the glob
   brings outside tests. Whether a scope's answer ends a lookup is one judgement wherever the lookup meets the scope,
   so a gated name ends none: `use crate::clock::now;` beside a block's `#[cfg(any())] use crate::mock::now;`, or a
-  block's `#[cfg(any())] fn now() {}`, calls `clock`'s `now`, and so does `use crate::bridge::now;` where `bridge` globs a module holding a gated
+  block's `#[cfg(any())] fn now() {}` — beside the block's own `use super::*;` too — calls `clock`'s `now`, and so does `use crate::bridge::now;` where `bridge` globs a module holding a gated
   `pub use crate::mock::now;` beside `pub use crate::clock::*;`. Each went unreported; where the gated item is the
   one compiled the other answer is an over-reaction, declared as
   `inline-symbol-path-confinement/a-cfg-gated-name-beside-a-glob-is-read-with-the-glob-a-stated-bound`. Address or
   baseline what they report.
 
 - **BREAKING** — **圭表 reads a single identifier as a mention under `.strict_prefix_only()`.** A single identifier
-  that names something is a path mentioned, so `let g: fn() = now;` and `&mut Clock` report under a strict
-  confinement of them, where only a call, a rooted path or a path of several segments was read; a name being
-  introduced — an item's, a field's, a parameter's, a binding's, a `for` pattern's or a macro's — and a bare `self`
-  are not. A name read in both namespaces is looked up in each through every scope before the two are joined, so a
+  is a path mentioned, so `let g: fn() = now;`, `&mut Clock` and a constant named in a pattern, `if let DENIED = x`,
+  report under a strict confinement of them, where only a call, a rooted path or a path of several segments was
+  read; an item's name, a field or a parameter being declared, a macro's name and a bare `self` are not. A binding's
+  name is a mention left to the resolver, so one named like an item or an import in scope is read as it, the
+  declared over-reaction below. A name read in both namespaces is looked up in each through every scope before the two are joined, so a
   block's `struct now {}` no longer ends the lookup of a value `now`. A parameter or `let` binding named like an import or an item in scope is read as it, declared as
   `inline-symbol-path-confinement/a-local-binding-named-like-an-import-is-read-as-the-import-a-stated-bound`, which
   under strict now reaches a binding read as a value too. Address or baseline what it reports.

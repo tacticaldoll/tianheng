@@ -303,7 +303,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                 "inline-symbol-path-confinement/a-local-binding-named-like-an-import-is-read-as-the-import-a-stated-bound",
             ),
             "a bare head naming a `fn` or closure parameter, or a `let` binding, that shares its name with an import or \
-             an item in scope",
+             an item in scope, and under strict the name such a binding introduces",
             Extent::Reached(Reached::OverReacts {
                 because: "parameters and `let` bindings are not recorded in the scope table, so the head is resolved \
                           through whatever the enclosing scopes bind under that name"

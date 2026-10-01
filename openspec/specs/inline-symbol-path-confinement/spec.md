@@ -50,9 +50,9 @@ lifetime, `..`, `..=` and `->` are each one token, so the path after a range ope
 receiver: `0..std::process::id()` is a call. A path occurrence SHALL be a token run — `::`? *head* ( `::` *segment* |
 `::` `<…>` )* — and its role SHALL be read from the tokens beside it alone: the name a `fn` item, a tuple struct or a
 tuple variant declares is its definition; a run followed by a parenthesized group is a call; anything else is a
-mention, a single identifier included, except where it introduces a name — after an item's or a binding's keyword,
-`for` or a binding's `mut`, a `mut` no `&`, `&&` or `*` stands before, or before a lone `:`, a `!` or a `@` — or is a
-bare `self`, `Self`, `super` or `crate`. A name read in both namespaces SHALL be looked up in each through the whole
+mention, a single identifier included, except where an item declares it — after an item's keyword — or it stands
+before a lone `:`, a `!` or a `@`, or is a bare `self`, `Self`, `super` or `crate`. A binding's name is not told apart
+from a constant named in a pattern, so it is a mention, and the resolver finds what in scope bears it. A name read in both namespaces SHALL be looked up in each through the whole
 chain of scopes before the two answers are joined, so a scope holding it in one namespace does not end the other's
 lookup. No expression or pattern grammar is read, so where an expression ends decides nothing, and a tuple-struct or
 tuple-variant pattern, written as a call is written, is read as a call — a declared over-reaction (bound:
@@ -879,8 +879,8 @@ that may not even name the module. Narrowing and escalation are mutually exclusi
 - **THEN** the system reacts (strict forbids mentions, not only calls)
 
 #### Scenario: A single identifier read as a value is mentioned under strict-prefix-only
-- **WHEN** `crate::clock` writes `pub fn now() {}` and `let g: fn() = now;` under `.must_not_call_inline("crate::clock::now").strict_prefix_only()` over `crate::clock`, the same beside a block's `struct now {}`, or `let _ = &mut Clock;` beside a `pub struct Clock;` under a prefix `crate::clock::Clock`; and, as controls, the same `now` beside a block's `fn now() {}`, and `pub fn now() {}`, a field `pub now: u8`, a parameter `now: u8` and `let now` and `let mut later` bindings and no use of them
-- **THEN** the first three report `crate::clock::now in crate::clock`, `crate::clock::now in crate::clock` and `crate::clock::Clock in crate::clock`, and the controls report nothing: a type alone does not end a value's lookup, a `&mut` is a reference's and not a binding's, and a single identifier is a path mentioned where it names something, and a name being introduced — an item's, a field's, a parameter's, a binding's, a `for` pattern's or a macro's — is not, nor is a bare `self`; rustc 1.96.0, edition 2021, builds both
+- **WHEN** `crate::clock` writes `pub fn now() {}` and `let g: fn() = now;` under `.must_not_call_inline("crate::clock::now").strict_prefix_only()` over `crate::clock`, the same beside a block's `struct now {}`, `let _ = &mut Clock;` beside a `pub struct Clock;` under a prefix `crate::clock::Clock`, or `if let DENIED = x {}` beside a `pub const DENIED: u8 = 0;` under a prefix `crate::clock::DENIED`; and, as controls, the same `now` beside a block's `fn now() {}`, and `pub fn now() {}`, a field `pub now: u8`, a parameter `now: u8` and bindings `later` and `k` nothing in scope bears
+- **THEN** the first four report `crate::clock::now in crate::clock`, `crate::clock::now in crate::clock`, `crate::clock::Clock in crate::clock` and `crate::clock::DENIED in crate::clock`, and the controls report nothing: a type alone does not end a value's lookup, a pattern names a constant as well as binding a name, and a single identifier is a path mentioned where it names something, and a name being introduced — an item's, a field's, a parameter's, a binding's, a `for` pattern's or a macro's — is not, nor is a bare `self`; rustc 1.96.0, edition 2021, builds both
 - **PINNED-BY** `a_single_identifier_read_as_a_value_is_mentioned_under_strict_prefix_only`
 
 #### Scenario: Combining narrowing and strict is a constitution error
@@ -1010,7 +1010,7 @@ scope.
 
 #### Scenario: A local binding named like an import is read as the import — a stated bound
 - **WHEN** the crate root writes `use crate::clock::now;` beside `pub mod clock { pub fn now() {} }`, and a function calls `now()` where `now` is its own `fn` parameter, a `let` binding of a closure, or a closure's parameter; or the same function stands inside `clock` beside its `pub fn now() {}`; under a prefix `crate::clock`
-- **THEN** the system reports `crate::clock::now in crate` for each, with and without `.strict_external()`: Rust resolves `now` to the local binding, and the scanner, which records no parameter or `let` binding, reads the import or the item — an over-reaction declared, not a precision claim; under `.strict_prefix_only()` the same holds of the binding read as a value, `now` with no call
+- **THEN** the system reports `crate::clock::now in crate` for each, with and without `.strict_external()`: Rust resolves `now` to the local binding, and the scanner, which records no parameter or `let` binding, reads the import or the item — an over-reaction declared, not a precision claim; under `.strict_prefix_only()` the same holds of the binding read as a value, `now` with no call, and of the name a `let` introduces, `let now = 1u8;` beside the module's `fn now`
 - **PINNED-BY** `a_local_binding_named_like_an_import_is_read_as_the_import`
 
 #### Scenario: A path taken as a value is a documented bound under the default

@@ -4074,8 +4074,11 @@ fn a_path_in_a_discriminants_turbofish_is_read() {
 
 /// Under `.strict_prefix_only()` a single identifier read as a value is a path mentioned, so `let g: fn() = now;` in
 /// `crate::clock` reports `crate::clock::now`, where it went unreported because only a call, a rooted path or a path
-/// of several segments was an occurrence. A name being introduced is not a mention: `pub fn now() {}`, a field
-/// `now: u8`, a parameter `now: u8` and a `let now` or `let mut later` binding report nothing. A block's `struct now
+/// of several segments was an occurrence. An item's name, a field and a parameter being declared are not mentions:
+/// `pub fn now() {}`, a field `now: u8` and a parameter `now: u8` report nothing, nor do bindings `later` and `k`
+/// nothing in scope bears. A binding's name is otherwise a mention left to the resolver, so a constant named in a
+/// pattern, `if let DENIED = x`, reports, and a `let now` beside the module's `fn now` reports too — the declared
+/// over-reaction `a-local-binding-named-like-an-import-is-read-as-the-import`. A block's `struct now
 /// {}` holds the name as a type alone, so the value `now` is still the module's function, while a block's `fn now()
 /// {}` shadows it; and `&mut Clock` mentions the unit struct `Clock`, its `mut` a reference's and not a binding's.
 /// rustc 1.96.0, edition 2021, builds every row.
@@ -4090,9 +4093,21 @@ fn a_single_identifier_read_as_a_value_is_mentioned_under_strict_prefix_only() {
         ),
         (
             "singlenameintroduced",
-            "pub fn now() {}\npub struct S { pub now: u8 }\npub fn f(now: u8) {}\npub fn h() { let now = 1u8; let mut later = 2u8; later += 1; }\n",
+            "pub fn now() {}\npub struct S { pub now: u8 }\npub fn f(now: u8) {}\npub fn h() { let mut later = 2u8; later += 1; for k in 0..later { let _ = k; } }\n",
             "crate::clock::now",
             &[][..],
+        ),
+        (
+            "bindingnamedlikeitem",
+            "pub fn now() {}\npub fn h() { let now = 1u8; let _ = now; }\n",
+            "crate::clock::now",
+            &["crate::clock::now in crate::clock"][..],
+        ),
+        (
+            "constantpattern",
+            "pub const DENIED: u8 = 0;\npub fn run(x: u8) {\n    if let DENIED = x {}\n}\n",
+            "crate::clock::DENIED",
+            &["crate::clock::DENIED in crate::clock"][..],
         ),
         (
             "typeonlyshadow",
@@ -7963,7 +7978,8 @@ fn a_lattice_of_globs_is_read_once_per_scope() {
 
 /// Rust resolves a head naming a `fn` parameter, a `let` binding or a closure parameter to that binding; the scanner
 /// records none of them, so `now()` there is read through the module's `use crate::clock::now;`, or through the item
-/// `now` the module declares — the declared over-reaction. Each row is compiled by rustc 1.96.0, edition 2021.
+/// `now` the module declares — the declared over-reaction; under `.strict_prefix_only()` so is the name a `let`
+/// introduces, `let now = 1u8;` beside `fn now`. Each row is compiled by rustc 1.96.0, edition 2021.
 #[test]
 fn a_local_binding_named_like_an_import_is_read_as_the_import() {
     let mut mismatches = Vec::new();
@@ -8001,6 +8017,30 @@ fn a_local_binding_named_like_an_import_is_read_as_the_import() {
         );
     }
     assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+    let probe = lib_probe(
+        "localletintroduced",
+        "pub mod clock {\n    pub fn now() {}\n    pub fn h() {\n        let now = 1u8;\n    }\n}\n",
+    );
+    let law = Constitution::new("local-binding").boundary(
+        ModuleBoundary::in_crate("localletintroduced")
+            .module("crate")
+            .must_not_call_inline("crate::clock")
+            .strict_prefix_only()
+            .depth(xuanji::ScanDepth::Subtree)
+            .because("no clock in the crate"),
+    );
+    match check(&law, probe.manifest()) {
+        Outcome::Violations(report) => assert_eq!(
+            report
+                .violations
+                .iter()
+                .map(|v| v.finding.as_str())
+                .collect::<Vec<_>>(),
+            ["crate::clock::now in crate"],
+            "under strict the name a `let` introduces is read as the item it shares its name with"
+        ),
+        other => panic!("expected the introduced name to be read as the item, got {other:?}"),
+    }
 }
 
 /// A block's import of what is not read may hold its name in the other namespace alone, so the name is also read
@@ -9026,7 +9066,8 @@ fn a_name_bound_only_where_a_cfg_gates_it_is_read_through_the_scopes_globs() {
 
 /// Whether a scope's answer ends a lookup is one judgement wherever the lookup meets the scope: a name a scope holds
 /// only by a `cfg`-gated item does not end it, so a block holding `#[cfg(any())] use crate::mock::now;`, or a gated
-/// `fn now() {}` of its own, leaves `now()` to the module's `use crate::clock::now;`, and a module `relay` holding a gated `pub use crate::mock::now;` beside
+/// `fn now() {}` of its own, leaves `now()` to the module's `use crate::clock::now;` — or to a `use super::*;` beside
+/// that gated item in the same block, which brings the parent's private import — and a module `relay` holding a gated `pub use crate::mock::now;` beside
 /// `pub use crate::clock::*;` brings `clock`'s `now` through `bridge`'s glob of it to `use crate::bridge::now;`. Each
 /// went unreported, the block case read where the lookup walks out of a block and the relay case where a lookup
 /// through globs reaches a scope. With the gated item written ungated, it shadows the outer name and nothing reports.
@@ -9063,6 +9104,18 @@ fn a_scope_holding_a_name_only_where_a_cfg_gates_it_ends_no_lookup() {
             "ungatedblockitem",
             items.to_string(),
             "use crate::clock::now;\npub fn run() {\n    fn now() {}\n    now();\n}\n",
+            &[][..],
+        ),
+        (
+            "gatedblockitemglob",
+            items.to_string(),
+            "use crate::clock::now;\npub mod inner {\n    pub fn run() {\n        use super::*;\n        #[cfg(any())]\n        fn now() {}\n        now();\n    }\n}\n",
+            &["crate::clock::now in crate::core"][..],
+        ),
+        (
+            "ungatedblockitemglob",
+            items.to_string(),
+            "use crate::clock::now;\npub mod inner {\n    pub fn run() {\n        use super::*;\n        fn now() {}\n        now();\n    }\n}\n",
             &[][..],
         ),
         (
