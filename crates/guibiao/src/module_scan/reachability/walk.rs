@@ -1,6 +1,7 @@
 //! Reachability graph traversal and physical-source resolution.
 
 use super::super::item_head::{BlockModule, block_modules};
+use super::super::source_texts::SourceTexts;
 use super::super::token_tree::{Edition, TokenTree};
 use super::declarations::{DeclaredModule, block_path_modules, declared_modules_in};
 use super::paths::module_path_of;
@@ -8,6 +9,7 @@ use std::cell::OnceCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 /// A physical file or inline body whose top-level declarations feed the graph walk.
 ///
@@ -181,21 +183,23 @@ struct ChildSources {
 /// declarations, candidates that physically exist prove a configuration compiles via that remap, granting tolerance to
 /// absence of the conventional file. Unreadable targets return an error immediately via [`xingbiao::is_regular_file`].
 ///
-/// A file of the crate is read and lexed once for the whole walk, into `texts` and `trees`: a file holding many inline
-/// modules is the source of each of them, and each reads its own range of the one token tree. A file the crate's file
-/// list does not hold is read and lexed where it is met.
+/// Every text comes from `sources`, the evaluation's one reading of each path. A file of the crate is lexed once for
+/// the whole walk, its text held in its slot of `texts` and its tree in `trees`: a file holding many inline modules is
+/// the source of each of them, and each reads its own range of the one token tree. A file the crate's file list does
+/// not hold is lexed where it is met, from the same reading.
 fn collect_children<'t>(
     module: &str,
     scan_sources: &[ScanSource],
     edition: Edition,
-    texts: &'t HashMap<&PathBuf, OnceCell<String>>,
+    sources: &SourceTexts,
+    texts: &'t HashMap<&PathBuf, OnceCell<Rc<str>>>,
     trees: &mut HashMap<PathBuf, (TokenTree<'t>, Vec<BlockModule>)>,
 ) -> Result<BTreeMap<String, ChildSources>, String> {
     let mut children: BTreeMap<String, ChildSources> = Default::default();
     for source in scan_sources {
         let loaded = source.load();
         let read = || {
-            std::fs::read_to_string(&loaded.file).map_err(|err| {
+            sources.text(&loaded.file).map_err(|err| {
                 format!("cannot read source file '{}': {err}", loaded.file.display())
             })
         };
@@ -743,6 +747,7 @@ fn root_scan_sources(root_files: &[&PathBuf], src_dir: &Path) -> Result<Vec<Scan
 /// Resolves the set of module paths reachable from the crate root via `mod` declarations.
 /// Returns `(reachable, inline_only, remapped, remap_shadowed)`.
 /// Unreachable orphan files are excluded; unreadable reachable files return a scan error.
+/// Every source is read through `sources`, so a path the evaluation has already read is not read again.
 ///
 /// File lookup is indexed by literal path to check walk presence without symlink canonicalization
 /// aliasing. Every declared source for a child is additive and cfg-blind, carrying its own
@@ -752,6 +757,7 @@ fn root_scan_sources(root_files: &[&PathBuf], src_dir: &Path) -> Result<Vec<Scan
 /// actually resolved.
 #[allow(clippy::type_complexity)]
 pub(crate) fn reachable_modules(
+    sources: &SourceTexts,
     src_dir: &Path,
     files: &[PathBuf],
     root_relative: Option<&Path>,
@@ -777,7 +783,7 @@ pub(crate) fn reachable_modules(
             .by_module
             .insert("crate".to_string(), root_scan_sources(root_files, src_dir)?);
     }
-    let texts: HashMap<&PathBuf, OnceCell<String>> =
+    let texts: HashMap<&PathBuf, OnceCell<Rc<str>>> =
         files.iter().map(|file| (file, OnceCell::new())).collect();
     let mut trees = HashMap::new();
     let mut queue = vec!["crate".to_string()];
@@ -785,7 +791,8 @@ pub(crate) fn reachable_modules(
         let Some(scan_sources) = graph.by_module.get(&module).cloned() else {
             continue;
         };
-        let children = collect_children(&module, &scan_sources, edition, &texts, &mut trees)?;
+        let children =
+            collect_children(&module, &scan_sources, edition, sources, &texts, &mut trees)?;
         for (child, child_sources) in children {
             let ChildSources {
                 seen_plain_file,

@@ -587,7 +587,22 @@ them.
   `cfg_attr` path is descended only where its directory exists, as a candidate is, so
   `#[cfg_attr(unix, path = "b")] #[path = "a"] mod m { mod c; }` with only `b/c.rs` is judged where it exited 2.
 
+- **圭表 reads each source once per `check` and scans each compilation unit root once.** Within one evaluation,
+  every source path is read at most once, on demand, by the path it was opened at — a file two roots compile, or one
+  two `#[path]` attributes load as two modules, included — and a file no root reaches is never read. Each root's file
+  list, reachability and unit scan are built once and shared by every module boundary judged over it; each file's
+  `use` declarations are classified once, on demand, for every import rule that reads them; and an inbound
+  boundary's value-namespace reading of its governed module comes from the tables that scan built. A constitution of
+  many module boundaries over one crate no longer re-reads it per boundary. Exit codes, violation identities and
+  baselines are unchanged: a constitution judged through the shared scans and through a scan per boundary yields the
+  same outcome, in either order its boundaries are declared in.
+
 ### Self-governance
+
+- **Amendment: 圭表's `std::fs` read and open calls are confined to one module.** A self-law boundary confines guibiao's
+  `std::fs` calls ending in `read_to_string`, `read` or `open` to `crate::module_scan::source_texts`, so such a
+  call anywhere else in guibiao is a violation of the self-governance gate. `self_law_amendment.rs` names the
+  change.
 
 - **A released `CHANGELOG.md` section is held to its tag.** Release coherence holds every `vX.Y.Z` tag's section
   to exactly one section of that version at `HEAD`, line for line with each line's own ending from its heading to the next, so an

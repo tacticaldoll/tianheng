@@ -528,25 +528,20 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH
 
-- **圭表 reads a compilation unit once per boundary rather than once per root.** *Class:* WATCH. *Observed
-  pressure:* none from an adopter. *Observation source:* `check_one_root` in `crates/guibiao/src/module_check.rs`
-  calls `UnitScan::read` for each boundary it judges, so a constitution of *n* boundaries over one root lexes,
-  tables and resolves that root *n* times, each with empty memos. Measured 2026-09-30 in a debug build, one inline
-  boundary over libc 0.2.189 took 5.0 s and over rustix 1.1.4 1.0 s, so the cost is that
-  figure times the boundary count. *Current reaction or bound:* none; the scale directions in
-  `per_target_corpus.rs` bound one boundary's reading. *Risk:* no false negative; a slow check on a large crate
-  under many boundaries. *Promotion trigger:* an adopter or CI run where the check's time is dominated by the
-  repeated read — measured by timing one boundary against the whole constitution — which makes building the
-  scan once per root and sharing it across boundaries a READY-PATCH. *Version class:* patch. *Authority:*
-  `inline-symbol-path-confinement`'s requirement that a large source is read in time its size bounds.
-
-  **The shape of that patch, read 2026-09-30 from `check_one_root`.** Everything from the source directory
-  through `UnitScan::read` depends on the package and the root alone, and a boundary adds only its governed set and
-  its messages, so the patch is one scan per root — a package's source texts read once, each root's reachability
-  and unit scan built once — shared by every boundary over it. Sharing it lets the resolver's memos outlive one
-  boundary, so the patch carries a direction judging a constitution through the shared scan and through a scan per
-  boundary and asserting the two answers equal. This repository's own self-governance run is an instance of the
-  trigger's CI clause, not yet timed.
+- **圭表 lexes a source twice for each root that compiles it: once in the walk and once in the unit scan.**
+  *Class:* WATCH. *Observed pressure:* none from an adopter; the steward named sharing the token tree as the step
+  after the per-root scan, 2026-10-01. *Observation source:* `collect_children` in
+  `crates/guibiao/src/module_scan/reachability/walk.rs` lexes each file it reads into a `TokenTree` the walk keeps,
+  and `FileScan::read` in `crates/guibiao/src/module_scan/symbol_scan.rs` lexes the same text again for the root's
+  unit scan; both take the text from the evaluation's one `SourceTexts` reading. *Current reaction or bound:* none;
+  the directions in `crates/guibiao/src/tests/evaluation_scans.rs` count reads, root scans, classifications and
+  scope tables, not lexes. *Risk:* no false negative; lexing time on a large crate, paid twice per root. *Promotion
+  trigger:* a steward decision, or a check whose time is dominated by lexing, measured by timing the walk against
+  the unit scan, which makes one token tree per source and edition, shared by the walk and the unit scan, a
+  READY-PATCH; the walk's trees borrow from its own text map, so the share moves that borrow. *Version class:*
+  patch. *Authority:* `module-boundary`'s requirement *One evaluation reads each source once and scans each
+  compilation unit once*, and `inline-symbol-path-confinement`'s requirement that a large source is read in time
+  its size bounds.
 
 - **The glob hazard reads a chain of globs once per glob that starts it.** *Class:* WATCH. *Observed pressure:*
   none from an adopter. *Observation source:* `glob_reaches_prefix` in `crates/guibiao/src/module_scan/glob_hazard.rs`
@@ -645,7 +640,11 @@ consumer for an undemonstrated deduplication.
   module a release branch rewrote against the review gates, which is how these were found. *Current reaction or bound:*
   none. *Risk:* the same classes reappearing in a release window that rewrites a module whole. *Promotion trigger:* a steward decision to
   adopt one, the pre-cut step first, since it asks nothing of the code. *Version class:* none; each is repository
-  governance. *Authority:* AGENTS.md's *A repair loop is a diagnosis, not a schedule*.
+  governance. *Authority:* AGENTS.md's *A repair loop is a diagnosis, not a schedule*. The read confinement is
+  built, 2026-10-01: `collect_children` and `UnitScan::read` take a source's text from `module_scan::source_texts`,
+  `governed_module_value_items` reads no text, its names coming from the unit scan's tables, and the self-law
+  boundary `guibiao::crate::module_scan::source_texts` confines guibiao's `std::fs` read and open calls to that
+  module.
 
 - **渾儀 and 漏刻 may read an inline module's children from its direct `#[path]` base alone.** *Class:* WATCH.
   *Observed pressure:* none from an adopter. *Observation source:* rustc compiles the first path attribute
@@ -3917,6 +3916,26 @@ Two properties from those windows do not expire with a version, so they stay:
 A closed item leaves the live class it was filed under; it does not stay there struck through. Its
 reproduction record moves here, where closed reproduction records belong, so a live class heading
 cannot read as a queue holding work that is already done.
+
+- ~~**圭表 reads a compilation unit once per boundary rather than once per root.**~~ *Class:* WATCH — closed on a
+  steward decision on 2026-10-01; the promotion trigger did not fire, and the check's time was not measured against
+  it. *Observed pressure:* none from an adopter. *Observation source:* `check_one_root` in
+  `crates/guibiao/src/module_check.rs` called `UnitScan::read` for each boundary it judged, so a constitution of
+  *n* boundaries over one root lexed, tabled and resolved that root *n* times, each with empty memos; measured
+  2026-09-30 in a debug build, one inline boundary over libc 0.2.189 took 5.0 s and over rustix 1.1.4 1.0 s.
+  *Closed by:*
+  `crates/guibiao/src/module_scan/evaluation.rs`'s `EvaluationScans`, which builds each root's `RootScan` — its
+  file list, reachability and unit scan — once per evaluation, on demand, shared by every module boundary judged
+  over that root; one `SourceTexts` per evaluation, which reads each source path once, on demand, by the path it
+  was opened at; each file's `use` classification kept on demand in its `FileScan`, with both import projections
+  read from it; and the governed value inventory read from the unit scan's tables. The `module-boundary`
+  requirement *One evaluation reads each source once and scans each compilation unit once* states it, and the
+  directions in `crates/guibiao/src/tests/evaluation_scans.rs` hold it by counting the work where it is done —
+  root scans, source reads, classifications and scope tables — beside
+  `shared_and_independent_scans_yield_one_outcome`, which judges a corpus through a shared scan and a scan per
+  boundary in both orders. *Authority:* steward decision on 2026-10-01. *Residue:* the walk and the unit scan each
+  lex a source, a WATCH of its own; and *The glob hazard reads a chain of globs once per glob that starts it* is
+  not touched by this change and stays WATCH.
 
 - ~~**The bounds-method reader anchors on a whole-line occurrence that is not the definition.**~~ *Class:*
   READY-PATCH — closed by taking the body only from an `impl` whose trait path ends in `Observer`, the residue a

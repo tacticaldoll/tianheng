@@ -190,6 +190,15 @@ pub fn constitution() -> Constitution {
         )
         .boundary(
             ModuleBoundary::in_crate("guibiao")
+                .module("crate::module_scan::source_texts")
+                .confine_inline_call("std::fs")
+                .ending_with(["read_to_string", "read", "open"])
+                .because(
+                    "guibiao calls std::fs to read or open a file in module_scan::source_texts alone",
+                ),
+        )
+        .boundary(
+            ModuleBoundary::in_crate("guibiao")
                 .module("crate::module_scan::token_tree")
                 .restrict_imports_to(Vec::<String>::new())
                 .because(

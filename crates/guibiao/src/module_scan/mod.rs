@@ -9,10 +9,13 @@
 //! raw-identifier canonicalization, `::`-containment, `self`/`super` folding); the item-header grammar
 //! ([`item_head`]); the `use` trees ([`use_tree`]) and path [`occurrence`]s read over it; the [`scope_tree`]; the one
 //! [`resolve`]r; and the [`glob_hazard`].
-//! [`fs_walk`], [`reachability`] and [`symbol_scan`] read the file system; every other module is pure string,
-//! token, and path processing. It depends on no model type but the finding the inline scan
-//! reports.
+//! [`fs_walk`] lists the file system, [`reachability`] probes it for the files a declaration may name, and
+//! [`source_texts`] reads it, each source path once per evaluation, for every reader of a file's text; every other
+//! module is pure string, token, and path processing. It depends on no model type but the finding the inline scan
+//! reports. Above those readers sits [`evaluation`]: one evaluation's scan of each compiled root,
+//! built once and shared by every module boundary judged over that root.
 
+mod evaluation;
 mod fs_walk;
 mod glob_hazard;
 mod item_head;
@@ -21,18 +24,22 @@ mod path_vocab;
 mod reachability;
 mod resolve;
 mod scope_tree;
+mod source_texts;
 mod symbol_scan;
 mod token_tree;
 mod use_scan;
 mod use_tree;
 
+pub(crate) use evaluation::{EvaluationScans, RootScan};
 pub(crate) use fs_walk::rust_files;
 pub(crate) use path_vocab::{
     PrefixRoot, SymbolPrefix, canonical_module_path, canonical_module_spelling,
     canonical_symbol_path_spelling, package_name_to_import_ident, path_within, sysroot_crate,
 };
 pub(crate) use reachability::{governed_files, names_crate_by_path_alone, reachable_modules};
-pub(crate) use symbol_scan::{InlineFinding, UnitScan, value_namespace_item_names};
+#[cfg(test)]
+pub(crate) use scope_tree::take_table_builds;
+pub(crate) use symbol_scan::{InlineFinding, UnitScan};
 pub(crate) use token_tree::Edition;
 pub(crate) use use_scan::ImportedPath;
 

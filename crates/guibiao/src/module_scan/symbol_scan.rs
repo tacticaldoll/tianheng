@@ -6,10 +6,11 @@
 //! What the scan does not observe, or over-reacts to, is declared by [`crate::observation_bounds`], never a silent
 //! pass.
 //!
-//! This module is I/O and assembly: every judgement of the text is made by the layers below it, and every refusal
-//! it returns names the file it was met in.
+//! This module is assembly over the texts the evaluation has read: every judgement of the text is made by the layers
+//! below it, and every refusal it returns names the file it was met in.
 
-use std::collections::{BTreeSet, HashSet};
+use std::cell::OnceCell;
+use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use crate::finding::ModuleFact;
@@ -22,9 +23,11 @@ use super::path_vocab::{
 };
 use super::resolve::{CrateScopes, Named, Namespace, with_rest};
 use super::scope_tree::{DeclKind, ScopeKind, ScopeTable};
+use super::source_texts::SourceTexts;
 use super::token_tree::{Edition, TokenTree};
 use super::use_scan::{
-    FileUse, ImportedPath, classify_uses, external_imports, file_uses, internal_imports,
+    ClassifiedLeaf, FileUse, ImportedPath, classify_uses, external_imports, file_uses,
+    internal_imports,
 };
 use super::use_tree::{UseLeaf, macro_use_statements, use_statements};
 
@@ -40,6 +43,11 @@ struct FileScan {
     module: String,
     occurrences: Vec<Occurrence>,
     uses: Vec<FileUse>,
+    /// The boundary-independent classification, including a bare refusal, read only when an import rule asks.
+    classified: OnceCell<Result<Vec<ClassifiedLeaf>, String>>,
+    /// The two projections of the same classification, each built only when its rule family asks.
+    internal: OnceCell<Vec<(String, ImportedPath)>>,
+    external: OnceCell<Vec<(String, String)>>,
     /// The `use` statements a macro's group holds whose trees read, which a strict confinement judges as it judges
     /// the rest and no import rule reads.
     macro_uses: Vec<FileUse>,
@@ -73,6 +81,9 @@ impl FileScan {
             module: module.to_string(),
             occurrences: occurrences(&tree, &spans),
             uses: file_uses(statements, &table),
+            classified: OnceCell::new(),
+            internal: OnceCell::new(),
+            external: OnceCell::new(),
             macro_uses: file_uses(macro_statements, &table),
         };
         (scan, table)
@@ -83,30 +94,43 @@ impl FileScan {
 /// over all of them: what the prefix existence check and the inline findings both read.
 pub(crate) struct UnitScan {
     files: Vec<FileScan>,
+    index: HashMap<(PathBuf, String), usize>,
+    /// Classification work, counted at the classifier call by the file and module it reads.
+    #[cfg(test)]
+    classifications: std::cell::RefCell<HashMap<(PathBuf, String), usize>>,
     scopes: CrateScopes,
 }
 
 impl UnitScan {
-    /// Read every reachable `(file, module)` pair of the unit, in a package of the given edition. An unreadable file
-    /// is refused here; a file whose text the scanner cannot judge is refused when a judgement reads it.
+    /// Read every reachable `(file, module)` pair of the unit, in a package of the given edition, each file's text
+    /// taken from `sources`, so a file the evaluation has already read is not read again. An unreadable file is refused
+    /// here; a file whose text the scanner cannot judge is refused when a judgement reads it.
     pub(crate) fn read(
+        sources: &SourceTexts,
         all_files: &[(PathBuf, String)],
         edition: Edition,
         proc_macro: bool,
     ) -> Result<Self, String> {
         let mut files = Vec::new();
+        let mut index = HashMap::new();
         let mut tables = Vec::new();
         for (file, module) in all_files {
-            let raw = std::fs::read_to_string(file).map_err(|err| {
-                crate::errors::unreadable_governed_file_error(file, &err.to_string())
-            })?;
+            let raw = sources
+                .text(file)
+                .map_err(|err| crate::errors::unreadable_governed_file_error(file, &err))?;
             let (scan, table) = FileScan::read(&raw, file, module, edition, tables.len());
+            index
+                .entry((file.clone(), module.clone()))
+                .or_insert(files.len());
             files.push(scan);
             tables.push(table);
         }
         let scopes = CrateScopes::new(tables, edition);
         Ok(UnitScan {
             files,
+            index,
+            #[cfg(test)]
+            classifications: std::cell::RefCell::new(HashMap::new()),
             scopes: if proc_macro {
                 scopes.in_a_proc_macro_crate()
             } else {
@@ -121,11 +145,14 @@ impl UnitScan {
         &self,
         file: &Path,
         module: &str,
-    ) -> Result<Vec<(String, ImportedPath)>, String> {
+    ) -> Result<&[(String, ImportedPath)], String> {
         let t = self.file_index(file, module)?;
-        let uses = classify_uses(&self.scopes, t, &self.files[t].uses)
-            .map_err(|refusal| crate::errors::scan_refusal_in_file(file, &refusal))?;
-        Ok(internal_imports(uses))
+        let uses = self
+            .classified(t)
+            .map_err(|refusal| crate::errors::scan_refusal_in_file(file, refusal))?;
+        Ok(self.files[t]
+            .internal
+            .get_or_init(|| internal_imports(uses)))
     }
 
     /// Every external crate the file read as `module` imports, paired with its importer: what
@@ -135,11 +162,43 @@ impl UnitScan {
         &self,
         file: &Path,
         module: &str,
-    ) -> Result<Vec<(String, String)>, String> {
+    ) -> Result<&[(String, String)], String> {
         let t = self.file_index(file, module)?;
-        let uses = classify_uses(&self.scopes, t, &self.files[t].uses)
-            .map_err(|refusal| crate::errors::scan_refusal_in_file(file, &refusal))?;
-        Ok(external_imports(uses))
+        let uses = self
+            .classified(t)
+            .map_err(|refusal| crate::errors::scan_refusal_in_file(file, refusal))?;
+        Ok(self.files[t]
+            .external
+            .get_or_init(|| external_imports(uses)))
+    }
+
+    /// Classify a file on demand, keeping the raw result so each reader wraps a refusal at its own use site.
+    fn classified(&self, t: usize) -> Result<&[ClassifiedLeaf], &String> {
+        self.files[t]
+            .classified
+            .get_or_init(|| self.classify(t))
+            .as_ref()
+            .map(Vec::as_slice)
+    }
+
+    /// Perform the classification itself: this is where the work is counted, never at a cache lookup.
+    fn classify(&self, t: usize) -> Result<Vec<ClassifiedLeaf>, String> {
+        let scan = &self.files[t];
+        #[cfg(test)]
+        {
+            *self
+                .classifications
+                .borrow_mut()
+                .entry((scan.file.clone(), scan.module.clone()))
+                .or_default() += 1;
+        }
+        classify_uses(&self.scopes, t, &scan.uses)
+    }
+
+    /// Classification work per file and module, including a classification that returned a refusal.
+    #[cfg(test)]
+    pub(crate) fn classifications(&self) -> HashMap<(PathBuf, String), usize> {
+        self.classifications.borrow().clone()
     }
 
     /// Every file of the unit read into a table it can judge, or a refusal naming the first file that is not: resolving a
@@ -158,9 +217,9 @@ impl UnitScan {
 
     /// The table of the file read as `module`, or a refusal naming a pair the unit did not read.
     fn file_index(&self, file: &Path, module: &str) -> Result<usize, String> {
-        self.files
-            .iter()
-            .position(|scan| scan.file == file && scan.module == module)
+        self.index
+            .get(&(file.to_path_buf(), module.to_string()))
+            .copied()
             .ok_or_else(|| {
                 crate::errors::scan_refusal_in_file(
                     file,
@@ -169,6 +228,42 @@ impl UnitScan {
                     ),
                 )
             })
+    }
+
+    /// The **value-namespace** names the file read as `module` declares at its own level — `fn`, `const`, `static` —
+    /// read from the table the unit built for that file and module, or a refusal naming a pair the unit did not read.
+    ///
+    /// Rust resolves a `mod` in the TYPE namespace, so the only names that can legally collide with `mod foo` are
+    /// these — `struct foo` beside `mod foo` would be a duplicate type-namespace definition and does not compile. One
+    /// `use m::foo;` then binds **both**, which is why an inbound module boundary anchored at `m` must consult this:
+    /// the module reading alone resolves the import to the descendant `m::foo` and misses that it also reaches `m`
+    /// itself (see `module_check::resolve_import_module`).
+    ///
+    /// Read from the same declaration inventory as every other reader of items, so names are keyed by their true
+    /// (inline-`mod`-qualified) module, an associated or block-local `fn` of the same name does not count, and an item
+    /// inside an `extern` block opened at that level is the enclosing module's: `unsafe extern "C" { pub fn foo(); }`
+    /// declares `foo` there, and it coexists with `mod foo` for exactly the namespace reason this function exists to
+    /// observe. An item declared inside a macro's group is not observed, a stated bound.
+    pub(crate) fn value_items(&self, file: &Path, module: &str) -> Result<Vec<String>, String> {
+        let t = self.file_index(file, module)?;
+        let mut out = Vec::new();
+        for scope in &self.scopes.table(t).scopes {
+            if scope.kind != ScopeKind::Module {
+                continue;
+            }
+            for (name, declarations) in &scope.declarations {
+                let value_item = declarations.iter().any(|declaration| {
+                    matches!(
+                        declaration.kind,
+                        DeclKind::Item(ItemKeyword::Fn | ItemKeyword::Const | ItemKeyword::Static)
+                    )
+                });
+                if value_item {
+                    out.push(format!("{}::{name}", scope.module));
+                }
+            }
+        }
+        Ok(out)
     }
 
     /// Every item the unit's modules declare at their own level, keyed `{true_module}::{name}` — the set an
@@ -368,47 +463,6 @@ impl Judgement<'_> {
             });
         }
     }
-}
-
-/// The **value-namespace** names `module` declares at its own level, read from one file's `source`: `fn`, `const`,
-/// `static`.
-///
-/// Rust resolves a `mod` in the TYPE namespace, so the only names that can legally collide with `mod foo` are these —
-/// `struct foo` beside `mod foo` would be a duplicate type-namespace definition and does not compile. One
-/// `use m::foo;` then binds **both**, which is why an inbound module boundary anchored at `m` must consult this: the
-/// module reading alone resolves the import to the descendant `m::foo` and misses that it also reaches `m` itself
-/// (see `module_check::resolve_import_module`).
-///
-/// Read from the same declaration inventory as every other reader of items, so names are keyed by their true
-/// (inline-`mod`-qualified) module, an associated or block-local `fn` of the same name does not count, and an item
-/// inside an `extern` block opened at that level is the enclosing module's: `unsafe extern "C" { pub fn foo(); }`
-/// declares `foo` there, and it coexists with `mod foo` for exactly the namespace reason this function exists to
-/// observe. An item declared inside a macro's group is not observed, a stated bound.
-pub(crate) fn value_namespace_item_names(
-    module: &str,
-    source: &str,
-    edition: Edition,
-) -> HashSet<String> {
-    let tree = TokenTree::lex(source, edition);
-    let table = ScopeTable::build(&tree, module, 0);
-    let mut out = HashSet::new();
-    for scope in &table.scopes {
-        if scope.kind != ScopeKind::Module {
-            continue;
-        }
-        for (name, declarations) in &scope.declarations {
-            let value_item = declarations.iter().any(|declaration| {
-                matches!(
-                    declaration.kind,
-                    DeclKind::Item(ItemKeyword::Fn | ItemKeyword::Const | ItemKeyword::Static)
-                )
-            });
-            if value_item {
-                out.insert(format!("{}::{name}", scope.module));
-            }
-        }
-    }
-    out
 }
 
 /// Resolve a written path — an occurrence's `::`-joined segments, or a glob's own path — standing in
