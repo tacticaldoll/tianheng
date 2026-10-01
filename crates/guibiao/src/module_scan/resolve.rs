@@ -40,7 +40,7 @@ const MAX_RESOLUTION_CHAIN: usize = 64;
 
 /// The refusal of a chain longer than [`MAX_RESOLUTION_CHAIN`] links, quoting the binding it was measured
 /// from and the module that binding is written in: the one wording every walk that meets the cap uses.
-pub(super) fn chain_refusal(quote: &str, module: &str) -> String {
+fn chain_refusal(quote: &str, module: &str) -> String {
     format!(
         "cannot judge a chain of more than {MAX_RESOLUTION_CHAIN} imports, globs, re-exports and `type` \
          aliases from `{quote};` in {}",
@@ -1252,7 +1252,11 @@ impl CrateScopes {
                 break;
             }
         }
-        let read = self.reading_globs.borrow_mut().take().unwrap_or_default();
+        let read = self
+            .reading_globs
+            .borrow_mut()
+            .take()
+            .expect("the glob readings are set before the passes");
         let all: GlobTargets = if settled {
             read
         } else {

@@ -104,7 +104,7 @@ fn file_alone(
 /// so a `use` inside an inline `mod inner { … }` is attributed to `{current_module}::inner`. Sorted and deduped by
 /// `(importer, import)`.
 #[cfg(test)]
-pub(crate) fn imports_with_importers(
+pub(super) fn imports_with_importers(
     source: &str,
     current_module: &str,
     edition: Edition,
@@ -136,7 +136,7 @@ pub(super) fn imported_module_paths(
 /// Each importer module of one file read alone paired with the **external** crate it imports — the mirror of
 /// [`imports_with_importers`]. Sorted and deduped by `(importer, external crate)`.
 #[cfg(test)]
-pub(crate) fn external_imports_with_importers(
+fn external_imports_with_importers(
     source: &str,
     current_module: &str,
     edition: Edition,
@@ -164,7 +164,7 @@ pub(super) enum UseTarget {
 /// internal as the head names it, and a re-export the rest runs through is not followed, since an import of
 /// `crate::support::X` imports `crate::support` whatever `X` re-exports. A head nothing binds is an external crate,
 /// as is a `::`-rooted one in edition 2018 and later.
-pub(super) fn classify(
+fn classify(
     scopes: &CrateScopes,
     t: usize,
     scope: u32,

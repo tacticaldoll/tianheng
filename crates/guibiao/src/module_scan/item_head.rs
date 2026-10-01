@@ -507,7 +507,7 @@ fn visibility_at(tree: &TokenTree, pub_at: usize) -> (Visibility, usize) {
 }
 
 /// The item header starting at token `start`, if one does: qualifiers, then an item keyword, at an item start.
-pub(super) fn item_from(tree: &TokenTree, start: usize) -> Option<ItemHead> {
+fn item_from(tree: &TokenTree, start: usize) -> Option<ItemHead> {
     if start >= tree.len() || !is_item_start(tree, start) {
         return None;
     }

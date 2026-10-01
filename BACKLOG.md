@@ -1274,26 +1274,6 @@ consumer for an undemonstrated deduplication.
   documenting guibiao's private items takes it. The same class across the workspace is the entry *A private
   item's doc comment can be stolen by an item inserted above it*, whose public half `deny(missing_docs)` holds.
 
-- **圭表 holds fallbacks and guards for states its own construction excludes.** *Class:* READY-PATCH — read, and
-  each removal touches no published surface. *Observed pressure:* a static review read each 2026-09-30.
-  *Observation source:* `resolve::glob_targets` defaults a `take()` of what it set before the loop; and
-  `use_tree` defaults `path.last()` just after pushing to it, tests a name read from a real token for emptiness, and
-  defaults `prefix.last()` past a guard on an empty prefix. *Current reaction or bound:* `unreachable_branch` holds
-  the decidable `split` and `rsplit` case; widening it refuses live sites, as AGENTS.md records. `item_head`'s
-  `angles` partner guard and `resolve::glob_edges`'s block arm, read with these, are removed. *Risk:* none to an
-  adopter; a later reader, human or model, told a case happens that does not. *Promotion trigger:* the next change
-  editing one of these functions, which removes its own in that change. *Version class:* patch. *Authority:*
-  AGENTS.md's *Fail loud only on observable misconfiguration*.
-
-- **圭表's scanner declares items wider than their callers need.** *Class:* READY-PATCH — read, and narrowing a
-  `pub(super)` item inside one crate touches no published surface. *Observed pressure:* a static review read each
-  2026-09-30. *Observation source:* `resolve::chain_refusal` is called only in `resolve.rs`; `use_scan::classify` only
-  in `use_scan.rs`; `use_scan`'s `external_imports_with_importers` only by its own tests; `imports_with_importers` is
-  `pub(crate)` where `module_scan` alone calls it; and `item_head::item_from` only in `item_head.rs`. *Current
-  reaction or bound:* none; `unreachable_pub` reaches only `pub`. *Risk:* none to an adopter; a later reader takes a
-  helper for an interface. *Promotion trigger:* the next change editing one of them, which narrows it in that
-  change. *Version class:* patch. *Authority:* the drift law's *no target or name without a reaction*.
-
 - **Item docs in 圭表's scanner say what the code no longer does.** *Class:* READY-PATCH — read, prose only.
   *Observed pressure:* a static review read each 2026-09-30. *Observation source:* `path_vocab::resolve_self_super`
   names `use_scan` among its sharers, while `item_head` and `written_root` alone call it;

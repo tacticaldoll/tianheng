@@ -219,24 +219,22 @@ fn read_tree(
         if !matches!(tree.kind(k), Kind::Ident | Kind::RawIdent | Kind::Keyword) {
             return Err(Unread::Token(k));
         }
-        path.segments.push(tree.written(k).to_string());
+        let segment = tree.written(k);
+        path.segments.push(segment.to_string());
         k += 1;
         if k < to && tree.is(k, "::") {
             k += 1;
             continue;
         }
         let binds = if tree.is(k, "as") && k + 1 < to {
-            tree.written(k + 1).to_string()
+            tree.written(k + 1)
         } else {
-            path.last().unwrap_or_default().to_string()
+            segment
         };
-        let binds = canonical_module_path(&binds);
-        if !binds.is_empty() {
-            out.push(UseLeaf::Name {
-                path: path.written(),
-                binds,
-            });
-        }
+        out.push(UseLeaf::Name {
+            path: path.written(),
+            binds: canonical_module_path(binds),
+        });
         return Ok(());
     }
     Err(Unread::Token(to))
@@ -256,13 +254,13 @@ fn read_part(
         return Ok(());
     }
     if tree.is(from, "self") && (from + 1 == to || tree.is(from + 1, "as")) {
-        if prefix.segments.is_empty() {
+        let Some(last) = prefix.last() else {
             return Ok(());
-        }
+        };
         let named = if tree.is(from + 1, "as") && from + 2 < to {
             tree.written(from + 2)
         } else {
-            prefix.last().unwrap_or_default()
+            last
         };
         out.push(UseLeaf::SelfLeaf {
             module: prefix.written(),
