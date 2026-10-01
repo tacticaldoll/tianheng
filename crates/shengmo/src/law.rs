@@ -86,10 +86,17 @@ pub fn constitution() -> Constitution {
         )
         .boundary(
             CrateBoundary::crate_("guibiao")
-                .restrict_dependencies_to(["serde_json", "xuanji", "xingbiao"])
+                .restrict_dependencies_to([
+                    "serde_json",
+                    "xuanji",
+                    "xingbiao",
+                    "unicode-ident",
+                    "unicode-normalization",
+                ])
                 .because(
                     "the 圭表 static core stays dependency-light: its direct normal edges reach only \
-                     serde_json, xuanji (reaction model), and xingbiao (metadata substrate). \
+                     serde_json, xuanji (reaction model), xingbiao (metadata substrate), unicode-ident \
+                     (Unicode identifier tables), and unicode-normalization (Unicode NFC). \
                      functional core ⊥ imperative shell: none reaches the 天衡 shell. 三儀 ⊥ 三儀: \
                      none names a sibling dimension",
                 ),

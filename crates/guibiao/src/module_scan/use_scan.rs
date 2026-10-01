@@ -11,8 +11,9 @@ use super::resolve::{CrateScopes, Named, Namespace};
 use super::scope_tree::ScopeTable;
 #[cfg(test)]
 use super::token_tree::Edition;
+#[cfg(test)]
 use super::token_tree::TokenTree;
-use super::use_tree::{UseLeaf, use_statements};
+use super::use_tree::{UseLeaf, UseStatement};
 
 /// One normalized internal import path, retaining **which form** the source wrote: a glob so boundary
 /// evaluation can distinguish a direct import from an ancestor-glob hazard, and a `{self}` leaf so it
@@ -95,7 +96,7 @@ fn file_alone(
 ) -> Result<Vec<(String, UseTarget, bool, bool)>, String> {
     let tree = TokenTree::lex(source, edition);
     let table = ScopeTable::build(&tree, current_module, 0);
-    let uses = file_uses(&tree, &table);
+    let uses = file_uses(super::use_tree::use_statements(&tree), &table);
     classify_uses(&CrateScopes::new(vec![table], edition), 0, &uses)
 }
 
@@ -211,6 +212,7 @@ pub(super) fn classify_uses(
                 UseLeaf::Name { path, .. } => (path, false, false, Namespace::Either),
                 UseLeaf::Glob(base) => (base, true, false, Namespace::Type),
                 UseLeaf::SelfLeaf { module, .. } => (module, false, true, Namespace::Type),
+                UseLeaf::Empty(_) => continue,
             };
             for target in classify(scopes, t, file_use.scope, written, ns)? {
                 out.push((file_use.importer.clone(), target, is_glob, is_self_leaf));
@@ -229,9 +231,9 @@ pub(super) struct FileUse {
 }
 
 /// Every `use` statement of the file `tree` holds, read against its scope `table`.
-pub(super) fn file_uses(tree: &TokenTree, table: &ScopeTable) -> Vec<FileUse> {
+pub(super) fn file_uses(statements: Vec<UseStatement>, table: &ScopeTable) -> Vec<FileUse> {
     let identities = identity_modules(table.scopes.iter().map(|scope| scope.module.as_str()));
-    use_statements(tree)
+    statements
         .into_iter()
         .map(|statement| {
             let scope = table.scope_at(statement.at);

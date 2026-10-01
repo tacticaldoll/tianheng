@@ -1,9 +1,10 @@
 //! Shared path vocabulary for the source scanner — the small foundation every reader above the token tree
 //! stands on: raw-identifier canonicalization, `::`-delimited containment, `self`/`super` folding, the spelling
-//! of a block's path segment, and the prefix spelling a confinement is declared in. Pure string processing over
-//! [`super::token_tree`]'s identifier bytes, no model type.
+//! of a block's path segment, and the prefix spelling a confinement is declared in. Pure string processing, an
+//! identifier read by Unicode's `XID_Start` and `XID_Continue` and compared in NFC, and no model type.
 
-use super::token_tree::{Edition, is_ident_byte};
+use super::token_tree::Edition;
+use unicode_normalization::UnicodeNormalization;
 
 /// Canonicalize one path segment by stripping a leading raw-identifier marker
 /// (`r#name` -> `name`). Rust resolves `mod r#type;` to the source file `type.rs`,
@@ -15,33 +16,69 @@ pub(super) fn canonical_segment(segment: &str) -> &str {
 }
 
 /// Canonicalize a whole `::`-joined module path segment-by-segment (see
-/// [`canonical_segment`]), so a boundary's declared path and an observed path compare
-/// in one vocabulary regardless of which uses the raw-identifier form.
+/// [`canonical_segment`]), in Unicode Normalization Form C, so a boundary's declared path and an observed path compare
+/// in one vocabulary regardless of which uses the raw-identifier form or which composition of a character: the token
+/// tree reads every identifier in NFC, as rustc compares them.
 pub(crate) fn canonical_module_path(path: &str) -> String {
-    path.split("::")
+    let joined = path
+        .split("::")
         .map(canonical_segment)
         .collect::<Vec<_>>()
-        .join("::")
+        .join("::");
+    if joined.is_ascii() {
+        joined
+    } else {
+        joined.nfc().collect()
+    }
 }
 
 /// Whether `segment` is exactly one identifier, written with nothing around it.
 ///
-/// Read with the lexer's own [`is_ident_byte`], the byte test every scanner here names an
-/// identifier with: a non-empty run of identifier bytes that does not start with a digit, behind at
-/// most one `r#`. Behind `r#` the five names a raw identifier cannot spell — `crate`, `self`,
-/// `super`, `Self` and `_` — are refused, as rustc refuses them. Every non-ASCII byte is an
-/// identifier byte to the lexer, whatever character it belongs to, so a non-ASCII segment that is
-/// not an identifier passes this layer; it names no module, and the existence check that follows
-/// every accepted path is what refuses it. Keywords pass for the same reason.
+/// Read as the Rust Reference's identifier grammar reads it — a first character that is `_` or Unicode
+/// `XID_Start`, then `XID_Continue` characters, behind at most one `r#` — with one exception: `_` alone, which the
+/// Reference reads as no identifier, passes here and is refused by each caller. A module path `crate::_` names no
+/// module, so its existence check refuses it, as 渾儀's does; a symbol prefix has no existence check past its head,
+/// so [`is_symbol_path_spelling`] refuses it. Behind `r#` the five names a raw identifier cannot spell — `crate`,
+/// `self`, `super`, `Self` and `_` — are refused, as rustc refuses them. Whitespace, a soft hyphen, a word joiner or a dash is no `XID_Continue` character, so `std::process` followed
+/// by a left-to-right mark is refused rather than accepted as a prefix no path can spell. Keywords pass: a module path
+/// names a module whatever its spelling, and the existence check that follows every crate-rooted path is what
+/// refuses one that names nothing.
 fn is_identifier(segment: &str) -> bool {
     let (raw, name) = match segment.strip_prefix("r#") {
         Some(name) => (true, name),
         None => (false, segment),
     };
-    let bytes = name.as_bytes();
-    let lexes = bytes.first().is_some_and(|first| !first.is_ascii_digit())
-        && bytes.iter().all(|&byte| is_ident_byte(byte));
+    let mut characters = name.chars();
+    let lexes = characters
+        .next()
+        .is_some_and(|first| first == '_' || unicode_ident::is_xid_start(first))
+        && characters.all(unicode_ident::is_xid_continue);
     lexes && !(raw && matches!(name, "crate" | "self" | "super" | "Self" | "_"))
+}
+
+/// A crate the toolchain ships, which a path may name without the package declaring it.
+///
+/// Each variant is a distinct answer to *which scope holds it*: [`Sysroot::Prelude`] is in every crate's extern
+/// prelude, [`Sysroot::ProcMacro`] is in a proc-macro crate's alone, and [`Sysroot::Test`] in none, so a crate names
+/// it only through an `extern crate`, which the scope table reads as a binding. Every path each publishes is ASCII.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Sysroot {
+    /// `std`, `core` or `alloc`.
+    Prelude,
+    /// `proc_macro`.
+    ProcMacro,
+    /// `test`.
+    Test,
+}
+
+/// The sysroot crate `head` names, written bare: the one list every reader of a sysroot head matches on.
+pub(crate) fn sysroot_crate(head: &str) -> Option<Sysroot> {
+    match head {
+        "std" | "core" | "alloc" => Some(Sysroot::Prelude),
+        "proc_macro" => Some(Sysroot::ProcMacro),
+        "test" => Some(Sysroot::Test),
+        _ => None,
+    }
 }
 
 /// `crate`, or `crate::` followed by `::`-separated identifiers.
@@ -99,6 +136,11 @@ fn is_disallowed_symbol_head(head: &str, is_global: bool) -> bool {
 
 /// Whether `written` is `::`-separated identifiers (optionally starting with `::` for external
 /// crates) whose first segment can name a crate or module ([`is_disallowed_symbol_head`]).
+///
+/// Under a sysroot head ([`sysroot_crate`]) every segment is ASCII, since every path a sysroot crate publishes is,
+/// and nothing after this holds a sysroot prefix to what it names: `std::pr` followed by a Cyrillic `о` and
+/// `cess` is an identifier to [`is_identifier`] and names no path, so it is refused here. Under any other
+/// head a segment is held to [`is_identifier`] alone, since a crate's own names may lie past ASCII.
 fn is_symbol_path_spelling(written: &str) -> bool {
     let is_global = written.starts_with("::");
     let raw = if is_global {
@@ -114,10 +156,15 @@ fn is_symbol_path_spelling(written: &str) -> bool {
         return false;
     }
     let mut segments = raw.split("::");
-    segments
-        .next()
-        .is_some_and(|head| is_identifier(head) && !is_disallowed_symbol_head(head, is_global))
-        && segments.all(is_identifier)
+    let Some(head) = segments.next() else {
+        return false;
+    };
+    let under_sysroot = sysroot_crate(canonical_segment(head)).is_some();
+    is_identifier(head)
+        && !is_disallowed_symbol_head(head, is_global)
+        && segments.all(|segment| {
+            is_identifier(segment) && segment != "_" && (!under_sysroot || segment.is_ascii())
+        })
 }
 
 /// Whether an inline-call prefix was written from the extern-crate root (`::std::time`) or bare
@@ -228,6 +275,17 @@ pub(crate) fn path_within(path: &str, prefix: &str) -> bool {
 /// own start. This and [`is_block_segment`] are the one owner of the spelling.
 pub(super) fn block_segment(table: usize, id: u32) -> String {
     format!("{{block#{table}.{id}}}")
+}
+
+/// The segment naming the `count`th module of one name the blocks of one module declare, in source order: `{block}`
+/// for the first and `{block N}` for the Nth after it, so two are two modules. A block names nothing a path outside it
+/// can write, so the segment is the block's readable form rather than a path.
+pub(super) fn block_label(count: usize) -> String {
+    if count == 1 {
+        "{block}".to_string()
+    } else {
+        format!("{{block {count}}}")
+    }
 }
 
 /// Whether `segment` is a [`block_segment`].

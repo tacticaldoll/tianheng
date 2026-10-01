@@ -1,7 +1,7 @@
 //! `use` statements and their trees: the one enumeration of `use` statements over a [`TokenTree`] and the one
 //! use-tree parser, which the import scan and the scope tree both read.
 
-use super::item_head::{Visibility, in_macro_body, visibility_before};
+use super::item_head::{Visibility, in_attribute, in_macro_body, visibility_before};
 use super::path_vocab::canonical_module_path;
 use super::token_tree::{Delimiter, Kind, TokenTree};
 
@@ -14,20 +14,37 @@ const MAX_USE_TREE_NESTING: usize = 128;
 /// leaves as the one use-tree parser reads them from its tokens, or the refusal quoting the tree as written.
 pub(super) struct UseStatement {
     pub at: usize,
+    /// The statement's `;`.
+    pub end: usize,
     pub visibility: Visibility,
     pub leaves: Result<Vec<UseLeaf>, String>,
 }
 
 /// Every `use … ;` statement in `tree`, in order: the one enumeration every reader of imports in this scanner
 /// starts from. A precise-capturing `use<…>` bound is not a statement, a statement inside a macro's group other
-/// than `cfg_if!`'s is not read, and one with no `;` at its level is not a statement.
+/// than `cfg_if!`'s is not read, nor one inside an attribute, which is that attribute's input — rustc 1.96.0 compiles
+/// `#[cfg_attr(any(), my_attr(use crate::forbidden::Thing;))] fn f() {}` with no such import — and one with no `;`
+/// at its level is not a statement.
 pub(super) fn use_statements(tree: &TokenTree) -> Vec<UseStatement> {
+    statements_where(tree, false)
+}
+
+/// Every `use … ;` statement a macro's group other than `cfg_if!`'s holds, read as [`use_statements`] reads the rest:
+/// what the macro makes of its tokens is not read, so no import rule reads them, while a reader of mentions reads them
+/// as it reads every other token of a macro's group, conservatively.
+pub(super) fn macro_use_statements(tree: &TokenTree) -> Vec<UseStatement> {
+    statements_where(tree, true)
+}
+
+/// The `use` statements standing inside a macro's group where `in_macro` holds, and the rest where it does not.
+fn statements_where(tree: &TokenTree, in_macro: bool) -> Vec<UseStatement> {
     let mut statements = Vec::new();
     for at in 0..tree.len() {
         if tree.kind(at) != Kind::Keyword
             || tree.text(at) != "use"
             || tree.is(at + 1, "<")
-            || in_macro_body(tree, at)
+            || in_macro_body(tree, at) != in_macro
+            || in_attribute(tree, at)
         {
             continue;
         }
@@ -36,12 +53,23 @@ pub(super) fn use_statements(tree: &TokenTree) -> Vec<UseStatement> {
         };
         let body = render(tree, at + 1, end);
         let mut leaves = Vec::new();
-        let read =
-            read_tree(tree, at + 1, end, &Path::default(), 0, &mut leaves).map_err(|depth| {
-                format!("cannot judge a `use` tree nested past {depth} brace levels: '{body}'")
-            });
+        let read = read_tree(tree, at + 1, end, &Path::default(), 0, &mut leaves).map_err(
+            |unread| match unread {
+                Unread::PastCap(depth) => {
+                    format!("cannot judge a `use` tree nested past {depth} brace levels: '{body}'")
+                }
+                Unread::Token(k) if k < end => format!(
+                    "cannot judge a `use` tree holding `{}` where a path segment stands: '{body}'",
+                    tree.written(k)
+                ),
+                Unread::Token(_) => {
+                    format!("cannot judge a `use` tree whose path ends in `::`: '{body}'")
+                }
+            },
+        );
         statements.push(UseStatement {
             at,
+            end,
             visibility: visibility_before(tree, at),
             leaves: read.map(|()| leaves),
         });
@@ -94,6 +122,10 @@ pub(super) enum UseLeaf {
     /// A `{self}` leaf: the group's prefix module itself, and the name it binds — its `as` alias, or
     /// else the module path's last segment, so `use std::io::{self};` binds `io`.
     SelfLeaf { module: String, binds: String },
+    /// An empty group, by the path before it: `use crate::a::{};` imports and binds nothing, and still names
+    /// `crate::a`, which rustc resolves — `use crate::a::nothere::{};` is refused with E0432 — so a reader of
+    /// mentions reads it while a reader of imports passes it over.
+    Empty(String),
 }
 
 /// The path a use tree has read so far: its segments as written, and whether it began with `::`.
@@ -118,11 +150,22 @@ impl Path {
     }
 }
 
+/// Why a use tree is not read: nested past the cap, or holding at `Token`'s index — the end of the statement where a
+/// path runs out after `::` — a token no path segment is, which rustc refuses, so the tree is refused rather than a
+/// leaf dropped.
+#[derive(Debug)]
+enum Unread {
+    PastCap(usize),
+    Token(usize),
+}
+
 /// Read the use tree in tokens `from..to` under `prefix` into `out` — the one use-tree parser every reader of
 /// imports in this scanner shares, reading tokens rather than text, so `as _` is an alias and `::*` a glob by
 /// what they are. A group recurses once per brace level, and past [`MAX_USE_TREE_NESTING`] levels the tree is
 /// refused, answering the cap, rather than read partially: a real, compilable `use` nested that deep would
-/// otherwise vanish from observation with no report — the false negative PROJECT.md's core contract forbids.
+/// otherwise vanish from observation with no report — the false negative PROJECT.md's core contract forbids. A
+/// `$crate` head, which only a `macro_rules!` body can write, is read as `crate`: it names the crate defining the
+/// macro, and a macro this scanner reads is this crate's.
 fn read_tree(
     tree: &TokenTree,
     from: usize,
@@ -130,14 +173,16 @@ fn read_tree(
     prefix: &Path,
     depth: usize,
     out: &mut Vec<UseLeaf>,
-) -> Result<(), usize> {
+) -> Result<(), Unread> {
     if depth > MAX_USE_TREE_NESTING {
-        return Err(MAX_USE_TREE_NESTING);
+        return Err(Unread::PastCap(MAX_USE_TREE_NESTING));
     }
     let mut path = prefix.clone();
     let mut k = from;
     if k < to && tree.is(k, "::") && path.segments.is_empty() {
         path.global = true;
+        k += 1;
+    } else if path.segments.is_empty() && tree.is(k, "$") && k + 1 < to && tree.is(k + 1, "crate") {
         k += 1;
     }
     while k < to {
@@ -151,6 +196,12 @@ fn read_tree(
         }
         if tree.kind(k) == Kind::Open(Delimiter::Brace) {
             let close = tree.partner(k).min(to);
+            if close == k + 1 {
+                if !path.segments.is_empty() {
+                    out.push(UseLeaf::Empty(path.written()));
+                }
+                return Ok(());
+            }
             let mut part = k + 1;
             while part < close {
                 let mut end = part;
@@ -166,7 +217,7 @@ fn read_tree(
             return Ok(());
         }
         if !matches!(tree.kind(k), Kind::Ident | Kind::RawIdent | Kind::Keyword) {
-            return Ok(());
+            return Err(Unread::Token(k));
         }
         path.segments.push(tree.written(k).to_string());
         k += 1;
@@ -188,7 +239,7 @@ fn read_tree(
         }
         return Ok(());
     }
-    Ok(())
+    Err(Unread::Token(to))
 }
 
 /// Read one part of a group, tokens `from..to`, under the group's prefix: a `self` leaf names the prefix module
@@ -200,7 +251,7 @@ fn read_part(
     prefix: &Path,
     depth: usize,
     out: &mut Vec<UseLeaf>,
-) -> Result<(), usize> {
+) -> Result<(), Unread> {
     if from >= to {
         return Ok(());
     }

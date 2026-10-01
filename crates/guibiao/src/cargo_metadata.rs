@@ -1,42 +1,76 @@
 use super::*;
 use serde_json::Value;
 
-use crate::module_scan::package_name_to_import_ident;
+use crate::module_scan::{Edition, package_name_to_import_ident};
 
 pub(crate) use xingbiao::{
     cargo_metadata, compilation_unit_label, crate_roots, find_package, member_src_dirs,
 };
 
-/// The manifest edition the compilation unit rooted at `root_file` is read in: that of the targets rooted there,
-/// since rustc compiles each target in its own edition. `cargo metadata` reports a target's `[lib]` or `[[bin]]`
-/// `edition` on the target and the package's own beside it — measured under cargo 1.96.0, a 2024 package with
-/// `[lib] edition = "2015"` reports `2015` on its library target and `2024` on the package, and builds a 2015
-/// crate. A target reporting no edition reads as the package's. Targets sharing the root in different editions are
-/// compiled twice, once in each, so one reading cannot judge both and the root is refused.
-pub(crate) fn target_edition<'a>(
-    package: &'a Value,
-    root_file: &Path,
+/// What the targets rooted at one file ask of reading it: the edition they are read in, and whether one is a
+/// proc-macro crate, whose extern prelude holds `proc_macro` without an `extern crate` — measured against rustc 1.96.0,
+/// edition 2021, a `[lib] proc-macro = true` crate calls `proc_macro::TokenStream::new()` with none.
+pub(crate) struct RootReading {
+    pub(crate) edition: Edition,
+    pub(crate) proc_macro: bool,
+}
+
+/// The [`RootReading`] of the targets rooted at `root_file`, or of every target of the package where the roots are not
+/// reported. rustc compiles each target in its own edition, and `cargo metadata` reports a target's `[lib]` or
+/// `[[bin]]` `edition` on the target and the package's own beside it — measured under cargo 1.96.0, a 2024 package with
+/// `[lib] edition = "2015"` reports `2015` on its library target and `2024` on the package, and builds a 2015 crate. A
+/// target reporting no edition reads as the package's. Targets sharing the root in editions the scanner reads apart are
+/// compiled twice, once in each, so one reading cannot judge both and the root is refused; editions it reads alike,
+/// 2018 beside 2021, are one reading.
+pub(crate) fn root_reading(
+    package: &Value,
+    root_file: Option<&Path>,
     crate_package: &str,
-) -> Result<Option<&'a str>, String> {
+) -> Result<RootReading, String> {
     let package_edition = package["edition"].as_str();
-    let mut editions: Vec<Option<&str>> = package["targets"]
+    let targets: Vec<&Value> = package["targets"]
         .as_array()
         .into_iter()
         .flatten()
-        .filter(|target| target["src_path"].as_str().map(Path::new) == Some(root_file))
-        .map(|target| target["edition"].as_str().or(package_edition))
+        .filter(|target| {
+            root_file.is_none_or(|root| target["src_path"].as_str().map(Path::new) == Some(root))
+        })
         .collect();
-    editions.sort();
-    editions.dedup();
-    match editions.as_slice() {
-        [] => Ok(package_edition),
-        [edition] => Ok(*edition),
-        several => Err(crate::errors::root_in_several_editions_error(
-            crate_package,
-            root_file,
-            &several.iter().map(|e| e.unwrap_or("?")).collect::<Vec<_>>(),
-        )),
-    }
+    let proc_macro = targets.iter().any(|target| {
+        target["kind"]
+            .as_array()
+            .is_some_and(|kinds| kinds.iter().any(|kind| kind.as_str() == Some("proc-macro")))
+    });
+    let edition = match root_file {
+        None => Edition::of(package_edition),
+        Some(root) => {
+            let mut written: Vec<Option<&str>> = targets
+                .iter()
+                .map(|target| target["edition"].as_str().or(package_edition))
+                .collect();
+            written.sort();
+            written.dedup();
+            let readings: Vec<Edition> = written
+                .iter()
+                .map(|edition| Edition::of(*edition))
+                .collect();
+            match readings.first() {
+                None => Edition::of(package_edition),
+                Some(first) if readings.iter().all(|reading| reading == first) => *first,
+                Some(_) => {
+                    return Err(crate::errors::root_in_several_editions_error(
+                        crate_package,
+                        root,
+                        &written.iter().map(|e| e.unwrap_or("?")).collect::<Vec<_>>(),
+                    ));
+                }
+            }
+        }
+    };
+    Ok(RootReading {
+        edition,
+        proc_macro,
+    })
 }
 
 /// The membership set, or why it could not be read.

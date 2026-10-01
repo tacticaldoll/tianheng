@@ -140,9 +140,9 @@ on both readings: reacting on both would make an ordinary bare import of a child
 for a broad false positive. Concretely, an import whose whole path resolves to a module that is a
 single-segment child of the anchored module SHALL additionally react when the anchored module itself
 declares a value-namespace item (`fn`, `const`, `static`) of that same final segment, and SHALL NOT react
-when it declares only the module. The observation this needs exists in this dimension: the definition
-observation backing an inline-call prefix's existence check reads exactly those names, per module, at
-module top level.
+when it declares only the module. The observation this needs exists in this dimension: the value-namespace
+item reader, beside the definition observation backing an inline-call prefix's existence check, reads exactly those
+names, per module, at module top level; the existence check's own observation reads every item a module declares.
 
 An import whose **form cannot bind a value** SHALL NOT react through the value reading, whatever the
 anchored module declares. Two forms cannot, and the exclusions rest on what the language admits rather

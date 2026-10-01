@@ -12,9 +12,9 @@ use crate::errors::{
     missing_src_error, must_not_be_imported_by_on_crate_error,
     must_only_be_imported_by_on_crate_error, no_compiled_root_error,
     non_canonical_inline_prefix_error, non_canonical_module_path_error, out_of_package_root_error,
-    restrict_imports_to_on_crate_error, scan_refusal_in_file, unknown_allowed_module_error,
+    restrict_imports_to_on_crate_error, unknown_allowed_module_error,
     unknown_forbidden_module_error, unknown_inline_prefix_error, unknown_inline_prefix_head_error,
-    unknown_module_error,
+    unknown_module_error, walk_refusal_in_unit,
 };
 use crate::finding::ModuleFact;
 use crate::model::module_rule::Perimeter;
@@ -22,7 +22,7 @@ use crate::module_scan::{
     Edition, ImportedPath, InlineFinding, PrefixRoot, SymbolPrefix, UnitScan,
     canonical_module_path, canonical_module_spelling, canonical_symbol_path_spelling,
     governed_files, names_crate_by_path_alone, package_name_to_import_ident, path_within,
-    reachable_modules, rust_files, value_namespace_item_names,
+    reachable_modules, rust_files, sysroot_crate, value_namespace_item_names,
 };
 use crate::{BoundaryKind, ModuleBoundary, ModuleRule, Violation, ViolationId};
 
@@ -313,49 +313,72 @@ enum InlinePrefix<'a> {
 /// An inline confinement's declaration: the builder method it was declared through, its prefix and the modifiers
 /// the judgement reads.
 struct Inline<'a> {
-    rule_method: &'static str,
-    declared: Declared,
+    declared: DeclaredPrefix,
     ending_with: Option<&'a [String]>,
     strict: bool,
     external: bool,
 }
 
-/// An inline confinement's prefix: blank, which the judgement refuses where it is reached, so that a missing
-/// governed module or crate keeps being the refusal given first; or a prefix in its canonical spelling.
-enum Declared {
-    Blank,
-    Prefix(DeclaredPrefix),
-}
-
 impl<'a> InlinePrefix<'a> {
+    /// Read an inline confinement's declaration, refusing every misdeclaration the boundary alone decides — a
+    /// blank or non-canonical prefix, and `confine_inline_call` over `crate` or at `ScanDepth::Shallow` — before
+    /// any root is walked, so a scan refusal in some file cannot stand in front of the line the operator must
+    /// change.
     fn of(boundary: &'a ModuleBoundary) -> Result<Self, String> {
         let Some((prefix, ending_with, strict, external)) = boundary.rule.inline_payload() else {
             return Ok(InlinePrefix::NotInline);
         };
-        let rule_method = if matches!(boundary.rule, ModuleRule::ConfineInlineCall { .. }) {
+        let permitting = matches!(boundary.rule, ModuleRule::ConfineInlineCall { .. });
+        let rule_method = if permitting {
             "confine_inline_call"
         } else {
             "must_not_call_inline"
         };
-        let declared = if prefix.trim().is_empty() {
-            Declared::Blank
+        let blank = prefix.trim().is_empty();
+        let canonical = if blank {
+            None
         } else {
-            let canonical = canonical_symbol_path_spelling(prefix).map_err(|suggestion| {
-                non_canonical_inline_prefix_error(
-                    prefix,
-                    &boundary.crate_package,
-                    rule_method,
-                    suggestion.as_deref(),
-                )
-            })?;
-            Declared::Prefix(DeclaredPrefix {
+            Some(
+                canonical_symbol_path_spelling(prefix).map_err(|suggestion| {
+                    non_canonical_inline_prefix_error(
+                        prefix,
+                        &boundary.crate_package,
+                        rule_method,
+                        suggestion.as_deref(),
+                    )
+                })?,
+            )
+        };
+        if permitting && canonical_module_path(&boundary.module) == "crate" {
+            return Err(confine_inline_call_on_crate_error(&boundary.crate_package));
+        }
+        if permitting && boundary.depth == ScanDepth::Shallow {
+            return Err(confine_inline_call_shallow_error(&boundary.crate_package));
+        }
+        let Some(canonical) = canonical else {
+            return Err(inline_empty_prefix_error(
+                &boundary.crate_package,
                 rule_method,
-                written: prefix.to_string(),
-                prefix: canonical,
-            })
+            ));
+        };
+        if ending_with.is_some() && strict {
+            return Err(inline_narrow_and_strict_error(
+                &boundary.crate_package,
+                rule_method,
+            ));
+        }
+        if ending_with.is_some_and(|verbs| verbs.is_empty()) {
+            return Err(inline_empty_verbs_error(
+                &boundary.crate_package,
+                rule_method,
+            ));
+        }
+        let declared = DeclaredPrefix {
+            rule_method,
+            written: prefix.to_string(),
+            prefix: canonical,
         };
         Ok(InlinePrefix::Inline(Inline {
-            rule_method,
             declared,
             ending_with,
             strict,
@@ -392,7 +415,7 @@ impl DeclaredPrefix {
                 crate_package,
                 self.rule_method,
             )),
-            "std" | "core" | "alloc" | "proc_macro" | "test" => Ok(()),
+            _ if sysroot_crate(head).is_some() => Ok(()),
             _ if external_crates.iter().any(|name| name == head) => Ok(()),
             _ => {
                 let rooted = format!("crate::{path}");
@@ -540,10 +563,7 @@ fn check_inbound_rule(
                 continue;
             }
         }
-        for (importer, import) in unit_scan
-            .imports(&file, &file_module)
-            .map_err(|refusal| scan_refusal_in_file(&file, &refusal))?
-        {
+        for (importer, import) in unit_scan.imports(&file, &file_module)? {
             if is_inside_protected_module(&importer, governed_module) {
                 continue;
             }
@@ -623,10 +643,7 @@ fn check_external_confinement(
         if hosts_only_permitted_importers(&file_module, governed_module, boundary.depth) {
             continue;
         }
-        for (importer, external) in unit_scan
-            .external_imports(&file, &file_module)
-            .map_err(|refusal| scan_refusal_in_file(&file, &refusal))?
-        {
+        for (importer, external) in unit_scan.external_imports(&file, &file_module)? {
             if external != confined {
                 continue;
             }
@@ -665,7 +682,7 @@ fn check_external_confinement(
 /// `UnitScan::findings` / `resolve_written`. `external` reflects the single rule's
 /// `strict_external` modifier.
 ///
-/// Empty prefix, conflicting narrow-and-strict, or empty verbs misdeclarations fail loud (exit 2).
+/// Its misdeclarations are refused by `InlinePrefix::of` before any root is walked.
 /// Crate-wide files feed type alias and pub use resolution; dependency names are read on demand
 /// when external confinement is active.
 #[allow(clippy::too_many_arguments)]
@@ -680,21 +697,8 @@ fn check_inline_confinement(
     ending_with: Option<&[String]>,
     strict: bool,
     external: bool,
-    declared_as: &str,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
-    if ending_with.is_some() && strict {
-        return Err(inline_narrow_and_strict_error(
-            &boundary.crate_package,
-            declared_as,
-        ));
-    }
-    if ending_with.is_some_and(|verbs| verbs.is_empty()) {
-        return Err(inline_empty_verbs_error(
-            &boundary.crate_package,
-            declared_as,
-        ));
-    }
     let dependency_names = if external {
         crate::cargo_metadata::dependency_import_names(package)
     } else {
@@ -774,10 +778,7 @@ fn check_outbound_rule(
     };
     let mut findings: Vec<(String, String, String)> = Vec::new();
     for (file, current_module) in governed {
-        for (importer, import) in unit_scan
-            .imports(&file, &current_module)
-            .map_err(|refusal| scan_refusal_in_file(&file, &refusal))?
-        {
+        for (importer, import) in unit_scan.imports(&file, &current_module)? {
             if is_violation(&import) {
                 findings.push((importer, import.path, file.display().to_string()));
             }
@@ -836,8 +837,7 @@ pub(crate) fn check_module_boundary(
         named.require_exist(declared, &boundary.crate_package)?;
         match &inline_prefix {
             InlinePrefix::Inline(Inline {
-                declared: Declared::Prefix(prefix),
-                ..
+                declared: prefix, ..
             }) => prefix.require_names_something(
                 declared,
                 items,
@@ -847,11 +847,7 @@ pub(crate) fn check_module_boundary(
                     .collect::<Vec<_>>(),
                 &boundary.crate_package,
             ),
-            InlinePrefix::Inline(Inline {
-                declared: Declared::Blank,
-                ..
-            })
-            | InlinePrefix::NotInline => Ok(()),
+            InlinePrefix::NotInline => Ok(()),
         }
     };
     let mut declared = std::collections::BTreeSet::new();
@@ -976,17 +972,19 @@ fn check_one_root(
         None => None,
     };
     let unit: &str = unit_owned.as_deref().unwrap_or("src");
-    let edition = Edition::of(match root_file {
-        Some(rf) => crate::cargo_metadata::target_edition(package, rf, &boundary.crate_package)?,
-        None => package["edition"].as_str(),
-    });
+    let reading = crate::cargo_metadata::root_reading(package, root_file, &boundary.crate_package)?;
+    let edition = reading.edition;
     let mut files = rust_files(&src_dir)?;
     if let Some(siblings) = sibling_roots {
         files.retain(|f| root_file.is_some_and(|r| r == f.as_path()) || !siblings.contains(f));
     }
     files.retain(|f| !names_crate_by_path_alone(f, &src_dir, root_relative.as_deref()));
     let (reachable, inline_only, remapped, remap_shadowed) =
-        reachable_modules(&src_dir, &files, root_relative.as_deref(), edition)?;
+        reachable_modules(&src_dir, &files, root_relative.as_deref(), edition).map_err(
+            |refusal| {
+                walk_refusal_in_unit(&boundary.crate_package, unit_owned.as_deref(), &refusal)
+            },
+        )?;
     declared.extend(reachable.iter().cloned());
     let governed_module = canonical_module_path(&boundary.module);
     let governed = governed_files(
@@ -1012,7 +1010,7 @@ fn check_one_root(
         remap_shadowed: &remap_shadowed,
         edition,
     };
-    let unit_scan = UnitScan::read(&ctx.all_files(), edition)?;
+    let unit_scan = UnitScan::read(&ctx.all_files(), edition, reading.proc_macro)?;
     let inline = match inline_prefix {
         InlinePrefix::NotInline => None,
         InlinePrefix::Inline(inline) => Some((inline, &unit_scan)),
@@ -1081,12 +1079,6 @@ fn check_one_root(
     }
     if let Some((inline, unit_scan)) = &inline {
         let permitting = matches!(boundary.rule, ModuleRule::ConfineInlineCall { .. });
-        if permitting && governed_module == "crate" {
-            return Err(confine_inline_call_on_crate_error(&boundary.crate_package));
-        }
-        if permitting && boundary.depth == ScanDepth::Shallow {
-            return Err(confine_inline_call_shallow_error(&boundary.crate_package));
-        }
         let judged: Vec<(PathBuf, String)> = if permitting {
             ctx.all_files()
                 .into_iter()
@@ -1095,16 +1087,7 @@ fn check_one_root(
         } else {
             governed
         };
-        let declared_as = inline.rule_method;
-        let prefix = match &inline.declared {
-            Declared::Blank => {
-                return Err(inline_empty_prefix_error(
-                    &boundary.crate_package,
-                    declared_as,
-                ));
-            }
-            Declared::Prefix(declared) => &declared.prefix,
-        };
+        let prefix = &inline.declared.prefix;
         check_inline_confinement(
             &ctx,
             unit_scan,
@@ -1116,7 +1099,6 @@ fn check_one_root(
             inline.ending_with,
             inline.strict,
             inline.external,
-            declared_as,
             violations,
         )?;
         return Ok(outcome);

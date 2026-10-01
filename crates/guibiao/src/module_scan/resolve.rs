@@ -25,6 +25,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use super::item_head::Visibility;
 use super::path_vocab::path_within;
 use super::path_vocab::{PathSite, WrittenRoot, written_root};
+use super::path_vocab::{Sysroot, sysroot_crate};
 use super::path_vocab::{block_segment, is_block_segment, names_a_block_item, readable_module};
 pub(super) use super::scope_tree::Namespace;
 use super::scope_tree::{Binding, DeclKind, Declaration, ScopeKind, ScopeTable};
@@ -47,11 +48,6 @@ pub(super) fn chain_refusal(quote: &str, module: &str) -> String {
     )
 }
 
-/// Whether `head` names a sysroot crate, which is in every crate's extern prelude.
-fn is_sysroot(head: &str) -> bool {
-    matches!(head, "std" | "core" | "alloc")
-}
-
 /// What a written path names from the scope it stands in: the resolver's typed answer, which each
 /// reader matches exhaustively.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -69,8 +65,10 @@ pub(super) enum Named {
     Local,
     /// Nothing a path can start from.
     Invalid,
-    /// The chain it walked was longer than [`MAX_RESOLUTION_CHAIN`] links; the refusal quotes where
-    /// the chain was measured from.
+    /// A refusal of the walk rather than an answer, carrying its message: a chain longer than
+    /// [`MAX_RESOLUTION_CHAIN`] links, quoting where it was measured from; the answers of the globs reaching a
+    /// head not settling within the graph's readings; or a compilation unit's globs not settling on what they
+    /// name within the fixed point's passes.
     PastCap(String),
 }
 
@@ -124,6 +122,7 @@ enum Head {
     /// [`Head::Unbound`] and the glob's own finding is what reacts.
     Foreign(Vec<String>),
     Unbound,
+    /// A refusal of the walk, as [`Named::PastCap`] carries one.
     PastCap(String),
 }
 
@@ -354,6 +353,13 @@ impl Walk {
         cycle
     }
 
+    /// Whether `key` is the binding the walk is reading now: the head of `use md5x::md5x;` looked up in its own scope.
+    /// rustc resolves an import's path without that import, so the scope is read without it, which is the scope's
+    /// answer for that lookup rather than a cycle the walk cut — and so it is kept, under its own memo key.
+    fn reads_itself(&self, key: &(usize, u32, String)) -> bool {
+        self.resolving.last().is_some_and(|entry| &entry.key == key)
+    }
+
     /// Enter a binding, unless the chain already holds [`MAX_RESOLUTION_CHAIN`] links.
     fn enter(
         &mut self,
@@ -403,8 +409,9 @@ type GlobKey = (usize, u32, usize);
 type GlobTargets = HashMap<GlobKey, Result<Vec<String>, String>>;
 
 /// A memo key for [`CrateScopes::scope_lookup`]: the table and scope, the name, its namespace, the module it is seen
-/// from, and how many links deep the walk stands, since whether a lookup meets the chain cap depends on that depth.
-type LookupKey = (usize, u32, String, Namespace, String, usize);
+/// from, how many links deep the walk stands, since whether a lookup meets the chain cap depends on that depth, and
+/// whether the lookup is the head of the binding the walk is reading, which reads the scope without that binding.
+type LookupKey = (usize, u32, String, Namespace, String, usize, bool);
 
 /// Every table of one compilation unit: what each module binds at module scope, what each declares,
 /// and the edition a written path's root is read in. It resolves every binding — a `use` leaf, a
@@ -414,6 +421,8 @@ type LookupKey = (usize, u32, String, Namespace, String, usize);
 pub(super) struct CrateScopes {
     pub(super) tables: Vec<ScopeTable>,
     edition: Edition,
+    /// Whether the unit is a proc-macro crate, whose extern prelude holds `proc_macro` beside the sysroot crates.
+    proc_macro: bool,
     /// Every module scope of the unit, `(table, scope)`, by module path — a module declared twice
     /// under exclusive cfgs has one scope per declaration.
     pub(super) modules: BTreeMap<String, Vec<(usize, u32)>>,
@@ -443,6 +452,23 @@ pub(super) struct CrateScopes {
 }
 
 impl CrateScopes {
+    /// Whether the unit's extern prelude holds the sysroot crate `head` names.
+    fn extern_prelude_holds(&self, head: &str) -> bool {
+        match sysroot_crate(head) {
+            Some(Sysroot::Prelude) => true,
+            Some(Sysroot::ProcMacro) => self.proc_macro,
+            Some(Sysroot::Test) | None => false,
+        }
+    }
+
+    /// These scopes, read as a proc-macro crate's, whose extern prelude holds `proc_macro`.
+    pub(super) fn in_a_proc_macro_crate(self) -> Self {
+        CrateScopes {
+            proc_macro: true,
+            ..self
+        }
+    }
+
     /// Hold `tables`, the unit's files, in their edition. Nothing is resolved here: a binding no
     /// resolution walks through is never read.
     pub(super) fn new(tables: Vec<ScopeTable>, edition: Edition) -> Self {
@@ -481,6 +507,7 @@ impl CrateScopes {
         CrateScopes {
             tables,
             edition,
+            proc_macro: false,
             modules,
             blocks,
             extern_prelude,
@@ -628,7 +655,7 @@ impl CrateScopes {
                 }
                 Head::Local => Named::Local,
                 Head::PastCap(refusal) => Named::PastCap(refusal),
-                Head::Unbound | Head::Foreign(_) if is_sysroot(&head_name) => {
+                Head::Unbound | Head::Foreign(_) if self.extern_prelude_holds(&head_name) => {
                     Named::Paths(vec![with_rest(head_name, &rest)])
                 }
                 Head::Unbound if from_root => Named::External(with_rest(head_name, &rest)),
@@ -661,8 +688,15 @@ impl CrateScopes {
     /// `extern crate` of the crate root binds it as. What only a glob of a crate whose contents are not read
     /// could bring is no answer here — a bare head may name a prelude or a local binding instead — so the
     /// chain walks on past it.
+    ///
+    /// A block whose only answer is an import of what is not read — `use std::fmt;` — may hold the name in the other
+    /// namespace alone, as `std::fmt` names a module and no value, so rustc reads `fmt()` past it from the scope around
+    /// the block. Its answer is kept and the chain walks on, the answers joined, so the call reports under what the
+    /// outer scope binds it as: `use crate::forbidden::fmt; fn g() { use std::fmt; fmt(); }` calls
+    /// `crate::forbidden::fmt`, measured against rustc 1.96.0, edition 2021.
     fn lookup(&self, t: usize, scope: u32, head: &str, ns: Namespace, walk: &mut Walk) -> Head {
         let mut current = Some(scope);
+        let mut unsettled = Vec::new();
         while let Some(id) = current {
             let entry = &self.tables[t].scopes[id as usize];
             match self.scope_lookup(t, id, head, ns, &entry.module, walk) {
@@ -670,10 +704,58 @@ impl CrateScopes {
                     current = entry.parent;
                 }
                 Head::Unbound | Head::Foreign(_) => break,
-                answer => return answer,
+                answer @ Head::Candidates { .. }
+                    if entry.kind == ScopeKind::Block
+                        && self.binds_only_what_is_not_read(t, id, head, ns, walk) =>
+                {
+                    unsettled.push(answer);
+                    current = entry.parent;
+                }
+                answer if unsettled.is_empty() => return answer,
+                answer => return joined(unsettled.into_iter().chain([answer])),
             }
         }
-        self.in_extern_prelude(head, ns)
+        let prelude = self.in_extern_prelude(head, ns);
+        if unsettled.is_empty() {
+            prelude
+        } else {
+            joined(unsettled.into_iter().chain([prelude]))
+        }
+    }
+
+    /// Whether block `id` holds `head` in `ns` only through imports whose target is not read in `ns` — neither
+    /// declared nor bound there, nor aliased, and every import of it of [`Presence::Unknown`] — so the block may not
+    /// hold it in `ns` at all. [`Namespace::Either`] asks each namespace, and one that may not be held is enough.
+    fn binds_only_what_is_not_read(
+        &self,
+        t: usize,
+        id: u32,
+        head: &str,
+        ns: Namespace,
+        walk: &mut Walk,
+    ) -> bool {
+        if ns == Namespace::Either {
+            return [Namespace::Type, Namespace::Value]
+                .into_iter()
+                .any(|ns| self.binds_only_what_is_not_read(t, id, head, ns, walk));
+        }
+        let entry = &self.tables[t].scopes[id as usize];
+        if entry
+            .declarations
+            .get(head)
+            .is_some_and(|all| all.iter().any(|declaration| declaration.in_namespace(ns)))
+        {
+            return false;
+        }
+        let bindings = entry.bindings.get(head).map_or(&[][..], Vec::as_slice);
+        !bindings.is_empty()
+            && bindings.iter().all(|binding| match binding {
+                Binding::Import { written, .. } => matches!(
+                    self.import_presence(t, id, head, written, ns, walk),
+                    Ok(Presence::Unknown)
+                ),
+                Binding::Alias { .. } => false,
+            })
     }
 
     /// What the crate root's `extern crate` items bind `head` as — the names they add to every module's
@@ -701,7 +783,8 @@ impl CrateScopes {
     /// lookup that comes back to a scope — two modules globbing each other, neither binding the name — ends there. A
     /// binding holds its name in every namespace, and where there is none a lookup in
     /// [`Namespace::Either`] is the lookup in each namespace, joined. A binding
-    /// the walk is already inside is passed over, so a cycle ends and a `use md5x::md5x;` names the crate.
+    /// the walk is already inside is passed over, so a cycle ends; the one the walk is reading now is passed over as
+    /// the import resolved without itself, which is no cut, so a `use md5x::md5x;` names the crate and is kept.
     ///
     /// An answer is kept, by [`LookupKey`], only where no cycle was cut while answering, since a cut answer holds what
     /// one walk could read rather than what the scope names, and never past the chain cap, which is a refusal of the
@@ -728,6 +811,7 @@ impl CrateScopes {
             ns,
             from.to_string(),
             walk.resolving.len(),
+            walk.reads_itself(&(t, id, head.to_string())),
         );
         if let Some(head) = self.looked.borrow().get(&memo) {
             return head.clone();
@@ -741,7 +825,13 @@ impl CrateScopes {
     }
 
     /// [`CrateScopes::scope_lookup`] for one namespace, read without the memo: what the scope binds or declares, and
-    /// where it binds and declares nothing, what its globs bring, by [`CrateScopes::through_globs`].
+    /// where it binds and declares nothing, what its globs bring, by [`CrateScopes::through_globs`]. A scope binding the
+    /// name only through imports of what is not read — `use std::fmt;` — may not hold it in `ns`, as `std::fmt` names a
+    /// module and no value, so rustc reads `fmt()` from the scope's globs; its globs are read too and the answers
+    /// joined, so `use crate::forbidden::*; use std::fmt;` then `fmt()` calls `crate::forbidden::fmt`, measured against
+    /// rustc 1.96.0, edition 2021. Where such an import does hold the name, the glob's answer is an over-reaction,
+    /// the declared bound
+    /// `inline-symbol-path-confinement/an-import-of-what-is-not-read-beside-a-glob-is-read-with-the-glob-a-stated-bound`.
     fn scope_lookup_once(
         &self,
         t: usize,
@@ -752,6 +842,15 @@ impl CrateScopes {
         walk: &mut Walk,
     ) -> Head {
         match self.bound_here(t, id, head, ns, from, walk) {
+            Some(answer @ Head::Candidates { .. })
+                if !self.tables[t].scopes[id as usize].globs.is_empty()
+                    && self.binds_only_what_is_not_read(t, id, head, ns, walk) =>
+            {
+                match self.through_globs(t, id, head, ns, from, walk) {
+                    Head::Unbound => answer,
+                    globbed => joined([answer, globbed]),
+                }
+            }
             Some(answer) => answer,
             None => self.through_globs(t, id, head, ns, from, walk),
         }
@@ -772,7 +871,7 @@ impl CrateScopes {
         let visible = |visibility: &Visibility| visibility.visible_from(&entry.module, from);
         let key = (t, id, head.to_string());
         let mut bindings: Vec<&Binding> = Vec::new();
-        if !walk.meets_cycle(&key) {
+        if !walk.reads_itself(&key) && !walk.meets_cycle(&key) {
             for binding in entry.bindings.get(head).into_iter().flatten() {
                 if !visible(binding.visibility()) {
                     continue;
@@ -866,7 +965,8 @@ impl CrateScopes {
             let reading = if next - 1 == start {
                 self.glob_edges(&mut graph, t, id, head, &from)
             } else {
-                let memo = (t, id, head.to_string(), ns, from.clone(), depth);
+                let itself = walk.reads_itself(&(t, id, head.to_string()));
+                let memo = (t, id, head.to_string(), ns, from.clone(), depth, itself);
                 let held = self.looked.borrow().get(&memo).cloned();
                 match held.or_else(|| self.bound_here(t, id, head, ns, &from, walk)) {
                     Some(answer) => GlobRead::Answered(answer),
@@ -886,8 +986,9 @@ impl CrateScopes {
                     && matches!(graph.reads[n], GlobRead::Globs(_))
                     && !matches!(answers[n], Head::PastCap(_))
                 {
+                    let itself = walk.reads_itself(&(*t, *id, head.to_string()));
                     looked.insert(
-                        (*t, *id, head.to_string(), ns, from.clone(), depth),
+                        (*t, *id, head.to_string(), ns, from.clone(), depth, itself),
                         answers[n].clone(),
                     );
                 }
@@ -918,11 +1019,10 @@ impl CrateScopes {
                 Err(refusal) => return GlobRead::Answered(Head::PastCap(refusal)),
             };
             for target in targets {
-                if path_within(&target, "crate") && self.modules.contains_key(&target) {
-                    let scopes = match self.blocks.get(&target) {
-                        Some(block) => std::slice::from_ref(block),
-                        None => self.modules.get(&target).map_or(&[][..], Vec::as_slice),
-                    };
+                let scopes = path_within(&target, "crate")
+                    .then(|| self.modules.get(&target))
+                    .flatten();
+                if let Some(scopes) = scopes {
                     let into = scopes
                         .iter()
                         .map(|&(t, s)| graph.node(t, s, &entry.module))
@@ -961,7 +1061,8 @@ impl CrateScopes {
         )
     }
 
-    /// Whether `binding` holds `name` in `ns`: a `type` alias names a type; an import holds each namespace its target
+    /// Whether `binding` holds `name` in `ns`: a `type` alias names a type, and so does a `{self}` leaf, which imports
+    /// its group's module alone; any other import holds each namespace its target
     /// names something in, and every namespace where its target names nothing in either — an item a macro generates,
     /// whose namespaces are not read — so only a target known in the other namespace and absent in this one leaves
     /// this one to the scope's globs. The one namespace filter a declaration also answers, [`Namespace`], read for a
@@ -975,9 +1076,17 @@ impl CrateScopes {
         ns: Namespace,
         walk: &mut Walk,
     ) -> Result<bool, String> {
-        let Binding::Import { written, .. } = binding else {
+        let Binding::Import {
+            written,
+            module_only,
+            ..
+        } = binding
+        else {
             return Ok(ns != Namespace::Value);
         };
+        if *module_only {
+            return Ok(ns != Namespace::Value);
+        }
         if self.import_presence(t, scope, name, written, ns, walk)? != Presence::Absent {
             return Ok(true);
         }
@@ -1463,12 +1572,15 @@ mod tests {
     use super::super::token_tree::{Edition, TokenTree};
     use super::*;
 
+    /// What `head` at `at` in `source`, read as `crate::core` beneath a crate root declaring it, names.
     fn resolved(source: &str, at: &str, head: &str, ns: Namespace) -> Option<String> {
         let tree = TokenTree::lex(source, Edition::Rust2018);
         let offset = source.find(at).unwrap();
         let token = (0..tree.len()).find(|&i| tree.start(i) >= offset).unwrap();
         let table = ScopeTable::build(&tree, "crate::core", 0);
-        let scopes = CrateScopes::new(vec![table], Edition::Rust2018);
+        let root = TokenTree::lex("pub mod core;\n", Edition::Rust2018);
+        let root = ScopeTable::build(&root, "crate", 1);
+        let scopes = CrateScopes::new(vec![table, root], Edition::Rust2018);
         match scopes.name(0, scopes.table(0).scope_at(token), head, PathSite::Expr, ns) {
             Named::Paths(paths) => Some(paths.join(" | ")),
             Named::Local => Some("<local>".to_string()),
@@ -1615,12 +1727,12 @@ mod tests {
 
     #[test]
     fn a_block_use_binds_its_whole_block_and_nothing_outside() {
-        let source = "use crate::a::X;\nfn h() { X::fa(); }\nfn g() { X::early(); use crate::b::X; X::fb(); }\nfn k() { X::late(); }\n";
+        let source = "mod a { pub struct X; }\nmod b { pub struct X; }\nuse crate::core::a::X;\nfn h() { X::fa(); }\nfn g() { X::early(); use crate::core::b::X; X::fb(); }\nfn k() { X::late(); }\n";
         for (at, expected) in [
-            ("X::fa", "crate::a::X"),
-            ("X::early", "crate::b::X"),
-            ("X::fb", "crate::b::X"),
-            ("X::late", "crate::a::X"),
+            ("X::fa", "crate::core::a::X"),
+            ("X::early", "crate::core::b::X"),
+            ("X::fb", "crate::core::b::X"),
+            ("X::late", "crate::core::a::X"),
         ] {
             assert_eq!(
                 resolved(source, at, "X", Namespace::Type).as_deref(),

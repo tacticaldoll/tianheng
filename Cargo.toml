@@ -64,6 +64,14 @@ serde_json = "1"
 # self-law amendment ritual, because 勘合's release-coherence gate calls those readers from `src/` and the
 # edge is therefore Normal rather than dev-only.
 toml_edit = "0.25"
+# Unicode's XID_Start and XID_Continue, for 圭表's reading of a written path segment as an identifier: whether a
+# character past ASCII can stand in a Rust identifier is a table lookup with one answer, where excluding one more
+# character at a time is not. Adopted through the self-law amendment ritual, since 圭表's `src/` reads it.
+unicode-ident = "1"
+# Unicode Normalization Form C, for 圭表's lexer: rustc compares identifiers after normalizing them to NFC, so a name
+# written decomposed and one written precomposed are one name, and a reader comparing bytes is a false negative.
+# Adopted through the self-law amendment ritual, since 圭表's `src/` reads it.
+unicode-normalization = "0.1.24"
 # syn is the heavy AST dependency, and its perimeter is stated at the table the law observes rather than
 # one word wider.
 #

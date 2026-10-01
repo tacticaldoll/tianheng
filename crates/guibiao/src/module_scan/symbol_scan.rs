@@ -26,6 +26,7 @@ use super::token_tree::{Edition, TokenTree};
 use super::use_scan::{
     FileUse, ImportedPath, classify_uses, external_imports, file_uses, internal_imports,
 };
+use super::use_tree::{UseLeaf, macro_use_statements, use_statements};
 
 /// One inline offence: the `finding` string (per the identity requirement) and the source file.
 pub(crate) struct InlineFinding {
@@ -39,6 +40,9 @@ struct FileScan {
     module: String,
     occurrences: Vec<Occurrence>,
     uses: Vec<FileUse>,
+    /// The `use` statements a macro's group holds whose trees read, which a strict confinement judges as it judges
+    /// the rest and no import rule reads.
+    macro_uses: Vec<FileUse>,
 }
 
 /// Every file of one compilation unit, each read once into its scope table and its occurrences, and the resolver
@@ -51,7 +55,11 @@ pub(crate) struct UnitScan {
 impl UnitScan {
     /// Read every reachable `(file, module)` pair of the unit, in a package of the given edition. An unreadable file
     /// is refused here; a file whose text the scanner cannot judge is refused when a judgement reads it.
-    pub(crate) fn read(all_files: &[(PathBuf, String)], edition: Edition) -> Result<Self, String> {
+    pub(crate) fn read(
+        all_files: &[(PathBuf, String)],
+        edition: Edition,
+        proc_macro: bool,
+    ) -> Result<Self, String> {
         let mut files = Vec::new();
         let mut tables = Vec::new();
         for (file, module) in all_files {
@@ -60,17 +68,34 @@ impl UnitScan {
             })?;
             let tree = TokenTree::lex(&raw, edition);
             let table = ScopeTable::build(&tree, module, tables.len());
+            let statements = use_statements(&tree);
+            let macro_statements: Vec<_> = macro_use_statements(&tree)
+                .into_iter()
+                .filter(|statement| statement.leaves.is_ok())
+                .collect();
+            let mut spans: Vec<(usize, usize)> = statements
+                .iter()
+                .chain(&macro_statements)
+                .map(|statement| (statement.at, statement.end))
+                .collect();
+            spans.sort_unstable();
             files.push(FileScan {
                 file: file.clone(),
                 module: module.clone(),
-                occurrences: occurrences(&tree),
-                uses: file_uses(&tree, &table),
+                occurrences: occurrences(&tree, &spans),
+                uses: file_uses(statements, &table),
+                macro_uses: file_uses(macro_statements, &table),
             });
             tables.push(table);
         }
+        let scopes = CrateScopes::new(tables, edition);
         Ok(UnitScan {
             files,
-            scopes: CrateScopes::new(tables, edition),
+            scopes: if proc_macro {
+                scopes.in_a_proc_macro_crate()
+            } else {
+                scopes
+            },
         })
     }
 
@@ -82,11 +107,9 @@ impl UnitScan {
         module: &str,
     ) -> Result<Vec<(String, ImportedPath)>, String> {
         let t = self.file_index(file, module)?;
-        Ok(internal_imports(classify_uses(
-            &self.scopes,
-            t,
-            &self.files[t].uses,
-        )?))
+        let uses = classify_uses(&self.scopes, t, &self.files[t].uses)
+            .map_err(|refusal| crate::errors::scan_refusal_in_file(file, &refusal))?;
+        Ok(internal_imports(uses))
     }
 
     /// Every external crate the file read as `module` imports, paired with its importer: what
@@ -98,11 +121,22 @@ impl UnitScan {
         module: &str,
     ) -> Result<Vec<(String, String)>, String> {
         let t = self.file_index(file, module)?;
-        Ok(external_imports(classify_uses(
-            &self.scopes,
-            t,
-            &self.files[t].uses,
-        )?))
+        let uses = classify_uses(&self.scopes, t, &self.files[t].uses)
+            .map_err(|refusal| crate::errors::scan_refusal_in_file(file, &refusal))?;
+        Ok(external_imports(uses))
+    }
+
+    /// Every file of the unit read into a table it can judge, or a refusal naming the first file that is not: resolving a
+    /// governed file's inline paths reads every file's scope table. An import rule reads a governed file's own `use`
+    /// trees and no other file's refusal, so a file an inbound rule's self-import exemption excuses never decides its
+    /// exit code.
+    fn every_table_judged(&self) -> Result<(), String> {
+        for (t, file) in self.files.iter().enumerate() {
+            if let Some(refusal) = self.scopes.table(t).refusal() {
+                return Err(crate::errors::scan_refusal_in_file(&file.file, refusal));
+            }
+        }
+        Ok(())
     }
 
     /// The table of the file read as `module`, or a refusal naming a pair the unit did not read.
@@ -162,11 +196,7 @@ impl UnitScan {
             strict,
             external_dependencies: external.then(|| dependency_names.iter().cloned().collect()),
         };
-        for (t, file) in self.files.iter().enumerate() {
-            if let Some(refusal) = self.scopes.table(t).refusal() {
-                return Err(crate::errors::scan_refusal_in_file(&file.file, refusal));
-            }
-        }
+        self.every_table_judged()?;
         let mut findings: Vec<InlineFinding> = Vec::new();
         for (governed_file, governed_module) in governed {
             let t = self.file_index(governed_file, governed_module)?;
@@ -191,8 +221,8 @@ struct Judgement<'a> {
 }
 
 impl Judgement<'_> {
-    /// Judge every glob and every occurrence of one governed file, table `t`. A refusal is returned bare, and the caller
-    /// names the file.
+    /// Judge every glob and every occurrence of one governed file, table `t`, and under a strict confinement every leaf
+    /// of its `use` trees, read as the `use` path it is. A refusal is returned bare, and the caller names the file.
     fn file(
         &self,
         t: usize,
@@ -203,30 +233,7 @@ impl Judgement<'_> {
         let file = scan.file.display().to_string();
         let dependencies = self.external_dependencies.as_ref();
         for (scope, written) in table.globs() {
-            for glob in resolve_written(
-                written,
-                PathSite::Use,
-                Namespace::Type,
-                self.scopes,
-                t,
-                scope,
-                dependencies,
-            )? {
-                if glob_reaches_prefix(
-                    self.scopes,
-                    &glob,
-                    self.prefix,
-                    &table.scopes[scope as usize].module,
-                )? {
-                    findings.push(InlineFinding {
-                        fact: ModuleFact::InlineGlob {
-                            path: glob,
-                            module: scan.module.clone(),
-                        },
-                        file: file.clone(),
-                    });
-                }
-            }
+            self.glob(t, scope, written, scan, &file, findings)?;
         }
         for occurrence in &scan.occurrences {
             if !is_judged(self.strict, occurrence.is_call) {
@@ -247,20 +254,102 @@ impl Judgement<'_> {
                 scope,
                 dependencies,
             )? {
-                if path_within(&resolved, self.prefix)
-                    && should_react_on_occurrence(self.strict, self.verbs.as_deref(), &resolved)
-                {
-                    findings.push(InlineFinding {
-                        fact: ModuleFact::InlinePath {
-                            path: resolved,
-                            module: scan.module.clone(),
-                        },
-                        file: file.clone(),
-                    });
+                if should_react_on_occurrence(self.strict, self.verbs.as_deref(), &resolved) {
+                    self.report(resolved, scan, &file, findings);
+                }
+            }
+        }
+        if self.strict {
+            for (file_use, in_macro) in scan
+                .uses
+                .iter()
+                .map(|file_use| (file_use, false))
+                .chain(scan.macro_uses.iter().map(|file_use| (file_use, true)))
+            {
+                for leaf in file_use.leaves.as_ref().map_err(Clone::clone)? {
+                    let written = match leaf {
+                        UseLeaf::Name { path, .. } => path,
+                        UseLeaf::SelfLeaf { module, .. } | UseLeaf::Empty(module) => module,
+                        UseLeaf::Glob(base) if in_macro => {
+                            self.glob(t, file_use.scope, base, scan, &file, findings)?;
+                            continue;
+                        }
+                        UseLeaf::Glob(_) => continue,
+                    };
+                    for resolved in resolve_written(
+                        written,
+                        PathSite::Use,
+                        Namespace::Either,
+                        self.scopes,
+                        t,
+                        file_use.scope,
+                        dependencies,
+                    )? {
+                        self.report(resolved, scan, &file, findings);
+                    }
                 }
             }
         }
         Ok(())
+    }
+
+    /// Report the glob `written` in `scope` of table `t` where what it brings in can reach the prefix. A glob a scope
+    /// records — one a block inside a macro's group holds among them — is judged under every confinement, and every
+    /// glob a macro's group holds is a mention as well, judged under a strict one wherever it stands.
+    fn glob(
+        &self,
+        t: usize,
+        scope: u32,
+        written: &str,
+        scan: &FileScan,
+        file: &str,
+        findings: &mut Vec<InlineFinding>,
+    ) -> Result<(), String> {
+        let table = self.scopes.table(t);
+        for glob in resolve_written(
+            written,
+            PathSite::Use,
+            Namespace::Type,
+            self.scopes,
+            t,
+            scope,
+            self.external_dependencies.as_ref(),
+        )? {
+            if glob_reaches_prefix(
+                self.scopes,
+                &glob,
+                self.prefix,
+                &table.scopes[scope as usize].module,
+            )? {
+                findings.push(InlineFinding {
+                    fact: ModuleFact::InlineGlob {
+                        path: glob,
+                        module: scan.module.clone(),
+                    },
+                    file: file.to_string(),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// Report `resolved`, a path `scan` names, where it lies under the prefix.
+    fn report(
+        &self,
+        resolved: String,
+        scan: &FileScan,
+        file: &str,
+        findings: &mut Vec<InlineFinding>,
+    ) {
+        if path_within(&resolved, self.prefix) {
+            findings.push(InlineFinding {
+                fact: ModuleFact::InlinePath {
+                    path: resolved,
+                    module: scan.module.clone(),
+                },
+                file: file.to_string(),
+            });
+        }
     }
 }
 

@@ -135,12 +135,28 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
+                "module-boundary/a-cfg-before-a-separator-its-construct-holds-is-not-read-a-stated-bound",
+            ),
+            "a `mod` with no file in a block whose item, statement, match arm, parameter or field carries a `cfg` \
+             and holds a `,`, a brace group or an attribute of its own before that block — a generic list's or a \
+             `where` clause's comma, a closure's parameters, an `if`'s block before `else`, a struct literal or \
+             pattern, a tuple struct's earlier fields, or a type's generic arguments before an array length",
+            Extent::Reached(Reached::RefusesToJudge {
+                because: "the owner of an enclosing group is read back to the previous `;`, `,`, brace group or \
+                          attribute, so a construct holding one of those before the group is not reached and its \
+                          `cfg` is not read; the missing file is refused rather than tolerated"
+                    .into(),
+            }),
+            "a_cfg_before_a_separator_its_construct_holds_is_not_read",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
                 "inline-symbol-path-confinement/a-prefix-naming-a-macro-generated-item-is-refused-a-stated-bound",
             ),
             "a `crate::` inline-call prefix naming an item a macro invocation defines",
             Extent::Reached(Reached::RefusesToJudge {
-                because: "no declaration inside a macro invocation's group is recorded, so the item is absent from \
-                          the set the prefix is held to and the prefix is refused as naming nothing"
+                because: "no declaration inside a macro invocation's group other than a `cfg_if!` arm is recorded, so \
+                          the item is absent from the set the prefix is held to and the prefix is refused as naming nothing"
                     .into(),
             }),
             "a_prefix_naming_a_macro_generated_item_is_refused",
@@ -176,14 +192,28 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             ),
             "a bare call, in its own module, of an item a macro invocation generates",
             Extent::Reached(Reached::UnderReacts {
-                because: "no declaration inside a macro invocation's group is recorded, so the \
-                          generated item is not in the scope table and a head no scope binds names nothing; a crate-rooted path naming \
+                because: "no declaration inside a macro invocation's group other than a `cfg_if!` arm is recorded, so \
+                          the generated item is not in the scope table and a head no scope binds names nothing; a crate-rooted path naming \
                           it from another module still reacts"
                     .into(),
                 owner: Owner::Engine,
             }),
             "a_macro_generated_item_called_bare_in_its_module_is_a_bound",
             ["a_crate_rooted_call_of_a_macro_generated_item_reports"],
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "inline-symbol-path-confinement/a-use-written-in-a-macro-group-outside-any-block-binds-nothing-a-stated-bound",
+            ),
+            "a path beside a `use` written directly in a macro's group, outside any block the group holds",
+            Extent::Reached(Reached::UnderReacts {
+                because: "where a macro expands what its group holds is not read, so a `use` written directly in the \
+                          group binds in no scope, and a path it would bind names nothing; a `use` a block in the group \
+                          holds binds that block's paths"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "a_use_written_in_a_macro_group_outside_any_block_binds_nothing",
         ),
         BoundDecl::pinned(
             BoundId::new(
@@ -197,6 +227,19 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                 owner: Owner::Engine,
             }),
             "a_prelude_name_called_bare_is_not_read_as_its_std_path",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "inline-symbol-path-confinement/a-parenthesized-fn-bound-is-read-as-a-call-a-stated-bound",
+            ),
+            "a trait bound of the `Fn` family written with parenthesized arguments — `F: Fn(u8) -> u8`, \
+             `impl FnOnce()`, `dyn FnMut(u8)`",
+            Extent::Reached(Reached::OverReacts {
+                because: "a path's role is read from the tokens beside it, and a parenthesized bound is written as a \
+                          call is, so no reading of the tokens tells the bound from the call"
+                    .into(),
+            }),
+            "a_parenthesized_fn_bound_is_read_as_a_call",
         ),
         BoundDecl::pinned(
             BoundId::new(
@@ -267,6 +310,32 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                     .into(),
             }),
             "a_local_binding_named_like_an_import_is_read_as_the_import",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "inline-symbol-path-confinement/an-import-in-a-block-of-what-is-not-read-is-read-with-the-scope-around-it-a-stated-bound",
+            ),
+            "a bare head a block binds only through an import of what the scanner does not read, which the scope \
+             around the block also binds",
+            Extent::Reached(Reached::OverReacts {
+                because: "whether such an import holds the name in the namespace the head is read in is not read, so \
+                          the head is resolved through the block's import and through the scope around the block both"
+                    .into(),
+            }),
+            "a_block_import_of_what_is_not_read_is_read_with_the_scope_around_it",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "inline-symbol-path-confinement/an-import-of-what-is-not-read-beside-a-glob-is-read-with-the-glob-a-stated-bound",
+            ),
+            "a bare head a scope binds only through an import of what the scanner does not read, which a glob of \
+             that scope also brings",
+            Extent::Reached(Reached::OverReacts {
+                because: "whether such an import holds the name in the namespace the head is read in is not read, so \
+                          the head is resolved through the import and through the scope's globs both"
+                    .into(),
+            }),
+            "an_import_of_what_is_not_read_beside_a_glob_is_read_with_the_glob",
         ),
         BoundDecl::pinned(
             BoundId::new(

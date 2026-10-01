@@ -1205,3 +1205,75 @@ pub(super) fn must_not_be_imported_by_does_not_flag_the_protected_modules_own_su
         "the protected module's own subtree is not an importer: {violations:?}"
     );
 }
+
+/// A refusal of the module walk names the crate and the compilation unit it walked, so a package of several roots
+/// says which root declares the module to repair.
+#[test]
+pub(super) fn a_walk_refusal_names_its_compilation_unit() {
+    let (result, _) = run_module_check(
+        "walk-refusal-unit",
+        &[
+            ("lib.rs", "pub mod kernel;\nmod ghost;\n"),
+            ("kernel.rs", ""),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::kernel")
+            .must_not_import("crate::ghost")
+            .because("the kernel must not import a ghost"),
+    );
+    let err = result.expect_err("a declared module with no file is a scan error");
+    assert!(
+        err.starts_with(
+            "cannot walk crate 'x' in compilation unit 'lib.rs': module 'crate::ghost'"
+        ),
+        "{err}"
+    );
+}
+
+/// A walk refusal names the file whose `mod` declares the module, and a missing file every declaring source sought:
+/// a nested `mod ghost;` names `a.rs`, and a block module whose two `cfg_attr` paths name no directory names the file
+/// it expected under each, where the first alone was named.
+#[test]
+pub(super) fn a_walk_refusal_names_where_each_declaration_is_written() {
+    let boundary = || {
+        ModuleBoundary::in_crate("x")
+            .module("crate::kernel")
+            .must_not_import("crate::ghost")
+            .because("the kernel must not import a ghost")
+    };
+    let (nested, _) = run_module_check(
+        "walk-refusal-declared-in",
+        &[
+            ("lib.rs", "pub mod kernel;\npub mod a;\n"),
+            ("kernel.rs", ""),
+            ("a.rs", "mod ghost;\n"),
+        ],
+        boundary(),
+    );
+    let nested = nested.expect_err("a declared module with no file is a scan error");
+    assert!(
+        nested.contains("could not be located (declared in '")
+            && nested.contains("a.rs', expected '"),
+        "{nested}"
+    );
+    let (candidates, _) = run_module_check(
+        "walk-refusal-candidates",
+        &[
+            (
+                "lib.rs",
+                "pub mod kernel;\npub fn f() { #[cfg_attr(unix, path = \"d\")] \
+                 #[cfg_attr(windows, path = \"e\")] mod k { pub mod m; } }\n",
+            ),
+            ("kernel.rs", ""),
+        ],
+        boundary(),
+    );
+    let candidates = candidates.expect_err("a block module no candidate backs is a scan error");
+    let separator = std::path::MAIN_SEPARATOR;
+    for expected in [
+        format!("{separator}d{separator}m.rs"),
+        format!("{separator}e{separator}m.rs"),
+    ] {
+        assert!(candidates.contains(&expected), "{expected} in {candidates}");
+    }
+}

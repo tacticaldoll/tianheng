@@ -143,6 +143,10 @@ them.
 - In an edition-2015 package, address or baseline what 圭表's import rules now report through a submodule's
   `use` path, bare or `::`-rooted, whose first segment names a crate-root module.
 
+- Where two targets share one root file in editions 圭表 reads apart — a `[lib]` or `[[bin]]` in 2015 beside one in
+  a later edition — point each at its own root, or give them one edition; the check refuses the shared root
+  (exit 2) rather than judge it in one of the two.
+
 - Rewrite every 圭表 module path — the module passed to `ModuleBoundary::…::module`, and each module named by
   `must_not_import`, `must_not_be_imported_by`, `restrict_imports_to` and `must_only_be_imported_by` — in the
   canonical `crate::…` spelling, naming a module some root of the crate declares. Address or baseline what a
@@ -179,6 +183,22 @@ them.
   the chain by aliasing the item it names directly. A `use` tree is now read up to 128 braces deep and refused past it: an
   import rule judges a tree exactly 128 deep, which 0.7.1 refused, and an inline confinement judges trees 65
   to 128 deep, which 0.7.1 refused past 64 — address or baseline what they report.
+
+- Rerun the check and address or baseline what 圭表 now reads: the `mod`s after a crate root's shebang line or
+  byte-order mark; a file-form or inline `mod` a block declares; a call past a `{self}` group leaf, or past a
+  block or beside a glob that imports the name only as what it does not read; a bare `proc_macro::…` call in a proc-macro crate;
+  a call or glob a `use` in a block inside a macro's group brings; a call or import written in another Unicode
+  composition than the module it names;
+  under `.strict_prefix_only()`, a grouped `use` leaf, an edition-2015 `use`, a grouped `use` a macro's group
+  holds, a `$crate::{…}` head included, a glob a macro's group holds, and a path after a comma in an enum discriminant's turbofish or qualified path; an import separated by a
+  vertical tab or a `Pattern_White_Space` character past ASCII; and a call through a `type` alias of a
+  parenthesized path. Remove the entry `--disallow-stale` names for a `use` written inside an attribute's
+  arguments, and repair a `use` tree holding a token no path segment is, which is now a scan error (exit 2).
+
+- Rewrite an inline-call prefix under `std`, `core`, `alloc`, `proc_macro` or `test` that spells a character past
+  ASCII, such as a soft hyphen or a word joiner copied in with the path, in the ASCII the sysroot's paths are written
+  in, and remove from any prefix or module path a character no identifier holds, and from a prefix a `_` segment; the check now refuses them (exit 2) where it accepted
+  a path that never reacted.
 
 ### Static
 
@@ -288,10 +308,16 @@ them.
   answer in both spellings: `dep::f()` and `::dep::f()` are outside the default and reported under
   `.strict_external()`. The receiver-method bound
   `inline-symbol-path-confinement/a-receiver-method-read-is-a-documented-bound` now names the qualified form
-  and gains a second pin, and one over-reaction is declared,
-  `inline-symbol-path-confinement/a-generic-parameter-named-like-an-import-is-read-as-the-import-a-stated-bound`:
-  generic parameter lists are not read, so a head naming a generic parameter reads as the module's same-named
-  import. The bound registered in 0.7.1 as
+  and gains a second pin, and over-reactions are declared:
+  `inline-symbol-path-confinement/a-generic-parameter-named-like-an-import-is-read-as-the-import-a-stated-bound`,
+  since generic parameter lists are not read, so a head naming a generic parameter reads as the module's
+  same-named import;
+  `inline-symbol-path-confinement/a-local-binding-named-like-an-import-is-read-as-the-import-a-stated-bound`, since a
+  `fn` or closure parameter and a `let` binding are not recorded either;
+  `inline-symbol-path-confinement/an-import-in-a-block-of-what-is-not-read-is-read-with-the-scope-around-it-a-stated-bound`,
+  since whether a block's import of a crate that is not read holds the name it binds is not read; and
+  `inline-symbol-path-confinement/a-parenthesized-fn-bound-is-read-as-a-call-a-stated-bound`, since
+  `F: Fn(u8) -> u8` is written as a call is. The bound registered in 0.7.1 as
   `inline-symbol-path-confinement/a-glob-reacts-to-any-alias-or-re-export-beneath-its-resolved-module-a-stated-bound`
   keeps its id: the glob hazard may still react to an alias beneath its resolved module that the glob does not
   bring into scope. These bounds are declared:
@@ -316,9 +342,45 @@ them.
   where 0.7.1 read none of them;
   a file-form `mod` a block declares with a `#[path]` or a `cfg_attr` path, `fn f() { #[path = "x.rs"] mod m; }`,
   governs `x.rs` as `crate::{block}::m`, and `{block N}::m` for a later one of that name, and a path through `m`
-  from its block reads that file, while one whose every path names no file is a scan error (exit 2); and a `#[path]` in a file reached through a symlink resolves from the directory of the path
+  from its block reads that file, while one whose every path names no file is a scan error (exit 2) unless a `cfg`
+  removes it or something enclosing it, and names the file declaring it; an inline `mod k { … }` a block declares is
+  read, its path attributes resolving from the declaring file's directory, so `fn f() { mod k { #[path = "y.rs"] mod m;
+  } }` governs `k/y.rs` as `crate::{block}::k::m`, and one carrying a `cfg_attr` path reads its children from the
+  directories that path names alone, as rustc does; and a `#[path]` in a file reached through a symlink resolves from the directory of the path
   the file is opened by, as rustc does, rather than the symlink target's. Each may report violations in source
   that went unread.
+
+- **BREAKING** — **圭表 reads a `{self}` leaf as importing its module alone.** `use crate::local::both::{self};` imports
+  the module `both` and not a `fn both` beside it, so a call `both()` past it names what the scope around it binds,
+  and reports under that prefix where it went unreported; address or baseline it.
+
+- **BREAKING** — **圭表 reads a name past a block that binds it only through an import of what it does not read.**
+  `fn g() { use std::fmt; fmt(); }` beside the module's `use crate::forbidden::fmt;` calls the module's `fmt`, since
+  `std::fmt` names a module and no value, and now reports under `crate::forbidden`, where it went unreported;
+  address or baseline it. Where such an import does hold the name, the scope around the block is read too, a
+  declared over-reaction. The same holds of a scope's own globs: `use crate::forbidden::*; use std::fmt;` then
+  `fmt()` calls the glob's `fmt`, and now reports under `crate::forbidden` beside the glob's own finding.
+
+- **BREAKING** — **圭表 reads `proc_macro` as a proc-macro crate's extern prelude does.** A `[lib] proc-macro = true`
+  crate names `proc_macro` with no `extern crate proc_macro;`, so an inline confinement over a `proc_macro::…` prefix
+  now reports `proc_macro::TokenStream::new()` written bare there, where the call went unreported. Address or
+  baseline what it reports.
+
+- **BREAKING** — **圭表 judges a `use` leaf as a `use` path, and reads no `use` inside an attribute.** Under
+  `.strict_prefix_only()` a leaf of a grouped tree — `use crate::{clock::now};` — and an edition-2015 `use clock::now;`
+  now report under the prefix the path names, where they went unreported, and so does a grouped `use` a macro's
+  group holds, a `$crate` head included; address or baseline them. A `use`
+  written inside an attribute's arguments, `#[my_attr(use crate::x::Y;)]`, is that attribute's input and is no
+  longer read as an import, so an entry recorded for one is stale; `--disallow-stale` names it. A path after a comma
+  inside an enum discriminant's turbofish or qualified path, `A = f::<u8, std::process::Command>()` or
+  `A = 1 + <u8 as Tr<u8, std::process::Command>>::X`, is read as a path rather than as the name of a variant, and reports under `.strict_prefix_only()`. Whitespace is the Reference's
+  `Pattern_White_Space`: a vertical tab and five characters past ASCII separate tokens, where a vertical tab in a
+  `use` tree dropped its leaf and a wide one was read into a name, so such an import now reports; a use tree holding
+  a token no path segment is, which rustc refuses, is a scan error (exit 2) rather than a leaf dropped.
+
+- **BREAKING** — **圭表 reads a `type` alias through a parenthesized path.** A `type` alias whose target is a
+  parenthesized path, `type C = (crate::a::T);`, generic arguments included, is read through that path, so a call
+  through it reports where it went unreported; address or baseline it.
 
 - **BREAKING** — **圭表's import rules read a `use` path's head as a uniform path.** From edition 2018 a bare
   first segment names what the scope the `use` stands in binds or declares before it names a crate, so in
@@ -361,7 +423,8 @@ them.
   named `kernel`. The import rules now report it, and the external-crate rule no longer does. Import rules and
   inline confinements classify a `use` path's root through one dispatch, in the edition of the target being
   read: its `[lib]` or `[[bin]]` `edition` where it declares one, so a 2024 package with `[lib] edition = "2015"`
-  is read as 2015. Targets sharing one root in two editions are a constitution error (exit 2) naming both.
+  is read as 2015. Targets sharing one root in editions read apart — 2015 beside a later one — are a constitution
+  error (exit 2) naming both; 2018 beside 2021 is one reading.
 
 - **BREAKING** — **圭表 accepts a module path only in its canonical spelling, naming a module that exists.**
   The rule 渾儀's module anchors follow, held by 圭表's own reading: a module path is `crate` or `crate::`
@@ -391,7 +454,10 @@ them.
   implementation both builders share:
   - **Spelling.** `::`-separated identifiers, optionally starting with a leading `::` for explicit
     external crate disambiguation; `r#x` is `x`. An empty segment, a trailing `::`, or interior whitespace is
-    exit 2, suggesting the trimmed segments where valid. So is a first segment that can never name a crate or
+    exit 2, suggesting the trimmed segments where valid, and so is a character past ASCII in a segment under
+    `std`, `core`, `alloc`, `proc_macro` or `test`, whose paths are all ASCII. Under any head a segment is an
+    identifier as the Reference reads one, `XID_Start` then `XID_Continue`, so a soft hyphen, a word joiner or an
+    emoji in a segment is exit 2, and so is a segment `_` alone, which names nothing: `std::_` never reacted. So is a first segment that can never name a crate or
     module — `_` or `r#_`; `r#crate`, `r#self`, `r#super` or `r#Self`; bare `self`, `super` or `Self`; or
     `crate` after a leading `::` — suggesting the unraw spelling where that is valid (`r#crate::clock` →
     `crate::clock`). Every other first segment, a keyword in some edition or not, is accepted bare or raw:
@@ -414,6 +480,37 @@ them.
   `inline-symbol-path-confinement/a-prefix-naming-a-macro-generated-item-is-refused-a-stated-bound`. A blank
   prefix keeps its own refusal.
 
+- **圭表 tolerates an absent module file beneath what a `cfg` removes.** A `mod` with no file was tolerated only
+  where a `cfg` sat on the declaration itself or it was written directly in a `cfg_if!` arm. It is now tolerated
+  wherever rustc loads nothing beneath a `cfg`: inside an inline module, `fn`, block statement, match arm or field carrying
+  one, bare or applied through `cfg_attr`, anywhere inside a `cfg_if!` arm, and in the file of a module a `cfg`
+  removes — `#[cfg(feature = "x")] mod o { mod i; }` or `#[cfg(feature = "x")] mod o;` over an `o.rs` declaring
+  `mod i;`, with no `i.rs`, exited 2 in 0.7.1 and is judged now. A file that exists beneath such a `cfg` is still
+  read, and the check refuses a missing file where no `cfg` applies, as before. 漏刻's probe-coverage walker still
+  reads the `cfg` from the declaration and its arm alone.
+
+- **BREAKING** — **圭表 reads an identifier in NFC, as rustc compares one.** A name written decomposed — `se` +
+  U+0301 + `cret` — and the same name written precomposed were two names to 圭表 and one to rustc, so a call
+  `crate::sécret::go()` written in one composition went unreported under a prefix or a module declared in the other,
+  `must_not_import` likewise, and a prefix whose module was declared in the other composition was refused as naming
+  nothing. Every identifier the scanner reads, and every prefix and module path a boundary declares, is now compared
+  and reported in NFC. Address or baseline what it reports.
+
+- **BREAKING** — **圭表 reads a `use` a macro's block holds.** A block inside a macro's group — the transcriber of
+  `macro_rules! m { () => { use crate::clock::{self}; clock::now(); }; }` — binds its `use` statements for the paths
+  beside them, as the expansion does, so that call reports under `crate::clock`, and a glob there reacts as any
+  glob does; under `.strict_prefix_only()` a glob anywhere in a macro's group is judged as a glob. Each went
+  unreported. A `use` written directly in a macro's group, outside any block, still binds nothing, declared as
+  `inline-symbol-path-confinement/a-use-written-in-a-macro-group-outside-any-block-binds-nothing-a-stated-bound`.
+  Address or baseline what it reports.
+
+- **圭表's refusals say where to repair.** A misdeclared inline confinement — a blank prefix, narrowing with strict,
+  an empty verb set, `confine_inline_call` over `crate` or at `ScanDepth::Shallow` — is refused before any root is
+  walked, where a scan refusal in some file was reported in its place. A refusal of the module walk opens with the
+  crate and the compilation unit walked, `cannot walk crate 'x' in compilation unit 'lib.rs': …`, and names the file
+  whose `mod` it refuses; a missing module file names every declaring source that found none, where the first alone
+  was named. Exit codes are unchanged.
+
 ### Self-governance
 
 - **A released `CHANGELOG.md` section is held to its tag.** Release coherence holds every `vX.Y.Z` tag's section
@@ -423,6 +520,16 @@ them.
   how many released sections it held, since git answers an unreadable `refs/tags` as no tags, and over this
   repository that count is held to the release snapshots preceding `HEAD`. A rewrite is refused naming its first
   differing line by its line in `HEAD`'s `CHANGELOG.md`.
+
+- **Amendment: 圭表 may depend on `unicode-normalization`.** 圭表's allowlist of direct normal edges gains
+  `unicode-normalization`, Unicode's Normalization Form C, so an identifier is compared as rustc compares it rather
+  than by its bytes. `self_law_amendment.rs` names the change; its licence, `MIT OR Apache-2.0`, and that of
+  `tinyvec` beneath it, are among those `deny.toml` admits.
+
+- **Amendment: 圭表 may depend on `unicode-ident`.** 圭表's allowlist of direct normal edges gains `unicode-ident`,
+  Unicode's identifier tables, so a written path segment is read as an identifier by `XID_Start` and
+  `XID_Continue` rather than by excluding one character at a time; the edge was refused under the accepted law and
+  `syn` still is. `self_law_amendment.rs` names the change, and its licence was already reviewed in `deny.toml`.
 
 ## [0.7.1] - 2026-09-27
 

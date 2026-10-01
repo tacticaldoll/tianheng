@@ -3800,6 +3800,611 @@ fn uniform_path_controls_keep_their_answers() {
     }
 }
 
+/// Under `.strict_prefix_only()` a `use` leaf is judged as the `use` path it is, whatever tree it is written in: a
+/// grouped `use crate::{clock::now};` holds no path `clock::now`, and in edition 2015 `use clock::now;` in a submodule
+/// starts at the crate root. An empty group, `use crate::clock::{};`, imports nothing and names the path before it,
+/// which rustc resolves. Nor is a leaf read as an expression path from its module: `use crate::other::{clock::now};`
+/// in a module declaring its own `clock` mentions `crate::other::clock::now` alone. Each row is compiled by rustc
+/// 1.96.0, in edition 2021 but for the 2015 row.
+#[test]
+fn a_use_leaf_is_judged_as_a_use_path_under_strict_prefix_only() {
+    for (package, edition, use_line, expected) in [
+        (
+            "strictuseflat",
+            "2021",
+            "use crate::clock::now;",
+            "crate::clock::now in crate",
+        ),
+        (
+            "strictusegroup",
+            "2021",
+            "use crate::{clock::now};",
+            "crate::clock::now in crate",
+        ),
+        (
+            "strictusenested",
+            "2021",
+            "use crate::{clock::{now}};",
+            "crate::clock::now in crate",
+        ),
+        (
+            "strictuseouter",
+            "2021",
+            "use {crate::clock::now};",
+            "crate::clock::now in crate",
+        ),
+        (
+            "strictuseself",
+            "2021",
+            "use crate::clock::{self};",
+            "crate::clock in crate",
+        ),
+        (
+            "strictuse2015",
+            "2015",
+            "use clock::now;",
+            "crate::clock::now in crate",
+        ),
+        (
+            "strictuseempty",
+            "2021",
+            "use crate::clock::{};",
+            "crate::clock in crate",
+        ),
+        (
+            "strictusenestedempty",
+            "2021",
+            "use crate::{clock::{}};",
+            "crate::clock in crate",
+        ),
+    ] {
+        let probe = RootProbe::with_edition(
+            package,
+            edition,
+            "",
+            &[(
+                "src/lib.rs",
+                &format!(
+                    "pub mod clock {{ pub fn now() {{}} }}\npub mod sub {{ #[allow(unused_imports)] {use_line} }}\n"
+                ),
+            )],
+        );
+        let law = Constitution::new("strict-use").boundary(
+            ModuleBoundary::in_crate(package)
+                .module("crate")
+                .must_not_call_inline("crate::clock")
+                .strict_prefix_only()
+                .depth(xuanji::ScanDepth::Subtree)
+                .because("no mention of the clock"),
+        );
+        match check(&law, probe.manifest()) {
+            Outcome::Violations(report) => assert_eq!(
+                report
+                    .violations
+                    .iter()
+                    .map(|v| v.finding.as_str())
+                    .collect::<Vec<_>>(),
+                [expected],
+                "{package}: {report:?}"
+            ),
+            other => panic!("{package}: expected the use leaf to react, got {other:?}"),
+        }
+    }
+    let package = "strictusenoexpression";
+    let probe = lib_probe(
+        package,
+        "pub mod other { pub mod clock { pub fn now() {} } }\npub mod sub { pub mod clock { pub fn now() {} } \
+         #[allow(unused_imports)] use crate::other::{clock::now}; }\n",
+    );
+    let law = Constitution::new("strict-use").boundary(
+        ModuleBoundary::in_crate(package)
+            .module("crate")
+            .must_not_call_inline("crate::sub::clock")
+            .strict_prefix_only()
+            .depth(xuanji::ScanDepth::Subtree)
+            .because("no mention of sub's clock"),
+    );
+    let outcome = check(&law, probe.manifest());
+    assert_eq!(
+        outcome.exit_code(),
+        0,
+        "a grouped leaf is no expression path read from its module: {outcome:?}"
+    );
+}
+
+/// A parenthesized bound of the `Fn` family is written as a call is — `F: std::ops::Fn(u8) -> u8`,
+/// `impl std::ops::FnOnce()` — so it is read as one: the declared over-reaction. rustc 1.96.0, edition 2021, compiles
+/// both, and neither calls anything.
+#[test]
+fn a_parenthesized_fn_bound_is_read_as_a_call() {
+    for (package, item, expected) in [
+        (
+            "fnboundsugar",
+            "pub fn f<F: std::ops::Fn(u8) -> u8>(g: F) -> u8 { g(1) }",
+            "std::ops::Fn in crate",
+        ),
+        (
+            "fnoncesugar",
+            "pub fn h() -> impl std::ops::FnOnce() { || () }",
+            "std::ops::FnOnce in crate",
+        ),
+        (
+            "fnmutdynsugar",
+            "pub fn k(g: &dyn std::ops::FnMut(u8)) -> usize { std::mem::size_of_val(g) }",
+            "std::ops::FnMut in crate",
+        ),
+    ] {
+        let probe = lib_probe(package, &format!("{item}\n"));
+        assert_inline_answers(
+            &probe,
+            package,
+            "crate",
+            "std::ops",
+            &[expected],
+            &[expected],
+        );
+    }
+}
+
+/// A `type` alias a block declares of something no path names — a tuple, an array — is a block-local item, so a call
+/// through it names nothing the module imports: rustc 1.96.0, edition 2021, calls the alias's `default` in
+/// `fn g() { type Command = (u8, u8); let _ = Command::default(); }` beside `use std::process::Command;`. A block's alias
+/// of a path is read through its target as ever, parenthesized or not.
+#[test]
+fn a_block_alias_of_no_path_is_a_block_local_item() {
+    for (package, alias, call, expected) in [
+        (
+            "blockaliastuple",
+            "type Command = (u8, u8);",
+            "Command::default()",
+            &[][..],
+        ),
+        (
+            "blockaliasarray",
+            "type Command = [u8; 2];",
+            "Command::default()",
+            &[][..],
+        ),
+        (
+            "blockaliaspath",
+            "type Command = std::process::Command;",
+            "Command::new(\"true\")",
+            &["std::process::Command::new in crate"][..],
+        ),
+        (
+            "blockaliasparenthesized",
+            "type Command = (std::process::Command);",
+            "Command::new(\"true\")",
+            &["std::process::Command::new in crate"][..],
+        ),
+    ] {
+        let probe = lib_probe(
+            package,
+            &format!(
+                "#[allow(unused_imports)]\nuse std::process::Command;\npub fn g() {{ {alias} let _ = {call}; }}\n"
+            ),
+        );
+        assert_inline_answers(&probe, package, "crate", "std::process", expected, expected);
+    }
+}
+
+/// A parenthesized alias target is read with the generic arguments a type path takes, so
+/// `type C = (crate::secret::G<u8>);` in a block names `crate::secret::G`, and a call through it reports as it does
+/// without the parentheses. rustc 1.96.0, edition 2021, calls `crate::secret::G::make`.
+#[test]
+fn a_parenthesized_alias_of_a_generic_path_is_read_through_it() {
+    let package = "parengeneric";
+    let probe = lib_probe(
+        package,
+        "pub mod secret { pub struct G<T>(pub T); impl<T> G<T> { pub fn make() {} } }\n\
+         pub fn g() { type C = (crate::secret::G<u8>); C::make(); }\n",
+    );
+    let expected = ["crate::secret::G::make in crate"];
+    assert_inline_answers(
+        &probe,
+        package,
+        "crate",
+        "crate::secret",
+        &expected,
+        &expected,
+    );
+}
+
+/// A comma inside an enum discriminant's turbofish separates no variants, so the path after it is read as a path:
+/// `enum E { A = f::<u8, std::process::Command>() }` mentions `std::process::Command` as the same call in a `const`
+/// does, and reports under `.strict_prefix_only()`. rustc 1.96.0, edition 2021, compiles both with a generic
+/// `const fn f`; so does a qualified path after an operator, `A = 1 + <u8 as Tr<u8, std::process::Command>>::X`,
+/// whose `<` opens a path as it does in any expression.
+#[test]
+fn a_path_in_a_discriminants_turbofish_is_read() {
+    for (package, item) in [
+        (
+            "discriminantturbofish",
+            "pub enum E { A = f::<u8, std::process::Command>() }",
+        ),
+        (
+            "constturbofish",
+            "pub const K: isize = f::<u8, std::process::Command>();",
+        ),
+        (
+            "discriminantqualifiedsum",
+            "pub enum E { A = 1 + <u8 as Tr<u8, std::process::Command>>::X, B }",
+        ),
+        (
+            "discriminantqualifiednegation",
+            "pub enum E { A = -<u8 as Tr<u8, std::process::Command>>::X, B }",
+        ),
+    ] {
+        let probe = lib_probe(
+            package,
+            &format!(
+                "pub const fn f<A, B>() -> isize {{ 0 }}\npub trait Tr<A, B> {{ const X: isize; }}\n\
+                 impl<A, B> Tr<A, B> for u8 {{ const X: isize = 5; }}\n{item}\n"
+            ),
+        );
+        let law = Constitution::new("discriminant").boundary(
+            ModuleBoundary::in_crate(package)
+                .module("crate")
+                .must_not_call_inline("std::process")
+                .strict_prefix_only()
+                .depth(xuanji::ScanDepth::Subtree)
+                .because("no mention of processes"),
+        );
+        match check(&law, probe.manifest()) {
+            Outcome::Violations(report) => assert_eq!(
+                report
+                    .violations
+                    .iter()
+                    .map(|v| v.finding.as_str())
+                    .collect::<Vec<_>>(),
+                ["std::process::Command in crate"],
+                "{package}: {report:?}"
+            ),
+            other => panic!("{package}: expected the mention to react, got {other:?}"),
+        }
+    }
+}
+
+/// Whitespace is Unicode's `Pattern_White_Space`, as the Reference states: a vertical tab, which
+/// `u8::is_ascii_whitespace` leaves out, and five characters past ASCII separate tokens as a space does, so
+/// `use crate::forbidden::{\u{b}Thing\u{b}};` imports `crate::forbidden::Thing` and the name is read without either.
+/// rustc 1.96.0, edition 2021, compiles each row.
+#[test]
+fn every_pattern_white_space_character_separates_tokens() {
+    for (i, space) in [
+        '\t', '\n', '\u{b}', '\u{c}', '\r', ' ', '\u{85}', '\u{200e}', '\u{200f}', '\u{2028}',
+        '\u{2029}',
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let package = format!("whitespace{i}");
+        let probe = RootProbe::new(
+            &package,
+            "",
+            &[
+                (
+                    "src/lib.rs",
+                    "pub mod forbidden { pub struct Thing; }\npub mod m;\n",
+                ),
+                (
+                    "src/m.rs",
+                    &format!(
+                        "#[allow(unused_imports)]\nuse crate::forbidden::{{{space}Thing{space}}};\n"
+                    ),
+                ),
+            ],
+        );
+        let law = Constitution::new("whitespace").boundary(
+            ModuleBoundary::in_crate(&package)
+                .module("crate::m")
+                .must_not_import("crate::forbidden")
+                .because("m does not reach forbidden"),
+        );
+        match check(&law, probe.manifest()) {
+            Outcome::Violations(report) => assert_eq!(
+                report
+                    .violations
+                    .iter()
+                    .map(|v| v.finding.as_str())
+                    .collect::<Vec<_>>(),
+                ["crate::forbidden::Thing"],
+                "{space:?}: {report:?}"
+            ),
+            other => panic!("{space:?}: expected the import to react, got {other:?}"),
+        }
+    }
+}
+
+/// A use tree holding a token no path segment is, or a path that ends in `::`, is refused rather than read with the
+/// leaf dropped: rustc refuses both, and a dropped leaf is an import no rule sees.
+#[test]
+fn a_use_tree_holding_what_no_path_is_is_refused() {
+    for (package, use_line, refusal) in [
+        (
+            "usetreetoken",
+            "use crate::forbidden::{1};",
+            "holding `1` where a path segment stands",
+        ),
+        (
+            "usetreeendscolons",
+            "use crate::forbidden::;",
+            "whose path ends in `::`",
+        ),
+    ] {
+        let probe = RootProbe::new(
+            package,
+            "",
+            &[
+                (
+                    "src/lib.rs",
+                    "pub mod forbidden { pub struct Thing; }\npub mod m;\n",
+                ),
+                ("src/m.rs", &format!("{use_line}\n")),
+            ],
+        );
+        let law = Constitution::new("use-tree").boundary(
+            ModuleBoundary::in_crate(package)
+                .module("crate::m")
+                .must_not_import("crate::forbidden")
+                .because("m does not reach forbidden"),
+        );
+        match check(&law, probe.manifest()) {
+            Outcome::ConstitutionError(message) => {
+                assert!(message.contains(refusal), "{package}: {message}")
+            }
+            other => panic!("{package}: expected a refusal, got {other:?}"),
+        }
+    }
+}
+
+/// A macro's group is read conservatively under `.strict_prefix_only()`, and a `use` statement it holds is judged as
+/// the `use` path it is: `id! { use crate::{clock::now}; }` in `crate::core` mentions `crate::clock::now`, which its
+/// tokens read as an expression would not. A `$crate` head in a `macro_rules!` body reads as `crate`, grouped or not:
+/// `use $crate::{clock::now};` mentions `crate::clock::now` as `use $crate::clock::now;` does. rustc 1.96.0, edition
+/// 2021, builds each.
+#[test]
+fn a_use_in_a_macros_group_is_judged_as_a_use_path_under_strict_prefix_only() {
+    for (package, files, expected) in [
+        (
+            "strictmacrouse",
+            &[
+                (
+                    "src/lib.rs",
+                    "pub mod clock { pub fn now() {} }\npub mod core;\n",
+                ),
+                (
+                    "src/core.rs",
+                    "macro_rules! id { ($($t:tt)*) => { $($t)* }; }\nid! { #[allow(unused_imports)] use crate::{clock::now}; }\n",
+                ),
+            ][..],
+            "crate::clock::now in crate::core",
+        ),
+        (
+            "strictmacrodollarcrate",
+            &[(
+                "src/lib.rs",
+                "pub mod clock { pub fn now() {} }\n#[macro_export]\nmacro_rules! m { () => { #[allow(unused_imports)] use $crate::clock::now; }; }\npub mod core { crate::m!(); }\n",
+            )][..],
+            "crate::clock::now in crate",
+        ),
+        (
+            "strictmacrodollargroup",
+            &[
+                (
+                    "src/lib.rs",
+                    "pub mod clock { pub fn now() {} }\npub mod core;\n",
+                ),
+                (
+                    "src/core.rs",
+                    "macro_rules! m { () => { #[allow(unused_imports)] use $crate::{clock::now}; }; }\npub fn f() { m!(); }\n",
+                ),
+            ][..],
+            "crate::clock::now in crate::core",
+        ),
+    ] {
+        let probe = RootProbe::new(package, "", files);
+        let law = Constitution::new("strict-macro-use").boundary(
+            ModuleBoundary::in_crate(package)
+                .module("crate")
+                .must_not_call_inline("crate::clock")
+                .strict_prefix_only()
+                .depth(xuanji::ScanDepth::Subtree)
+                .because("no mention of the clock"),
+        );
+        match check(&law, probe.manifest()) {
+            Outcome::Violations(report) => assert!(
+                report.violations.iter().any(|v| v.finding == expected),
+                "{package}: {report:?}"
+            ),
+            other => panic!("{package}: expected {expected:?}, got {other:?}"),
+        }
+    }
+}
+
+/// A `use` a block inside a macro's group holds binds the paths beside it, as it binds them in the expansion: under
+/// the default confinement `macro_rules! m { () => { use crate::clock::{self}; clock::now(); }; }` invoked in
+/// `crate::core` names `crate::clock::now`, and so does a glob there; and under `.strict_prefix_only()` a glob a macro's
+/// group holds outside any block is judged as the glob it is. rustc 1.96.0, edition 2021, builds each row.
+#[test]
+fn a_use_in_a_macros_group_binds_and_globs_as_written() {
+    let lib = "pub mod clock { pub fn now() {} }\npub mod core;\n";
+    for (package, core, strict, expected) in [
+        (
+            "macroblockself",
+            "macro_rules! m { () => { use crate::clock::{self}; clock::now(); }; }\npub fn f() { m!(); }\n",
+            false,
+            "crate::clock::now in crate::core",
+        ),
+        (
+            "macroblockglob",
+            "macro_rules! m { () => { use crate::clock::*; now(); }; }\npub fn f() { m!(); }\n",
+            false,
+            "glob crate::clock in crate::core",
+        ),
+        (
+            "macrogroupglob",
+            "macro_rules! id { ($($t:tt)*) => { $($t)* }; }\nid! { #[allow(unused_imports)] use crate::clock::*; }\n",
+            true,
+            "glob crate::clock in crate::core",
+        ),
+    ] {
+        let probe = RootProbe::new(package, "", &[("src/lib.rs", lib), ("src/core.rs", core)]);
+        let boundary = ModuleBoundary::in_crate(package)
+            .module("crate::core")
+            .must_not_call_inline("crate::clock");
+        let boundary = if strict {
+            boundary.strict_prefix_only()
+        } else {
+            boundary
+        };
+        let law = Constitution::new("macro-use").boundary(boundary.because("no clock in the core"));
+        match check(&law, probe.manifest()) {
+            Outcome::Violations(report) => assert!(
+                report.violations.iter().any(|v| v.finding == expected),
+                "{package}: {report:?}"
+            ),
+            other => panic!("{package}: expected {expected:?}, got {other:?}"),
+        }
+    }
+}
+
+/// A `use` written directly in a macro's group, outside any block it holds, binds nothing: where the group expands
+/// it is not read, so `id! { use crate::clock::{self}; pub fn f() { clock::now(); } }` is not claimed observed under
+/// the default confinement — a stated bound — while the same `use` judged as a path under `.strict_prefix_only()`
+/// still reacts. rustc 1.96.0, edition 2021, builds the row.
+#[test]
+fn a_use_written_in_a_macro_group_outside_any_block_binds_nothing() {
+    let probe = RootProbe::new(
+        "macrogroupuse",
+        "",
+        &[
+            (
+                "src/lib.rs",
+                "pub mod clock { pub fn now() {} }\npub mod core;\n",
+            ),
+            (
+                "src/core.rs",
+                "macro_rules! id { ($($t:tt)*) => { $($t)* }; }\nid! { use crate::clock::{self}; pub fn f() { clock::now(); } }\n",
+            ),
+        ],
+    );
+    let law = Constitution::new("macro-group-use").boundary(
+        ModuleBoundary::in_crate("macrogroupuse")
+            .module("crate::core")
+            .must_not_call_inline("crate::clock")
+            .because("no clock in the core"),
+    );
+    match check(&law, probe.manifest()) {
+        Outcome::Clean(_) => {}
+        other => panic!("a stated bound: the call is not claimed observed, got {other:?}"),
+    }
+}
+
+/// rustc compares identifiers in NFC, so a module declared `s` + U+00E9 + `cret` and named `se` + U+0301 + `cret` are
+/// one module: a call or an import written in one composition is judged under a prefix or a module path written in
+/// the other, and reported in NFC. rustc 1.96.0, edition 2021, builds each row; a file-form `mod` with a name past
+/// ASCII it refuses (E0754), so the module is inline.
+#[test]
+fn an_identifier_is_one_name_in_either_composition() {
+    let precomposed = "s\u{e9}cret";
+    let decomposed = "se\u{301}cret";
+    for (package, declared, written, prefix) in [
+        ("nfccall", precomposed, decomposed, precomposed),
+        ("nfcprefix", precomposed, precomposed, decomposed),
+        ("nfcdecl", decomposed, precomposed, precomposed),
+    ] {
+        let lib = format!("pub mod {declared} {{ pub fn go() {{}} }}\npub mod core;\n");
+        let core = format!("pub fn f() {{ crate::{written}::go(); }}\n");
+        let probe = RootProbe::new(package, "", &[("src/lib.rs", &lib), ("src/core.rs", &core)]);
+        let law = Constitution::new("nfc").boundary(
+            ModuleBoundary::in_crate(package)
+                .module("crate::core")
+                .must_not_call_inline(&format!("crate::{prefix}"))
+                .because("no secret in the core"),
+        );
+        let expected = format!("crate::{precomposed}::go in crate::core");
+        match check(&law, probe.manifest()) {
+            Outcome::Violations(report) => assert!(
+                report.violations.iter().any(|v| v.finding == expected),
+                "{package}: {report:?}"
+            ),
+            other => panic!("{package}: expected {expected:?}, got {other:?}"),
+        }
+    }
+    let probe = RootProbe::new(
+        "nfcimport",
+        "",
+        &[
+            (
+                "src/lib.rs",
+                &format!("pub mod {precomposed} {{ pub fn go() {{}} }}\npub mod core;\n"),
+            ),
+            (
+                "src/core.rs",
+                &format!("#[allow(unused_imports)]\nuse crate::{decomposed}::go;\n"),
+            ),
+        ],
+    );
+    let law = Constitution::new("nfc-import").boundary(
+        ModuleBoundary::in_crate("nfcimport")
+            .module("crate::core")
+            .must_not_import(&format!("crate::{precomposed}"))
+            .because("no secret in the core"),
+    );
+    assert!(
+        matches!(check(&law, probe.manifest()), Outcome::Violations(_)),
+        "an import written decomposed is judged under the module declared precomposed"
+    );
+}
+
+/// An attribute's contents are its macro's input, so a `use` written inside one is no import: rustc 1.96.0, edition
+/// 2021, compiles `#[cfg_attr(any(), my_attr(use crate::forbidden::Thing;))] pub fn f() {}` importing nothing. The
+/// `use` an attribute is written on is read as ever.
+#[test]
+fn a_use_inside_an_attribute_is_no_import() {
+    let law = |package: &str| {
+        Constitution::new("attribute-use").boundary(
+            ModuleBoundary::in_crate(package)
+                .module("crate::m")
+                .must_not_import("crate::forbidden")
+                .because("m does not reach forbidden"),
+        )
+    };
+    let inside = RootProbe::new(
+        "attributeuse",
+        "",
+        &[
+            (
+                "src/lib.rs",
+                "pub mod forbidden { pub struct Thing; }\npub mod m;\n",
+            ),
+            (
+                "src/m.rs",
+                "#[cfg_attr(any(), my_attr(use crate::forbidden::Thing;))]\npub fn f() {}\n",
+            ),
+        ],
+    );
+    let outcome = check(&law("attributeuse"), inside.manifest());
+    assert_eq!(outcome.exit_code(), 0, "{outcome:?}");
+    let on = RootProbe::new(
+        "attributeonuse",
+        "",
+        &[
+            (
+                "src/lib.rs",
+                "pub mod forbidden { pub struct Thing; }\npub mod m;\n",
+            ),
+            (
+                "src/m.rs",
+                "#[allow(unused_imports)]\nuse crate::forbidden::Thing;\n",
+            ),
+        ],
+    );
+    let outcome = check(&law("attributeonuse"), on.manifest());
+    assert_eq!(outcome.exit_code(), 1, "{outcome:?}");
+}
+
 /// `crate::m0` defines `X`, each of a hundred `crate::m{i}` re-exports the one before, and nothing calls
 /// through the chain: its `pub use` paths are mentions, which only `.strict_prefix_only()` judges. So the chain is
 /// read, and refused past the cap, only there.
@@ -6228,8 +6833,9 @@ fn an_import_in_a_block_module_is_not_its_same_named_file_modules() {
 
 /// A target is read in its own edition, not its package's: a 2024 package whose `[lib]` declares `edition = "2015"`
 /// compiles its library as 2015, where `use clock::now;` in a submodule starts at the crate root, so a rule
-/// forbidding `crate::sub` from importing `crate::clock` reports it. Targets sharing one root in two editions compile
-/// it twice, which one reading cannot judge, so the check refuses.
+/// forbidding `crate::sub` from importing `crate::clock` reports it. Targets sharing one root in two editions the
+/// scanner reads apart compile it twice, which one reading cannot judge, so the check refuses; in 2018 and 2021, which it
+/// reads alike, the root is judged — cargo 1.96.0 builds both targets of such a manifest.
 #[test]
 fn a_target_is_read_in_its_own_edition() {
     let files = [
@@ -6274,6 +6880,75 @@ fn a_target_is_read_in_its_own_edition() {
         format!("{outcome:?}").contains("roots targets in editions 2015, 2024"),
         "{outcome:?}"
     );
+    let alike = RootProbe::with_edition(
+        "alikeedition",
+        "2021",
+        "[lib]\nedition = \"2018\"\npath = \"src/lib.rs\"\n[[bin]]\nname = \"alikeedition-bin\"\npath = \"src/lib.rs\"\n",
+        &[
+            (
+                "src/lib.rs",
+                "pub mod clock;\npub mod sub;\n#[allow(dead_code)]\nfn main() {}\n",
+            ),
+            ("src/clock.rs", "pub fn now() {}\n"),
+            (
+                "src/sub.rs",
+                "#[allow(unused_imports)]\nuse crate::clock::now;\n",
+            ),
+        ],
+    );
+    match check(&law("alikeedition"), alike.manifest()) {
+        Outcome::Violations(report) => assert_eq!(report.violations.len(), 1, "{report:?}"),
+        other => panic!("a root 2018 and 2021 targets share is judged: {other:?}"),
+    }
+}
+
+/// A proc-macro crate's extern prelude holds `proc_macro`, so `proc_macro::TokenStream::new()` written with no
+/// `extern crate proc_macro;` names the crate, as it does with one: rustc 1.96.0, edition 2021, compiles both, and a
+/// call outside the permitted module reports in each.
+#[test]
+fn a_proc_macro_crate_names_proc_macro_without_an_extern_crate() {
+    for (package, extern_crate) in [
+        ("procmacrobare", ""),
+        ("procmacroextern", "extern crate proc_macro;\n"),
+    ] {
+        let probe = RootProbe::new(
+            package,
+            "[lib]\nproc-macro = true\n",
+            &[
+                (
+                    "src/lib.rs",
+                    &format!(
+                        "{extern_crate}mod allowed;\nmod inner {{ pub fn bad() -> proc_macro::TokenStream {{ \
+                         proc_macro::TokenStream::new() }} }}\n#[proc_macro]\npub fn m(_i: proc_macro::TokenStream) \
+                         -> proc_macro::TokenStream {{ let _ = allowed::ok(); inner::bad() }}\n"
+                    ),
+                ),
+                (
+                    "src/allowed.rs",
+                    "pub fn ok() -> proc_macro::TokenStream { proc_macro::TokenStream::new() }\n",
+                ),
+            ],
+        );
+        let law = Constitution::new("proc-macro-prelude").boundary(
+            ModuleBoundary::in_crate(package)
+                .module("crate::allowed")
+                .confine_inline_call("proc_macro::TokenStream")
+                .because("only allowed builds token streams"),
+        );
+        let outcome = check(&law, probe.manifest());
+        match &outcome {
+            Outcome::Violations(report) => assert_eq!(
+                report
+                    .violations
+                    .iter()
+                    .map(|v| v.finding.as_str())
+                    .collect::<Vec<_>>(),
+                ["proc_macro::TokenStream::new in crate"],
+                "{package}: {report:?}"
+            ),
+            other => panic!("{package}: expected the call outside allowed to react, got {other:?}"),
+        }
+    }
 }
 
 /// Two cfg-exclusive `#[path]` files of one module each number their blocks from their own start, so a block is
@@ -6969,6 +7644,39 @@ fn answered_within<T: Send + 'static>(what: &str, read: impl FnOnce() -> T + Sen
     }
 }
 
+/// An import is resolved without itself, as rustc resolves it, so `pub use md5x::md5x;` names the dependency, and a chain
+/// of forty modules each re-exporting the one before is read in time its length bounds: reading the import without
+/// itself is the scope's answer for that lookup, kept like any other, rather than a cycle the walk cut, which would
+/// leave every lookup along the chain unkept and each read once per namespace, twice per link. The call through the
+/// last module still reports. rustc 1.96.0, edition 2021, builds the crate.
+#[test]
+fn a_chain_through_a_self_named_re_export_is_read_once_per_link() {
+    let mut lib = String::from("pub mod m0 { pub use md5x::md5x; }\n");
+    for i in 1..=40 {
+        lib.push_str(&format!(
+            "pub mod m{i} {{ pub use crate::m{}::md5x; }}\n",
+            i - 1
+        ));
+    }
+    lib.push_str("pub fn g() { crate::m40::md5x::f(); }\n");
+    let found = answered_within("a forty-link self-named re-export chain", move || {
+        let probe = RootProbe::new(
+            "selfnamedchain",
+            "[dependencies]\nmd5x = { path = \"md5x\" }\n",
+            &[
+                ("src/lib.rs", &lib),
+                (
+                    "md5x/Cargo.toml",
+                    "[package]\nname = \"md5x\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+                ),
+                ("md5x/src/lib.rs", "pub mod md5x { pub fn f() {} }\n"),
+            ],
+        );
+        inline_findings(&probe, "selfnamedchain", "crate", "md5x", true)
+    });
+    assert_eq!(found, ["md5x::md5x::f in crate"]);
+}
+
 /// Two modules each globbing the other, neither binding `drop`, end the lookup of `drop` where it comes back to the
 /// scope it went out from, rather than walking the pair without end; the call `b` makes beside them still reports,
 /// under the file module both are written in.
@@ -7093,6 +7801,123 @@ fn a_local_binding_named_like_an_import_is_read_as_the_import() {
     assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
 }
 
+/// A block's import of what is not read may hold its name in the other namespace alone, so the name is also read
+/// from the scope around the block: `use std::fmt;` names a module and no value, and rustc resolves `fmt()` in
+/// `fn g() { use std::fmt; fmt(); }` to the module's `use crate::forbidden::fmt;`. Each row is compiled by rustc 1.96.0,
+/// edition 2021.
+#[test]
+fn a_block_import_of_what_is_not_read_leaves_the_name_to_the_scope_around_it() {
+    let mut mismatches = Vec::new();
+    for (package, block) in [
+        ("blockforeignuse", "use std::fmt;"),
+        ("blockforeignself", "use std::fmt::{self};"),
+    ] {
+        let lib = format!(
+            "pub mod forbidden {{ pub fn fmt() {{}} }}\nuse crate::forbidden::fmt;\npub fn g() {{ {block} fmt(); }}\n"
+        );
+        let probe = lib_probe(package, &lib);
+        answer_mismatches(
+            &probe,
+            package,
+            "crate",
+            "crate::forbidden",
+            &["crate::forbidden::fmt in crate"],
+            &mut mismatches,
+        );
+    }
+    assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+}
+
+/// A `{self}` leaf imports the module its group names and nothing else of that name, so a value of that name is read
+/// from the scope around it: `use crate::local::both::{self};` in a block, with `local` declaring both `mod both` and
+/// `fn both`, leaves `both()` to the module's `use crate::secret::both;`. rustc 1.96.0, edition 2021, calls
+/// `crate::secret::both`.
+#[test]
+fn a_self_leaf_imports_its_module_and_no_value_of_that_name() {
+    let package = "selfleafvalue";
+    let probe = lib_probe(
+        package,
+        "pub mod secret { pub fn both() {} }\npub mod local { pub mod both {} pub fn both() {} }\n\
+         #[allow(unused_imports)]\nuse crate::secret::both;\npub fn g() { use crate::local::both::{self}; both(); }\n",
+    );
+    let mut mismatches = Vec::new();
+    answer_mismatches(
+        &probe,
+        package,
+        "crate",
+        "crate::secret",
+        &["crate::secret::both in crate"],
+        &mut mismatches,
+    );
+    assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+}
+
+/// The same reading where the block's import does hold the name: `std::process::id` is a function, and rustc calls it
+/// in `fn g() -> u32 { use std::process::id; id() }`, while the scanner, which does not read `std`, also reads `id`
+/// from the module's `use crate::forbidden::id;` — the declared over-reaction. rustc 1.96.0 compiles it, edition 2021.
+#[test]
+fn a_block_import_of_what_is_not_read_is_read_with_the_scope_around_it() {
+    let package = "blockforeignholds";
+    let probe = lib_probe(
+        package,
+        "pub mod forbidden { pub fn id() -> u32 { 0 } }\n#[allow(unused_imports)]\nuse crate::forbidden::id;\n\
+         pub fn g() -> u32 { use std::process::id; id() }\n",
+    );
+    let mut mismatches = Vec::new();
+    answer_mismatches(
+        &probe,
+        package,
+        "crate",
+        "crate::forbidden",
+        &["crate::forbidden::id in crate"],
+        &mut mismatches,
+    );
+    assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+}
+
+/// A scope that binds a name only through an import of what is not read may not hold it in the namespace a head is
+/// read in, so the scope's globs are read too: in `crate::core`, `use crate::forbidden::*; use std::fmt;` and then
+/// `fmt()` calls the glob's `crate::forbidden::fmt`, since `std::fmt` names a module and no value. Where the import
+/// does hold the name — `use std::mem::swap;` beside the glob, with `swap` a function in both — rustc calls
+/// `std::mem::swap`, and the scanner, which does not read `std`, reads the glob's `swap` too: the declared
+/// over-reaction. rustc 1.96.0, edition 2021, builds each.
+#[test]
+fn an_import_of_what_is_not_read_beside_a_glob_is_read_with_the_glob() {
+    for (package, forbidden, import, call, found) in [
+        (
+            "globbesidesysrootmodule",
+            "pub fn fmt() {}",
+            "std::fmt",
+            "fmt();",
+            "crate::forbidden::fmt in crate::core",
+        ),
+        (
+            "globbesidesysrootvalue",
+            "pub fn swap(_: &mut u8, _: &mut u8) {}",
+            "std::mem::swap",
+            "let (mut a, mut b) = (1u8, 2u8); swap(&mut a, &mut b);",
+            "crate::forbidden::swap in crate::core",
+        ),
+    ] {
+        let lib = format!("pub mod forbidden {{ {forbidden} }}\npub mod core;\n");
+        let core = format!(
+            "#[allow(unused_imports)]\nuse crate::forbidden::*;\n#[allow(unused_imports)]\nuse {import};\n\
+             pub fn g() {{ {call} }}\n"
+        );
+        let probe = RootProbe::new(package, "", &[("src/lib.rs", &lib), ("src/core.rs", &core)]);
+        let mut mismatches = Vec::new();
+        answer_mismatches(
+            &probe,
+            package,
+            "crate::core",
+            "crate::forbidden",
+            &[found, "glob crate::forbidden in crate::core"],
+            &mut mismatches,
+        );
+        assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+    }
+}
+
 /// An import is an import of the path its head names, and a re-export the rest of the path runs through is not
 /// followed: `use crate::support::x;` imports `crate::support` whatever `x` re-exports, so under
 /// `restrict_imports_to(["crate::support"])` it is permitted though `support` holds `pub use crate::forbidden::x;`. A
@@ -7207,6 +8032,392 @@ fn a_cfg_attr_path_module_a_block_declares_is_governed() {
     );
     let outcome = check(&law, absent.manifest());
     assert_eq!(outcome.exit_code(), 2, "{outcome:?}");
+}
+
+/// A module a block declares carries one path, read alike by the walk that reads its file and by the scope a path
+/// through it names: `k::m::s()` in `fn g() { mod k { #[path = "y.rs"] pub mod m; } }` reaches the `s` that `y.rs`
+/// re-exports from `crate::secret`, and `super::sx::go()` written in `y.rs` reaches `k`'s own `sx`. rustc 1.96.0, edition
+/// 2021, builds both. An inline module a macro's group holds has no such path and is read without a panic.
+#[test]
+fn a_block_modules_file_and_a_path_through_it_carry_one_path() {
+    for (package, lib, file, found) in [
+        (
+            "blockpathforward",
+            "pub mod secret { pub fn go() {} }\npub fn g() { mod k { #[path = \"y.rs\"] pub mod m; } k::m::s(); }\n",
+            "pub use crate::secret::go as s;\n",
+            "crate::secret::go in crate",
+        ),
+        (
+            "blockpathbackward",
+            "pub mod secret { pub fn go() {} }\npub fn g() { mod k { #[path = \"y.rs\"] pub mod m; pub mod sx { pub use crate::secret::go; } } k::m::s(); }\n",
+            "pub fn s() { super::sx::go(); }\n",
+            "crate::secret::go in crate::{block}::k::m",
+        ),
+    ] {
+        let probe = RootProbe::new(package, "", &[("src/lib.rs", lib), ("src/k/y.rs", file)]);
+        let law = Constitution::new("block-path").boundary(
+            ModuleBoundary::in_crate(package)
+                .module("crate")
+                .must_not_call_inline("crate::secret")
+                .depth(xuanji::ScanDepth::Subtree)
+                .because("no call of the secret"),
+        );
+        match check(&law, probe.manifest()) {
+            Outcome::Violations(report) => assert!(
+                report.violations.iter().any(|v| v.finding == found),
+                "{package}: {report:?}"
+            ),
+            other => panic!("{package}: expected {found:?}, got {other:?}"),
+        }
+    }
+    let probe = lib_probe(
+        "blockmacromodule",
+        "macro_rules! id { ($($t:tt)*) => { $($t)* }; }\npub fn a() { id! { mod k1 { pub fn f() {} } } }\n",
+    );
+    let outcome = check(
+        &root_scope_process_law("blockmacromodule"),
+        probe.manifest(),
+    );
+    assert_eq!(outcome.exit_code(), 0, "{outcome:?}");
+}
+
+/// A path attribute on an inline module a block declares gives it a directory of its own, so a file-form `mod` inside
+/// it needs no path attribute and is read from there: `fn f() { #[path = "d"] mod k { pub mod m; } }` reads `d/m.rs`,
+/// and so do the same with `#[cfg_attr(all(), path = "d")]`, a nested `pub mod j { pub mod m; }` reading `d/j/m.rs`,
+/// and an inline `k` whose inner `#[path = "d"] pub mod j` reads `k/d/m.rs`. rustc 1.96.0, edition 2021, builds each.
+#[test]
+fn a_path_attribute_gives_a_block_inline_module_a_directory_of_its_own() {
+    let call = "pub fn s() { let _ = std::process::id(); }\n";
+    for (i, (lib, file)) in [
+        (
+            "pub fn f() { #[path = \"d\"] mod k { pub mod m; } }\n",
+            "src/d/m.rs",
+        ),
+        (
+            "pub fn f() { #[cfg_attr(all(), path = \"d\")] mod k { pub mod m; } }\n",
+            "src/d/m.rs",
+        ),
+        (
+            "pub fn f() { #[path = \"d\"] mod k { pub mod j { pub mod m; } } }\n",
+            "src/d/j/m.rs",
+        ),
+        (
+            "pub fn f() { mod k { #[path = \"d\"] pub mod j { pub mod m; } } }\n",
+            "src/k/d/m.rs",
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let package = format!("blockpathdir{i}");
+        let probe = RootProbe::new(&package, "", &[("src/lib.rs", lib), (file, call)]);
+        let outcome = check(&root_scope_process_law(&package), probe.manifest());
+        assert_eq!(
+            reacting_files(&outcome),
+            [probe.dir().join(file).display().to_string()],
+            "{lib}: {outcome:?}"
+        );
+    }
+}
+
+/// Inside a block, an inline module compiled without its path attribute holds no file-form `mod` rustc accepts, so a
+/// `cfg_attr` path is the only base its children are read from: with a crate-root `mod k;` occupying `src/k/`,
+/// `fn f() { #[cfg_attr(unix, path = "d")] mod k { pub mod m; } }` reads `src/d/m.rs` and neither refuses a missing
+/// `src/k/m.rs` nor reads one that exists. rustc 1.96.0, edition 2021, builds each row.
+#[test]
+fn a_cfg_attr_path_is_a_block_inline_modules_only_base() {
+    let lib = "pub mod k;\npub fn f() { #[cfg_attr(unix, path = \"d\")] mod k { pub mod m; } k::m::s(); }\n";
+    let call = "pub fn s() { let _ = std::process::id(); }\n";
+    let unread = "pub fn s() { std::process::abort(); }\n";
+    for (package, files) in [
+        (
+            "blockcfgbase",
+            &[
+                ("src/lib.rs", lib),
+                ("src/k/mod.rs", ""),
+                ("src/d/m.rs", call),
+            ][..],
+        ),
+        (
+            "blockcfgbaseshadow",
+            &[
+                ("src/lib.rs", lib),
+                ("src/k/mod.rs", ""),
+                ("src/d/m.rs", call),
+                ("src/k/m.rs", unread),
+            ][..],
+        ),
+    ] {
+        let probe = RootProbe::new(package, "", files);
+        let outcome = check(&root_scope_process_law(package), probe.manifest());
+        assert_eq!(
+            reacting_files(&outcome),
+            [probe.dir().join("src/d/m.rs").display().to_string()],
+            "{package}: {outcome:?}"
+        );
+    }
+}
+
+/// The `cfg` of the construct owning the block that holds the `mod` is read back to the previous `;`, `,`, brace group
+/// or attribute, so an item, statement, parameter or field whose own tokens hold one of those before that block has
+/// its `cfg` left unread, and the missing file is refused: the declared bound. rustc 1.96.0, edition 2021, builds each
+/// row with no `x.rs`.
+#[test]
+fn a_cfg_before_a_separator_its_construct_holds_is_not_read() {
+    for (i, body) in [
+        "pub fn f() { #[cfg(any())] let _v: std::collections::HashMap<u8, u8> = { #[path = \"x.rs\"] mod m; std::collections::HashMap::new() }; }",
+        "pub fn f() { #[cfg(any())] let _c = |_a: u8, _b: u8| { #[path = \"x.rs\"] mod m; }; }",
+        "pub fn f(a: bool) { #[cfg(any())] if a {} else { #[path = \"x.rs\"] mod m; } }",
+        "pub struct Foo { pub a: u8 }\npub fn f(v: Foo) { match v { #[cfg(any())] Foo { a } => { let _ = a; #[path = \"x.rs\"] mod m; } _ => {} } }",
+        "pub struct S { pub a: u8 }\npub fn f() { #[cfg(any())] let _s = S { a: 1 }.a + { #[path = \"x.rs\"] mod m; 1 }; }",
+        "#[cfg(any())] pub fn h<A, B>(_: [u8; { #[path = \"x.rs\"] mod m; 1 }]) {}",
+        "#[cfg(any())] pub fn h<T>() where T: Copy, [u8; { #[path = \"x.rs\"] mod m; 1 }]: Sized {}",
+        "pub struct S { #[cfg(any())] pub a: std::collections::HashMap<u8, [u8; { #[path = \"x.rs\"] mod m; 1 }]> }",
+        "pub fn h(_a: u8, #[cfg(any())] _b: std::collections::HashMap<u8, [u8; { #[path = \"x.rs\"] mod m; 1 }]>) {}",
+        "#[cfg(any())] pub struct T<A, B>(A, B, [u8; { #[path = \"x.rs\"] mod m; 1 }]);",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let package = format!("separatedcfg{i}");
+        let probe = lib_probe(&package, &format!("{body}\n"));
+        let outcome = check(&root_scope_process_law(&package), probe.manifest());
+        assert_eq!(outcome.exit_code(), 2, "{body}: {outcome:?}");
+    }
+}
+
+/// An inline `mod` a block declares is read, and its file-form children are followed from the declaring file's
+/// directory: `fn f() { mod k { #[path = "y.rs"] pub mod m; } }` compiles `src/k/y.rs` from `lib.rs`, and the same
+/// with a nested `j` in `a.rs` compiles `src/k/j/y.rs`, not `src/a/k/j/y.rs`, measured against rustc 1.96.0, edition
+/// 2021. A file-form `mod` with no path attribute inside it is refused, as rustc refuses it ("cannot declare a file
+/// module inside a block unless it has a path attribute"), and the refusal names the module by its path, the file
+/// declaring it, and that it has no path attribute.
+#[test]
+fn an_inline_module_a_block_declares_is_read() {
+    let call = "pub fn s() { let _ = std::process::id(); }\n";
+    let root = RootProbe::new(
+        "blockinline",
+        "",
+        &[
+            (
+                "src/lib.rs",
+                "pub fn f() { mod k { #[path = \"y.rs\"] pub mod m; } k::m::s(); }\n",
+            ),
+            ("src/k/y.rs", call),
+        ],
+    );
+    let outcome = check(&root_scope_process_law("blockinline"), root.manifest());
+    assert_eq!(
+        reacting_files(&outcome),
+        [root.dir().join("src/k/y.rs").display().to_string()],
+        "{outcome:?}"
+    );
+    let nested = RootProbe::new(
+        "blockinlinenested",
+        "",
+        &[
+            ("src/lib.rs", "pub mod a;\n"),
+            (
+                "src/a.rs",
+                "pub fn f() { mod k { pub mod j { #[path = \"y.rs\"] pub mod m; } } k::j::m::s(); }\n",
+            ),
+            ("src/k/j/y.rs", call),
+        ],
+    );
+    let outcome = check(
+        &root_scope_process_law("blockinlinenested"),
+        nested.manifest(),
+    );
+    assert_eq!(
+        reacting_files(&outcome),
+        [nested.dir().join("src/k/j/y.rs").display().to_string()],
+        "{outcome:?}"
+    );
+    let plain = RootProbe::new(
+        "blockinlineplain",
+        "",
+        &[
+            (
+                "src/lib.rs",
+                "pub fn f() { mod k { pub mod m; } k::m::s(); }\n",
+            ),
+            ("src/k/m.rs", "pub fn s() {}\n"),
+        ],
+    );
+    match check(
+        &root_scope_process_law("blockinlineplain"),
+        plain.manifest(),
+    ) {
+        Outcome::ConstitutionError(message) => assert!(
+            message.contains(&plain.dir().join("src/lib.rs").display().to_string())
+                && message.contains("`crate::{block}::k::m`")
+                && message.contains("with no path attribute")
+                && !message.contains("cfg_attr"),
+            "{message}"
+        ),
+        other => panic!("expected a scan error, got {other:?}"),
+    }
+}
+
+/// A `mod` whose file is absent is tolerated wherever something enclosing it may be compiled out, since rustc loads
+/// nothing beneath what a `cfg` removes: a `fn`, a block statement, a match arm, a field, an inline module or a
+/// `cfg_if!` arm carrying one,
+/// bare or applied through `cfg_attr`, and a module a `cfg` removes whose file declares the `mod`. Each row builds with
+/// no file backing the inner `mod`, and each control is refused by rustc for that file — among them a `cfg` on the
+/// match arm or field before the one enclosing the `mod`, which removes that one alone, measured against rustc 1.96.0,
+/// edition 2021, with `cfg-if` 1.0 for the arm rows. A file that does exist beneath a compiled-out item is still
+/// read, so the call in it reports.
+#[test]
+fn an_absent_module_file_beneath_what_a_cfg_removes_is_tolerated() {
+    let absent: &[(&str, &[(&str, &str)])] = &[
+        (
+            "a cfg on the enclosing fn",
+            &[(
+                "src/lib.rs",
+                "#[cfg(any())]\nfn f() { #[path = \"x.rs\"] mod m; }\npub fn t() {}\n",
+            )],
+        ),
+        (
+            "a cfg on a block statement",
+            &[(
+                "src/lib.rs",
+                "pub fn f() { #[cfg(any())] { #[path = \"x.rs\"] mod m; } }\n",
+            )],
+        ),
+        (
+            "a cfg applied through cfg_attr on a block statement",
+            &[(
+                "src/lib.rs",
+                "pub fn f() { #[cfg_attr(all(), cfg(any()))] { #[path = \"x.rs\"] mod m; } }\n",
+            )],
+        ),
+        (
+            "a cfg_if arm inside a fn",
+            &[(
+                "src/lib.rs",
+                "pub fn f() { cfg_if::cfg_if! { if #[cfg(any())] { #[path = \"x.rs\"] mod m; } } }\n",
+            )],
+        ),
+        (
+            "a fn inside a cfg_if arm",
+            &[(
+                "src/lib.rs",
+                "cfg_if::cfg_if! { if #[cfg(any())] { fn f() { #[path = \"x.rs\"] mod m; } } }\npub fn t() {}\n",
+            )],
+        ),
+        (
+            "a cfg on the enclosing generic fn",
+            &[(
+                "src/lib.rs",
+                "#[cfg(any())]\nfn f<A, B>() { #[path = \"x.rs\"] mod m; }\npub fn t() {}\n",
+            )],
+        ),
+        (
+            "a cfg on the enclosing match arm",
+            &[(
+                "src/lib.rs",
+                "pub fn f(v: u8) { match v { #[cfg(any())] 0 => { #[path = \"x.rs\"] mod m; } _ => () } }\n",
+            )],
+        ),
+        (
+            "a cfg on the enclosing field",
+            &[(
+                "src/lib.rs",
+                "pub struct S { pub a: u8 }\npub fn f() -> S { S { #[cfg(all())] a: { 1 }, #[cfg(any())] a: { #[path = \"x.rs\"] mod m; 2 } } }\n",
+            )],
+        ),
+        (
+            "a cfg on the enclosing inline module",
+            &[(
+                "src/lib.rs",
+                "#[cfg(any())]\nmod o { mod i; }\npub fn t() {}\n",
+            )],
+        ),
+        (
+            "a cfg on the module whose file declares the mod",
+            &[
+                ("src/lib.rs", "#[cfg(any())]\nmod o;\npub fn t() {}\n"),
+                ("src/o.rs", "fn f() { #[path = \"x.rs\"] mod m; }\nmod i;\n"),
+            ],
+        ),
+    ];
+    for (i, (shape, files)) in absent.iter().enumerate() {
+        let package = format!("compiledout{i}");
+        let probe = RootProbe::new(&package, "", files);
+        let outcome = check(&root_scope_process_law(&package), probe.manifest());
+        assert_eq!(outcome.exit_code(), 0, "{shape}: {outcome:?}");
+    }
+    let refused: &[(&str, &[(&str, &str)])] = &[
+        (
+            "no cfg anywhere",
+            &[("src/lib.rs", "pub fn f() { #[path = \"x.rs\"] mod m; }\n")],
+        ),
+        (
+            "a cfg_attr applying no cfg on the enclosing fn",
+            &[(
+                "src/lib.rs",
+                "#[cfg_attr(unix, allow(dead_code))]\nfn f() { #[path = \"x.rs\"] mod m; }\npub fn t() {}\n",
+            )],
+        ),
+        (
+            "a cfg on the match arm before the enclosing one",
+            &[(
+                "src/lib.rs",
+                "pub fn f(v: u8) { match v { #[cfg(any())] 1 => (), _ => { #[path = \"x.rs\"] mod m; } } }\n",
+            )],
+        ),
+        (
+            "a cfg on the field before the enclosing one",
+            &[(
+                "src/lib.rs",
+                "pub struct S { pub a: u8, pub b: u8 }\npub fn f() -> S { S { #[cfg(all())] a: 1, b: { #[path = \"x.rs\"] mod m; 2 } } }\n",
+            )],
+        ),
+        (
+            "an unconditional module whose file declares the mod",
+            &[
+                ("src/lib.rs", "mod o;\npub fn t() {}\n"),
+                ("src/o.rs", "mod i;\n"),
+            ],
+        ),
+    ];
+    for (i, (shape, files)) in refused.iter().enumerate() {
+        let package = format!("notcompiledout{i}");
+        let probe = RootProbe::new(&package, "", files);
+        let outcome = check(&root_scope_process_law(&package), probe.manifest());
+        assert_eq!(outcome.exit_code(), 2, "{shape}: {outcome:?}");
+    }
+    let present = RootProbe::new(
+        "compiledoutpresent",
+        "",
+        &[
+            (
+                "src/lib.rs",
+                "#[cfg(any())]\nfn f() { #[path = \"x.rs\"] mod m; }\npub fn t() {}\n",
+            ),
+            ("src/x.rs", "pub fn h() -> u32 { std::process::id() }\n"),
+        ],
+    );
+    let outcome = check(
+        &root_scope_process_law("compiledoutpresent"),
+        present.manifest(),
+    );
+    assert_eq!(
+        reacting_files(&outcome),
+        [present.dir().join("src/x.rs").display().to_string()],
+        "{outcome:?}"
+    );
+}
+
+/// Every call under `std::process` in the whole of `package` reacts.
+fn root_scope_process_law(package: &str) -> Constitution {
+    Constitution::new("compiled-out").boundary(
+        ModuleBoundary::in_crate(package)
+            .module("crate")
+            .must_not_call_inline("std::process")
+            .depth(xuanji::ScanDepth::Subtree)
+            .because("no process calls"),
+    )
 }
 
 /// A list of forty thousand brace groups after a comparison, `[a < b, {0} > 0, {1} > 0, …]`, is read in time its length

@@ -9,10 +9,9 @@
 //! rules name. Each row must be accepted or refused alike, and an accepted row must be recorded in
 //! the same form — the violation target for a governed module or anchor, the rule key for a named
 //! module. Where both refuse a row for its spelling, the two refusals are the same text. The rows past
-//! the 渾儀 spelling table probe where the two identifier readings differ: 渾儀 asks syn's lexer and
-//! 圭表 asks its byte-level lexer, which counts every non-ASCII byte as an identifier byte, so those
-//! rows are refused by 圭表's existence check rather than its spelling check — alike in answer, not in
-//! message.
+//! the 渾儀 spelling table probe characters past ASCII: 渾儀 asks syn's lexer and 圭表 asks Unicode's
+//! `XID_Start` and `XID_Continue`, the rule syn's lexer applies, so a no-break space, a zero-width space
+//! and an emoji are refused by both for their spelling, with one message, and `é` is an identifier to both.
 
 use std::path::Path;
 
@@ -52,9 +51,9 @@ const SPELLINGS: &[(&str, Expect)] = &[
     ("crate::type", Expect::Absent),
     ("crate::_", Expect::Absent),
     ("crate::k\u{e9}rnel", Expect::Absent),
-    ("crate::\u{a0}kernel", Expect::ReadersDiffer),
-    ("crate::kernel\u{200b}", Expect::ReadersDiffer),
-    ("crate::\u{1f600}", Expect::ReadersDiffer),
+    ("crate::\u{a0}kernel", Expect::Misspelled),
+    ("crate::kernel\u{200b}", Expect::Misspelled),
+    ("crate::\u{1f600}", Expect::Misspelled),
 ];
 
 /// How a row must be answered.
@@ -66,25 +65,19 @@ enum Expect {
     Misspelled,
     /// A canonical spelling of no module: refused by both as absent.
     Absent,
-    /// Not an identifier to syn, an identifier to 圭表's byte-level lexer: 渾儀 refuses it as
-    /// misspelled and 圭表 as absent. Refused either way; only the reason differs.
-    ReadersDiffer,
 }
 
 impl Expect {
     fn hunyi(self) -> Kind {
         match self {
             Expect::Canonical(form) => Kind::Accepted(form.to_string()),
-            Expect::Misspelled | Expect::ReadersDiffer => Kind::Misspelled,
+            Expect::Misspelled => Kind::Misspelled,
             Expect::Absent => Kind::Absent,
         }
     }
 
     fn guibiao(self) -> Kind {
-        match self {
-            Expect::ReadersDiffer => Kind::Absent,
-            other => other.hunyi(),
-        }
+        self.hunyi()
     }
 }
 
@@ -269,10 +262,6 @@ fn guibiao_and_hunyi_accept_and_record_a_module_path_alike() {
             if gnomon.kind() != expected.guibiao() {
                 wrong.push(format!(
                     "guibiao {role} {written:?}: {gnomon:?}, expected {expected:?}"
-                ));
-            } else if matches!(expected, Expect::ReadersDiffer) && gnomon == hunyi {
-                wrong.push(format!(
-                    "guibiao {role} {written:?}: reader-specific refusals must differ: {gnomon:?}"
                 ));
             } else if gnomon.kind() == Kind::Misspelled && gnomon != hunyi {
                 wrong.push(format!(

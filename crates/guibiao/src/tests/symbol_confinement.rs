@@ -616,6 +616,62 @@ pub(super) fn inline_empty_prefix_is_a_constitution_error() {
     );
 }
 
+/// A misdeclaration the boundary alone decides is refused before any root is walked, so a module the walk cannot
+/// back stands behind it rather than in front of the line the operator must change.
+#[test]
+pub(super) fn a_misdeclared_inline_confinement_is_refused_before_the_walk() {
+    let files = &[
+        ("lib.rs", "pub mod core;\npub mod clock;\nmod ghost;\n"),
+        ("core.rs", "// clean\n"),
+        ("clock.rs", "pub fn now() {}\n"),
+    ];
+    let cases: [(ModuleBoundary, String); 5] = [
+        (
+            ModuleBoundary::in_crate("x")
+                .module("crate::core")
+                .must_not_call_inline("")
+                .because("bad"),
+            inline_empty_prefix_error("x", "must_not_call_inline"),
+        ),
+        (
+            ModuleBoundary::in_crate("x")
+                .module("crate")
+                .confine_inline_call("crate::clock")
+                .because("bad"),
+            crate::errors::confine_inline_call_on_crate_error("x"),
+        ),
+        (
+            ModuleBoundary::in_crate("x")
+                .module("crate::clock")
+                .confine_inline_call("crate::clock")
+                .depth(crate::ScanDepth::Shallow)
+                .because("bad"),
+            crate::errors::confine_inline_call_shallow_error("x"),
+        ),
+        (
+            ModuleBoundary::in_crate("x")
+                .module("crate::core")
+                .must_not_call_inline("crate::clock")
+                .ending_with(["now"])
+                .strict_prefix_only()
+                .because("bad"),
+            inline_narrow_and_strict_error("x", "must_not_call_inline"),
+        ),
+        (
+            ModuleBoundary::in_crate("x")
+                .module("crate::core")
+                .must_not_call_inline("crate::clock")
+                .ending_with(Vec::<String>::new())
+                .because("bad"),
+            crate::errors::inline_empty_verbs_error("x", "must_not_call_inline"),
+        ),
+    ];
+    for (index, (boundary, expected)) in cases.into_iter().enumerate() {
+        let (result, _) = run_module_check(&format!("inline-misdeclared-{index}"), files, boundary);
+        assert_eq!(result.unwrap_err(), expected, "case {index}");
+    }
+}
+
 #[test]
 pub(super) fn inline_narrow_and_strict_is_a_constitution_error() {
     let (result, _violations) = run_module_check(
@@ -1416,7 +1472,8 @@ pub(super) fn inline_empty_verbs_is_a_constitution_error() {
 }
 
 /// Every body here is deliberately malformed (rustc: `expected type, found `>``, among others); the test asserts
-/// the scan completes, never an answer about a program.
+/// the scan completes, never an answer about a program: clean, a violation, or a refusal to judge the tokens it
+/// cannot read — `use ::;`, whose path ends in `::` — never a panic, a hang or any other error.
 #[test]
 pub(super) fn inline_scanner_does_not_panic_or_hang_on_odd_input() {
     // Robustness: malformed `use`/brace/self-referential-alias input must never panic or hang.
@@ -1432,10 +1489,12 @@ pub(super) fn inline_scanner_does_not_panic_or_hang_on_odd_input() {
             &[("lib.rs", "pub mod core;\n"), ("core.rs", body)],
             confine_core_clock(),
         );
-        // Either clean or a violation, but it must complete (no panic / no hang) and not error out.
         assert!(
-            result.is_ok(),
-            "odd input must not error: {body:?} -> {result:?}"
+            match &result {
+                Ok(_) => true,
+                Err(refusal) => refusal.contains("cannot judge"),
+            },
+            "odd input must complete, or be refused as unjudgeable: {body:?} -> {result:?}"
         );
     }
 }
@@ -2472,6 +2531,22 @@ const INLINE_PREFIX_SPELLINGS: &[(&str, Result<&str, Option<&str>>)] = &[
     ("Self::clock", Err(None)),
     ("super::clock", Err(None)),
     ("std::time::*", Err(None)),
+    ("std::process\u{200e}", Err(None)),
+    ("std::\u{2028}time", Err(Some("std::time"))),
+    ("std::pro\u{ad}cess", Err(None)),
+    ("std::\u{2060}process", Err(None)),
+    ("std::process\u{2014}", Err(None)),
+    ("core::pro\u{ad}cess", Err(None)),
+    ("md5x::pro\u{ad}cess", Err(None)),
+    ("md5x::\u{2060}hash", Err(None)),
+    ("md5x::\u{1f980}", Err(None)),
+    ("md5x::\u{e9}t\u{e9}", Ok("md5x::\u{e9}t\u{e9}")),
+    ("md5x::\u{6a21}\u{7d44}", Ok("md5x::\u{6a21}\u{7d44}")),
+    ("md5x::_\u{e9}", Ok("md5x::_\u{e9}")),
+    ("proc_macro::Token\u{405}tream", Err(None)),
+    ("test::bl\u{43e}ck_box", Err(None)),
+    ("std::_", Err(None)),
+    ("md5x::_", Err(None)),
 ];
 
 #[test]

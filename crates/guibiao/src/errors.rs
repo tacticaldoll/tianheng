@@ -306,6 +306,20 @@ pub(crate) fn scan_refusal_in_file(file: &Path, refusal: &str) -> String {
     format!("cannot judge source file '{}': {refusal}", file.display())
 }
 
+/// A refusal the module walk of one compilation unit returned, named with the crate and the unit it walked, so a
+/// package of several roots says which one declares the module to repair.
+pub(crate) fn walk_refusal_in_unit(
+    crate_package: &str,
+    unit: Option<&str>,
+    refusal: &str,
+) -> String {
+    let unit_qualifier = match unit {
+        Some(u) => format!(" in compilation unit '{u}'"),
+        None => String::new(),
+    };
+    format!("cannot walk crate '{crate_package}'{unit_qualifier}: {refusal}")
+}
+
 /// Targets sharing one root in different editions are two compilations of one file, and a scan reads it once.
 pub(crate) fn root_in_several_editions_error(
     crate_package: &str,

@@ -18,3 +18,5 @@ categories = ["development-tools"]
 xuanji = { workspace = true }
 xingbiao = { workspace = true }
 serde_json = { workspace = true }
+unicode-ident = { workspace = true }
+unicode-normalization = { workspace = true }

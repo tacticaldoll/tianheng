@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**27 of 134 declared bounds have no pinning test.** That figure is the register's
+**27 of 139 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -111,6 +111,12 @@ fallback used where no manifest exists, which the register spec describes.
 - **pinned by**: `a_macro_generated_item_called_bare_in_its_module_is_a_bound`
 - **pinned by**: `a_crate_rooted_call_of_a_macro_generated_item_reports`
 
+### `inline-symbol-path-confinement/a-use-written-in-a-macro-group-outside-any-block-binds-nothing-a-stated-bound`
+
+> the system does not claim to observe the call — where the macro expands the `use` is not read, so it binds in no scope and `clock` names nothing
+
+- **pinned by**: `a_use_written_in_a_macro_group_outside_any_block_binds_nothing`
+
 ### `inline-symbol-path-confinement/a-prelude-name-called-bare-is-not-read-as-its-std-path-a-stated-bound`
 
 > the system does not claim to observe the call — the prelude's contents are not read, so `drop` names nothing rather than `std::mem::drop`
@@ -140,6 +146,24 @@ fallback used where no manifest exists, which the register spec describes.
 > the system reports `std::process::Command::default in crate::core`: Rust resolves `Command` to the generic parameter, and the scanner, which does not read generic parameter lists, reads the module's import — an over-reaction declared, not a precision claim
 
 - **pinned by**: `inline_generic_parameter_named_like_an_import_is_read_as_the_import`
+
+### `inline-symbol-path-confinement/an-import-in-a-block-of-what-is-not-read-is-read-with-the-scope-around-it-a-stated-bound`
+
+> the system reports `crate::forbidden::id in crate`, with and without `.strict_external()`: rustc calls `std::process::id`, and the scanner, which does not read `std` and so cannot tell whether the block's import holds a value, also reads `id` from the scope around the block — an over-reaction declared, not a precision claim
+
+- **pinned by**: `a_block_import_of_what_is_not_read_is_read_with_the_scope_around_it`
+
+### `inline-symbol-path-confinement/an-import-of-what-is-not-read-beside-a-glob-is-read-with-the-glob-a-stated-bound`
+
+> the system reports `crate::forbidden::fmt in crate::core` and `crate::forbidden::swap in crate::core` respectively, each beside `glob crate::forbidden in crate::core`, with and without `.strict_external()`: rustc 1.96.0, edition 2021, calls the glob's `fmt`, since `std::fmt` names a module and no value, and calls `std::mem::swap`, which the scanner, not reading `std`, cannot tell holds a value — the second an over-reaction declared, not a precision claim
+
+- **pinned by**: `an_import_of_what_is_not_read_beside_a_glob_is_read_with_the_glob`
+
+### `inline-symbol-path-confinement/a-parenthesized-fn-bound-is-read-as-a-call-a-stated-bound`
+
+> the system reports `std::ops::Fn in crate`, `std::ops::FnOnce in crate` and `std::ops::FnMut in crate`, with and without `.strict_external()`: rustc 1.96.0, edition 2021, compiles each and calls nothing there, and the scanner reads a path followed by a parenthesized group as a call — an over-reaction declared, not a precision claim
+
+- **pinned by**: `a_parenthesized_fn_bound_is_read_as_a_call`
 
 ### `inline-symbol-path-confinement/a-local-binding-named-like-an-import-is-read-as-the-import-a-stated-bound`
 
@@ -178,6 +202,12 @@ fallback used where no manifest exists, which the register spec describes.
 - **pinned by**: `inline_strict_external_absent_fully_qualified_call_is_a_bound`
 
 ## module-boundary
+
+### `module-boundary/a-cfg-before-a-separator-its-construct-holds-is-not-read-a-stated-bound`
+
+> the system refuses the file (exit 2), where rustc 1.96.0, edition 2021, builds each: the owner of the block is read back to that separator, so the construct's `cfg` is not read — a refusal declared, never a silent pass
+
+- **pinned by**: `a_cfg_before_a_separator_its_construct_holds_is_not_read`
 
 ### `module-boundary/an-example-test-bench-or-build-script-root-is-not-governed-a-stated-bound`
 

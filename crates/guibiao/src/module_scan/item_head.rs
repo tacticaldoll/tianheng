@@ -4,7 +4,8 @@
 //! starts, what a brace opens, or who may name what an item declares.
 
 use super::path_vocab::{
-    fold_canonical_segments, path_within, resolve_self_super, strip_block_segments,
+    block_label, canonical_segment, fold_canonical_segments, path_within, resolve_self_super,
+    strip_block_segments,
 };
 use super::token_tree::{AngleSlot, Delimiter, Kind, Node, TokenTree};
 
@@ -122,11 +123,11 @@ pub(super) fn is_outer_attribute(node: Node) -> bool {
 /// one segment — a built-in attribute, `r#` included, is always one — and the index just past the path. A path of
 /// several segments names no built-in: measured on rustc 1.96.0, a proc-macro attribute named `cfg` is refused with
 /// "name `cfg` is reserved in attribute namespace", so `foo::cfg` is no `cfg` and its arguments are read.
-pub(super) fn attribute_path<'s>(
-    tree: &TokenTree<'s>,
+pub(super) fn attribute_path<'t>(
+    tree: &'t TokenTree<'_>,
     start: usize,
     end: usize,
-) -> (Option<&'s str>, usize) {
+) -> (Option<&'t str>, usize) {
     let mut k = start;
     let mut segments = Vec::new();
     while k < end && (tree.is_word(k) || tree.kind(k) == Kind::Keyword || tree.is(k, "::")) {
@@ -203,6 +204,87 @@ pub(super) fn in_macro_body(tree: &TokenTree, i: usize) -> bool {
     false
 }
 
+/// Whether token `i` stands inside an attribute's brackets, at any depth: `#[…]` or `#![…]`. What an attribute holds
+/// is its macro's input, not source the item it is written on declares.
+pub(super) fn in_attribute(tree: &TokenTree, i: usize) -> bool {
+    let mut at = tree.enclosing(i);
+    while let Some(open) = at {
+        if tree.kind(open) == Kind::Open(Delimiter::Bracket)
+            && open.checked_sub(1).is_some_and(|before| {
+                tree.is(before, "#")
+                    || (tree.is(before, "!")
+                        && before.checked_sub(1).is_some_and(|hash| tree.is(hash, "#")))
+            })
+        {
+            return true;
+        }
+        at = tree.enclosing(open);
+    }
+    false
+}
+
+/// One `mod` a block declares, and the segment its module's path carries through that block.
+pub(super) struct BlockModule {
+    pub head: ItemHead,
+    pub name_at: usize,
+    /// The `{` of the module body the block stands in, or `None` at a file's top level: the module whose blocks
+    /// number this one among the modules of its name.
+    pub owner: Option<usize>,
+    pub label: String,
+}
+
+/// Every `mod` a block declares, inline or file-form, in source order, each with its [`block_label`]: the one reading
+/// of which `mod` stands in a block and what its module is named, which the reachability walk and the scope table both
+/// take, so a file a block's module reads and the scope a path through it names carry one path. A `mod` stands in a
+/// block where a group other than a `cfg_if!` or its arm stands between it and the first module body enclosing it, and
+/// is numbered among the modules of its name that module's blocks declare. A `mod` inside a macro's group is none.
+pub(super) fn block_modules(tree: &TokenTree) -> Vec<BlockModule> {
+    let mut counts: std::collections::BTreeMap<(Option<usize>, String), usize> = Default::default();
+    let mut found = Vec::new();
+    for i in 0..tree.len() {
+        if tree.kind(i) != Kind::Keyword || tree.text(i) != "mod" || in_macro_body(tree, i) {
+            continue;
+        }
+        let mut in_block = false;
+        let mut owner = None;
+        let mut at = tree.enclosing(i);
+        while let Some(open) = at {
+            let arm = tree
+                .enclosing(open)
+                .is_some_and(|outer| macro_group_kind(tree, outer) == Some(GroupKind::CfgIf));
+            match classify_group(tree, open, None) {
+                GroupKind::ModuleBody(_) => {
+                    owner = Some(open);
+                    break;
+                }
+                GroupKind::CfgIf => {}
+                _ if arm => {}
+                _ => in_block = true,
+            }
+            at = tree.enclosing(open);
+        }
+        if !in_block {
+            continue;
+        }
+        let Some((head, name_at)) =
+            item_at_keyword(tree, i).and_then(|head| head.name.map(|name| (head, name)))
+        else {
+            continue;
+        };
+        let count = counts
+            .entry((owner, canonical_segment(tree.text(name_at)).to_string()))
+            .or_default();
+        *count += 1;
+        found.push(BlockModule {
+            head,
+            name_at,
+            owner,
+            label: block_label(*count),
+        });
+    }
+    found
+}
+
 /// Classify the group opening at `open`, given the kind of the group enclosing it (`None` at a file's top level).
 pub(super) fn classify_group(
     tree: &TokenTree,
@@ -249,15 +331,37 @@ pub(super) fn classify_group(
 /// `<…>` group — `S<{ 1 }>`, `<const N: usize = { 1 }>` — is a const argument or default and no boundary, which
 /// [`inside_an_angle_group`] asks of the forward reading rather than counting the `>`s the walk passes.
 fn item_owning(tree: &TokenTree, open: usize) -> Option<ItemHead> {
+    let head = item_from(tree, start_after_boundary(tree, open, |_| false))?;
+    (head.keyword == ItemKeyword::Use || head.body == Some(open)).then_some(head)
+}
+
+/// Where what the group at `open` belongs to starts, so the outer attributes written on it stand directly before
+/// the answer: the header of the item whose body it is, and otherwise the first node after the previous `;`, `,`,
+/// brace group or attribute — the start of the statement, match arm or field it is written in. A `,` ends a match arm
+/// or a field without ending an item, so it is a boundary only where no item owns the group: `fn f<A, B>() { … }`
+/// is one header, while in `match v { #[cfg(x)] 1 => (), _ => { … } }` the `#[cfg(x)]` is the first arm's.
+pub(super) fn owner_start(tree: &TokenTree, open: usize) -> usize {
+    match item_owning(tree, open) {
+        Some(head) => head.start,
+        None => start_after_boundary(
+            tree,
+            open,
+            |node| matches!(node, Node::Token(t) if tree.is(t, ",")),
+        ),
+    }
+}
+
+/// The first node after the previous item boundary before `open` — a `;`, a brace group or an attribute — or after
+/// the previous node `also_ends` accepts.
+fn start_after_boundary(tree: &TokenTree, open: usize, also_ends: impl Fn(Node) -> bool) -> usize {
     let mut start = open;
     while let Some(node) = tree.node_before(start) {
-        if is_boundary_node(tree, node) && !inside_an_angle_group(tree, node) {
+        if (is_boundary_node(tree, node) && !inside_an_angle_group(tree, node)) || also_ends(node) {
             break;
         }
         start = node.first();
     }
-    let head = item_from(tree, start)?;
-    (head.keyword == ItemKeyword::Use || head.body == Some(open)).then_some(head)
+    start
 }
 
 /// Whether `node`, a brace group, stands inside a `<…>` group the one forward reading, [`angles`], pairs: a `<`
@@ -567,9 +671,7 @@ fn angles<'t>(tree: &'t TokenTree<'_>) -> &'t [AngleSlot] {
             match tree.kind(k) {
                 Kind::Open(_) => continue,
                 Kind::Close(_) => {
-                    if tree.partner(k) != k {
-                        open[tree.partner(k) + 1].clear();
-                    }
+                    open[tree.partner(k) + 1].clear();
                     continue;
                 }
                 _ => {}
@@ -630,8 +732,46 @@ pub(super) fn angle_group_end(tree: &TokenTree, open: usize) -> Option<usize> {
     angle_group(tree, open).map(|group| group.close)
 }
 
+/// The keywords that end an operand, which no expression follows: a path expression's `self`, `Self`, `super` and
+/// `crate` segments (*Path expressions*), the boolean literals `true` and `false` (*Literal expressions*), and the
+/// `await` of a postfix `.await` (*Await expressions*).
+const OPERAND_KEYWORDS: [&str; 7] = ["self", "Self", "super", "crate", "true", "false", "await"];
+
+/// Whether the token before `i` ends an operand, so a `<` at `i` compares: an identifier, a raw identifier, a
+/// literal, a closing delimiter, `?`, or one of [`OPERAND_KEYWORDS`]. A `}` ends a block-like operand as well as a
+/// statement, and is read as the operand's end, so a comparison after a block never opens a qualified path; a
+/// qualified path opening a statement after a `}` is read as a comparison — the declared bound
+/// `inline-symbol-path-confinement/a-qualified-path-after-a-closing-brace-is-read-as-a-rooted-path-a-stated-bound`.
+fn ends_an_operand(tree: &TokenTree, i: usize) -> bool {
+    let Some(prev) = i.checked_sub(1) else {
+        return false;
+    };
+    match tree.kind(prev) {
+        Kind::Ident | Kind::RawIdent | Kind::Literal | Kind::Close(_) => true,
+        Kind::Keyword => OPERAND_KEYWORDS.contains(&tree.text(prev)),
+        Kind::Punct => tree.text(prev) == "?",
+        Kind::Lifetime | Kind::Open(_) => false,
+    }
+}
+
+/// The `::` after the `>` closing the qualified path's `<…>` the `<` or `<<` at `i` opens, if it opens one: the
+/// token before it does not end an operand — a comparison needs a left operand — its `<…>` closes at its level, and
+/// a `::` follows. The one judgement of a `<` at a path's start.
+pub(super) fn opens_a_qualified_path(tree: &TokenTree, i: usize) -> Option<usize> {
+    if ends_an_operand(tree, i) {
+        return None;
+    }
+    let close = angle_group_end(tree, i)?;
+    tree.is(close + 1, "::").then_some(close + 1)
+}
+
 /// The token index of every variant name an `enum` body declares: the first word of each comma-separated member,
-/// past attributes.
+/// past attributes. A discriminant is an expression, where a `<` opens a `<…>` group only as a turbofish, after `::`,
+/// or as a qualified path, which [`opens_a_qualified_path`] decides as it decides one for every path reader — no
+/// operand ends before it and a `::` follows its group; such a group is passed over whole, so a comma inside it
+/// separates no members, and every other `<` is a comparison or a shift: `enum E { A = f::<u8, m::K>(), B = 1 << 3,
+/// C = 64 >> 1, D = 1 + <u8 as Tr<u8, m::K>>::X, F }` declares all five, and `m::K` is a path, measured against rustc
+/// 1.96.0, edition 2021, with a generic `const fn f`.
 pub(super) fn variant_positions(tree: &TokenTree) -> std::collections::BTreeSet<usize> {
     let mut names = std::collections::BTreeSet::new();
     for open in 0..tree.len() {
@@ -649,6 +789,18 @@ pub(super) fn variant_positions(tree: &TokenTree) -> std::collections::BTreeSet<
                 k = close + 1;
                 continue;
             }
+            let turbofish = opens_an_angle_group(tree, k)
+                && k.checked_sub(1).is_some_and(|before| tree.is(before, "::"));
+            let close = if turbofish {
+                angle_group_end(tree, k)
+            } else {
+                opens_a_qualified_path(tree, k).map(|tail| tail - 1)
+            };
+            if let Some(close) = close {
+                expect_name = false;
+                k = close + 1;
+                continue;
+            }
             if expect_name && tree.is_word(k) {
                 names.insert(k);
             }
@@ -663,6 +815,21 @@ pub(super) fn variant_positions(tree: &TokenTree) -> std::collections::BTreeSet<
 mod tests {
     use super::super::token_tree::Edition;
     use super::*;
+
+    /// A discriminant's turbofish holds commas that separate no members, while a shift is no `<…>` group, so the
+    /// members after both are still named: rustc 1.96.0, edition 2021, compiles
+    /// `pub enum E { A = f::<u8, m::K>(), B = 1 << 3, C = 64 >> 1, D = 1 + <u8 as Tr<u8, m::K>>::X, F }` with a generic
+    /// `const fn f` and a trait `Tr` declaring `X`, so a qualified path after an operator is passed over too.
+    #[test]
+    fn a_discriminants_turbofish_separates_no_variants() {
+        let source = "pub enum E { A = f::<u8, m::K>(), B = 1 << 3, C = 64 >> 1, D = 1 + <u8 as Tr<u8, m::K>>::X, F }";
+        let tree = TokenTree::lex(source, Edition::Rust2018);
+        let names: Vec<&str> = variant_positions(&tree)
+            .into_iter()
+            .map(|k| tree.text(k))
+            .collect();
+        assert_eq!(names, ["A", "B", "C", "D", "F"]);
+    }
 
     fn kind_of(source: &str, brace: usize) -> GroupKind {
         let tree = TokenTree::lex(source, Edition::Rust2018);

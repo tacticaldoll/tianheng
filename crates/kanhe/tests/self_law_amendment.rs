@@ -77,9 +77,9 @@ const DECLARED: [Boundary; 14] = [
     },
     Boundary {
         heading: "`guibiao` (crate)",
-        reason: "the 圭表 static core stays dependency-light: its direct normal edges reach only serde_json, xuanji (reaction model), and xingbiao (metadata substrate). functional core ⊥ imperative shell: none reaches the 天衡 shell. 三儀 ⊥ 三儀: none names a sibling dimension",
+        reason: "the 圭表 static core stays dependency-light: its direct normal edges reach only serde_json, xuanji (reaction model), xingbiao (metadata substrate), unicode-ident (Unicode identifier tables), and unicode-normalization (Unicode NFC). functional core ⊥ imperative shell: none reaches the 天衡 shell. 三儀 ⊥ 三儀: none names a sibling dimension",
         fields: &[
-            "- **rule**: restrict dependencies to (only: serde_json, xuanji, xingbiao)",
+            "- **rule**: restrict dependencies to (only: serde_json, xuanji, xingbiao, unicode-ident, unicode-normalization)",
             "- **kind**: crate · **severity**: enforce",
         ],
     },

@@ -14,7 +14,7 @@ use std::collections::BTreeSet;
 
 use super::item_head::{
     angle_group, angle_group_end, attribute_path, cfg_attr_metas, heads_a_path,
-    opens_an_angle_group, variant_positions,
+    opens_a_qualified_path, opens_an_angle_group, variant_positions,
 };
 use super::token_tree::{Delimiter, Kind, Node, TokenTree};
 
@@ -25,11 +25,6 @@ pub(super) struct Occurrence {
     pub segments: String,
     pub is_call: bool,
 }
-
-/// The keywords that end an operand, which no expression follows: a path expression's `self`, `Self`, `super` and
-/// `crate` segments (*Path expressions*), the boolean literals `true` and `false` (*Literal expressions*), and the
-/// `await` of a postfix `.await` (*Await expressions*).
-const OPERAND_KEYWORDS: [&str; 7] = ["self", "Self", "super", "crate", "true", "false", "await"];
 
 /// A path run whose head is at `head`.
 pub(super) struct PathRun {
@@ -69,42 +64,17 @@ pub(super) fn path_run(tree: &TokenTree, head: usize) -> PathRun {
     }
 }
 
-/// Whether the token before `i` ends an operand, so a `<` at `i` compares: an identifier, a raw identifier, a
-/// literal, a closing delimiter, `?`, or one of [`OPERAND_KEYWORDS`]. A `}` ends a block-like operand as well as a
-/// statement, and is read as the operand's end, so a comparison after a block never opens a qualified path; a
-/// qualified path opening a statement after a `}` is read as a comparison — the declared bound
-/// `inline-symbol-path-confinement/a-qualified-path-after-a-closing-brace-is-read-as-a-rooted-path-a-stated-bound`.
-fn ends_an_operand(tree: &TokenTree, i: usize) -> bool {
-    let Some(prev) = i.checked_sub(1) else {
-        return false;
-    };
-    match tree.kind(prev) {
-        Kind::Ident | Kind::RawIdent | Kind::Literal | Kind::Close(_) => true,
-        Kind::Keyword => OPERAND_KEYWORDS.contains(&tree.text(prev)),
-        Kind::Punct => tree.text(prev) == "?",
-        Kind::Lifetime | Kind::Open(_) => false,
-    }
-}
-
-/// The `::` after the `>` closing the qualified path's `<…>` the `<` or `<<` at `i` opens, if it opens one: the
-/// token before it does not end an operand — a comparison needs a left operand — its `<…>` closes at its level, and
-/// a `::` follows. The one judgement of a `<` at a path's start.
-fn opens_a_qualified_path(tree: &TokenTree, i: usize) -> Option<usize> {
-    if ends_an_operand(tree, i) {
-        return None;
-    }
-    let close = angle_group_end(tree, i)?;
-    tree.is(close + 1, "::").then_some(close + 1)
-}
-
 /// Every call and path mention in `tree`. An attribute's arguments are read past its own path and a `cfg` or
 /// `cfg_attr` predicate, as [`attribute_arguments`] states. The identifier
 /// after a `.` is a field or a method, not a path. The tail of a qualified path — `<T>::f`, `<T as Trait>::f` — has
 /// no head the scanner can resolve without the type inference it does not perform, so it is left to the
 /// receiver-method bound; the paths inside its `<…>` are read as any others are. A turbofish's contents — after a
 /// path or after a method — are read the same way: counting its `<…>` says where the path ends, and what it holds
-/// waits on a worklist to be read in turn.
-pub(super) fn occurrences(tree: &TokenTree) -> Vec<Occurrence> {
+/// waits on a worklist to be read in turn. A `use` statement's paths are no occurrences: each is an import, read by the
+/// one reader of use trees, whose leaves a strict confinement judges as `use` paths — a grouped `use crate::{a::b};`
+/// holds no path `a::b`, and in edition 2015 a `use` path starts at the crate root where an expression's does not.
+/// `statements` spans each such statement, `(use, ;)`, in source order.
+pub(super) fn occurrences(tree: &TokenTree, statements: &[(usize, usize)]) -> Vec<Occurrence> {
     let mut scan = Scan {
         tree,
         variants: variant_positions(tree),
@@ -115,6 +85,10 @@ pub(super) fn occurrences(tree: &TokenTree) -> Vec<Occurrence> {
     while let Some((from, to)) = scan.work.pop() {
         scan.read(from, to);
     }
+    scan.out.retain(|occurrence| {
+        let before = statements.partition_point(|&(at, _)| at <= occurrence.at);
+        before == 0 || statements[before - 1].1 < occurrence.at
+    });
     scan.out
 }
 
@@ -264,7 +238,11 @@ mod tests {
 
     fn read(source: &str) -> Vec<(String, bool)> {
         let tree = TokenTree::lex(source, Edition::Rust2018);
-        occurrences(&tree)
+        let spans: Vec<(usize, usize)> = super::super::use_tree::use_statements(&tree)
+            .iter()
+            .map(|statement| (statement.at, statement.end))
+            .collect();
+        occurrences(&tree, &spans)
             .into_iter()
             .map(|o| (o.segments, o.is_call))
             .collect()

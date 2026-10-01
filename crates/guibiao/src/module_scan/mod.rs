@@ -29,7 +29,7 @@ mod use_tree;
 pub(crate) use fs_walk::rust_files;
 pub(crate) use path_vocab::{
     PrefixRoot, SymbolPrefix, canonical_module_path, canonical_module_spelling,
-    canonical_symbol_path_spelling, package_name_to_import_ident, path_within,
+    canonical_symbol_path_spelling, package_name_to_import_ident, path_within, sysroot_crate,
 };
 pub(crate) use reachability::{governed_files, names_crate_by_path_alone, reachable_modules};
 pub(crate) use symbol_scan::{InlineFinding, UnitScan, value_namespace_item_names};

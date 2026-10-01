@@ -1,8 +1,8 @@
 //! Extraction of top-level `mod` declarations and their cfg/path attributes, read from a file's [`TokenTree`].
 
 use super::super::item_head::{
-    GroupKind, attribute_path, cfg_attr_metas, classify_group, in_macro_body, is_outer_attribute,
-    item_at_keyword, macro_group_kind,
+    BlockModule, GroupKind, attribute_path, cfg_attr_metas, classify_group, is_outer_attribute,
+    item_at_keyword, macro_group_kind, owner_start,
 };
 use super::super::path_vocab::canonical_segment;
 use super::super::token_tree::{Delimiter, Kind, Node, TokenTree};
@@ -33,11 +33,15 @@ pub(super) struct DeclaredModule {
     /// (file-form) declaration with no resolvable file, where it decides between a tolerated skip and
     /// a constitution error, for a plain conventional file and for a `#[path]` remap target alike.
     ///
-    /// Two sources, treated identically because they express one intent:
-    /// - a BARE `#[cfg(...)]` attribute (never `cfg_attr`) precedes the item;
-    /// - the declaration sits directly inside a transparent control-flow macro arm (`cfg_if!`), whose
-    ///   predicate lives in the macro's `if #[cfg(..)]` header rather than on the item. Every arm is
-    ///   conditionally compiled by construction, the trailing `else` on its predicate's negation.
+    /// It is whether the declaration, or anything its file encloses it in, may be compiled out — read by
+    /// [`may_be_compiled_out`] — which the walk widens to the declarations that opened the file:
+    /// - a `#[cfg(...)]` attribute precedes the item;
+    /// - an item, statement, match arm or field enclosing it carries one, since rustc removes what it holds with it —
+    ///   read back to the previous `;`, `,`, brace group or attribute, so a statement holding one of those before the
+    ///   group is not reached, a declared bound;
+    /// - it sits inside a transparent control-flow macro arm (`cfg_if!`), whose predicate lives in the macro's
+    ///   `if #[cfg(..)]` header rather than on the item. Every arm is conditionally compiled by construction, the
+    ///   trailing `else` on its predicate's negation.
     ///
     /// A `cfg_attr` counts only where it applies a `cfg`: unlike a bare `#[cfg(pred)]`, which removes the whole item
     /// when `pred` is false, `#[cfg_attr(pred, …)]` removes nothing of itself, so `#[cfg_attr(unix,
@@ -50,7 +54,8 @@ pub(super) struct DeclaredModule {
     /// nothing here to agree or disagree with until it does.
     pub(super) is_cfg_conditional: bool,
     /// Whether a block declares it, so it names no conventional file — rustc refuses a file-form `mod` in a block
-    /// with no path attribute that applies — and is read from its path attributes alone.
+    /// with no path attribute that applies — and is read from its path attributes alone; an inline one's body is read
+    /// from the declaring file's directory, as the walk states.
     pub(super) declared_in_block: bool,
 }
 
@@ -76,15 +81,15 @@ pub(super) fn declared_modules_in(
     range: std::ops::Range<usize>,
 ) -> Vec<DeclaredModule> {
     let mut declared: Vec<(usize, DeclaredModule)> = Vec::new();
-    let mut work: Vec<(usize, usize, bool)> = vec![(range.start, range.end.min(tree.len()), false)];
-    while let Some((from, to, in_arm)) = work.pop() {
+    let mut work: Vec<(usize, usize)> = vec![(range.start, range.end.min(tree.len()))];
+    while let Some((from, to)) = work.pop() {
         let mut i = from;
         while i < to {
             let node = tree.node_at(i);
             if let Node::Macro { open, close, .. } = node {
                 if macro_group_kind(tree, open) == Some(GroupKind::CfgIf) {
                     work.extend(
-                        cfg_if_arms(tree, open, close).map(|(open, close)| (open + 1, close, true)),
+                        cfg_if_arms(tree, open, close).map(|(open, close)| (open + 1, close)),
                     );
                 }
                 i = close + 1;
@@ -117,7 +122,8 @@ pub(super) fn declared_modules_in(
                         .into_iter()
                         .map(|(_, value)| value)
                         .collect(),
-                    is_cfg_conditional: body.is_none() && (attributes.bare_cfg || in_arm),
+                    is_cfg_conditional: body.is_none()
+                        && (attributes.bare_cfg || may_be_compiled_out(tree, head.start)),
                     declared_in_block: false,
                 },
             ));
@@ -149,9 +155,37 @@ fn cfg_if_arms<'t>(
     })
 }
 
-/// Every file-form `mod` a block within tokens `range` declares with a path attribute, direct or `cfg_attr` — `fn f()
-/// { #[path = "x.rs"] mod m; }` and `fn f() { #[cfg_attr(unix, path = "x.rs")] mod m; }`, which rustc compiles on unix,
-/// measured against rustc 1.96.0, edition 2021 — named as the module it is governed
+/// Whether a group of its file enclosing token `at` may be compiled out, taking what it holds with it: a `cfg_if!` arm,
+/// which is conditional by construction, or a group whose item, statement, match arm or field carries an outer `cfg`, bare
+/// or applied through `cfg_attr`. Every enclosing group is read up to the file's top, so a module body, a `fn` body, a
+/// block statement and an arm are one question rather than one reading each. Measured against rustc 1.96.0, edition
+/// 2021: `#[cfg(any())] fn f() { #[path = "x.rs"] mod m; }`, `fn f() { #[cfg(any())] { #[path = "x.rs"] mod m; } }`
+/// and `#[cfg(any())] mod o { mod i; }` each build with no file backing the inner `mod`. Which item, statement, arm or
+/// field owns a group is [`owner_start`]'s reading back to the previous separator, so an item, statement, parameter or
+/// field holding a `,`, a brace group or an attribute of its own before the group — `let v: HashMap<u8, u8> = { … }`,
+/// `if a {} else { … }`, `fn h<A, B>(_: [u8; { … }])` — has its `cfg` left unread and the missing file refused, the
+/// declared bound
+/// `module-boundary/a-cfg-before-a-separator-its-construct-holds-is-not-read-a-stated-bound`.
+fn may_be_compiled_out(tree: &TokenTree, at: usize) -> bool {
+    let mut group = tree.enclosing(at);
+    while let Some(open) = group {
+        let outer = tree.enclosing(open);
+        let arm = outer.is_some_and(|outer| {
+            macro_group_kind(tree, outer) == Some(GroupKind::CfgIf)
+                && classify_group(tree, open, Some(&GroupKind::CfgIf)) == GroupKind::CfgArm
+        });
+        if arm || attributes_before(tree, owner_start(tree, open)).bare_cfg {
+            return true;
+        }
+        group = outer;
+    }
+    false
+}
+
+/// Every inline `mod` a block within tokens `range` declares, and every file-form one it declares with a path attribute,
+/// direct or `cfg_attr` — `fn f() { #[path = "x.rs"] mod m; }` and `fn f() { #[cfg_attr(unix, path = "x.rs")] mod m; }`,
+/// which rustc compiles on unix, and `fn f() { mod k { #[path = "y.rs"] mod m; } }`, which compiles `k/y.rs` beside the
+/// declaring file, measured against rustc 1.96.0, edition 2021 — named as the module it is governed
 /// as: `{block}::m`, and `{block N}::m` for the Nth module named `m` a block of the range declares, inline or not, in
 /// source order, so two are two modules. A block names nothing a path outside it can write, so the name is the
 /// block's readable form rather than a path; rustc refuses a file-form `mod` in a block with no path attribute, so
@@ -161,59 +195,37 @@ fn cfg_if_arms<'t>(
 /// time the blocks between the `mod` and that body bound, rather than once per group enclosing it.
 pub(super) fn block_path_modules(
     tree: &TokenTree,
+    blocks: &[BlockModule],
     range: std::ops::Range<usize>,
 ) -> Vec<DeclaredModule> {
-    let mut seen: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
-    let mut declared = Vec::new();
     let end = range.end.min(tree.len());
-    for i in range.start..end {
-        if tree.kind(i) != Kind::Keyword || tree.text(i) != "mod" {
+    let owner = range.start.checked_sub(1).filter(|&open| {
+        tree.kind(open) == Kind::Open(Delimiter::Brace) && tree.partner(open) == end
+    });
+    let mut declared = Vec::new();
+    for BlockModule {
+        head,
+        name_at,
+        owner: declared_under,
+        label: block,
+    } in blocks
+    {
+        let name_at = *name_at;
+        if *declared_under != owner || !(range.start..end).contains(&head.keyword_at) {
             continue;
         }
-        let mut in_block = false;
-        let mut in_nested_module = false;
-        let mut at = tree.enclosing(i);
-        while let Some(open) = at.filter(|&open| open >= range.start) {
-            let arm = tree
-                .enclosing(open)
-                .is_some_and(|outer| macro_group_kind(tree, outer) == Some(GroupKind::CfgIf));
-            match classify_group(tree, open, None) {
-                GroupKind::ModuleBody(_) => {
-                    in_nested_module = true;
-                    break;
-                }
-                GroupKind::CfgIf => {}
-                _ if arm => {}
-                _ => in_block = true,
-            }
-            at = tree.enclosing(open);
-        }
-        if !in_block || in_nested_module || in_macro_body(tree, i) {
-            continue;
-        }
-        let Some((head, name)) =
-            item_at_keyword(tree, i).and_then(|head| head.name.map(|name| (head, name)))
-        else {
-            continue;
-        };
-        let name = canonical_segment(tree.text(name)).to_string();
-        let count = seen.entry(name.clone()).or_default();
-        *count += 1;
-        if head.body.is_some() || !tree.is(head.name.map_or(i, |n| n + 1), ";") {
+        let name = canonical_segment(tree.text(name_at)).to_string();
+        let body = head.body.map(|open| (open, tree.partner(open)));
+        if body.is_none() && !tree.is(name_at + 1, ";") {
             continue;
         }
         let attributes = attributes_before(tree, head.start);
-        if attributes.direct.is_none() && attributes.conditional.is_empty() {
+        if body.is_none() && attributes.direct.is_none() && attributes.conditional.is_empty() {
             continue;
         }
-        let block = if *count == 1 {
-            "{block}".to_string()
-        } else {
-            format!("{{block {count}}}")
-        };
         declared.push(DeclaredModule {
             name: format!("{block}::{name}"),
-            body: None,
+            body,
             direct_path: attributes.direct,
             direct_path_is_conditional: attributes.direct_after_candidate,
             conditional_paths: attributes
@@ -221,7 +233,8 @@ pub(super) fn block_path_modules(
                 .into_iter()
                 .map(|(_, value)| value)
                 .collect(),
-            is_cfg_conditional: attributes.bare_cfg,
+            is_cfg_conditional: body.is_none()
+                && (attributes.bare_cfg || may_be_compiled_out(tree, head.start)),
             declared_in_block: true,
         });
     }

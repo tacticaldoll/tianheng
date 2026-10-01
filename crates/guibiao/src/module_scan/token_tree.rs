@@ -8,8 +8,11 @@
 //! Nothing here recurses, so no nesting depth is refused. The module names no type of the crate it sits in: it
 //! reads Rust's lexical grammar, and what the tokens mean is each reader's own question.
 
+use std::borrow::Cow;
 use std::cell::OnceCell;
 use std::ops::Range;
+
+use unicode_normalization::UnicodeNormalization;
 
 /// The editions whose keyword sets differ in a way a reader of paths can see: in 2015 `async`, `await`, `dyn` and
 /// `try` are identifiers.
@@ -108,7 +111,8 @@ impl Node {
 }
 
 pub(super) struct TokenTree<'s> {
-    source: &'s str,
+    /// The source the tokens' spans index: as written, or with its identifiers in NFC ([`identifiers_in_nfc`]).
+    source: Cow<'s, str>,
     tokens: Vec<Token>,
     /// For an opener, its closer; for a closer, its opener; for any other token, itself.
     partner: Vec<usize>,
@@ -186,7 +190,7 @@ fn shebang_end(bytes: &[u8]) -> usize {
     let mut k = 2;
     loop {
         match bytes.get(k) {
-            Some(b) if b.is_ascii_whitespace() => k += 1,
+            Some(_) if white_space_len(bytes, k) > 0 => k += white_space_len(bytes, k),
             Some(b'/') if bytes.get(k + 1) == Some(&b'/') => {
                 while k < bytes.len() && bytes[k] != b'\n' {
                     k += 1;
@@ -203,7 +207,30 @@ fn shebang_end(bytes: &[u8]) -> usize {
         .map_or(bytes.len(), |at| at + 1)
 }
 
-/// Whether `byte` continues an identifier. Any byte at or above 0x80 does, so a Unicode identifier is one word.
+/// The length of the whitespace character at `bytes[i]`, or `0` where none stands there: the Reference's
+/// *Whitespace* is Unicode's `Pattern_White_Space`, which holds a vertical tab `u8::is_ascii_whitespace` does not and
+/// five characters past ASCII. Measured against rustc 1.96.0, edition 2021: `use crate::forbidden::{\u{b}Thing};`
+/// compiles, and so does each of the others in that place.
+pub(super) fn white_space_len(bytes: &[u8], i: usize) -> usize {
+    const WIDE: [&[u8]; 5] = [
+        "\u{85}".as_bytes(),
+        "\u{200e}".as_bytes(),
+        "\u{200f}".as_bytes(),
+        "\u{2028}".as_bytes(),
+        "\u{2029}".as_bytes(),
+    ];
+    match bytes.get(i) {
+        Some(b'\t' | b'\n' | b'\x0b' | b'\x0c' | b'\r' | b' ') => 1,
+        Some(_) => WIDE
+            .iter()
+            .find(|wide| bytes[i..].starts_with(wide))
+            .map_or(0, |wide| wide.len()),
+        None => 0,
+    }
+}
+
+/// Whether `byte` continues an identifier. Any byte at or above 0x80 does, so a Unicode identifier is one word;
+/// [`word_end`] stops at a whitespace character past ASCII, which is no part of a word.
 pub(super) fn is_ident_byte(byte: u8) -> bool {
     byte == b'_' || byte.is_ascii_alphanumeric() || byte >= 0x80
 }
@@ -220,8 +247,9 @@ impl<'s> TokenTree<'s> {
         let mut i = source_start(bytes);
         while i < bytes.len() {
             let b = bytes[i];
-            if b.is_ascii_whitespace() {
-                i += 1;
+            let space = white_space_len(bytes, i);
+            if space > 0 {
+                i += space;
                 continue;
             }
             if b == b'/' && bytes.get(i + 1) == Some(&b'/') {
@@ -323,7 +351,7 @@ impl<'s> TokenTree<'s> {
             }
         }
         TokenTree {
-            source,
+            source: identifiers_in_nfc(source, &mut tokens),
             tokens,
             partner,
             parent,
@@ -345,7 +373,7 @@ impl<'s> TokenTree<'s> {
     }
 
     /// The token's text; a raw identifier's without its `r#`.
-    pub(super) fn text(&self, i: usize) -> &'s str {
+    pub(super) fn text(&self, i: usize) -> &str {
         let span = self.tokens[i].span.clone();
         let text = &self.source[span];
         if self.tokens[i].kind == Kind::RawIdent {
@@ -356,7 +384,7 @@ impl<'s> TokenTree<'s> {
     }
 
     /// The token's text as the source wrote it, a raw identifier's `r#` included.
-    pub(super) fn written(&self, i: usize) -> &'s str {
+    pub(super) fn written(&self, i: usize) -> &str {
         &self.source[self.tokens[i].span.clone()]
     }
 
@@ -511,6 +539,41 @@ impl<'s> TokenTree<'s> {
     }
 }
 
+/// `source` with every identifier token in Unicode Normalization Form C, and each token's span moved to the text it
+/// now covers; everything else, a literal's contents included, is kept byte for byte. rustc normalizes an identifier
+/// to NFC before comparing it, so `se` + U+0301 + `cret` and `s` + U+00E9 + `cret` are one name to it and one name to
+/// every reader of this tree. Measured against rustc 1.96.0, edition 2021: `pub mod sécret` written precomposed
+/// beside a call `crate::se\u{301}cret::go()` written decomposed builds. A source whose identifiers are already in NFC,
+/// every ASCII one among them, is kept as it is.
+fn identifiers_in_nfc<'s>(source: &'s str, tokens: &mut [Token]) -> Cow<'s, str> {
+    let is_identifier = |token: &Token| matches!(token.kind, Kind::Ident | Kind::RawIdent);
+    let unnormalized = |token: &Token| {
+        is_identifier(token) && {
+            let text = &source[token.span.clone()];
+            !text.is_ascii() && !unicode_normalization::is_nfc(text)
+        }
+    };
+    if !tokens.iter().any(unnormalized) {
+        return Cow::Borrowed(source);
+    }
+    let mut normalized = String::with_capacity(source.len());
+    let mut copied = 0;
+    for token in tokens {
+        let span = token.span.clone();
+        normalized.push_str(&source[copied..span.start]);
+        let start = normalized.len();
+        if is_identifier(token) {
+            normalized.extend(source[span.clone()].nfc());
+        } else {
+            normalized.push_str(&source[span.clone()]);
+        }
+        token.span = start..normalized.len();
+        copied = span.end;
+    }
+    normalized.push_str(&source[copied..]);
+    Cow::Owned(normalized)
+}
+
 /// Decode a plain string literal's escapes — the set rustc and syn accept (`\n`/`\r`/`\t`/`\\`/
 /// `\0`/`\'`/`\"`/`\xHH`/`\u{…}`/backslash-newline line continuation) — so a `#[path]` value read
 /// from source matches what syn would give. An unrecognized escape yields `None` (fail-safe: the
@@ -589,7 +652,7 @@ fn utf8_len(lead: u8) -> usize {
 }
 
 fn word_end(bytes: &[u8], mut i: usize) -> usize {
-    while i < bytes.len() && is_ident_byte(bytes[i]) {
+    while i < bytes.len() && is_ident_byte(bytes[i]) && white_space_len(bytes, i) == 0 {
         i += 1;
     }
     i
@@ -722,6 +785,28 @@ mod tests {
         (0..tree.len())
             .map(|i| (tree.kind(i), tree.written(i).to_string()))
             .collect()
+    }
+
+    /// An identifier is read in NFC, as rustc compares one, and the spans after it follow the text it now holds, while a
+    /// literal keeps the bytes it was written with.
+    #[test]
+    fn an_identifier_is_read_in_nfc_and_a_literal_as_written() {
+        let decomposed = "crate::se\u{301}cret::go(\"se\u{301}\"); r#se\u{301}cret";
+        assert_eq!(
+            kinds(decomposed),
+            vec![
+                (Kind::Keyword, "crate".into()),
+                (Kind::Punct, "::".into()),
+                (Kind::Ident, "s\u{e9}cret".into()),
+                (Kind::Punct, "::".into()),
+                (Kind::Ident, "go".into()),
+                (Kind::Open(Delimiter::Parenthesis), "(".into()),
+                (Kind::Literal, "\"se\u{301}\"".into()),
+                (Kind::Close(Delimiter::Parenthesis), ")".into()),
+                (Kind::Punct, ";".into()),
+                (Kind::RawIdent, "r#s\u{e9}cret".into()),
+            ]
+        );
     }
 
     /// A shebang line and a leading byte-order mark are no token, while `#!` followed — past whitespace and comments,
