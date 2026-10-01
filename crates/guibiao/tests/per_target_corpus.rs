@@ -9169,7 +9169,8 @@ fn a_scope_holding_a_name_only_where_a_cfg_gates_it_ends_no_lookup() {
 /// reports under `std::process`; and `#[cfg(any())] mod md5x {}` leaves `md5x::compute()` to the dependency, which
 /// reports under `.strict_external()`, where an un-`use`d dependency call is observed. A module written ungated
 /// shadows the crate and nothing reports, and so does a crate root's `extern crate core as std;`, which answers `std`
-/// for certain — the call is `core::mem::drop` — unless that alias is gated too. rustc 1.96.0, edition 2021, builds each.
+/// for certain — the call is `core::mem::drop` — unless that alias is gated too, even beside a root `mod std` no `cfg`
+/// gates, which no other module sees. rustc 1.96.0, edition 2021, builds each.
 #[test]
 fn a_head_held_only_by_a_gated_item_may_name_a_crate() {
     let core = |module: &str| {
@@ -9204,6 +9205,11 @@ fn a_head_held_only_by_a_gated_item_may_name_a_crate() {
         (
             "gatedalias",
             "#[cfg(any())]\nextern crate core as std;",
+            &["std::mem::drop in crate::core"][..],
+        ),
+        (
+            "gatedaliasbesidemod",
+            "#[cfg(any())]\nextern crate core as std;\npub mod std {}",
             &["std::mem::drop in crate::core"][..],
         ),
     ] {

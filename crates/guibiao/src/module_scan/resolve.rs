@@ -460,6 +460,10 @@ pub(super) struct CrateScopes {
     /// What each `extern crate` of the crate root binds: in scope in every module of the unit, after
     /// what the module's own scopes bind.
     extern_prelude: BTreeMap<String, Vec<Declared>>,
+    /// The names an `extern crate` of the crate root no `cfg` gates binds, which the extern prelude answers for
+    /// certain: `extern crate core as std;` leaves no sysroot `std` to read, while a gated one leaves the name open in
+    /// every module, whatever else the root declares under it.
+    certain_externs: BTreeSet<String>,
     named: RefCell<HashMap<NameKey, Named>>,
     denoted: RefCell<HashMap<DenoteKey, Result<Vec<String>, String>>>,
     /// What [`CrateScopes::scope_lookup`] answered, by [`LookupKey`], where no cycle was cut while answering.
@@ -507,6 +511,7 @@ impl CrateScopes {
         let mut modules: BTreeMap<String, Vec<(usize, u32)>> = BTreeMap::new();
         let mut blocks: BTreeMap<String, (usize, u32)> = BTreeMap::new();
         let mut extern_prelude: BTreeMap<String, Vec<Declared>> = BTreeMap::new();
+        let mut certain_externs = BTreeSet::new();
         for (t, table) in tables.iter().enumerate() {
             for (id, scope) in table.scopes.iter().enumerate() {
                 let id = u32::try_from(id).expect("scope table exceeds u32");
@@ -525,7 +530,10 @@ impl CrateScopes {
                 if scope.kind == ScopeKind::Module && scope.module == "crate" {
                     for (name, all) in &scope.declarations {
                         for declaration in all {
-                            if let DeclKind::ExternCrate(target) = &declaration.kind {
+                            if let DeclKind::ExternCrate { target, gated } = &declaration.kind {
+                                if !gated {
+                                    certain_externs.insert(name.clone());
+                                }
                                 extern_prelude
                                     .entry(name.clone())
                                     .or_default()
@@ -543,6 +551,7 @@ impl CrateScopes {
             modules,
             blocks,
             extern_prelude,
+            certain_externs,
             named: RefCell::default(),
             denoted: RefCell::default(),
             looked: RefCell::default(),
@@ -809,7 +818,7 @@ impl CrateScopes {
         }
         let prelude = self.in_extern_prelude(head, ns);
         let open = match prelude {
-            Head::Candidates { .. } => !self.root_holds_extern_crate_for_certain(head),
+            Head::Candidates { .. } => !self.certain_externs.contains(head),
             _ => gated,
         };
         let mut answer = joined(unsettled.into_iter().chain([prelude]));
@@ -905,20 +914,6 @@ impl CrateScopes {
                 ),
                 Binding::Alias { .. } => false,
             })
-    }
-
-    /// Whether the extern prelude's answer for `head` holds on every build: the crate root binds it by an `extern crate`
-    /// no `cfg` gates, so `extern crate core as std;` answers `std` for certain and leaves no sysroot `std` to read,
-    /// while a gated one leaves the head open in every module, whether or not a scope of its own held it.
-    fn root_holds_extern_crate_for_certain(&self, head: &str) -> bool {
-        self.modules.get("crate").is_some_and(|scopes| {
-            scopes.iter().any(|&(t, s)| {
-                self.tables[t].scopes[s as usize]
-                    .declarations
-                    .contains_key(head)
-                    && !self.held_only_where_gated(t, s, head, Namespace::Type)
-            })
-        })
     }
 
     /// What the crate root's `extern crate` items bind `head` as — the names they add to every module's
@@ -1093,7 +1088,9 @@ impl CrateScopes {
             for declaration in declarations {
                 match (&declaration.kind, entry.kind) {
                     (DeclKind::Module(path), _) => declared.push(Declared::Module(path.clone())),
-                    (DeclKind::ExternCrate(target), _) => declared.push(extern_crate_names(target)),
+                    (DeclKind::ExternCrate { target, .. }, _) => {
+                        declared.push(extern_crate_names(target))
+                    }
                     (DeclKind::Item(_), ScopeKind::Module) => {
                         declared.push(Declared::Item(format!("{}::{head}", entry.module)));
                     }

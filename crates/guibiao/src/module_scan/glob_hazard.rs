@@ -137,7 +137,7 @@ fn read_scope(
         }
     }
     for declaration in scope.declarations.values().flatten() {
-        if let DeclKind::ExternCrate(target) = &declaration.kind {
+        if let DeclKind::ExternCrate { target, .. } = &declaration.kind {
             if declaration.visibility != Visibility::Private {
                 hazard.read(
                     scopes.denote(extern_crate_names(target).path(), Namespace::Either),

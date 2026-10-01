@@ -93,8 +93,9 @@ pub(super) enum DeclKind {
     /// A module, by its path — for one declared in a block, a path through [`block_segment`] that no path written in
     /// source can spell.
     Module(String),
-    /// An `extern crate`, by the crate it names: `crate` for `extern crate self`.
-    ExternCrate(String),
+    /// An `extern crate`, by the crate it names — `crate` for `extern crate self` — and whether a `cfg` gates it,
+    /// which a crate root's ungated declaration of the same name does not make certain.
+    ExternCrate { target: String, gated: bool },
     /// Any other item, by its keyword: it names itself, and a path through it reads what the item holds.
     Item(ItemKeyword),
 }
@@ -515,7 +516,7 @@ impl ScopeTable {
                 type_ns: true,
                 value_ns: false,
                 visibility,
-                kind: DeclKind::ExternCrate(target),
+                kind: DeclKind::ExternCrate { target, gated },
             });
     }
 }

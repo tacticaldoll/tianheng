@@ -47,7 +47,7 @@ struct FileScan {
 
 impl FileScan {
     /// Read `raw`, the text of `file` as `module`, into its scan and its scope table, the unit's `table`th: every
-    /// judgement of a file's text the unit makes is made here, so whatever text the file holds, it ends.
+    /// judgement of a file's text the unit makes is made here.
     fn read(
         raw: &str,
         file: &Path,
@@ -483,19 +483,28 @@ fn should_react_on_occurrence(strict: bool, verbs: Option<&[String]>, resolved: 
 mod tests {
     use super::*;
 
-    /// A file cut off anywhere — mid-item, mid-path, after a `type A =` — is read to its end: a reader that steps past
-    /// the last token answers nothing there rather than indexing beyond it.
+    /// A file cut off anywhere — mid-item, mid-path, after a `type A =`, inside a literal or a comment — is read to its
+    /// end: a reader that steps past the last token answers nothing there rather than indexing beyond it. The fixture
+    /// holds each item form, path form and literal form the readers distinguish, and every prefix of it is read.
     #[test]
     fn a_file_cut_off_anywhere_is_read_to_its_end() {
-        let source = "#![allow(unused)]\n\
-            use crate::a::{b, c::*, d as e};\n\
-            pub type A<'a, T> = &'a mut (crate::x::Y<T>);\n\
+        let source = "\u{feff}#!/usr/bin/env run\n\
+            #![allow(unused)]\n\
+            use crate::a::{b, c::*, d as e, f::{self, g}};\n\
+            pub(in crate::a) type A<'a, T> = &'a mut (crate::x::Y<T>);\n\
             type B = *const ::std::cell::Cell<u8>;\n\
-            #[cfg_attr(unix, path = \"u.rs\")] mod m;\n\
-            extern crate core as std;\n\
+            #[cfg_attr(unix, path = \"u.rs\")] #[path = \"v.rs\"] mod m;\n\
+            #[cfg(any())] extern crate core as std;\n\
+            unsafe extern \"C\" { pub fn ext(x: i32) -> i32; }\n\
+            pub union U { a: u8, b: crate::y::Z }\n\
+            pub enum E { A(crate::y::Z), B { f: u8 } = 1 }\n\
+            pub trait Tr: for<'a> Fn(&'a u8) { const C: u8; fn f(&self) -> <Self as Tr>::X; }\n\
             impl<T: crate::t::Tr> crate::t::Tr for S<T> where T: Copy {}\n\
             macro_rules! m { ($x:expr) => { crate::q::f($x) }; }\n\
-            pub fn run() { let r#ref = 1; crate::z::<u8>::f(&mut r#ref); std::process::id(); }\n";
+            mod inner { use super::*; pub fn h() { if 1 << 2 < 3 { <u8 as crate::k::K>::k(); } } }\n\
+            pub fn run() { let r#ref = 1; crate::z::<u8>::f(&mut r#ref); std::process::id(); \
+            let _ = (b'x', b\"y\", r#\"z\"#, c\"w\", '\\u{1F600}'); /* outer /* nested */ still */ }\n\
+            const S: &str = \"unterminated";
         for cut in (0..=source.len()).filter(|&cut| source.is_char_boundary(cut)) {
             for edition in [Edition::Rust2015, Edition::Rust2018, Edition::Rust2021] {
                 FileScan::read(&source[..cut], Path::new("lib.rs"), "crate", edition, 0);

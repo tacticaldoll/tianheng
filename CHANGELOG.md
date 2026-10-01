@@ -571,8 +571,9 @@ them.
   build compiling the module out calls `std`. Such a head is now also read as what no scope binds — a sysroot crate,
   and under `.strict_external()` a dependency — beside the gated module's paths, unless the crate root's ungated
   `extern crate` answers it, as `extern crate core as std;` answers `std` as `core`. A root `extern crate` a `cfg`
-  gates leaves its name open the same way in every module, so beside `#[cfg(any())] extern crate core as std;` a
-  submodule's `std::process::id()` reports under `std::process` too. Address or baseline what it reports.
+  gates leaves its name open the same way in every module, whatever else the root declares under that name, so
+  beside `#[cfg(any())] extern crate core as std;` a submodule's `std::process::id()` reports under `std::process`
+  too. Address or baseline what it reports.
 
 - **BREAKING** — **圭表's import rules refuse an import read through another file's unreadable `use` tree.** A `use`
   tree nested past the cap leaves its file's scopes without the bindings it makes, so an import whose head is read
