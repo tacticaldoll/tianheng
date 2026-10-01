@@ -194,8 +194,7 @@ pub fn constitution() -> Constitution {
                 .confine_inline_call("std::fs")
                 .ending_with(["read_to_string", "read", "open"])
                 .because(
-                    "guibiao reads a source file's contents in module_scan::source_texts alone; \
-                     every other module takes a source's text from it",
+                    "guibiao calls std::fs to read or open a file in module_scan::source_texts alone",
                 ),
         )
         .boundary(

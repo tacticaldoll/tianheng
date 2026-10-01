@@ -91,7 +91,7 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 
 ### `guibiao::crate::module_scan::source_texts` (module)
 
-> guibiao reads a source file's contents in module_scan::source_texts alone; every other module takes a source's text from it
+> guibiao calls std::fs to read or open a file in module_scan::source_texts alone
 
 - **rule**: inline symbol path permitted only in module (confined_prefix: std::fs; ending_with: read_to_string, read, open)
 - **kind**: module · **severity**: enforce · **crate**: guibiao
