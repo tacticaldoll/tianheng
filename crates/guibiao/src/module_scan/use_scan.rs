@@ -109,7 +109,7 @@ pub(super) fn imports_with_importers(
     current_module: &str,
     edition: Edition,
 ) -> Result<Vec<(String, ImportedPath)>, String> {
-    Ok(internal_imports(file_alone(
+    Ok(internal_imports(&file_alone(
         source,
         current_module,
         edition,
@@ -141,7 +141,7 @@ fn external_imports_with_importers(
     current_module: &str,
     edition: Edition,
 ) -> Result<Vec<(String, String)>, String> {
-    Ok(external_imports(file_alone(
+    Ok(external_imports(&file_alone(
         source,
         current_module,
         edition,
@@ -260,14 +260,14 @@ pub(super) fn file_uses(statements: Vec<UseStatement>, table: &ScopeTable) -> Ve
 }
 
 /// Internal imports of classified leaves, paired with their importer, sorted and deduplicated.
-pub(super) fn internal_imports(classified: Vec<ClassifiedLeaf>) -> Vec<(String, ImportedPath)> {
+pub(super) fn internal_imports(classified: &[ClassifiedLeaf]) -> Vec<(String, ImportedPath)> {
     let mut pairs: Vec<(String, ImportedPath)> = classified
-        .into_iter()
-        .filter_map(|leaf| match leaf.target {
+        .iter()
+        .filter_map(|leaf| match &leaf.target {
             UseTarget::Internal(path) => Some((
-                leaf.importer,
+                leaf.importer.clone(),
                 ImportedPath {
-                    path,
+                    path: path.clone(),
                     is_glob: leaf.is_glob,
                     is_self_leaf: leaf.is_self_leaf,
                 },
@@ -281,11 +281,11 @@ pub(super) fn internal_imports(classified: Vec<ClassifiedLeaf>) -> Vec<(String, 
 }
 
 /// External crates of classified leaves, paired with their importer, sorted and deduplicated.
-pub(super) fn external_imports(classified: Vec<ClassifiedLeaf>) -> Vec<(String, String)> {
+pub(super) fn external_imports(classified: &[ClassifiedLeaf]) -> Vec<(String, String)> {
     let mut pairs: Vec<(String, String)> = classified
-        .into_iter()
-        .filter_map(|leaf| match leaf.target {
-            UseTarget::External(head) => Some((leaf.importer, head)),
+        .iter()
+        .filter_map(|leaf| match &leaf.target {
+            UseTarget::External(head) => Some((leaf.importer.clone(), head.clone())),
             UseTarget::Internal(_) => None,
         })
         .collect();

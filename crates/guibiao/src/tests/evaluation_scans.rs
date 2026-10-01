@@ -493,12 +493,9 @@ pub(super) fn each_source_path_is_read_once_on_demand() {
     );
 }
 
-/// `module-boundary` scenario "A source two roots or two modules reach is read once": a file two
-/// roots of one package compile is read once across both, and a file two `#[path]` attributes load
-/// as two modules is read once for both — while every module position it holds is judged as a scan
-/// per boundary, reading the file afresh, judges it.
+/// A source compiled by two roots is read once across both, and each root retains its own findings.
 #[test]
-pub(super) fn a_source_two_roots_or_two_modules_reach_is_read_once() {
+pub(super) fn a_source_two_roots_reach_is_read_once() {
     let ws = TempWorkspace::new("read-once-two-roots");
     ws.write("lib.rs", "pub mod kernel;\npub mod common;\n");
     ws.write("main.rs", "mod kernel;\nmod common;\nfn main() {}\n");
@@ -552,7 +549,11 @@ pub(super) fn a_source_two_roots_or_two_modules_reach_is_read_once() {
         crate::evaluate_with_scans(&constitution, &metadata, &EvaluationScans::independent()),
         "the shared reading judges each root as a reading per boundary does"
     );
+}
 
+/// One source loaded as two modules is read once, and both module positions retain their findings.
+#[test]
+pub(super) fn a_source_two_modules_reach_is_read_once() {
     let ws = TempWorkspace::new("read-once-two-modules");
     ws.write(
         "lib.rs",
@@ -641,4 +642,81 @@ pub(super) fn a_source_no_root_reaches_is_never_read() {
         ]),
         "the unreachable, unreadable file is never read"
     );
+}
+
+/// Outbound, inbound and external rules share one classification per file and module across boundaries.
+/// The exact key set includes every pair a rule reads and excludes the protected subtree every rule skips.
+#[test]
+pub(super) fn a_files_uses_are_classified_once_across_rules_and_boundaries() {
+    let ws = TempWorkspace::new("classify-once");
+    ws.write(
+        "lib.rs",
+        "pub mod internal;\npub mod service;\npub mod ffi;\n",
+    );
+    ws.write("internal.rs", "pub mod detail;\npub struct Secret;\n");
+    ws.write("internal/detail.rs", "use crate::internal::Secret;\n");
+    ws.write(
+        "service.rs",
+        "use crate::internal::Secret;\nuse libc::c_int;\n",
+    );
+    ws.write(
+        "ffi.rs",
+        "use crate::internal::Secret;\nuse libc::c_void;\n",
+    );
+    let metadata = ws.metadata("x");
+    let constitution = constitution_of(vec![
+        ModuleBoundary::in_crate("x")
+            .module("crate::service")
+            .must_not_import("crate::internal")
+            .because("service does not import internal"),
+        ModuleBoundary::in_crate("x")
+            .module("crate::service")
+            .restrict_imports_to(["crate::ffi"])
+            .because("service imports only ffi"),
+        ModuleBoundary::in_crate("x")
+            .module("crate::internal")
+            .must_not_be_imported_by("crate::service")
+            .because("service does not reach internal"),
+        ModuleBoundary::in_crate("x")
+            .module("crate::internal")
+            .must_only_be_imported_by(["crate::ffi"])
+            .because("only ffi reaches internal"),
+        ModuleBoundary::in_crate("x")
+            .module("crate::internal")
+            .confine_external_crate("libc")
+            .because("only internal imports libc"),
+        ModuleBoundary::in_crate("x")
+            .module("crate::internal")
+            .confine_external_crate("serde")
+            .because("only internal imports serde"),
+    ]);
+    for reversed in [false, true] {
+        let constitution = if reversed {
+            let mut boundaries = constitution.boundaries().to_vec();
+            boundaries.reverse();
+            let mut reversed = Constitution::new("reverse");
+            for boundary in boundaries {
+                reversed = reversed.boundary(boundary);
+            }
+            reversed
+        } else {
+            constitution.clone()
+        };
+        let scans = EvaluationScans::shared();
+        let outcome = crate::evaluate_with_scans(&constitution, &metadata, &scans);
+        assert_eq!(outcome.exit_code(), 1, "the rules react: {outcome:?}");
+        let expected: HashMap<_, _> = [
+            ("lib.rs", "crate"),
+            ("service.rs", "crate::service"),
+            ("ffi.rs", "crate::ffi"),
+        ]
+        .into_iter()
+        .map(|(file, module)| ((ws.src().join(file), module.to_string()), 1))
+        .collect();
+        assert_eq!(
+            scans.classifications(),
+            expected,
+            "each pair at least one rule reads is classified once and no other pair is classified (reversed: {reversed})"
+        );
+    }
 }

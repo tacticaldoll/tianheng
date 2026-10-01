@@ -1199,10 +1199,26 @@ declared in.
 - **WHEN** a file is compiled by two roots of one package, or loaded by two `#[path]` attributes as two modules
 - **THEN** the file is read once for all of them, and each root's and each module's position in it is judged as a
   scan per boundary judges it
-- **PINNED-BY** `a_source_two_roots_or_two_modules_reach_is_read_once`
+- **PINNED-BY** `a_source_two_roots_reach_is_read_once`
+- **PINNED-BY** `a_source_two_modules_reach_is_read_once`
 
 #### Scenario: A source no root reaches is never read
 
 - **WHEN** a `.rs` file under a root's source directory that no `mod` declaration reaches cannot be read
 - **THEN** the evaluation never reads it, and its exit code is the one the reachable sources decide
 - **PINNED-BY** `a_source_no_root_reaches_is_never_read`
+
+#### Scenario: A file's uses are classified once across rules and boundaries
+
+- **WHEN** outbound, inbound and external rules in several boundaries read the same files and modules
+- **THEN** each pair is classified at most once, and the classified set is exactly the set at least one rule
+  reads, in either declaration order; internal and external imports are projections of that same classification
+- **PINNED-BY** `a_files_uses_are_classified_once_across_rules_and_boundaries`
+
+#### Scenario: A file no rule reads is never classified
+
+- **WHEN** a file within an inbound boundary's protected subtree contains a `use` tree the classifier refuses,
+  and the self-import exemption excludes that file from every rule's reading, at shallow or subtree depth
+- **THEN** the file is never classified and its refusal never decides the exit code; only the files a rule
+  reads occur in the classification counts
+- **PINNED-BY** `shallow_inbound_rules_do_not_read_a_file_the_self_import_exemption_excuses`

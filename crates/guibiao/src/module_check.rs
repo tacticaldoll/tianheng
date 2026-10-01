@@ -489,11 +489,11 @@ fn check_inbound_rule(
             }
         }
         for (importer, import) in root.unit_scan().imports(file, file_module)? {
-            if is_inside_protected_module(&importer, governed_module) {
+            if is_inside_protected_module(importer, governed_module) {
                 continue;
             }
             if let Some(forbidden) = &forbidden_importer {
-                if !path_within(&importer, forbidden) {
+                if !path_within(importer, forbidden) {
                     continue;
                 }
             }
@@ -515,12 +515,12 @@ fn check_inbound_rule(
             if forbidden_importer.is_none() {
                 let within_allowed = allowed_importers
                     .iter()
-                    .any(|entry| path_within(&importer, entry));
+                    .any(|entry| path_within(importer, entry));
                 if within_allowed {
                     continue;
                 }
             }
-            offenders.push((importer, file.display().to_string()));
+            offenders.push((importer.clone(), file.display().to_string()));
         }
     }
     offenders.sort();
@@ -568,13 +568,13 @@ fn check_external_confinement(
             continue;
         }
         for (importer, external) in root.unit_scan().external_imports(file, file_module)? {
-            if external != confined {
+            if external != &confined {
                 continue;
             }
-            if within_scan_depth(&importer, governed_module, boundary.depth) {
+            if within_scan_depth(importer, governed_module, boundary.depth) {
                 continue;
             }
-            offenders.push((importer, file.display().to_string()));
+            offenders.push((importer.clone(), file.display().to_string()));
         }
     }
     offenders.sort();
@@ -701,8 +701,12 @@ fn check_outbound_rule(
     let mut findings: Vec<(String, String, String)> = Vec::new();
     for (file, current_module) in governed {
         for (importer, import) in root.unit_scan().imports(&file, &current_module)? {
-            if is_violation(&import) {
-                findings.push((importer, import.path, file.display().to_string()));
+            if is_violation(import) {
+                findings.push((
+                    importer.clone(),
+                    import.path.clone(),
+                    file.display().to_string(),
+                ));
             }
         }
     }

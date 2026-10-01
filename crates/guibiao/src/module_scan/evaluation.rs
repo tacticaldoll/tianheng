@@ -341,4 +341,16 @@ impl EvaluationScans {
     pub(crate) fn source_reads(&self) -> HashMap<PathBuf, usize> {
         self.sources.reads()
     }
+
+    /// Classification work by file and module across the root scans this evaluation shares.
+    #[cfg(test)]
+    pub(crate) fn classifications(&self) -> HashMap<(PathBuf, String), usize> {
+        let mut counts = HashMap::new();
+        for root in self.scans.borrow().values() {
+            for (pair, count) in root.unit_scan().classifications() {
+                *counts.entry(pair).or_default() += count;
+            }
+        }
+        counts
+    }
 }

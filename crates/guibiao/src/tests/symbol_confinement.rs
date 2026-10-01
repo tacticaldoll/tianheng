@@ -2036,14 +2036,29 @@ pub(super) fn shallow_inbound_rules_do_not_read_a_file_the_self_import_exemption
             .must_only_be_imported_by(["crate::facade"])
             .depth(depth)
             .because("the protected module's own descendant is never an inbound importer");
-        let (result, violations) =
-            run_module_check("shallow-inbound-self-descendant-unread", files, boundary);
+        let ws = TempWorkspace::new("shallow-inbound-self-descendant-unread");
+        for (file, source) in files {
+            ws.write(file, source);
+        }
+        let scans = crate::module_scan::EvaluationScans::shared();
+        let mut violations = Vec::new();
+        let result = crate::module_check::check_module_boundary(
+            &ws.metadata("x"),
+            &scans,
+            &boundary,
+            &mut violations,
+        );
         assert!(
             result.is_ok(),
             "a file the self-import exemption excuses must never be read, so its content cannot \
              produce a scan error at {depth:?}: {result:?}"
         );
         assert!(violations.is_empty(), "{depth:?}: {violations:?}");
+        assert_eq!(
+            scans.classifications(),
+            std::collections::HashMap::from([((ws.src().join("lib.rs"), "crate".to_string()), 1)]),
+            "only the root's imports are read; a file the self-import exemption excuses is never classified at {depth:?}"
+        );
     }
 }
 
