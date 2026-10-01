@@ -685,7 +685,8 @@ fn out_of_reach_bound() -> BoundDecl {
         ),
         "a `use` inside a string literal or macro body",
         Extent::OutOfReach {
-            because: "comments, string literals and macro bodies are stripped before scanning"
+            because: "a comment is no token, a string literal is one literal token, and no `use` reader records a \
+                      `use` written inside a macro's group other than a `cfg_if!` arm"
                 .into(),
         },
         "a_confined_use_inside_a_string_or_macro_body_is_not_observed",
@@ -699,7 +700,7 @@ fn every_extent_derives_what_its_pinning_test_must_demonstrate() {
     let cases = [
         (
             Extent::OutOfReach {
-                because: "stripped before scanning".into(),
+                because: "never seen by the observation source".into(),
             },
             Demonstrates::DoesNotReact,
         ),
@@ -723,7 +724,7 @@ fn every_extent_derives_what_its_pinning_test_must_demonstrate() {
         ),
         (
             Extent::Reached(Reached::UnderReacts {
-                because: "the use-map reads `use` only".into(),
+                because: "the scope table reads `use` only".into(),
                 owner: Owner::Adopter,
             }),
             Demonstrates::DoesNotReact,

@@ -1,9 +1,11 @@
 //! Reachability graph traversal and physical-source resolution.
 
-use super::super::lexer::{clean_with_positions, read_path_string};
-use super::declarations::declared_modules_in;
+use super::super::item_head::{BlockModule, block_modules};
+use super::super::token_tree::{Edition, TokenTree};
+use super::declarations::{DeclaredModule, block_path_modules, declared_modules_in};
 use super::paths::module_path_of;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::cell::OnceCell;
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
@@ -18,61 +20,92 @@ enum ScanSource {
         file: PathBuf,
         path_base: PathBuf,
         child_base: PathBuf,
-        ancestors: HashSet<PathBuf>,
+        lineage: Lineage,
     },
+    /// An inline module's body, by the token indices of its `{` and `}` in the file's tree.
     Body {
         file: PathBuf,
         start: usize,
         end: usize,
         path_base: PathBuf,
         child_base: PathBuf,
-        ancestors: HashSet<PathBuf>,
+        lineage: Lineage,
     },
+}
+
+/// What a source inherits from the declarations that opened it: the files already open along them, which a declaration
+/// cycling back to one of them is refused for, and whether one of them may be compiled out — rustc loads nothing
+/// beneath a module a `cfg` removes, so a `mod` of that source with no file is as tolerable as one carrying the `cfg`
+/// itself. Measured against rustc 1.96.0, edition 2021: `#[cfg(any())] mod o;` over an `o.rs` holding `mod i;` builds
+/// with no `i.rs`. Per source, since a module's several cfg-blind sources are opened by different declarations.
+#[derive(Clone, Default)]
+struct Lineage {
+    files: HashSet<PathBuf>,
+    compiled_out: bool,
+    /// Whether the source is a module a block declares, or one inside it that no path attribute gave a directory of its
+    /// own, where rustc refuses a file-form `mod` with no path attribute: `fn f() { mod k { mod m; } }` is refused with "cannot declare a file module inside a block
+    /// unless it has a path attribute", measured against rustc 1.96.0, edition 2021. A file such a module's `#[path]`
+    /// names is a module file of its own, so the walk into it starts outside every block.
+    in_block: bool,
+}
+
+impl Lineage {
+    /// This lineage continued through a declaration that is itself compiled out where `compiled_out` holds.
+    fn under(&self, compiled_out: bool) -> Lineage {
+        Lineage {
+            files: self.files.clone(),
+            compiled_out: self.compiled_out || compiled_out,
+            in_block: false,
+        }
+    }
+
+    /// This lineage continued into an inline body, inside a block where `in_block` holds: one a block declares, or
+    /// one inside it, unless the body's module carries a path attribute, which gives it a directory of its own —
+    /// `fn f() { #[path = "d"] mod k { pub mod m; } }` reads `d/m.rs`, and so does the same with
+    /// `#[cfg_attr(all(), path = "d")]`, measured against rustc 1.96.0, edition 2021.
+    fn with_in_block(&self, in_block: bool) -> Lineage {
+        Lineage {
+            in_block,
+            ..self.clone()
+        }
+    }
 }
 
 struct LoadedSource {
     file: PathBuf,
-    text: String,
-    cleaned: String,
-    positions: Vec<usize>,
-    range: Range<usize>,
+    /// The token range whose top-level declarations this source holds: the whole file, or an inline body between
+    /// its braces. `None` is the whole file, whose length is known only once it is lexed.
+    range: Option<Range<usize>>,
     path_base: PathBuf,
     child_base: PathBuf,
-    ancestors: HashSet<PathBuf>,
+    lineage: Lineage,
 }
 
 impl ScanSource {
-    fn load(&self) -> Result<LoadedSource, String> {
-        let (file, range, path_base, child_base, ancestors) = match self {
+    fn load(&self) -> LoadedSource {
+        let (file, range, path_base, child_base, lineage) = match self {
             Self::File {
                 file,
                 path_base,
                 child_base,
-                ancestors,
-            } => (file, None, path_base, child_base, ancestors),
+                lineage,
+            } => (file, None, path_base, child_base, lineage),
             Self::Body {
                 file,
                 start,
                 end,
                 path_base,
                 child_base,
-                ancestors,
-            } => (file, Some(*start..*end), path_base, child_base, ancestors),
+                lineage,
+            } => (file, Some(*start + 1..*end), path_base, child_base, lineage),
         };
-        let text = std::fs::read_to_string(file)
-            .map_err(|err| format!("cannot read source file '{}': {err}", file.display()))?;
-        let (cleaned, positions) = clean_with_positions(&text);
-        let range = range.unwrap_or(0..cleaned.len());
-        Ok(LoadedSource {
+        LoadedSource {
             file: file.clone(),
-            text,
-            cleaned,
-            positions,
             range,
             path_base: path_base.clone(),
             child_base: child_base.clone(),
-            ancestors: ancestors.clone(),
-        })
+            lineage: lineage.clone(),
+        }
     }
 }
 
@@ -81,31 +114,48 @@ struct InlineBody {
     start: usize,
     end: usize,
     base: PathBuf,
+    /// The directory the conventional base takes under `base`: the module's own name, which a block's `{block}::`
+    /// naming is no part of.
+    directory: String,
     /// A **direct** `#[path]`'s base: it replaces the conventional one outright.
     relocated_base: Option<PathBuf>,
-    /// Every `cfg_attr(…, path = …)` base this declaration carries, when no direct attribute
-    /// overrides them. Candidates, not the base — see [`register_inline_sources`].
+    /// Every `cfg_attr(…, path = …)` base this declaration may compile, beside a direct one as without it: rustc takes
+    /// the first path attribute written, which a `cfg_attr` written before a direct one is where its predicate holds,
+    /// and one written after it never is, so the attribute reader keeps only the first kind. Candidates, not the
+    /// base — see [`register_inline_sources`].
     candidate_bases: Vec<PathBuf>,
-    ancestors: HashSet<PathBuf>,
+    /// Whether the conventional base is one rustc may compile beside the candidates: not inside a block, where an
+    /// inline module compiled without its path attribute holds no file-form `mod` rustc accepts, so only the paths
+    /// its `cfg_attr`s name are bases.
+    conventional_compiles: bool,
+    lineage: Lineage,
 }
 
+/// A file-form declaration's source, by the conventional directory it resolves from. `declared_in` is the file whose
+/// `mod` declares it, which each refusal of the source names, so a module several sources declare says which line to
+/// change.
 struct PlainSource {
     base: PathBuf,
-    ancestors: HashSet<PathBuf>,
+    declared_in: PathBuf,
+    lineage: Lineage,
     is_cfg_conditional: bool,
 }
 
+/// A direct `#[path]` declaration's source; `declared_in` as [`PlainSource`] has it.
 struct DirectPathSource {
     relative: PathBuf,
     base: PathBuf,
-    ancestors: HashSet<PathBuf>,
+    declared_in: PathBuf,
+    lineage: Lineage,
     is_cfg_conditional: bool,
 }
 
+/// A `cfg_attr(…, path = …)` declaration's source whose target exists; `declared_in` as [`PlainSource`] has it.
 struct ConditionalPathSource {
     relative: PathBuf,
     base: PathBuf,
-    ancestors: HashSet<PathBuf>,
+    declared_in: PathBuf,
+    lineage: Lineage,
 }
 
 /// What one child's declarations across the scanned sources say about where its source is.
@@ -124,90 +174,195 @@ struct ChildSources {
 
 /// Collect child module declarations across the given scan sources.
 ///
-/// A direct `#[path]` takes precedence over sibling `cfg_attr` paths and relocates the base outright.
-/// With no direct attribute, every `cfg_attr(…, path = …)` target is a candidate base unioned in
-/// [`register_inline_sources`]. For non-inline declarations, candidates that physically exist prove a
-/// configuration compiles via that remap, granting tolerance to absence of the conventional file.
-/// Unreadable targets return an error immediately via [`xingbiao::is_regular_file`].
-fn collect_children(scan_sources: &[ScanSource]) -> Result<BTreeMap<String, ChildSources>, String> {
+/// A direct `#[path]` relocates the base, and every `cfg_attr(…, path = …)` target written before it, or with no direct
+/// one at all, is a candidate base unioned in [`register_inline_sources`]: rustc compiles the first path attribute
+/// written, and whether a `cfg_attr` before the direct one applies is a predicate this scanner does not evaluate. A
+/// path written after the first direct one is never compiled, and the attribute reader drops it. For non-inline
+/// declarations, candidates that physically exist prove a configuration compiles via that remap, granting tolerance to
+/// absence of the conventional file. Unreadable targets return an error immediately via [`xingbiao::is_regular_file`].
+///
+/// A file of the crate is read and lexed once for the whole walk, into `texts` and `trees`: a file holding many inline
+/// modules is the source of each of them, and each reads its own range of the one token tree. A file the crate's file
+/// list does not hold is read and lexed where it is met.
+fn collect_children<'t>(
+    module: &str,
+    scan_sources: &[ScanSource],
+    edition: Edition,
+    texts: &'t HashMap<&PathBuf, OnceCell<String>>,
+    trees: &mut HashMap<PathBuf, (TokenTree<'t>, Vec<BlockModule>)>,
+) -> Result<BTreeMap<String, ChildSources>, String> {
     let mut children: BTreeMap<String, ChildSources> = Default::default();
     for source in scan_sources {
-        let loaded = source.load()?;
-        for declared in declared_modules_in(&loaded.cleaned, loaded.range) {
-            let child_sources = children.entry(declared.name.clone()).or_default();
-            if let Some((start, end)) = declared.body {
-                let base_at = |eq_cleaned: usize| -> Option<PathBuf> {
-                    let &orig_eq = loaded.positions.get(eq_cleaned)?;
-                    let rel =
-                        read_path_string(loaded.text.as_bytes(), orig_eq + 1, loaded.text.len())?;
-                    Some(loaded.path_base.join(rel))
-                };
-                let relocated_base = declared.direct_path_eq.and_then(base_at);
-                let candidate_bases: Vec<PathBuf> = match relocated_base {
-                    Some(_) => Vec::new(),
-                    None => declared
-                        .conditional_path_eqs
-                        .iter()
-                        .copied()
-                        .filter_map(base_at)
-                        .collect(),
-                };
-                child_sources.bodies.push(InlineBody {
-                    file: loaded.file.clone(),
-                    start,
-                    end,
-                    base: loaded.child_base.clone(),
-                    relocated_base,
-                    candidate_bases,
-                    ancestors: loaded.ancestors.clone(),
-                });
-                continue;
-            }
-            let mut resolved_conditional = Vec::new();
-            for &eq_cleaned in &declared.conditional_path_eqs {
-                if let Some(&orig_eq) = loaded.positions.get(eq_cleaned) {
-                    if let Some(rel) =
-                        read_path_string(loaded.text.as_bytes(), orig_eq + 1, loaded.text.len())
-                    {
-                        let candidate_target = loaded.path_base.join(&rel);
-                        if xingbiao::is_regular_file(&candidate_target)? {
-                            resolved_conditional.push(ConditionalPathSource {
-                                relative: PathBuf::from(rel),
-                                base: loaded.path_base.clone(),
-                                ancestors: loaded.ancestors.clone(),
-                            });
+        let loaded = source.load();
+        let read = || {
+            std::fs::read_to_string(&loaded.file).map_err(|err| {
+                format!("cannot read source file '{}': {err}", loaded.file.display())
+            })
+        };
+        match texts.get(&loaded.file) {
+            Some(slot) => {
+                if !trees.contains_key(&loaded.file) {
+                    let text = match slot.get() {
+                        Some(text) => text,
+                        None => {
+                            let text = read()?;
+                            slot.get_or_init(|| text)
                         }
-                    }
+                    };
+                    let tree = TokenTree::lex(text, edition);
+                    let blocks = block_modules(&tree);
+                    trees.insert(loaded.file.clone(), (tree, blocks));
                 }
+                let (tree, blocks) = &trees[&loaded.file];
+                record_declarations(module, &loaded, tree, blocks, &mut children)?;
             }
-            let has_backing_conditional_target = !resolved_conditional.is_empty();
-            child_sources.conditional.extend(resolved_conditional);
-
-            if let Some(eq_cleaned) = declared.direct_path_eq {
-                if let Some(&orig_eq) = loaded.positions.get(eq_cleaned) {
-                    if let Some(rel) =
-                        read_path_string(loaded.text.as_bytes(), orig_eq + 1, loaded.text.len())
-                    {
-                        child_sources.direct.push(DirectPathSource {
-                            relative: PathBuf::from(rel),
-                            base: loaded.path_base.clone(),
-                            ancestors: loaded.ancestors.clone(),
-                            is_cfg_conditional: declared.is_cfg_conditional,
-                        });
-                    }
-                }
-            } else {
-                child_sources.seen_plain_file = true;
-                child_sources.plain.push(PlainSource {
-                    base: loaded.child_base.clone(),
-                    ancestors: loaded.ancestors.clone(),
-                    is_cfg_conditional: declared.is_cfg_conditional
-                        || has_backing_conditional_target,
-                });
+            None => {
+                let text = read()?;
+                let tree = TokenTree::lex(&text, edition);
+                let blocks = block_modules(&tree);
+                record_declarations(module, &loaded, &tree, &blocks, &mut children)?;
             }
         }
     }
     Ok(children)
+}
+
+/// Record the child modules one loaded source declares, each beside what the other sources say about it.
+fn record_declarations(
+    module: &str,
+    loaded: &LoadedSource,
+    tree: &TokenTree<'_>,
+    blocks: &[BlockModule],
+    children: &mut BTreeMap<String, ChildSources>,
+) -> Result<(), String> {
+    let range = loaded.range.clone().unwrap_or(0..tree.len());
+    for declared in declared_modules_in(tree, range.clone())
+        .into_iter()
+        .chain(block_path_modules(tree, blocks, range))
+    {
+        let child_sources = children.entry(declared.name.clone()).or_default();
+        match declared.body {
+            Some((start, end)) => child_sources
+                .bodies
+                .push(inline_body(loaded, &declared, start, end)),
+            None => record_file_form(module, loaded, &declared, child_sources)?,
+        }
+    }
+    Ok(())
+}
+
+/// The scan source an inline `mod name { … }` body opens, with the bases its file-form children resolve from.
+fn inline_body(
+    loaded: &LoadedSource,
+    declared: &DeclaredModule,
+    start: usize,
+    end: usize,
+) -> InlineBody {
+    let in_block = loaded.lineage.in_block || declared.declared_in_block;
+    let (base, directory) = if declared.declared_in_block {
+        let own = declared
+            .name
+            .rsplit_once("::")
+            .map_or(&*declared.name, |(_, own)| own);
+        (loaded.path_base.clone(), own.to_string())
+    } else {
+        (loaded.child_base.clone(), declared.name.clone())
+    };
+    InlineBody {
+        file: loaded.file.clone(),
+        start,
+        end,
+        base,
+        directory,
+        relocated_base: declared
+            .direct_path
+            .clone()
+            .flatten()
+            .map(|rel| loaded.path_base.join(rel)),
+        candidate_bases: declared
+            .conditional_paths
+            .iter()
+            .map(|rel| loaded.path_base.join(rel))
+            .collect(),
+        conventional_compiles: !in_block,
+        lineage: loaded.lineage.with_in_block(
+            in_block && declared.direct_path.is_none() && declared.conditional_paths.is_empty(),
+        ),
+    }
+}
+
+/// Record a file-form `mod name;` by each source it may resolve from: the `cfg_attr` path targets that exist, a direct
+/// `#[path]`, or the conventional directory — refusing one inside a block that no configuration builds.
+fn record_file_form(
+    module: &str,
+    loaded: &LoadedSource,
+    declared: &DeclaredModule,
+    child_sources: &mut ChildSources,
+) -> Result<(), String> {
+    let child_lineage = loaded.lineage.under(declared.is_cfg_conditional);
+    let compiled_out = child_lineage.compiled_out;
+    let mut has_backing_conditional_target = false;
+    for rel in &declared.conditional_paths {
+        if xingbiao::is_regular_file(&loaded.path_base.join(rel))? {
+            has_backing_conditional_target = true;
+            child_sources.conditional.push(ConditionalPathSource {
+                relative: PathBuf::from(rel),
+                base: loaded.path_base.clone(),
+                declared_in: loaded.file.clone(),
+                lineage: child_lineage.clone(),
+            });
+        }
+    }
+    match &declared.direct_path {
+        Some(Some(rel)) => child_sources.direct.push(DirectPathSource {
+            relative: PathBuf::from(rel),
+            base: loaded.path_base.clone(),
+            declared_in: loaded.file.clone(),
+            lineage: child_lineage,
+            is_cfg_conditional: compiled_out
+                || (declared.direct_path_is_conditional && has_backing_conditional_target),
+        }),
+        Some(None) => {}
+        None if declared.declared_in_block || loaded.lineage.in_block => {
+            if !has_backing_conditional_target && !compiled_out {
+                return Err(unbuildable_block_module(module, loaded, declared));
+            }
+        }
+        None => {
+            child_sources.seen_plain_file = true;
+            child_sources.plain.push(PlainSource {
+                base: loaded.child_base.clone(),
+                declared_in: loaded.file.clone(),
+                lineage: child_lineage,
+                is_cfg_conditional: compiled_out || has_backing_conditional_target,
+            });
+        }
+    }
+    Ok(())
+}
+
+/// The refusal of a file-form `mod` inside a block that no configuration builds: with no path attribute rustc refuses
+/// it, and with only `cfg_attr` paths none of which exists, no build has its file.
+fn unbuildable_block_module(
+    module: &str,
+    loaded: &LoadedSource,
+    declared: &DeclaredModule,
+) -> String {
+    let child = format!("{module}::{}", declared.name);
+    if declared.conditional_paths.is_empty() {
+        format!(
+            "module `{child}`, declared in '{}', is a file-form `mod` inside a block with no path \
+             attribute, which rustc refuses: a module a block holds has no conventional file",
+            loaded.file.display()
+        )
+    } else {
+        format!(
+            "module `{child}`, declared in '{}', names no file that exists by any of its \
+             `cfg_attr` path attributes, and a file-form `mod` inside a block has no conventional \
+             file, so no configuration builds it",
+            loaded.file.display()
+        )
+    }
 }
 
 #[derive(Default)]
@@ -220,31 +375,46 @@ struct GraphSources {
 /// Register an inline `mod name { … }` body as a scan source, once per base its file-form children
 /// may resolve from.
 ///
-/// A **direct** `#[path]` relocates that base outright — one source, as before. A `cfg_attr`-wrapped
-/// one names a base per platform predicate, so every target is a **candidate**, unioned with the
-/// conventional directory: the scanner does not evaluate `cfg` and cannot know which arm a build
-/// compiles, so preferring one would silently drop the children beneath the other (the false negative
-/// the core contract forbids). A candidate is descended only when it **exists as a directory** —
-/// recursing into an absent one would spuriously fail loud on the body's other, unrelated nested
-/// items solely because one platform's directory is missing, even when another candidate already
-/// backs them. When no candidate exists at all, the conventional base is descended anyway, so a
-/// nested reference genuinely broken on every platform still fails loud exactly as it did before this
-/// tolerance existed.
+/// A **direct** `#[path]` relocates that base, and each `cfg_attr`-wrapped one written before it is a **candidate**
+/// read beside it; with a candidate before it, the direct one applies only where the candidate's predicate is false,
+/// so it is descended as a candidate is — measured against rustc 1.96.0, edition 2021, on unix:
+/// `#[cfg_attr(unix, path = "b")] #[path = "a"] mod m { mod c; }` builds with only `b/c.rs` on disk. With no direct one, a `cfg_attr`-wrapped path names a base per platform predicate, so every target
+/// is a candidate, unioned with the conventional directory where that compiles — not inside a block, where a module
+/// compiled without its path attribute holds no file-form `mod` rustc accepts: the scanner does not evaluate `cfg` and
+/// cannot know which arm a build compiles, so preferring one would silently drop the children beneath the other (the
+/// false negative the core contract forbids). A candidate is descended only when it **exists as a directory** — recursing into an absent
+/// one would spuriously fail loud on the body's other, unrelated nested items solely because one platform's directory
+/// is missing, even when another candidate already backs them. When no candidate exists at all, the conventional base
+/// is descended anyway, or inside a block every candidate is, so a nested reference genuinely broken on every platform
+/// still fails loud, naming each candidate it found no file under.
 ///
-/// This is 漏刻's own already-stated rule for the identical shape, implemented independently here
-/// (三儀 ⊥ 三儀: the same rule, not the same function), so the two dimensions cannot disagree about
-/// what rustc compiles.
+/// 漏刻 states a rule for the same shape and implements it independently (三儀 ⊥ 三儀: the same rule, not the
+/// same function). The two are not yet one answer: 漏刻 still takes the last of several direct `#[path]`
+/// attributes, where rustc and this walk take the first, which `BACKLOG.md` tracks with the inline-base
+/// question under the 渾儀 and 漏刻 WATCH entry.
 fn register_inline_sources(
-    child: &str,
     child_path: &str,
     bodies: Vec<InlineBody>,
     graph: &mut GraphSources,
 ) -> Result<(), String> {
     let sources = graph.by_module.entry(child_path.to_string()).or_default();
     for body in bodies {
-        let conventional = body.base.join(child);
+        let conventional = body.base.join(&body.directory);
         let bases: Vec<PathBuf> = match &body.relocated_base {
-            Some(base) => vec![base.clone()],
+            Some(base) if body.candidate_bases.is_empty() => vec![base.clone()],
+            Some(base) => {
+                let mut present: Vec<PathBuf> = Vec::new();
+                for candidate in std::iter::once(base).chain(&body.candidate_bases) {
+                    if xingbiao::is_directory(candidate)? && !present.contains(candidate) {
+                        present.push(candidate.clone());
+                    }
+                }
+                if present.is_empty() {
+                    vec![base.clone()]
+                } else {
+                    present
+                }
+            }
             None if body.candidate_bases.is_empty() => vec![conventional],
             None => {
                 let mut present: Vec<PathBuf> = Vec::new();
@@ -252,7 +422,7 @@ fn register_inline_sources(
                     .candidate_bases
                     .iter()
                     .cloned()
-                    .chain(std::iter::once(conventional.clone()))
+                    .chain(body.conventional_compiles.then(|| conventional.clone()))
                 {
                     if xingbiao::is_directory(&base)? {
                         present.push(base);
@@ -260,10 +430,10 @@ fn register_inline_sources(
                 }
                 present.sort();
                 present.dedup();
-                if present.is_empty() {
-                    vec![conventional]
-                } else {
-                    present
+                match (present.is_empty(), body.conventional_compiles) {
+                    (false, _) => present,
+                    (true, true) => vec![conventional],
+                    (true, false) => body.candidate_bases.clone(),
                 }
             }
         };
@@ -274,7 +444,7 @@ fn register_inline_sources(
                 end: body.end,
                 path_base: base.clone(),
                 child_base: base,
-                ancestors: body.ancestors.clone(),
+                lineage: body.lineage.clone(),
             });
         }
     }
@@ -284,8 +454,13 @@ fn register_inline_sources(
 /// Resolve plain file sources for `child` (`child.rs` or `child/mod.rs`).
 ///
 /// Refuses ambiguity if both exist. If neither exists and the declaration is cfg-conditional, it is
-/// tolerated; otherwise an error is returned. An unreadable candidate fails immediately via
+/// tolerated; otherwise an error is returned, naming every declaring source that found neither file, so a module
+/// several sources declare lists each place to repair. An unreadable candidate fails immediately via
 /// [`xingbiao::is_regular_file`].
+///
+/// A source's `path_base` is the directory of the path it is opened by, as rustc resolves a `#[path]` in it, not the
+/// directory of a file a symlink there names — measured against rustc 1.96.0, `src/a.rs -> ../elsewhere/a.rs` holding
+/// `#[path = "x.rs"]` reads `src/x.rs`. The canonical path is kept for the cycle check alone.
 fn resolve_plain_sources(
     child: &str,
     child_path: &str,
@@ -297,10 +472,12 @@ fn resolve_plain_sources(
 ) -> Result<bool, String> {
     let mut already_sourced = HashSet::new();
     let mut any_structural_match = false;
+    let mut unlocated = Vec::new();
     for plain_source in plain {
         let PlainSource {
             base,
-            ancestors: source_ancestors,
+            declared_in,
+            lineage: source_lineage,
             is_cfg_conditional,
         } = plain_source;
         let flat = base.join(format!("{child}.rs"));
@@ -309,22 +486,23 @@ fn resolve_plain_sources(
         let nested_present = xingbiao::is_regular_file(&nested)?;
         if flat_present && nested_present {
             return Err(format!(
-                "module '{child_path}' resolves to both '{}' and '{}' — a plain \
+                "module '{child_path}', declared in '{}', resolves to both '{}' and '{}' — a plain \
                  `mod {child}` must be backed by exactly one file",
+                declared_in.display(),
                 flat.display(),
                 nested.display()
             ));
         }
         if !flat_present && !nested_present {
-            if is_cfg_conditional {
-                continue;
+            if !is_cfg_conditional {
+                unlocated.push(format!(
+                    "declared in '{}', expected '{}' or '{}'",
+                    declared_in.display(),
+                    flat.display(),
+                    nested.display()
+                ));
             }
-            return Err(format!(
-                "module '{child_path}' is declared (`mod {child};`) but its source \
-                 file could not be located (expected '{}' or '{}')",
-                flat.display(),
-                nested.display()
-            ));
+            continue;
         }
         for (candidate, present) in [(flat, flat_present), (nested, nested_present)] {
             if !present {
@@ -334,9 +512,11 @@ fn resolve_plain_sources(
             if !already_sourced.insert(canon.clone()) {
                 continue;
             }
-            if source_ancestors.contains(&canon) {
+            if source_lineage.files.contains(&canon) {
                 return Err(format!(
-                    "module '{child_path}' resolves to '{}', which cycles back to an already-open source file",
+                    "module '{child_path}', declared in '{}', resolves to '{}', which cycles back to an \
+                     already-open source file",
+                    declared_in.display(),
                     candidate.display()
                 ));
             }
@@ -352,13 +532,13 @@ fn resolve_plain_sources(
                     .remapped
                     .push((candidate.clone(), child_path.to_string()));
             }
-            let own_dir = canon
+            let own_dir = candidate
                 .parent()
                 .map(Path::to_path_buf)
                 .unwrap_or_else(|| base.clone());
             let new_child_base = base.join(child);
-            let mut ancestors = source_ancestors.clone();
-            ancestors.insert(canon);
+            let mut lineage = source_lineage.clone();
+            lineage.files.insert(canon);
             graph
                 .by_module
                 .entry(child_path.to_string())
@@ -367,9 +547,15 @@ fn resolve_plain_sources(
                     file: candidate,
                     path_base: own_dir,
                     child_base: new_child_base,
-                    ancestors,
+                    lineage,
                 });
         }
+    }
+    if !unlocated.is_empty() {
+        return Err(format!(
+            "module '{child_path}' is declared (`mod {child};`) but its source file could not be located ({})",
+            unlocated.join("; ")
+        ));
     }
     let plain_file_resolved = !already_sourced.is_empty();
     if plain_file_resolved && !any_structural_match {
@@ -383,31 +569,36 @@ enum RemapKind {
     Conditional,
 }
 
+/// The remapped file's `path_base` is the directory of the path it is opened by, not of a file a symlink there names,
+/// as [`resolve_plain_sources`] states.
 fn register_remapped_source(
     child_path: &str,
     target: PathBuf,
     base: PathBuf,
-    target_ancestors: HashSet<PathBuf>,
+    declared_in: &Path,
+    target_lineage: Lineage,
     kind: RemapKind,
     graph: &mut GraphSources,
 ) -> Result<(), String> {
     let canon = xingbiao::canonicalize_or_fail(&target)?;
-    if target_ancestors.contains(&canon) {
+    if target_lineage.files.contains(&canon) {
         let attribute = match kind {
             RemapKind::Direct => "#[path]",
             RemapKind::Conditional => "#[cfg_attr(..., path = ...)]",
         };
         return Err(format!(
-            "module '{child_path}' is remapped by {attribute} to '{}', which cycles back to an already-open source file",
+            "module '{child_path}', declared in '{}', is remapped by {attribute} to '{}', which cycles back to an \
+             already-open source file",
+            declared_in.display(),
             target.display()
         ));
     }
     graph
         .remapped
         .push((target.clone(), child_path.to_string()));
-    let own_dir = canon.parent().map(Path::to_path_buf).unwrap_or(base);
-    let mut ancestors = target_ancestors;
-    ancestors.insert(canon);
+    let own_dir = target.parent().map(Path::to_path_buf).unwrap_or(base);
+    let mut lineage = target_lineage;
+    lineage.files.insert(canon);
     graph
         .by_module
         .entry(child_path.to_string())
@@ -416,7 +607,7 @@ fn register_remapped_source(
             file: target,
             path_base: own_dir.clone(),
             child_base: own_dir,
-            ancestors,
+            lineage,
         });
     Ok(())
 }
@@ -437,7 +628,8 @@ fn resolve_direct_paths(
         let DirectPathSource {
             relative,
             base,
-            ancestors: target_ancestors,
+            declared_in,
+            lineage: target_lineage,
             is_cfg_conditional,
         } = direct_source;
         let target = base.join(&relative);
@@ -446,7 +638,9 @@ fn resolve_direct_paths(
                 continue;
             }
             return Err(format!(
-                "module '{child_path}' is remapped by #[path = \"{}\"] to a file that does not exist: '{}'",
+                "module '{child_path}', declared in '{}', is remapped by #[path = \"{}\"] to a file that does not \
+                 exist: '{}'",
+                declared_in.display(),
                 relative.display(),
                 target.display()
             ));
@@ -455,7 +649,8 @@ fn resolve_direct_paths(
             child_path,
             target,
             base,
-            target_ancestors,
+            &declared_in,
+            target_lineage,
             RemapKind::Direct,
             graph,
         )?;
@@ -479,7 +674,8 @@ fn resolve_conditional_paths(
         let ConditionalPathSource {
             relative,
             base,
-            ancestors: target_ancestors,
+            declared_in,
+            lineage: target_lineage,
         } = conditional_source;
         let target = base.join(&relative);
         if !xingbiao::is_regular_file(&target)? {
@@ -489,7 +685,8 @@ fn resolve_conditional_paths(
             child_path,
             target,
             base,
-            target_ancestors,
+            &declared_in,
+            target_lineage,
             RemapKind::Conditional,
             graph,
         )?;
@@ -526,9 +723,11 @@ fn index_files_by_module<'a>(
 /// declaring source of its own to probe a directory from (every other module's file discovery
 /// goes through a live per-source directory probe instead; see [`index_files_by_module`]'s doc).
 fn root_scan_sources(root_files: &[&PathBuf], src_dir: &Path) -> Result<Vec<ScanSource>, String> {
-    let mut root_ancestors = HashSet::new();
+    let mut root_lineage = Lineage::default();
     for f in root_files {
-        root_ancestors.insert(xingbiao::canonicalize_or_fail(f)?);
+        root_lineage
+            .files
+            .insert(xingbiao::canonicalize_or_fail(f)?);
     }
     Ok(root_files
         .iter()
@@ -536,7 +735,7 @@ fn root_scan_sources(root_files: &[&PathBuf], src_dir: &Path) -> Result<Vec<Scan
             file: (*f).clone(),
             path_base: src_dir.to_path_buf(),
             child_base: src_dir.to_path_buf(),
-            ancestors: root_ancestors.clone(),
+            lineage: root_lineage.clone(),
         })
         .collect())
 }
@@ -556,6 +755,7 @@ pub(crate) fn reachable_modules(
     src_dir: &Path,
     files: &[PathBuf],
     root_relative: Option<&Path>,
+    edition: Edition,
 ) -> Result<
     (
         std::collections::BTreeSet<String>,
@@ -577,12 +777,15 @@ pub(crate) fn reachable_modules(
             .by_module
             .insert("crate".to_string(), root_scan_sources(root_files, src_dir)?);
     }
+    let texts: HashMap<&PathBuf, OnceCell<String>> =
+        files.iter().map(|file| (file, OnceCell::new())).collect();
+    let mut trees = HashMap::new();
     let mut queue = vec!["crate".to_string()];
     while let Some(module) = queue.pop() {
         let Some(scan_sources) = graph.by_module.get(&module).cloned() else {
             continue;
         };
-        let children = collect_children(&scan_sources)?;
+        let children = collect_children(&module, &scan_sources, edition, &texts, &mut trees)?;
         for (child, child_sources) in children {
             let ChildSources {
                 seen_plain_file,
@@ -594,7 +797,7 @@ pub(crate) fn reachable_modules(
             let child_path = format!("{module}::{child}");
             let inline_extraction_base = bodies.first().map(|b| b.base.clone());
             if !bodies.is_empty() {
-                register_inline_sources(&child, &child_path, bodies, &mut graph)?;
+                register_inline_sources(&child_path, bodies, &mut graph)?;
             }
             let plain_file_resolved = if seen_plain_file {
                 resolve_plain_sources(

@@ -71,11 +71,11 @@ pub(super) fn a_module_path_is_accepted_only_in_its_canonical_spelling() {
     }
 }
 
-/// A segment is an identifier by the lexer's byte test: not starting with a digit, and behind `r#`
-/// not one of the five names a raw identifier cannot spell. A non-ASCII segment passes this layer
-/// whatever character it is, and is left to the existence check.
+/// A segment is an identifier as the Reference reads one — `_` or `XID_Start`, then `XID_Continue` — and behind `r#`
+/// not one of the five names a raw identifier cannot spell: a non-ASCII letter passes this layer and is left to the
+/// existence check, and a no-break space is no identifier character.
 #[test]
-pub(super) fn a_module_path_segment_is_an_identifier_by_the_lexers_byte_test() {
+pub(super) fn a_module_path_segment_is_an_identifier_by_unicode_xid() {
     for refused in [
         "crate::1kernel",
         "crate::r#",
@@ -87,6 +87,7 @@ pub(super) fn a_module_path_segment_is_an_identifier_by_the_lexers_byte_test() {
         "crate::r#r#kernel",
         "crate::ker-nel",
         "crate::kernel\t",
+        "crate::\u{a0}kernel",
     ] {
         assert!(canonical_module_spelling(refused).is_err(), "{refused:?}");
     }
@@ -96,7 +97,6 @@ pub(super) fn a_module_path_segment_is_an_identifier_by_the_lexers_byte_test() {
         "crate::kernel1",
         "crate::type",
         "crate::k\u{e9}rnel",
-        "crate::\u{a0}kernel",
     ] {
         assert!(canonical_module_spelling(accepted).is_ok(), "{accepted:?}");
     }

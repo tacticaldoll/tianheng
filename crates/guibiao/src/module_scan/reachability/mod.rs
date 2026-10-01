@@ -1,6 +1,6 @@
 //! The module-graph walk: resolves reachable compiled modules from the crate root and
 //! selects governed source files, excluding undeclared orphans, inline shadows, and
-//! remap-shadowed paths. Depends on the shared lexer and path vocabulary.
+//! remap-shadowed paths. Reads each source through the token tree and the shared path vocabulary.
 
 mod declarations;
 mod paths;

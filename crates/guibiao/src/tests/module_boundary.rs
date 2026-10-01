@@ -578,10 +578,10 @@ pub(super) fn a_dual_backed_module_declared_inside_a_cfg_if_arm_is_still_a_scan_
 }
 
 /// The `cfg_attr` half of the cfg-conditional rule, which nothing in 圭表 previously pinned even
-/// though the requirement asserts it: `cfg_attr` never REMOVES the item, it only conditionally applies
-/// its wrapped attribute, so a missing file beneath it is a genuine compile error (E0583) on every
-/// configuration and must not be tolerated. Without this test, an `attr_prefix_has_bare_cfg` that
-/// accidentally matched `cfg_attr` would turn a real build failure into a silent skip.
+/// though the requirement asserts it: a `cfg_attr` applying no `cfg` never REMOVES the item, it only
+/// conditionally applies its wrapped attribute, so a missing file beneath it is a genuine compile error (E0583)
+/// on every configuration and must not be tolerated. Without this test, a bare-`cfg` arm of `attributes_before`
+/// that accidentally matched `cfg_attr` would turn a real build failure into a silent skip.
 #[test]
 pub(super) fn a_cfg_attr_decorated_missing_module_file_is_not_tolerated() {
     let (result, _violations) = run_module_check(
@@ -1204,4 +1204,76 @@ pub(super) fn must_not_be_imported_by_does_not_flag_the_protected_modules_own_su
         violations.is_empty(),
         "the protected module's own subtree is not an importer: {violations:?}"
     );
+}
+
+/// A refusal of the module walk names the crate and the compilation unit it walked, so a package of several roots
+/// says which root declares the module to repair.
+#[test]
+pub(super) fn a_walk_refusal_names_its_compilation_unit() {
+    let (result, _) = run_module_check(
+        "walk-refusal-unit",
+        &[
+            ("lib.rs", "pub mod kernel;\nmod ghost;\n"),
+            ("kernel.rs", ""),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::kernel")
+            .must_not_import("crate::ghost")
+            .because("the kernel must not import a ghost"),
+    );
+    let err = result.expect_err("a declared module with no file is a scan error");
+    assert!(
+        err.starts_with(
+            "cannot walk crate 'x' in compilation unit 'lib.rs': module 'crate::ghost'"
+        ),
+        "{err}"
+    );
+}
+
+/// A walk refusal names the file whose `mod` declares the module, and a missing file every declaring source sought:
+/// a nested `mod ghost;` names `a.rs`, and a block module whose two `cfg_attr` paths name no directory names the file
+/// it expected under each, where the first alone was named.
+#[test]
+pub(super) fn a_walk_refusal_names_where_each_declaration_is_written() {
+    let boundary = || {
+        ModuleBoundary::in_crate("x")
+            .module("crate::kernel")
+            .must_not_import("crate::ghost")
+            .because("the kernel must not import a ghost")
+    };
+    let (nested, _) = run_module_check(
+        "walk-refusal-declared-in",
+        &[
+            ("lib.rs", "pub mod kernel;\npub mod a;\n"),
+            ("kernel.rs", ""),
+            ("a.rs", "mod ghost;\n"),
+        ],
+        boundary(),
+    );
+    let nested = nested.expect_err("a declared module with no file is a scan error");
+    assert!(
+        nested.contains("could not be located (declared in '")
+            && nested.contains("a.rs', expected '"),
+        "{nested}"
+    );
+    let (candidates, _) = run_module_check(
+        "walk-refusal-candidates",
+        &[
+            (
+                "lib.rs",
+                "pub mod kernel;\npub fn f() { #[cfg_attr(unix, path = \"d\")] \
+                 #[cfg_attr(windows, path = \"e\")] mod k { pub mod m; } }\n",
+            ),
+            ("kernel.rs", ""),
+        ],
+        boundary(),
+    );
+    let candidates = candidates.expect_err("a block module no candidate backs is a scan error");
+    let separator = std::path::MAIN_SEPARATOR;
+    for expected in [
+        format!("{separator}d{separator}m.rs"),
+        format!("{separator}e{separator}m.rs"),
+    ] {
+        assert!(candidates.contains(&expected), "{expected} in {candidates}");
+    }
 }

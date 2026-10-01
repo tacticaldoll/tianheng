@@ -289,7 +289,7 @@ fn borrowed(value: &Cow<'static, str>) -> bool {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Extent {
-    /// The observation source never sees the shape — text stripped before scanning, source outside the
+    /// The observation source never sees the shape — a `use` written inside a string literal, source outside the
     /// corpus, a body behind an unexpanded macro, a name the resolver cannot reach.
     ///
     /// This is the one extent that can hide a false negative *without* the reaction having had a choice, and

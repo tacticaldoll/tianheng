@@ -299,10 +299,9 @@ fn a_value_in_a_nested_scope_is_still_not_the_enclosing_modules() {
 
 /// A value name that is only *text* — a comment, a string literal, a macro body — declares nothing.
 ///
-/// The collector's own precondition is declaration-cleaned source; it was handed the raw file, so any
-/// of these three read as a declaration and made an ordinary `use protected::foo;` react even though
-/// `protected` declares only the module. Each shape is asserted separately: one fixture covering all
-/// three could pass while two of the strippings were missing.
+/// The collector reads declarations from the token tree, so none of these three is a declaration, and an
+/// ordinary `use protected::foo;` does not react when `protected` declares only the module. Each shape is
+/// asserted separately: one fixture covering all three could pass while two of them were read as items.
 #[test]
 fn a_value_named_only_in_text_declares_nothing() {
     for (label, protected) in [

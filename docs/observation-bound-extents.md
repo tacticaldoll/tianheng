@@ -3,12 +3,14 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**60 of 128 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**62 of 142 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
+- `inline-symbol-path-confinement/a-macro-generated-item-called-bare-in-its-own-module-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-path-taken-as-a-value-is-a-documented-bound-under-the-default` — owner: adopter
-- `inline-symbol-path-confinement/an-extern-crate-rename-is-a-stated-bound-under-strict-external` — owner: engine
+- `inline-symbol-path-confinement/a-prelude-name-called-bare-is-not-read-as-its-std-path-a-stated-bound` — owner: engine
+- `inline-symbol-path-confinement/a-use-written-in-a-macro-group-outside-any-block-binds-nothing-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/the-fully-qualified-external-call-is-a-stated-bound-under-the-default` — owner: adopter
 - `module-boundary/an-example-test-bench-or-build-script-root-is-not-governed-a-stated-bound` — owner: engine
 - `observation-bound-register/what-code-executed-inside-the-checkout-does-outside-it-is-not-observed-a-stated-bound` — owner: engine
@@ -136,7 +138,15 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **pinned by**: `repeated_extern_block_shares_one_identity`
 - **pinned by**: `repeated_unrenderable_items_share_one_identity`
 
-## declines to refuse (2)
+## declines to refuse (3)
+
+### `inline-symbol-path-confinement/a-cfg-closed-re-export-ring-is-read-in-time-exponential-in-its-length-a-stated-bound`
+
+> a ring of modules each re-exporting a name from the next under one `cfg` and from elsewhere under its negation, the last closing it
+
+- **because**: an answer read past a cut cycle depends on the walk it was entered from and is not remembered, so each link is re-read once per path to it and the reading doubles per link; no budget refuses it, and the chain cap bounds the depth rather than the time
+- **its defence must show**: does not refuse
+- **pinned by**: `a_cfg_closed_re_export_ring_is_read_in_time_exponential_in_its_length`
 
 ### `inline-symbol-path-confinement/a-prefix-segment-past-what-guibiao-reads-is-not-verified-a-stated-bound`
 
@@ -188,23 +198,24 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `an_interior_mutable_const_is_not_a_static`
 
-## out of reach (30)
+## out of reach (31)
 
 ### `external-crate-confinement/a-confined-crate-use-inside-a-string-or-macro-body-is-not-observed-a-stated-bound`
 
 > a confined-crate `use` written inside a string literal or a macro body
 
-- **because**: comments, string literals and macro bodies are stripped before scanning
+- **because**: a comment is no token, a string literal is one literal token, and no import rule reads a `use` written inside a macro's group other than a `cfg_if!` arm
 - **its defence must show**: does not react
-- **pinned by**: `confine_ignores_a_use_inside_a_string_literal`
+- **pinned by**: `confine_ignores_a_use_inside_a_string_literal_or_macro_body`
 
 ### `inline-symbol-path-confinement/a-receiver-method-read-is-a-documented-bound`
 
-> a read reached through a method call on a receiver
+> a read reached through a method call on a receiver, or through a path beginning with `<`
 
-- **because**: no type inference is performed on the receiver, so the confined path is never resolved from the call site
+- **because**: no type inference is performed on the receiver or the qualified type, so the confined path is never resolved from the call site
 - **its defence must show**: does not react
 - **pinned by**: `inline_receiver_method_read_is_a_bound`
+- **pinned by**: `inline_qualified_path_is_the_type_directed_bound`
 
 ### `inline-symbol-path-confinement/an-external-crate-re-export-is-a-documented-bound`
 
@@ -269,6 +280,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: a squash merge runs on GitHub's servers, so no local commit exists and no hook runs, and both values of the repository's squash-title setting append the serial; the check guards the sanctioned path to a merge, and a browser reaches no wrapper
 - **its defence must show**: does not react
 - **pinned by**: `a_merge_made_outside_the_wrapper_is_not_observed`
+
+### `runtime-origin-assertion/a-raw-string-after-an-identifier-character-is-read-as-one-in-every-edition-a-stated-bound`
+
+> a probe written after `cr#"` in an edition-2015 or 2018 crate, before a later `"#`
+
+- **because**: the audit reads source roots with no edition, and takes an `r#"` for a raw string whatever precedes it, so before edition 2021, where `cr` is an identifier, the code up to the next `"#` is read as the string's contents
+- **its defence must show**: does not react
+- **pinned by**: `louke_reads_a_raw_string_after_an_identifier_character_in_every_edition`
 
 ### `runtime-origin-assertion/source-outside-a-member-s-library-or-binary-target-subtree-is-out-of-scope-a-stated-bound`
 
@@ -430,7 +449,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_macro_invocation_pub_item_is_a_documented_bound`
 
-## over-reacts (21)
+## over-reacts (30)
 
 ### `crate-dependency-boundary/an-optional-dependency-edge-is-observed-as-a-declared-one-a-stated-bound`
 
@@ -456,6 +475,22 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `confine_external_crate_is_cfg_blind_to_unenabled_cfg_arms`
 
+### `inline-symbol-path-confinement/a-cfg-gated-name-beside-a-glob-is-read-with-the-glob-a-stated-bound`
+
+> a name a scope binds or declares only by items a `cfg` gates, which a glob of that scope, or the scope around a block, also names
+
+- **because**: the predicate is never evaluated, so on a build that compiles the gated item in, the name is resolved through what the lookup reads past the scope as well as through it
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `a_cfg_gated_name_beside_a_glob_is_read_with_the_glob`
+
+### `inline-symbol-path-confinement/a-generic-parameter-named-like-an-import-is-read-as-the-import-a-stated-bound`
+
+> a head naming a generic parameter that shares its name with a `use` of the enclosing module
+
+- **because**: generic parameter lists are not read, so the head is resolved through whatever the module binds under that name
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `inline_generic_parameter_named_like_an_import_is_read_as_the_import`
+
 ### `inline-symbol-path-confinement/a-glob-reacts-to-any-alias-or-re-export-beneath-its-resolved-module-a-stated-bound`
 
 > a glob import whose resolved module has, anywhere beneath it, a `type` alias or `pub use` of the confined prefix, whether or not the glob actually imports that name
@@ -463,6 +498,62 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the glob hazard asks whether any definition beneath the glob's resolved module resolves under the prefix, not whether the glob brings that name into scope
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_sibling_test_glob_reacts_to_an_alias_in_its_resolved_module`
+
+### `inline-symbol-path-confinement/a-local-binding-named-like-an-import-is-read-as-the-import-a-stated-bound`
+
+> a bare head naming a `fn` or closure parameter, or a `let` binding, that shares its name with an import or an item in scope, and under strict the name such a binding introduces
+
+- **because**: parameters and `let` bindings are not recorded in the scope table, so the head is resolved through whatever the enclosing scopes bind under that name
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `a_local_binding_named_like_an_import_is_read_as_the_import`
+
+### `inline-symbol-path-confinement/a-parenthesized-fn-bound-is-read-as-a-call-a-stated-bound`
+
+> a trait bound of the `Fn` family written with parenthesized arguments — `F: Fn(u8) -> u8`, `impl FnOnce()`, `dyn FnMut(u8)`
+
+- **because**: a path's role is read from the tokens beside it, and a parenthesized bound is written as a call is, so no reading of the tokens tells the bound from the call
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `a_parenthesized_fn_bound_is_read_as_a_call`
+
+### `inline-symbol-path-confinement/a-path-in-a-pattern-position-is-read-as-a-call-a-stated-bound`
+
+> a tuple-struct or tuple-variant path in a pattern position — a `let`, `if let`, `while let` or let-else pattern, a `for` loop's, a match arm's, a `fn` or closure parameter's, a macro's arguments, a destructuring assignment's left side
+
+- **because**: a path's role is read from the tokens beside it, and a tuple-struct or tuple-variant pattern followed by its parenthesized fields is written as a call is, so no reading of the tokens tells the pattern from the call
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `a_path_in_a_pattern_position_is_read_as_a_call`
+
+### `inline-symbol-path-confinement/a-qualified-path-a-shift-opens-in-a-generic-list-is-read-as-a-rooted-path-a-stated-bound`
+
+> under `.strict_prefix_only()` and `.strict_external()`, the tail of a qualified path the second `<` of a `<<` opens in a generic list — `Vec<<u8 as Tr>::md5x>`
+
+- **because**: the token before the `<<` ends an operand, as in `1 << n > ::std::process::id() && n > 0`, so the `<<` is read as a shift and the tail after the inner `>` as a rooted path, which names a dependency where its first segment is one; telling the list from the shift needs a type from a value
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `a_qualified_path_a_shift_opens_in_a_generic_list_is_read_as_a_rooted_path`
+
+### `inline-symbol-path-confinement/a-qualified-path-after-a-closing-brace-is-read-as-a-rooted-path-a-stated-bound`
+
+> under `.strict_external()`, the tail of a qualified path opening a statement right after a `}` — `if c {} <W>::md5x();`
+
+- **because**: a `}` ends a block-like operand as well as a statement, and is read as an operand's end so a comparison after a block never opens a qualified path; the `<` after it is then a comparison, and the tail after its `>` is read as a rooted path, which names a dependency where its first segment is one
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `a_qualified_path_after_a_closing_brace_is_read_as_a_rooted_path`
+
+### `inline-symbol-path-confinement/an-import-in-a-block-of-what-is-not-read-is-read-with-the-scope-around-it-a-stated-bound`
+
+> a bare head a block binds only through an import of what the scanner does not read, which the scope around the block also binds
+
+- **because**: whether such an import holds the name in the namespace the head is read in is not read, so the head is resolved through the block's import and through the scope around the block both
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `a_block_import_of_what_is_not_read_is_read_with_the_scope_around_it`
+
+### `inline-symbol-path-confinement/an-import-of-what-is-not-read-beside-a-glob-is-read-with-the-glob-a-stated-bound`
+
+> a bare head a scope binds only through an import of what the scanner does not read, which a glob of that scope also brings
+
+- **because**: whether such an import holds the name in the namespace the head is read in is not read, so the head is resolved through the import and through the scope's globs both
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `an_import_of_what_is_not_read_beside_a_glob_is_read_with_the_glob`
 
 ### `reference-integrity/a-code-span-shaped-like-an-object-is-refused-though-it-names-none-a-stated-bound`
 
@@ -600,15 +691,23 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `cfg_is_observed_as_written`
 
-## refuses to judge (4)
+## refuses to judge (5)
 
 ### `inline-symbol-path-confinement/a-prefix-naming-a-macro-generated-item-is-refused-a-stated-bound`
 
 > a `crate::` inline-call prefix naming an item a macro invocation defines
 
-- **because**: macro bodies are stripped before items are collected, so the item is absent from the set the prefix is held to and the prefix is refused as naming nothing
+- **because**: no declaration inside a macro invocation's group other than a `cfg_if!` arm is recorded, so the item is absent from the set the prefix is held to and the prefix is refused as naming nothing
 - **its defence must show**: refuses to judge
 - **pinned by**: `a_prefix_naming_a_macro_generated_item_is_refused`
+
+### `module-boundary/a-cfg-before-a-separator-its-construct-holds-is-not-read-a-stated-bound`
+
+> a `mod` with no file in a block whose item, statement, match arm, parameter or field carries a `cfg` and holds a `,`, a brace group or an attribute of its own before that block — a generic list's or a `where` clause's comma, a closure's parameters, an `if`'s block before `else`, a struct literal or pattern, a tuple struct's earlier fields, or a type's generic arguments before an array length
+
+- **because**: the owner of an enclosing group is read back to the previous `;`, `,`, brace group or attribute, so a construct holding one of those before the group is not reached and its `cfg` is not read; the missing file is refused rather than tolerated
+- **its defence must show**: refuses to judge
+- **pinned by**: `a_cfg_before_a_separator_its_construct_holds_is_not_read`
 
 ### `publish-source-integrity/whether-a-worktree-holding-an-undecodable-path-is-clean-is-not-observed-a-stated-bound`
 
@@ -634,7 +733,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: refuses to judge
 - **pinned by**: `an_unparseable_thread_local_body_refuses_to_judge`
 
-## under-reacts (60)
+## under-reacts (62)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -652,6 +751,15 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `inline_a_verb_outside_the_declared_set_is_a_bound`
 
+### `inline-symbol-path-confinement/a-macro-generated-item-called-bare-in-its-own-module-is-not-observed-a-stated-bound`
+
+> a bare call, in its own module, of an item a macro invocation generates
+
+- **because**: no declaration inside a macro invocation's group other than a `cfg_if!` arm is recorded, so the generated item is not in the scope table and a head no scope binds names nothing; a crate-rooted path naming it from another module still reacts
+- **its defence must show**: does not react
+- **pinned by**: `a_macro_generated_item_called_bare_in_its_module_is_a_bound`
+- **pinned by**: `a_crate_rooted_call_of_a_macro_generated_item_reports`
+
 ### `inline-symbol-path-confinement/a-path-taken-as-a-value-is-a-documented-bound-under-the-default`
 
 > a confined path mentioned in value position rather than called
@@ -660,13 +768,21 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `inline_value_capture_is_a_bound_under_the_default`
 
-### `inline-symbol-path-confinement/an-extern-crate-rename-is-a-stated-bound-under-strict-external`
+### `inline-symbol-path-confinement/a-prelude-name-called-bare-is-not-read-as-its-std-path-a-stated-bound`
 
-> a call reached through an `extern crate … as` alias head under strict-external
+> a bare call of a prelude name — `drop(x)`, `Some(..)`, `Box::new(..)` — under a standard-library prefix
 
-- **because**: the use-map is built from `use` declarations only, so an `extern crate` rename binds an alias the resolver does not know
+- **because**: the prelude's contents are not read, so a head no scope binds names nothing rather than the standard-library path the prelude would give it
 - **its defence must show**: does not react
-- **pinned by**: `inline_strict_external_extern_crate_rename_is_a_stated_bound`
+- **pinned by**: `a_prelude_name_called_bare_is_not_read_as_its_std_path`
+
+### `inline-symbol-path-confinement/a-use-written-in-a-macro-group-outside-any-block-binds-nothing-a-stated-bound`
+
+> a path beside a `use` written directly in a macro's group, outside any block the group holds
+
+- **because**: where a macro expands what its group holds is not read, so a `use` written directly in the group binds in no scope, and a path it would bind names nothing; a `use` a block in the group holds binds that block's paths
+- **its defence must show**: does not react
+- **pinned by**: `a_use_written_in_a_macro_group_outside_any_block_binds_nothing`
 
 ### `inline-symbol-path-confinement/the-fully-qualified-external-call-is-a-stated-bound-under-the-default`
 

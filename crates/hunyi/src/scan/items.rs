@@ -120,11 +120,10 @@ fn module_cycle_error(module: &str, crate_package: &str, file: &Path) -> String 
 /// Chosen empirically, not guessed: `walk_module`'s own per-frame footprint (several owned
 /// `HashSet`/`String`/`PathBuf` clones per level) overflowed a 2MB test-thread's stack somewhere
 /// between 80 and 90 levels of genuine recursion in a from-scratch measurement (see
-/// `a_deeply_nested_acyclic_module_tree_is_a_scan_error_not_a_stack_overflow`'s own history) — an
-/// order of magnitude below what a naive guess (512, matching `use_scan.rs`'s much cheaper
-/// string-based `MAX_USE_NEST_DEPTH`) would have allowed. 32 keeps a wide safety margin below that
-/// measured line (real stack-size variance across platforms/threads considered), while still
-/// comfortably exceeding any real crate's module nesting depth.
+/// `a_deeply_nested_acyclic_module_tree_is_a_scan_error_not_a_stack_overflow`'s own history) — far
+/// below a naive guess of 512. 32 keeps a wide safety margin below that measured line (real stack-size
+/// variance across platforms/threads considered), while still comfortably exceeding any real crate's
+/// module nesting depth.
 const MAX_MODULE_DEPTH: usize = 32;
 
 /// Shared by all three walkers ([`walk_module`], [`collect_subtree`], `unsafe_sites::walk_unsafe`) so the

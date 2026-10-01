@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**27 of 128 declared bounds have no pinning test.** That figure is the register's
+**27 of 142 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -73,9 +73,9 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `external-crate-confinement/a-confined-crate-use-inside-a-string-or-macro-body-is-not-observed-a-stated-bound`
 
-> the system reports no violation, because comments, string literals, and macro bodies are stripped before scanning, matching the scanner's stated bounds
+> the system reports no violation, because a comment is no token, a string literal is one literal token, and no `use` written inside a macro's group is recorded, matching the scanner's stated bounds
 
-- **pinned by**: `confine_ignores_a_use_inside_a_string_literal`
+- **pinned by**: `confine_ignores_a_use_inside_a_string_literal_or_macro_body`
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -87,7 +87,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `inline-symbol-path-confinement/a-glob-reacts-to-any-alias-or-re-export-beneath-its-resolved-module-a-stated-bound`
 
-> the system reacts on `glob super in crate::agent`: the glob only brings the `hidden` module into scope, not `Spawner`, but the alias beneath the glob's resolved module is still treated as a possible prefix-resolving name — an over-reaction declared, not a precision claim
+> the system reacts on `glob crate::agent in crate::agent`: the glob only brings the `hidden` module into scope, not `Spawner`, but the alias beneath the glob's resolved module is still treated as a possible prefix-resolving name — an over-reaction declared, not a precision claim
 
 - **pinned by**: `a_sibling_test_glob_reacts_to_an_alias_in_its_resolved_module`
 
@@ -99,9 +99,83 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `inline-symbol-path-confinement/a-receiver-method-read-is-a-documented-bound`
 
-> the system does not claim to observe it (no type inference on the receiver) — a stated bound, not a silent assertion of cleanliness
+> the system does not claim to observe it (no type inference on the receiver or the qualified type) — a stated bound, not a silent assertion of cleanliness
 
 - **pinned by**: `inline_receiver_method_read_is_a_bound`
+- **pinned by**: `inline_qualified_path_is_the_type_directed_bound`
+
+### `inline-symbol-path-confinement/a-macro-generated-item-called-bare-in-its-own-module-is-not-observed-a-stated-bound`
+
+> the system does not claim to observe the bare call — the macro's item is not in the scope table, so the head names nothing — and reports the crate-rooted call as `crate::m::gen in crate`, in either mode
+
+- **pinned by**: `a_macro_generated_item_called_bare_in_its_module_is_a_bound`
+- **pinned by**: `a_crate_rooted_call_of_a_macro_generated_item_reports`
+
+### `inline-symbol-path-confinement/a-use-written-in-a-macro-group-outside-any-block-binds-nothing-a-stated-bound`
+
+> the system does not claim to observe the call — where the macro expands the `use` is not read, so it binds in no scope and `clock` names nothing
+
+- **pinned by**: `a_use_written_in_a_macro_group_outside_any_block_binds_nothing`
+
+### `inline-symbol-path-confinement/a-prelude-name-called-bare-is-not-read-as-its-std-path-a-stated-bound`
+
+> the system does not claim to observe the call — the prelude's contents are not read, so `drop` names nothing rather than `std::mem::drop`
+
+- **pinned by**: `a_prelude_name_called_bare_is_not_read_as_its_std_path`
+
+### `inline-symbol-path-confinement/a-path-in-a-pattern-position-is-read-as-a-call-a-stated-bound`
+
+> each reports the pattern's path — `crate::m::P in crate::m` or `crate::m::E::A in crate::m` — in either mode: an over-reaction declared, not a precision claim
+
+- **pinned by**: `a_path_in_a_pattern_position_is_read_as_a_call`
+
+### `inline-symbol-path-confinement/a-qualified-path-after-a-closing-brace-is-read-as-a-rooted-path-a-stated-bound`
+
+> after a `}` the system reports `md5x in crate` under `md5x` with `.strict_external()` and nothing under the default, and after the controls nothing in either mode: an over-reaction declared, not a precision claim
+
+- **pinned by**: `a_qualified_path_after_a_closing_brace_is_read_as_a_rooted_path`
+
+### `inline-symbol-path-confinement/a-qualified-path-a-shift-opens-in-a-generic-list-is-read-as-a-rooted-path-a-stated-bound`
+
+> the system reports `md5x in crate` under `md5x` with `.strict_prefix_only()` and `.strict_external()`, and nothing with `.strict_external()` alone: an over-reaction declared, not a precision claim
+
+- **pinned by**: `a_qualified_path_a_shift_opens_in_a_generic_list_is_read_as_a_rooted_path`
+
+### `inline-symbol-path-confinement/a-generic-parameter-named-like-an-import-is-read-as-the-import-a-stated-bound`
+
+> the system reports `std::process::Command::default in crate::core`: Rust resolves `Command` to the generic parameter, and the scanner, which does not read generic parameter lists, reads the module's import — an over-reaction declared, not a precision claim
+
+- **pinned by**: `inline_generic_parameter_named_like_an_import_is_read_as_the_import`
+
+### `inline-symbol-path-confinement/an-import-in-a-block-of-what-is-not-read-is-read-with-the-scope-around-it-a-stated-bound`
+
+> the system reports `crate::forbidden::id in crate`, with and without `.strict_external()`: rustc calls `std::process::id`, and the scanner, which does not read `std` and so cannot tell whether the block's import holds a value, also reads `id` from the scope around the block — an over-reaction declared, not a precision claim
+
+- **pinned by**: `a_block_import_of_what_is_not_read_is_read_with_the_scope_around_it`
+
+### `inline-symbol-path-confinement/an-import-of-what-is-not-read-beside-a-glob-is-read-with-the-glob-a-stated-bound`
+
+> the system reports `crate::forbidden::fmt in crate::core` and `crate::forbidden::swap in crate::core` respectively, each beside `glob crate::forbidden in crate::core`, with and without `.strict_external()`: rustc 1.96.0, edition 2021, calls the glob's `fmt`, since `std::fmt` names a module and no value, and calls `std::mem::swap`, which the scanner, not reading `std`, cannot tell holds a value — the second an over-reaction declared, not a precision claim
+
+- **pinned by**: `an_import_of_what_is_not_read_beside_a_glob_is_read_with_the_glob`
+
+### `inline-symbol-path-confinement/a-cfg-gated-name-beside-a-glob-is-read-with-the-glob-a-stated-bound`
+
+> the system reports `std::process::Command::new in crate`, with and without `.strict_external()`: rustc 1.96.0, edition 2021, compiles the gated import on every build and calls `crate::mock::Command::new`, and the scanner, which never evaluates a predicate, also reads `Command` through the glob — an over-reaction declared, not a precision claim
+
+- **pinned by**: `a_cfg_gated_name_beside_a_glob_is_read_with_the_glob`
+
+### `inline-symbol-path-confinement/a-parenthesized-fn-bound-is-read-as-a-call-a-stated-bound`
+
+> the system reports `std::ops::Fn in crate`, `std::ops::FnOnce in crate` and `std::ops::FnMut in crate`, with and without `.strict_external()`: rustc 1.96.0, edition 2021, compiles each and calls nothing there, and the scanner reads a path followed by a parenthesized group as a call — an over-reaction declared, not a precision claim
+
+- **pinned by**: `a_parenthesized_fn_bound_is_read_as_a_call`
+
+### `inline-symbol-path-confinement/a-local-binding-named-like-an-import-is-read-as-the-import-a-stated-bound`
+
+> the system reports `crate::clock::now in crate` for each, with and without `.strict_external()`: Rust resolves `now` to the local binding, and the scanner, which records no parameter or `let` binding, reads the import or the item — an over-reaction declared, not a precision claim; under `.strict_prefix_only()` the same holds of the binding read as a value, `now` with no call, and of the name a `let` introduces, `let now = 1u8;` beside the module's `fn now`
+
+- **pinned by**: `a_local_binding_named_like_an_import_is_read_as_the_import`
 
 ### `inline-symbol-path-confinement/a-path-taken-as-a-value-is-a-documented-bound-under-the-default`
 
@@ -115,12 +189,6 @@ fallback used where no manifest exists, which the register spec describes.
 
 - **pinned by**: `inline_foreign_reexport_of_the_confined_path_is_a_bound`
 
-### `inline-symbol-path-confinement/an-extern-crate-rename-is-a-stated-bound-under-strict-external`
-
-> the system does not claim to observe the call through the `chr` alias head (the use-map reads `use` only; the `extern crate … as` rename is a stated bound even under strict-external), never a silent assertion of cleanliness
-
-- **pinned by**: `inline_strict_external_extern_crate_rename_is_a_stated_bound`
-
 ### `inline-symbol-path-confinement/a-prefix-segment-past-what-guibiao-reads-is-not-verified-a-stated-bound`
 
 > the system accepts the prefix and reports no violation: another crate's contents are its own source, associated items are not collected, and a first segment nothing confirms may be a dependency's crate name, so a misspelling there matches nothing and is not refused
@@ -129,17 +197,29 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `inline-symbol-path-confinement/a-prefix-naming-a-macro-generated-item-is-refused-a-stated-bound`
 
-> the system exits 2 as for a prefix naming nothing: macro bodies are stripped before items are collected, so the item is not in the set the prefix is held to
+> the system exits 2 as for a prefix naming nothing: no declaration inside a macro's group is recorded, so the item is not in the set the prefix is held to
 
 - **pinned by**: `a_prefix_naming_a_macro_generated_item_is_refused`
 
 ### `inline-symbol-path-confinement/the-fully-qualified-external-call-is-a-stated-bound-under-the-default`
 
-> the system does NOT react (the fully-qualified un-`use`d external call is a stated non-observation under the default; behavior is unchanged from before this capability)
+> the system does NOT react (the fully-qualified un-`use`d external call is a stated non-observation under the default)
 
 - **pinned by**: `inline_strict_external_absent_fully_qualified_call_is_a_bound`
 
+### `inline-symbol-path-confinement/a-cfg-closed-re-export-ring-is-read-in-time-exponential-in-its-length-a-stated-bound`
+
+> the resolver names `crate::forbidden::f` for each, and the eleven-link reading reads at least four times the scopes the eight-link one does: an answer read past a cut cycle is not remembered, so each link is re-read once per path to it and the reading doubles per link, a declared bound on time rather than on the verdict; rustc 1.96.0, edition 2021, builds it on unix
+
+- **pinned by**: `a_cfg_closed_re_export_ring_is_read_in_time_exponential_in_its_length`
+
 ## module-boundary
+
+### `module-boundary/a-cfg-before-a-separator-its-construct-holds-is-not-read-a-stated-bound`
+
+> the system refuses the file (exit 2), where rustc 1.96.0, edition 2021, builds each: the owner of the block is read back to that separator, so the construct's `cfg` is not read — a refusal declared, never a silent pass
+
+- **pinned by**: `a_cfg_before_a_separator_its_construct_holds_is_not_read`
 
 ### `module-boundary/an-example-test-bench-or-build-script-root-is-not-governed-a-stated-bound`
 
@@ -573,6 +653,12 @@ fallback used where no manifest exists, which the register spec describes.
 > the root-file run reports the seam covered, while the directory run reports it unprobed — the stated bound of the legacy corpus, recorded rather than presented as equivalent coverage
 
 - **pinned by**: `a_symlinked_subdirectory_is_descended_from_a_root_file_and_not_from_a_directory`
+
+### `runtime-origin-assertion/a-raw-string-after-an-identifier-character-is-read-as-one-in-every-edition-a-stated-bound`
+
+> 圭表 reports the `use`, and the probe audit does not see the probe and reports the seam unprobed: the audit reads `cr#"` as the start of a raw string in every edition, a stated bound; rustc 1.96.0 builds the crate in edition 2018 and refuses it in 2021
+
+- **pinned by**: `louke_reads_a_raw_string_after_an_identifier_character_in_every_edition`
 
 ## self-law-projection
 

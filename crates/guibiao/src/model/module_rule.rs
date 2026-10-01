@@ -1,5 +1,5 @@
 use super::constitution::*;
-use crate::module_scan::{canonical_module_path, package_name_to_import_ident};
+use crate::module_scan::{SymbolPrefix, canonical_module_path, package_name_to_import_ident};
 use serde_json::Value;
 use xuanji::{Polarity, RuleKey, ScanDepth, Severity};
 
@@ -276,7 +276,7 @@ impl ModuleRule {
                                 .map(|verb| canonical_module_path(verb)),
                         ),
                     ),
-                    ("prefix", canonical_module_path(prefix)),
+                    ("prefix", SymbolPrefix::of(prefix).path),
                     ("strict", strict.to_string()),
                 ],
             ),
@@ -297,7 +297,7 @@ impl ModuleRule {
                                 .map(|verb| canonical_module_path(verb)),
                         ),
                     ),
-                    ("prefix", canonical_module_path(prefix)),
+                    ("prefix", SymbolPrefix::of(prefix).path),
                     ("strict", strict.to_string()),
                 ],
             ),
@@ -319,7 +319,7 @@ impl ModuleRule {
 
     /// The inline-confinement payload — `(prefix, ending_with, strict, external)` — or `None` for a
     /// non-inline rule. Dispatch and the exit-2 constitution checks route through this accessor; the only
-    /// `external`-conditional behavior lives in the scan (`inline_symbol_findings` / `resolve_head`).
+    /// `external`-conditional behavior lives in the scan (`UnitScan::findings` / `resolve_written`).
     pub(crate) fn inline_payload(&self) -> Option<(&str, Option<&[String]>, bool, bool)> {
         match self {
             ModuleRule::ConfineInlineSymbolPath {
@@ -568,12 +568,11 @@ impl ModuleTargetDraft {
     /// returned [`InlineConfinementDraft`] is a dedicated draft — its `.ending_with` /
     /// `.strict_prefix_only` modifiers cannot be applied to the other module rules.
     ///
-    /// Resolution follows the alias-carrying use-map, local `type` aliases, and the local
-    /// `pub use` re-export closure to a fixpoint, and reacts fail-closed on a glob that can bring
-    /// a prefix-resolving name into scope. The stated bounds (receiver-method reads, in-macro-body
-    /// aliases, fragment/proc-macro construction, external-crate re-exports, value-position
-    /// captures under the default, and the inherited file-scope scanner bounds) are declared
-    /// non-observations, never silent passes.
+    /// A path's head resolves from its lexical scope — the nearest block or module binding, glob
+    /// edges followed to a fixed point, and the local `type`-alias and `pub use` re-export closure —
+    /// and a glob that can bring a prefix-resolving name into scope reacts fail-closed. Where the scan
+    /// stops, it says so: every stated bound is declared by [`crate::observation_bounds`] and projected
+    /// into `docs/observation-bounds.md`, never a silent pass.
     ///
     /// The prefix of this and of [`confine_inline_call`](Self::confine_inline_call) is written as
     /// `::`-separated identifiers (`r#x` is read as `x`), and a `crate::` prefix must name a module some
@@ -716,40 +715,44 @@ impl InlineConfinementDraft {
     /// **Opt-in.** Resolve a written path's bare head that matches a **declared dependency name**
     /// (rename-aware, `-`→`_`-normalized to its import identifier) as that external crate — so a
     /// **fully-qualified, un-`use`d external call** (`chrono::Utc::now()` with no `use chrono`)
-    /// resolving under the confined prefix reacts. This closes the asymmetry whereby a sysroot
-    /// head (`std`/`core`/`alloc`) was caught while a fully-qualified external head resolved as a
-    /// fake local path and was silently missed (a false negative).
+    /// resolving under the confined prefix reacts. Without it a sysroot head (`std`/`core`/`alloc`)
+    /// is caught while a fully-qualified external head, which no scope binds, names nothing — a
+    /// stated non-observation under the default.
     ///
     /// The flag has a second effect: the existing glob-hazard reaction **extends** to external-crate
     /// globs. A `use chrono::*;` under a `chrono::…` confinement now resolves its glob head as
     /// external `chrono` (an ancestor of the prefix) and reacts fail-closed; under the default it
-    /// stays `{module}::chrono` and does not react.
+    /// names nothing, since no scope binds `chrono`, and does not react.
     ///
-    /// The reclassification honors **local precedence, first match wins**, checked against the
-    /// call's TRUE inline module (`{module}::inner…`, following any `mod name { … }` around it): the
-    /// enclosing module's `use`-map, a crate-root module shadow, any local module `{module}::head`,
-    /// then any top-level item definition (mod/struct/enum/union/trait/type/fn/const/static) of that
-    /// name **in the calling module** — only if none claim the head does the dependency match fire.
+    /// The reclassification honors **local precedence**, and local precedence is the scope lookup
+    /// every path goes through, from the scope the call stands in up to its TRUE inline module
+    /// (`{module}::inner…`, following any `mod name { … }` around it): an import, a `type` alias, a
+    /// name a glob brings, a child module or a top-level item definition
+    /// (mod/struct/enum/union/trait/type/fn/const/static) of that name — only a head none of them
+    /// binds is matched against the dependency names.
     /// A local item shadows a same-named external call only within its OWN module: a file-top
     /// `fn rand` does not mask a `rand::random()` call inside an inline `mod tests { … }`, and a
     /// submodule-local `fn rand` masks only calls in that submodule.
     ///
-    /// It catches fully-qualified external calls **by the crate's real name**. It does NOT close:
-    /// an `extern crate dep as alias;` rename (a call through the local `alias` head is a stated
-    /// bound — the use-map observes `use` only), glob-brought names beyond the glob-hazard
-    /// reaction, and macro-constructed names. Do not read this as "all external calls caught."
+    /// It catches fully-qualified external calls **by the crate's real name**; an `extern crate dep as
+    /// alias;` binds `alias` as `use dep as alias;` does, so a call through it reacts with or without the
+    /// flag. It does NOT close glob-brought names beyond the glob-hazard reaction, or macro-constructed
+    /// names. Do not read this as "all external calls caught."
     ///
-    /// One further stated bound, strict-external only: a `mod name {` token or unbalanced braces
-    /// **inside a macro-invocation body** can perturb the call scan's inline-module tracking (the
-    /// call scan keeps macro bodies — real reads hide there — while the item collector strips them),
-    /// so a call's true module may be mis-attributed. Rare and declared, never a silent pass.
+    /// One further stated bound, strict-external only: a `mod name {` **inside a macro-invocation
+    /// body** opens a module scope for the calls inside that body, while no declaration inside a
+    /// macro's group is recorded, so a call's true module may be mis-attributed. Rare and declared,
+    /// never a silent pass.
     ///
-    /// One stated **over-**reaction bound, only under a **single-segment** bare crate prefix
-    /// (`must_not_call_inline("rand")`) — a multi-segment prefix (`chrono::Utc`) is immune: 圭表's
-    /// text scan cannot tell a local binding or a definition site from a call, so a local
-    /// `let rand = …; rand()`, or the definition site of an associated / nested `fn rand(…)` (whose
-    /// `rand(` reads as a call), may false-positive. Module-top-level definitions are exempt (they
-    /// resolve to the local item). Declared, not silent.
+    /// One stated **over-**reaction bound is this flag's, only under a **single-segment** bare crate prefix
+    /// (`must_not_call_inline("rand")`) — a multi-segment prefix (`chrono::Utc`) is immune, as is every
+    /// prefix under the default, where a head no scope binds names nothing: 圭表's text scan cannot tell
+    /// a local binding from a call, so a local `let rand = …; rand()` may false-positive here. A `fn` item's
+    /// own name (`fn rand(…)`) is read as its definition, never a call, and module-top-level definitions
+    /// resolve to the local item. Separately, and in every mode, a `fn` or closure parameter or a `let`
+    /// binding sharing its name with an import or an item in scope is read as that import or item, so
+    /// `use crate::clock::now; fn s(now: fn()) { now(); }` reports under `crate::clock`. Both are declared,
+    /// not silent.
     ///
     /// Orthogonal to [`ending_with`](Self::ending_with) / [`strict_prefix_only`](Self::strict_prefix_only):
     /// it changes head *resolution*, not call-vs-mention breadth, and composes with either — it is

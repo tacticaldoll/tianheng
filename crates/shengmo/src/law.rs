@@ -86,10 +86,17 @@ pub fn constitution() -> Constitution {
         )
         .boundary(
             CrateBoundary::crate_("guibiao")
-                .restrict_dependencies_to(["serde_json", "xuanji", "xingbiao"])
+                .restrict_dependencies_to([
+                    "serde_json",
+                    "xuanji",
+                    "xingbiao",
+                    "unicode-ident",
+                    "unicode-normalization",
+                ])
                 .because(
                     "the 圭表 static core stays dependency-light: its direct normal edges reach only \
-                     serde_json, xuanji (reaction model), and xingbiao (metadata substrate). \
+                     serde_json, xuanji (reaction model), xingbiao (metadata substrate), unicode-ident \
+                     (Unicode identifier tables), and unicode-normalization (Unicode NFC). \
                      functional core ⊥ imperative shell: none reaches the 天衡 shell. 三儀 ⊥ 三儀: \
                      none names a sibling dimension",
                 ),
@@ -179,6 +186,15 @@ pub fn constitution() -> Constitution {
                     "path canonicalization and cycle/dedup guards in guibiao must resolve \
                      through `xingbiao::canonicalize_or_fail` or `try_visit` for unified \
                      failure handling",
+                ),
+        )
+        .boundary(
+            ModuleBoundary::in_crate("guibiao")
+                .module("crate::module_scan::token_tree")
+                .restrict_imports_to(Vec::<String>::new())
+                .because(
+                    "guibiao's token tree imports no other guibiao module, so the readers of its tokens \
+                     import it and it imports none of them",
                 ),
         )
         .boundary(

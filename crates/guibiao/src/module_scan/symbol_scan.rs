@@ -1,36 +1,32 @@
-//! The inline-symbol-path scan: the observation source for `ConfineInlineSymbolPath`
-//! (`must_not_call_inline`). Unlike the `use`-scan, it observes **call expressions** (and, under
-//! strict, any path mention) in function bodies — INCLUDING macro-invocation bodies — resolving a
-//! path's head through an alias-carrying use-map, local `type` aliases, and the local `pub use`
-//! re-export closure to a fixpoint. A glob that can bring a prefix-resolving name into scope reacts
-//! fail-closed. Pure string / path processing over [`super::lexer`] and [`super::path_vocab`]; no
-//! model type. The declared stated bounds (receiver-method reads, in-macro-body aliases,
-//! fragment/proc-macro construction, external-crate re-exports, value-position captures under the
-//! default, and the inherited file-scope scanner bounds) are non-observations, never silent passes.
+//! The inline-symbol-path scan: the observation source for `ConfineInlineSymbolPath` (`must_not_call_inline`,
+//! `confine_inline_call`). It reads each file of a compilation unit once into a [`TokenTree`], builds its
+//! [`ScopeTable`] and its path [`Occurrence`]s from that one tree, and judges **call expressions** — and, under
+//! strict, any path mention — anywhere in a governed file, macro-invocation bodies included, each resolved through
+//! the one [`CrateScopes`] resolver. A glob that can bring a prefix-resolving name into scope reacts fail-closed.
+//! What the scan does not observe, or over-reacts to, is declared by [`crate::observation_bounds`], never a silent
+//! pass.
+//!
+//! This module is I/O and assembly: every judgement of the text is made by the layers below it, and every refusal
+//! it returns names the file it was met in.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashSet};
+use std::path::{Path, PathBuf};
 
 use crate::finding::ModuleFact;
 
-use super::lexer::{is_ident_byte, strip_comments_and_strings, strip_macro_bodies};
+use super::glob_hazard::glob_reaches_prefix;
+use super::item_head::ItemKeyword;
+use super::occurrence::{Occurrence, occurrences};
 use super::path_vocab::{
-    brace_content, canonical_module_path, canonical_segment, fold_canonical_segments,
-    is_crate_root_shadow, path_within, resolve_self_super, scan_inline_modules, split_top_commas,
+    PathSite, SymbolPrefix, canonical_module_path, names_a_block_item, path_within,
 };
-
-/// The crate-wide resolution context, built once from every reachable file: the local definition
-/// closure (`type` aliases and `pub use` re-exports, keyed by their fully-qualified local name →
-/// target path) and the glob re-exports (a module that `pub use`-globs another path). Per-file
-/// `use`-maps are built on demand during the call scan.
-struct ResolveCtx {
-    /// Fully-qualified local name (`crate::mod::Name`) → its target path (canonicalized in the
-    /// defining module's context). Covers `type Name = Target;` and `pub use Target as Name;`
-    /// (and `pub use Target;`, whose name is the last segment).
-    defs: HashMap<String, String>,
-    /// `(module, resolved-glob-path)` for each `pub use <path>::*;` — feeds the recursive
-    /// local-module glob-hazard test.
-    glob_reexports: Vec<(String, String)>,
-}
+use super::resolve::{CrateScopes, Named, Namespace, with_rest};
+use super::scope_tree::{DeclKind, ScopeKind, ScopeTable};
+use super::token_tree::{Edition, TokenTree};
+use super::use_scan::{
+    FileUse, ImportedPath, classify_uses, external_imports, file_uses, internal_imports,
+};
+use super::use_tree::{UseLeaf, macro_use_statements, use_statements};
 
 /// One inline offence: the `finding` string (per the identity requirement) and the source file.
 pub(crate) struct InlineFinding {
@@ -38,1128 +34,441 @@ pub(crate) struct InlineFinding {
     pub file: String,
 }
 
-/// Scan the crate for inline-symbol-path offences against a `ConfineInlineSymbolPath` boundary;
-/// its default and strict-external forms both route here via `inline_payload`.
-/// `all_files` is every reachable `(file, module)` pair (crate-wide, for the def closure);
-/// `governed` is the subset whose module is within the governed subtree (where calls are
-/// forbidden). `prefix` is the confined module-path prefix; `ending_with` narrows to read verbs;
-/// `strict` reacts on any mention, not only calls; `external` opts in the strict-external head
-/// ladder (a fully-qualified un-`use`d head matching a declared dependency reclassifies as
-/// external); `dependency_names` are the rename-aware declared-dependency import identifiers that
-/// ladder matches against (unused when `external` is false). Returns findings sorted + deduped by
-/// `finding`.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn inline_symbol_findings(
-    all_files: &[(std::path::PathBuf, String)],
-    governed: &[(std::path::PathBuf, String)],
-    root_modules: &[String],
-    prefix: &str,
-    ending_with: Option<&[String]>,
-    strict: bool,
-    external: bool,
-    dependency_names: &[String],
-) -> Result<Vec<InlineFinding>, String> {
-    let prefix = canonical_module_path(prefix.trim_start_matches("::"));
-    let verbs: Option<Vec<String>> =
-        ending_with.map(|vs| vs.iter().map(|v| canonical_module_path(v)).collect());
-
-    let mut ctx = ResolveCtx {
-        defs: HashMap::new(),
-        glob_reexports: Vec::new(),
-    };
-    let mut file_text: HashMap<std::path::PathBuf, String> = HashMap::new();
-    let mut use_maps: HashMap<std::path::PathBuf, HashMap<(String, String), String>> =
-        HashMap::new();
-    let mut module_paths: HashSet<String> = HashSet::new();
-    let mut item_defs: HashSet<String> = HashSet::new();
-    for (file, module) in all_files {
-        let raw = std::fs::read_to_string(file)
-            .map_err(|err| crate::errors::unreadable_governed_file_error(file, &err.to_string()))?;
-        let decl_text = strip_macro_bodies(&strip_comments_and_strings(&raw));
-        let use_map = collect_use_map(&decl_text, module, root_modules)?;
-        collect_defs(&decl_text, module, root_modules, &use_map, &mut ctx)?;
-        if external {
-            module_paths.insert(module.clone());
-            collect_item_definition_names(module, &decl_text, &mut item_defs);
-        }
-        use_maps.insert(file.clone(), use_map);
-        file_text.insert(file.clone(), raw);
-    }
-    let dep_names: HashSet<String> = if external {
-        dependency_names.iter().cloned().collect()
-    } else {
-        HashSet::new()
-    };
-    let external_vocab = external.then_some(ExternalVocab {
-        module_paths: &module_paths,
-        item_defs: &item_defs,
-        dep_names: &dep_names,
-    });
-
-    let mut findings: Vec<InlineFinding> = Vec::new();
-    for (file, module) in governed {
-        let raw = &file_text[file];
-        let use_map = &use_maps[file];
-        let decl_text = strip_macro_bodies(&strip_comments_and_strings(raw));
-        let mut chase_defs = ctx.defs.clone();
-        for ((use_module, alias), target) in use_map {
-            chase_defs
-                .entry(format!("{use_module}::{alias}"))
-                .or_insert_with(|| target.clone());
-        }
-
-        for (glob_path, occurrence_module) in glob_import_paths(&decl_text, module)? {
-            if let Some(resolved) = resolve_head(
-                &glob_path,
-                module,
-                &occurrence_module,
-                use_map,
-                root_modules,
-                external_vocab.as_ref(),
-            ) {
-                if glob_reaches_prefix(&resolved, &prefix, &ctx, &mut HashSet::new()) {
-                    findings.push(InlineFinding {
-                        fact: ModuleFact::InlineGlob {
-                            path: glob_path,
-                            module: module.clone(),
-                        },
-                        file: file.display().to_string(),
-                    });
-                }
-            }
-        }
-
-        let call_text = strip_comments_and_strings(raw);
-        for occurrence in path_occurrences(&call_text, module) {
-            let Some(resolved) = resolve_head(
-                &occurrence.segments,
-                module,
-                &occurrence.module,
-                use_map,
-                root_modules,
-                external_vocab.as_ref(),
-            ) else {
-                continue;
-            };
-            let resolved = chase_closure(&resolved, &chase_defs, &mut HashSet::new());
-            if !path_within(&resolved, &prefix) {
-                continue;
-            }
-            if should_react_on_occurrence(strict, occurrence.is_call, verbs.as_deref(), &resolved) {
-                findings.push(InlineFinding {
-                    fact: ModuleFact::InlinePath {
-                        path: resolved,
-                        module: module.clone(),
-                    },
-                    file: file.display().to_string(),
-                });
-            }
-        }
-    }
-
-    findings.sort_by(|a, b| a.fact.cmp(&b.fact).then(a.file.cmp(&b.file)));
-    findings.dedup_by(|a, b| a.fact == b.fact);
-    Ok(findings)
-}
-
-/// A path occurrence in call/mention position: its `::`-joined segments, whether it is applied as a
-/// call (`path(...)` or `path::<...>(...)`), and the true (inline) module that lexically encloses it
-/// (`{file_module}::inner…`). The `module` feeds ONLY the strict-external local-shadow check in
-/// [`resolve_head`]; the finding text and default resolution stay keyed on the file module.
-struct PathOccurrence {
-    segments: String,
-    is_call: bool,
+/// One file of a compilation unit, read once: its path, its module, and the occurrences its tree holds.
+struct FileScan {
+    file: PathBuf,
     module: String,
+    occurrences: Vec<Occurrence>,
+    uses: Vec<FileUse>,
+    /// The `use` statements a macro's group holds whose trees read, which a strict confinement judges as it judges
+    /// the rest and no import rule reads.
+    macro_uses: Vec<FileUse>,
 }
 
-/// Scan all call and path-mention occurrences in `source`.
-///
-/// Every occurrence carries its true (inline) module, tracked by inline
-/// `mod name { … }` nesting exactly as [`super::use_scan`]'s walk does (non-`mod` braces move the
-/// depth but never touch the stack, so a call anywhere inside `mod tests { … }` attributes to
-/// `…::tests`). The caller's `external` mode remains a resolution policy, not a lexical-module
-/// attribution policy.
-fn path_occurrences(source: &str, base_module: &str) -> Vec<PathOccurrence> {
-    let bytes = source.as_bytes();
-    let mut out = Vec::new();
-    let inline_modules = scan_inline_modules(source, base_module);
-    let mut i = 0;
-    while i < bytes.len() {
-        if matches!(bytes[i], b'{' | b'}') {
-            i += 1;
-            continue;
-        }
-        if !is_ident_byte(bytes[i]) || bytes[i].is_ascii_digit() {
-            i += 1;
-            continue;
-        }
-        let prev = i.checked_sub(1).map(|p| bytes[p]);
-        if prev.is_some_and(is_ident_byte) || prev == Some(b'.') {
-            i = end_of_ident(bytes, i);
-            continue;
-        }
-        let start = i;
-        let mut end = end_of_ident(bytes, i);
-        loop {
-            let j = skip_ws(bytes, end);
-            if bytes.get(j) == Some(&b':') && bytes.get(j + 1) == Some(&b':') {
-                let after = skip_ws(bytes, j + 2);
-                if bytes
-                    .get(after)
-                    .is_some_and(|b| is_ident_byte(*b) && !b.is_ascii_digit())
-                {
-                    end = end_of_ident(bytes, after);
-                    continue;
-                }
-                if bytes.get(after) == Some(&b'<') {
-                    end = skip_angles(bytes, after);
-                    continue;
-                }
-            }
-            break;
-        }
-        let mut segments = normalize_segments(&bytes[start..end]);
-        let mut p = i;
-        while p > 0 && bytes[p - 1].is_ascii_whitespace() {
-            p -= 1;
-        }
-        let is_leading_colons = p >= 2
-            && bytes[p - 1] == b':'
-            && bytes[p - 2] == b':'
-            && (p == 2 || {
-                let mut before_colons = p - 2;
-                while before_colons > 0 && bytes[before_colons - 1].is_ascii_whitespace() {
-                    before_colons -= 1;
-                }
-                before_colons == 0 || !is_ident_byte(bytes[before_colons - 1])
-            });
-        if is_leading_colons {
-            segments = format!("::{segments}");
-        }
-        let is_call = is_call_application(bytes, end);
-        if segments.contains("::") || is_call {
-            let module = inline_modules.modules[inline_modules.contexts[i] as usize].clone();
-            out.push(PathOccurrence {
-                segments,
-                is_call,
-                module,
-            });
-        }
-        i = end.max(i + 1);
+impl FileScan {
+    /// Read `raw`, the text of `file` as `module`, into its scan and its scope table, the unit's `table`th: every
+    /// judgement of a file's text the unit makes is made here.
+    fn read(
+        raw: &str,
+        file: &Path,
+        module: &str,
+        edition: Edition,
+        table: usize,
+    ) -> (FileScan, ScopeTable) {
+        let tree = TokenTree::lex(raw, edition);
+        let table = ScopeTable::build(&tree, module, table);
+        let statements = use_statements(&tree);
+        let macro_statements: Vec<_> = macro_use_statements(&tree)
+            .into_iter()
+            .filter(|statement| statement.leaves.is_ok())
+            .collect();
+        let mut spans: Vec<(usize, usize)> = statements
+            .iter()
+            .chain(&macro_statements)
+            .map(|statement| (statement.at, statement.end))
+            .collect();
+        spans.sort_unstable();
+        let scan = FileScan {
+            file: file.to_path_buf(),
+            module: module.to_string(),
+            occurrences: occurrences(&tree, &spans),
+            uses: file_uses(statements, &table),
+            macro_uses: file_uses(macro_statements, &table),
+        };
+        (scan, table)
     }
-    out
 }
 
-/// Index just past the identifier starting at `i`, tolerating a leading raw-identifier `r#`.
-fn end_of_ident(bytes: &[u8], i: usize) -> usize {
-    let mut j = i;
-    if bytes.get(j) == Some(&b'r') && bytes.get(j + 1) == Some(&b'#') {
-        j += 2;
-    }
-    while j < bytes.len() && is_ident_byte(bytes[j]) {
-        j += 1;
-    }
-    j.max(i + 1)
+/// Every file of one compilation unit, each read once into its scope table and its occurrences, and the resolver
+/// over all of them: what the prefix existence check and the inline findings both read.
+pub(crate) struct UnitScan {
+    files: Vec<FileScan>,
+    scopes: CrateScopes,
 }
 
-/// Index of the next non-whitespace byte at or after `i`.
-fn skip_ws(bytes: &[u8], i: usize) -> usize {
-    let mut j = i;
-    while j < bytes.len() && bytes[j].is_ascii_whitespace() {
-        j += 1;
-    }
-    j
-}
-
-/// Index just past the balanced `<…>` group opening at `start` (`bytes[start] == '<'`); the end of
-/// input if unbalanced (never panics).
-fn skip_angles(bytes: &[u8], start: usize) -> usize {
-    let mut depth = 0usize;
-    let mut k = start;
-    while k < bytes.len() {
-        match bytes[k] {
-            b'<' => depth += 1,
-            b'>' => {
-                depth -= 1;
-                if depth == 0 {
-                    return k + 1;
-                }
-            }
-            _ => {}
+impl UnitScan {
+    /// Read every reachable `(file, module)` pair of the unit, in a package of the given edition. An unreadable file
+    /// is refused here; a file whose text the scanner cannot judge is refused when a judgement reads it.
+    pub(crate) fn read(
+        all_files: &[(PathBuf, String)],
+        edition: Edition,
+        proc_macro: bool,
+    ) -> Result<Self, String> {
+        let mut files = Vec::new();
+        let mut tables = Vec::new();
+        for (file, module) in all_files {
+            let raw = std::fs::read_to_string(file).map_err(|err| {
+                crate::errors::unreadable_governed_file_error(file, &err.to_string())
+            })?;
+            let (scan, table) = FileScan::read(&raw, file, module, edition, tables.len());
+            files.push(scan);
+            tables.push(table);
         }
-        k += 1;
+        let scopes = CrateScopes::new(tables, edition);
+        Ok(UnitScan {
+            files,
+            scopes: if proc_macro {
+                scopes.in_a_proc_macro_crate()
+            } else {
+                scopes
+            },
+        })
     }
-    bytes.len()
-}
 
-/// Reduce a captured path span to its `::`-joined identifier segments, dropping interior
-/// whitespace, `::` separators, and balanced turbofish `<…>` groups; a raw-identifier `r#name`
-/// segment is canonicalized to `name`.
-fn normalize_segments(span: &[u8]) -> String {
-    let mut segs: Vec<String> = Vec::new();
-    let mut k = 0;
-    while k < span.len() {
-        if span[k] == b'<' {
-            k = skip_angles(span, k);
-        } else if is_ident_byte(span[k]) || (span[k] == b'r' && span.get(k + 1) == Some(&b'#')) {
-            let s = end_of_ident(span, k);
-            let seg = String::from_utf8_lossy(&span[k..s]).into_owned();
-            segs.push(canonical_segment(&seg).to_string());
-            k = s;
-        } else {
-            k += 1;
-        }
+    /// Every internal import the file read as `module` makes, paired with its importer, every head read through the
+    /// unit's resolver: what an import rule judges. Sorted and deduplicated by `(importer, import)`.
+    pub(crate) fn imports(
+        &self,
+        file: &Path,
+        module: &str,
+    ) -> Result<Vec<(String, ImportedPath)>, String> {
+        let t = self.file_index(file, module)?;
+        let uses = classify_uses(&self.scopes, t, &self.files[t].uses)
+            .map_err(|refusal| crate::errors::scan_refusal_in_file(file, &refusal))?;
+        Ok(internal_imports(uses))
     }
-    segs.join("::")
-}
 
-/// Whether a call application `(` follows the path ending at `end`, skipping whitespace and an
-/// optional (trailing) turbofish `::<…>`.
-fn is_call_application(bytes: &[u8], end: usize) -> bool {
-    let mut j = skip_ws(bytes, end);
-    if bytes.get(j) == Some(&b':') && bytes.get(j + 1) == Some(&b':') {
-        let after = skip_ws(bytes, j + 2);
-        if bytes.get(after) == Some(&b'<') {
-            j = skip_ws(bytes, skip_angles(bytes, after));
-        }
+    /// Every external crate the file read as `module` imports, paired with its importer: what
+    /// `confine_external_crate` judges, read through the same resolver as [`UnitScan::imports`], so one head is
+    /// never both. Sorted and deduplicated by `(importer, crate)`.
+    pub(crate) fn external_imports(
+        &self,
+        file: &Path,
+        module: &str,
+    ) -> Result<Vec<(String, String)>, String> {
+        let t = self.file_index(file, module)?;
+        let uses = classify_uses(&self.scopes, t, &self.files[t].uses)
+            .map_err(|refusal| crate::errors::scan_refusal_in_file(file, &refusal))?;
+        Ok(external_imports(uses))
     }
-    bytes.get(j) == Some(&b'(')
-}
 
-/// A brace-nesting depth cap for this file's two hand-rolled `use`-tree walkers ([`glob_bases`],
-/// [`expand_use_leaves`]'s inner `go`), so a pathologically nested `use` cannot overflow the
-/// stack — a DoS backstop set far beyond any real or lint-clean source. Past the cap, fail loud
-/// (a scan error) rather than silently dropping the sub-tree: a real, compilable `use` nested
-/// past this depth would otherwise vanish from observation with no report — the false negative
-/// PROJECT.md's core contract forbids. Mirrors `use_scan::MAX_USE_NEST_DEPTH`'s identical
-/// rationale for the same shape of walker.
-const MAX_SYMBOL_NEST_DEPTH: usize = 64;
-
-/// Every glob import path in already-declaration-cleaned source: a `use <path>::*;` (bare) or a
-/// grouped `use <path>::{ … * … };` (the `*` among the group members). Returns the module-path
-/// `<path>` (without the trailing `::*`) and the true inline module enclosing the `use`.
-fn glob_import_paths(source: &str, base_module: &str) -> Result<Vec<(String, String)>, String> {
-    use super::lexer::UseStatementScan;
-    let bytes = source.as_bytes();
-    let inline_modules = scan_inline_modules(source, base_module);
-    let mut paths = Vec::new();
-    let mut i = 0;
-    while i < bytes.len() {
-        if super::lexer::keyword_starts_at(bytes, i, b"use") {
-            match super::lexer::scan_use_statement(bytes, source, i) {
-                UseStatementScan::Statement { body, next } => {
-                    let mut bases = Vec::new();
-                    glob_bases(&body, &mut bases, 0)?;
-                    let module =
-                        inline_modules.modules[inline_modules.contexts[i] as usize].clone();
-                    paths.extend(bases.into_iter().map(|path| (path, module.clone())));
-                    i = next;
-                    continue;
-                }
-                UseStatementScan::NotAStatement { resume_at } => {
-                    i = resume_at;
-                    continue;
-                }
-                UseStatementScan::Unterminated => break,
+    /// Every file of the unit read into a table it can judge, or a refusal naming the first file that is not: resolving a
+    /// governed file's inline paths reads every file's scope table. An import rule refuses a governed file's own
+    /// unreadable `use` tree, and another file's only where a head it resolves is read through that file's scopes, so a
+    /// file an inbound rule's self-import exemption excuses decides its exit code only where an import is read through
+    /// it.
+    fn every_table_judged(&self) -> Result<(), String> {
+        for (t, file) in self.files.iter().enumerate() {
+            if let Some(refusal) = self.scopes.table(t).refusal() {
+                return Err(crate::errors::scan_refusal_in_file(&file.file, refusal));
             }
         }
-        i += 1;
+        Ok(())
     }
-    Ok(paths)
-}
 
-/// Collect every glob base path in a use tree, recursing into groups (so a **nested** glob member
-/// `use std::{time::*, io::Write}` yields `std::time`, not just a top-level `use std::time::*`).
-/// A bare tail `a::b::*` → `a::b`; a group member `*` → the group prefix. Brace handling goes
-/// through [`brace_content`] / [`split_top_commas`] (char-based, never a byte slice), so a malformed
-/// `}`-before-`{` cannot panic.
-fn glob_bases(tree: &str, out: &mut Vec<String>, depth: usize) -> Result<(), String> {
-    if depth > MAX_SYMBOL_NEST_DEPTH {
-        return Err(format!(
-            "cannot judge a `use` tree nested past {MAX_SYMBOL_NEST_DEPTH} brace levels: '{tree}'"
-        ));
+    /// The table of the file read as `module`, or a refusal naming a pair the unit did not read.
+    fn file_index(&self, file: &Path, module: &str) -> Result<usize, String> {
+        self.files
+            .iter()
+            .position(|scan| scan.file == file && scan.module == module)
+            .ok_or_else(|| {
+                crate::errors::scan_refusal_in_file(
+                    file,
+                    &format!(
+                        "it is governed as `{module}`, which the unit scan did not read it as"
+                    ),
+                )
+            })
     }
-    let tree = tree.trim();
-    match tree.find('{') {
-        Some(open) => {
-            let prefix = tree[..open].trim();
-            for part in split_top_commas(&brace_content(&tree[open..])) {
-                let part = part.trim();
-                if part.is_empty() {
+
+    /// Every item the unit's modules declare at their own level, keyed `{true_module}::{name}` — the set an
+    /// inline-call prefix naming an item of the crate is held to. An item written inside a macro's group, or
+    /// generated by one, is not in it; nor is an item of a module declared in a block, which no path names.
+    pub(crate) fn item_definitions(&self) -> BTreeSet<String> {
+        let mut items = BTreeSet::new();
+        for t in 0..self.files.len() {
+            for scope in &self.scopes.table(t).scopes {
+                if scope.kind != ScopeKind::Module || names_a_block_item(&scope.module) {
                     continue;
                 }
-                if part == "*" {
-                    let base = prefix.trim_end_matches(':').trim();
-                    if !base.is_empty() {
-                        out.push(base.to_string());
-                    }
-                } else {
-                    glob_bases(&format!("{prefix}{part}"), out, depth + 1)?;
+                for name in scope.declarations.keys() {
+                    items.insert(format!("{}::{name}", scope.module));
                 }
             }
         }
-        None => {
-            if let Some(base) = tree.strip_suffix("::*") {
-                let base = base.trim();
-                if !base.is_empty() {
-                    out.push(base.to_string());
+        items
+    }
+
+    /// The inline findings against one confinement. `governed` is the subset of the unit's files whose module is
+    /// judged; `prefix` is the confined prefix in its one canonical form; `ending_with` narrows to read verbs;
+    /// `strict` reacts on any mention, not only calls; `external` opts in strict-external observation (a
+    /// fully-qualified un-`use`d head no scope binds, matching a declared dependency, is that external crate);
+    /// `dependency_names` are the rename-aware declared-dependency import identifiers it matches against. Returns
+    /// findings sorted and deduped by fact. Any file of the unit whose text the scanner cannot judge is refused naming
+    /// that file, governed or not, since resolving a governed file reads every file's scope table; so is a governed
+    /// file whose judged resolution walks a chain past the nesting cap.
+    pub(crate) fn findings(
+        &self,
+        governed: &[(PathBuf, String)],
+        prefix: &SymbolPrefix,
+        ending_with: Option<&[String]>,
+        strict: bool,
+        external: bool,
+        dependency_names: &[String],
+    ) -> Result<Vec<InlineFinding>, String> {
+        let judge = Judgement {
+            scopes: &self.scopes,
+            prefix: prefix.path.as_str(),
+            verbs: ending_with.map(|vs| vs.iter().map(|v| canonical_module_path(v)).collect()),
+            strict,
+            external_dependencies: external.then(|| dependency_names.iter().cloned().collect()),
+        };
+        self.every_table_judged()?;
+        let mut findings: Vec<InlineFinding> = Vec::new();
+        for (governed_file, governed_module) in governed {
+            let t = self.file_index(governed_file, governed_module)?;
+            let scan = &self.files[t];
+            judge
+                .file(t, scan, &mut findings)
+                .map_err(|refusal| crate::errors::scan_refusal_in_file(&scan.file, &refusal))?;
+        }
+        findings.sort_by(|a, b| a.fact.cmp(&b.fact).then(a.file.cmp(&b.file)));
+        findings.dedup_by(|a, b| a.fact == b.fact);
+        Ok(findings)
+    }
+}
+
+/// One confinement's judgement over the unit.
+struct Judgement<'a> {
+    scopes: &'a CrateScopes,
+    prefix: &'a str,
+    verbs: Option<Vec<String>>,
+    strict: bool,
+    external_dependencies: Option<BTreeSet<String>>,
+}
+
+impl Judgement<'_> {
+    /// Judge every glob and every occurrence of one governed file, table `t`, and under a strict confinement every leaf
+    /// of its `use` trees, read as the `use` path it is. A refusal is returned bare, and the caller names the file.
+    fn file(
+        &self,
+        t: usize,
+        scan: &FileScan,
+        findings: &mut Vec<InlineFinding>,
+    ) -> Result<(), String> {
+        let table = self.scopes.table(t);
+        let file = scan.file.display().to_string();
+        let dependencies = self.external_dependencies.as_ref();
+        for (scope, written) in table.globs() {
+            self.glob(t, scope, written, scan, &file, findings)?;
+        }
+        for occurrence in &scan.occurrences {
+            if !is_judged(self.strict, occurrence.is_call) {
+                continue;
+            }
+            let scope = table.scope_at(occurrence.at);
+            let ns = if occurrence.is_call {
+                Namespace::Value
+            } else {
+                Namespace::Either
+            };
+            for resolved in resolve_written(
+                &occurrence.segments,
+                PathSite::Expr,
+                ns,
+                self.scopes,
+                t,
+                scope,
+                dependencies,
+            )? {
+                if should_react_on_occurrence(self.strict, self.verbs.as_deref(), &resolved) {
+                    self.report(resolved, scan, &file, findings);
                 }
             }
         }
-    }
-    Ok(())
-}
-
-/// The raw `use …` statement bodies (the text between `use` and `;`), from declaration-cleaned
-/// source. A lightweight cousin of the `use`-scan's walk, sufficient for glob detection.
-fn use_statements(source: &str, base_module: &str) -> Vec<(String, String)> {
-    use super::lexer::UseStatementScan;
-    let bytes = source.as_bytes();
-    let inline_modules = scan_inline_modules(source, base_module);
-    let mut trees = Vec::new();
-    let mut i = 0;
-    while i < bytes.len() {
-        if super::lexer::keyword_starts_at(bytes, i, b"use") {
-            match super::lexer::scan_use_statement(bytes, source, i) {
-                UseStatementScan::Statement { body, next } => {
-                    let module =
-                        inline_modules.modules[inline_modules.contexts[i] as usize].clone();
-                    trees.push((module, body));
-                    i = next;
-                    continue;
-                }
-                UseStatementScan::NotAStatement { resume_at } => {
-                    i = resume_at;
-                    continue;
-                }
-                UseStatementScan::Unterminated => break,
-            }
-        }
-        i += 1;
-    }
-    trees
-}
-
-/// Build the per-file alias-carrying use-map: the head identifier a `use` introduces → the target
-/// path it names (canonicalized). `use std::time::SystemTime as SysT;` → `SysT` →
-/// `std::time::SystemTime`; `use std::time;` → `time` → `std::time`; `use std::time::SystemTime;`
-/// → `SystemTime` → `std::time::SystemTime`. Grouped forms are expanded. Glob (`::*`) entries name
-/// no head, so they are skipped here (the glob-hazard rule handles them).
-fn collect_use_map(
-    source: &str,
-    base_module: &str,
-    root_modules: &[String],
-) -> Result<HashMap<(String, String), String>, String> {
-    let mut map = HashMap::new();
-    for (module, tree) in use_statements(source, base_module) {
-        for (alias, path) in expand_use_leaves(&tree)? {
-            if let Some(canonical) = resolve_written_path(&path, &module, root_modules) {
-                map.insert((module.clone(), alias), canonical);
-            }
-        }
-    }
-    Ok(map)
-}
-
-/// Expand a use tree into `(introduced-head-identifier, written-path)` leaves. `a::{b, c as d}` →
-/// `(b, a::b)`, `(d, a::c)`. A `self`/glob leaf introduces no simple head and is skipped.
-fn expand_use_leaves(tree: &str) -> Result<Vec<(String, String)>, String> {
-    fn go(tree: &str, out: &mut Vec<(String, String)>, depth: usize) -> Result<(), String> {
-        if depth > MAX_SYMBOL_NEST_DEPTH {
-            return Err(format!(
-                "cannot judge a `use` tree nested past {MAX_SYMBOL_NEST_DEPTH} brace levels: '{tree}'"
-            ));
-        }
-        let tree = tree.trim();
-        match tree.find('{') {
-            Some(open) => {
-                let prefix = tree[..open].trim();
-                let inner = brace_content(&tree[open..]);
-                for part in split_top_commas(&inner) {
-                    let part = part.trim();
-                    let head = match part.find(" as ") {
-                        Some(idx) => part[..idx].trim(),
-                        None => part,
+        if self.strict {
+            for (file_use, in_macro) in scan
+                .uses
+                .iter()
+                .map(|file_use| (file_use, false))
+                .chain(scan.macro_uses.iter().map(|file_use| (file_use, true)))
+            {
+                for leaf in file_use.leaves.as_ref().map_err(Clone::clone)? {
+                    let written = match leaf {
+                        UseLeaf::Name { path, .. } => path,
+                        UseLeaf::SelfLeaf { module, .. } | UseLeaf::Empty(module) => module,
+                        UseLeaf::Glob(base) if in_macro => {
+                            self.glob(t, file_use.scope, base, scan, &file, findings)?;
+                            continue;
+                        }
+                        UseLeaf::Glob(_) => continue,
                     };
-                    if part.is_empty() || part == "*" || head == "self" {
-                        continue;
+                    for resolved in resolve_written(
+                        written,
+                        PathSite::Use,
+                        Namespace::Either,
+                        self.scopes,
+                        t,
+                        file_use.scope,
+                        dependencies,
+                    )? {
+                        self.report(resolved, scan, &file, findings);
                     }
-                    go(&format!("{prefix}{part}"), out, depth + 1)?;
-                }
-            }
-            None => {
-                if tree.ends_with("::*") || tree.is_empty() {
-                    return Ok(());
-                }
-                let (path, alias) = match tree.split_once(" as ") {
-                    Some((p, a)) => (p.trim().to_string(), a.trim().to_string()),
-                    None => {
-                        let leaf = tree.rsplit_once("::").map_or(tree, |(_, leaf)| leaf).trim();
-                        (tree.to_string(), leaf.to_string())
-                    }
-                };
-                let alias = canonical_module_path(&alias);
-                if !alias.is_empty() {
-                    out.push((alias, path));
                 }
             }
         }
         Ok(())
     }
-    let mut out = Vec::new();
-    go(tree, &mut out, 0)?;
-    Ok(out)
+
+    /// Report the glob `written` in `scope` of table `t` where what it brings in can reach the prefix. A glob a scope
+    /// records — one a block inside a macro's group holds among them — is judged under every confinement, and every
+    /// glob a macro's group holds is a mention as well, judged under a strict one wherever it stands.
+    fn glob(
+        &self,
+        t: usize,
+        scope: u32,
+        written: &str,
+        scan: &FileScan,
+        file: &str,
+        findings: &mut Vec<InlineFinding>,
+    ) -> Result<(), String> {
+        let table = self.scopes.table(t);
+        for glob in resolve_written(
+            written,
+            PathSite::Use,
+            Namespace::Type,
+            self.scopes,
+            t,
+            scope,
+            self.external_dependencies.as_ref(),
+        )? {
+            if glob_reaches_prefix(
+                self.scopes,
+                &glob,
+                self.prefix,
+                &table.scopes[scope as usize].module,
+            )? {
+                findings.push(InlineFinding {
+                    fact: ModuleFact::InlineGlob {
+                        path: glob,
+                        module: scan.module.clone(),
+                    },
+                    file: file.to_string(),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// Report `resolved`, a path `scan` names, where it lies under the prefix.
+    fn report(
+        &self,
+        resolved: String,
+        scan: &FileScan,
+        file: &str,
+        findings: &mut Vec<InlineFinding>,
+    ) {
+        if path_within(&resolved, self.prefix) {
+            findings.push(InlineFinding {
+                fact: ModuleFact::InlinePath {
+                    path: resolved,
+                    module: scan.module.clone(),
+                },
+                file: file.to_string(),
+            });
+        }
+    }
 }
 
-/// Collect the `type`-alias and `pub use` re-export definitions of a file into the crate-wide
-/// context, keyed by their fully-qualified local name. Targets are resolved module-relative
-/// (through the file's `use_map`), so `type B = A;` targets the sibling `crate::mod::A` and
-/// `use std::time::SystemTime; type Clock = SystemTime;` targets `std::time::SystemTime`.
-fn collect_defs(
-    source: &str,
+/// The **value-namespace** names `module` declares at its own level, read from one file's `source`: `fn`, `const`,
+/// `static`.
+///
+/// Rust resolves a `mod` in the TYPE namespace, so the only names that can legally collide with `mod foo` are these —
+/// `struct foo` beside `mod foo` would be a duplicate type-namespace definition and does not compile. One
+/// `use m::foo;` then binds **both**, which is why an inbound module boundary anchored at `m` must consult this: the
+/// module reading alone resolves the import to the descendant `m::foo` and misses that it also reaches `m` itself
+/// (see `module_check::resolve_import_module`).
+///
+/// Read from the same declaration inventory as every other reader of items, so names are keyed by their true
+/// (inline-`mod`-qualified) module, an associated or block-local `fn` of the same name does not count, and an item
+/// inside an `extern` block opened at that level is the enclosing module's: `unsafe extern "C" { pub fn foo(); }`
+/// declares `foo` there, and it coexists with `mod foo` for exactly the namespace reason this function exists to
+/// observe. An item declared inside a macro's group is not observed, a stated bound.
+pub(crate) fn value_namespace_item_names(
     module: &str,
-    root_modules: &[String],
-    use_map: &HashMap<(String, String), String>,
-    ctx: &mut ResolveCtx,
-) -> Result<(), String> {
-    for (name, target, def_module) in type_aliases(source, module) {
-        if let Some(canonical) = resolve_target(&target, &def_module, use_map, root_modules) {
-            ctx.defs.insert(
-                format!("{def_module}::{}", canonical_module_path(&name)),
-                canonical,
-            );
-        }
-    }
-    for (def_module, tree) in pub_use_statements(source, module) {
-        let mut globs = Vec::new();
-        glob_bases(&tree, &mut globs, 0)?;
-        for base in globs {
-            if let Some(canonical) = resolve_written_path(&base, &def_module, root_modules) {
-                ctx.glob_reexports.push((def_module.clone(), canonical));
-            }
-        }
-        for (alias, path) in expand_use_leaves(&tree)? {
-            if let Some(canonical) = resolve_written_path(&path, &def_module, root_modules) {
-                ctx.defs.insert(format!("{def_module}::{alias}"), canonical);
-            }
-        }
-    }
-    Ok(())
-}
-
-/// Collect the **true-module-qualified** names of every reachable module's own item definitions —
-/// `mod`, `struct`, `enum`, `union`, `trait`, `type`, `fn`, `const`, `static` — from
-/// declaration-cleaned source into `out` as `{true_module}::{name}`, where `{true_module}` is the
-/// file's `module` extended by the inline `mod name { … }`s enclosing the item. Backs rung (iv) of
-/// the strict-external local-precedence ladder: a bare head naming a local item **of the calling
-/// module** is NOT reclassified as an external dependency (so a local `fn rand()` under a `rand`
-/// dependency, or a local `struct`/`type`/plain `mod` named like a dep, stays clean). The
-/// value-namespace items (`fn`/`const`/`static`) are included beyond
-/// `hunyi::crate_scope::local_type_namespace_names` because a bare *call* head (`rand()`) binds to a
-/// local `fn`.
-///
-/// Two disciplines keep this from *over*-suppressing (an external call silently read as local — the
-/// one forbidden bug, a false negative):
-/// - **True-module-qualified.** Names are keyed `{true_module}::{name}` and matched against
-///   `{occurrence_module}::head` (mirroring rung iii), so a same-named item of another module never
-///   cross-suppresses and a file-top item does not mask a call inside `mod tests { … }`.
-/// - **Module top level only.** Only an item at its own module's top level enters that module's
-///   bare-head scope (brace depth == the enclosing module's body-open depth); associated / block-
-///   local items sit deeper and are skipped (capturing them would over-suppress a same-named
-///   external call). An inline `mod`'s own name is itself such a top-level item. (Comments, strings,
-///   and char literals are pre-stripped from `source`, so a `'}'` cannot miscount the depth.)
-///
-///   One brace is transparent to this rule: an `extern` block's. Its `fn`/`static` items are declared in
-///   the module that CONTAINS the block, not in a scope of their own, so they are module-top-level
-///   despite sitting one depth deeper — see [`extern_block_brace_at`]. That is right for this ladder as
-///   well as for the value-namespace query: a bare `rand()` call resolves to a local
-///   `extern "C" { pub fn rand(); }` exactly as it would to a plain local `fn rand()`, so treating the
-///   extern one as absent read a local call as an external dependency.
-///
-/// Residual stated bound: the full single-segment over-reaction (a local `let` / param / closure
-/// binding, `must_not_call_inline("rand")` only; `chrono::Utc` is immune) is canonical in
-/// `strict_external`'s rustdoc and not re-argued here. One corollary specific to this fn's
-/// module-top-level-only discipline: the definition site of an associated / nested `fn` named like
-/// the crate (whose `name(` reads as a call) may likewise false-positive under a single-segment prefix.
-fn collect_item_definition_names(module: &str, source: &str, out: &mut HashSet<String>) {
-    const KEYWORDS: [&[u8]; 9] = [
-        b"mod", b"struct", b"enum", b"union", b"trait", b"type", b"fn", b"const", b"static",
-    ];
-    collect_definition_names(module, source, &KEYWORDS, true, out);
-}
-
-/// Every item the files of one compilation unit define at their modules' top level, keyed
-/// `{true_module}::{name}` — the set the strict-external ladder reads, gathered by the same
-/// [`collect_item_definition_names`] over the same declaration-cleaned text.
-///
-/// It is what an inline-call prefix naming an item of the crate is held to. An item written inside a
-/// macro body, or generated by one, is not in it, as it is not in the ladder's set.
-pub(crate) fn local_item_definitions(
-    files: &[(std::path::PathBuf, String)],
-) -> Result<HashSet<String>, String> {
-    let mut items = HashSet::new();
-    for (file, module) in files {
-        let raw = std::fs::read_to_string(file)
-            .map_err(|err| crate::errors::unreadable_governed_file_error(file, &err.to_string()))?;
-        let decl_text = strip_macro_bodies(&strip_comments_and_strings(&raw));
-        collect_item_definition_names(module, &decl_text, &mut items);
-    }
-    Ok(items)
-}
-
-/// The **value-namespace** names a module declares at its own top level: `fn`, `const`, `static`.
-///
-/// Rust resolves a `mod` in the TYPE namespace, so the only names that can legally collide with
-/// `mod foo` are these — `struct foo` beside `mod foo` would be a duplicate type-namespace
-/// definition and does not compile. One `use m::foo;` then binds **both**, which is why an inbound
-/// module boundary anchored at `m` must consult this: the module reading alone resolves the import to
-/// the descendant `m::foo` and misses that it also reaches `m` itself (see
-/// `module_check::resolve_import_module`).
-///
-/// Shares [`collect_item_definition_names`]'s walk, and with it both disciplines that keep the
-/// answer honest: names are keyed by their **true** (inline-`mod`-qualified) module, and only items at
-/// their own module's top level are captured, so an associated or block-local `fn` of the same name
-/// does not count. Inline `mod` names are deliberately NOT captured here — they are the type-namespace
-/// side of the very collision this exists to detect.
-///
-/// "Top level" includes an item inside an `extern` block opened at that level, because such a block opens
-/// no naming scope: `unsafe extern "C" { pub fn foo(); }` declares `foo` in the enclosing module, and it
-/// coexists with `mod foo` for exactly the namespace reason this function exists to observe. Treating that
-/// brace like any other made the value invisible and a real import of the governed module pass silently —
-/// the class `PROJECT.md` forbids outright, and the shape 渾儀 had already been corrected for.
-///
-/// `source` must be declaration-cleaned (comments, strings, and macro bodies stripped), like every
-/// other reader in this module: an item declared inside a macro body is not observed, a stated bound.
-pub(crate) fn value_namespace_item_names(module: &str, source: &str) -> HashSet<String> {
-    const VALUE_KEYWORDS: [&[u8]; 3] = [b"fn", b"const", b"static"];
+    source: &str,
+    edition: Edition,
+) -> HashSet<String> {
+    let tree = TokenTree::lex(source, edition);
+    let table = ScopeTable::build(&tree, module, 0);
     let mut out = HashSet::new();
-    collect_definition_names(module, source, &VALUE_KEYWORDS, false, &mut out);
-    out
-}
-
-/// The shared walk behind [`collect_item_definition_names`] and [`value_namespace_item_names`]:
-/// module-top-level definitions introduced by any of `keywords`, keyed `{true_module}::{name}`.
-/// `capture_inline_mod_names` decides whether an inline `mod x { … }`'s own name is itself recorded as
-/// a definition of the enclosing module — wanted for the local-precedence ladder, not for the
-/// value-namespace query, whose whole point is to distinguish the two namespaces.
-/// The `{` of an `extern` block starting at `i`, if one starts there: `extern {`, `extern "C" {`, and the
-/// `unsafe extern "C" {` form Rust 2024 requires (the `unsafe` sits before the keyword, so matching on
-/// `extern` alone reaches all three).
-///
-/// An extern block's brace opens no naming scope — its `fn`/`static` items are declared in the module
-/// that CONTAINS the block, and can legally coexist with a `mod` of the same name because the two live in
-/// different namespaces. `extern crate foo;` is deliberately not matched: it has no brace, so the `{`
-/// requirement excludes it without a special case.
-fn extern_block_brace_at(bytes: &[u8], i: usize) -> Option<usize> {
-    if !super::lexer::keyword_starts_at(bytes, i, b"extern") {
-        return None;
-    }
-    let mut cursor = skip_ws(bytes, i + b"extern".len());
-    if bytes.get(cursor) == Some(&b'"') {
-        cursor += 1;
-        while cursor < bytes.len() && bytes[cursor] != b'"' {
-            cursor += 1;
-        }
-        cursor = skip_ws(bytes, cursor.saturating_add(1));
-    }
-    (bytes.get(cursor) == Some(&b'{')).then_some(cursor)
-}
-
-/// Collect item definition names declared in `source` for the given module.
-///
-/// Tracks inline `mod name { … }` nesting so items are qualified under their true enclosing
-/// module (`{module}::inner…::name`). An `extern` block's brace does not open a naming scope;
-/// its items remain top-level items of the enclosing module. Modifiers like `static mut` skip the
-/// unraw `mut` keyword to read the true declared name.
-fn collect_definition_names(
-    module: &str,
-    source: &str,
-    keywords: &[&[u8]],
-    capture_inline_mod_names: bool,
-    out: &mut HashSet<String>,
-) {
-    let bytes = source.as_bytes();
-    let inline_modules = scan_inline_modules(source, module);
-    let mut i = 0;
-    let mut depth = 0usize;
-    let mut extern_opens: Vec<usize> = Vec::new();
-    let mut site_index = 0usize;
-    while i < bytes.len() {
-        let module_top = inline_modules.module_tops[i];
-        let top = if extern_opens.last() == Some(&module_top) {
-            module_top + 1
-        } else {
-            module_top
-        };
-        if let Some(brace) = extern_block_brace_at(bytes, i) {
-            extern_opens.push(depth);
-            i = brace;
+    for scope in &table.scopes {
+        if scope.kind != ScopeKind::Module {
             continue;
         }
-        if inline_modules
-            .sites
-            .get(site_index)
-            .is_some_and(|site| site.at == i)
-        {
-            let site = &inline_modules.sites[site_index];
-            if capture_inline_mod_names && depth == site.module_top && !site.name.is_empty() {
-                out.insert(format!(
-                    "{}::{}",
-                    inline_modules.modules[site.enclosing as usize], site.name
-                ));
-            }
-            site_index += 1;
-            i = site.brace;
-            continue;
-        }
-        match bytes[i] {
-            b'{' => {
-                depth += 1;
-                i += 1;
-                continue;
-            }
-            b'}' => {
-                depth = depth.saturating_sub(1);
-                while extern_opens.last().is_some_and(|d| *d >= depth) {
-                    extern_opens.pop();
-                }
-                i += 1;
-                continue;
-            }
-            _ => {}
-        }
-        if !is_ident_byte(bytes[i]) {
-            i += 1;
-            continue;
-        }
-        if depth == top {
-            if let Some(kw) = keywords
-                .iter()
-                .find(|kw| super::lexer::keyword_starts_at(bytes, i, kw))
-            {
-                let mut name_start = skip_ws(bytes, i + kw.len());
-                if kw == b"static" && super::lexer::keyword_starts_at(bytes, name_start, b"mut") {
-                    name_start = skip_ws(bytes, name_start + b"mut".len());
-                }
-                if bytes.get(name_start).is_some_and(|b| is_ident_byte(*b)) {
-                    let name =
-                        normalize_segments(&bytes[name_start..end_of_ident(bytes, name_start)]);
-                    if !name.is_empty() {
-                        out.insert(format!(
-                            "{}::{name}",
-                            inline_modules.modules[inline_modules.contexts[i] as usize]
-                        ));
-                    }
-                }
+        for (name, declarations) in &scope.declarations {
+            let value_item = declarations.iter().any(|declaration| {
+                matches!(
+                    declaration.kind,
+                    DeclKind::Item(ItemKeyword::Fn | ItemKeyword::Const | ItemKeyword::Static)
+                )
+            });
+            if value_item {
+                out.insert(format!("{}::{name}", scope.module));
             }
         }
-        i = end_of_ident(bytes, i);
-    }
-}
-
-/// Every `type Name = Target;` in declaration-cleaned source, as `(Name, Target)`.
-fn type_aliases(source: &str, base_module: &str) -> Vec<(String, String, String)> {
-    let bytes = source.as_bytes();
-    let inline_modules = scan_inline_modules(source, base_module);
-    let mut out = Vec::new();
-    let mut i = 0;
-    while i < bytes.len() {
-        if super::lexer::keyword_starts_at(bytes, i, b"type") {
-            let module = inline_modules.modules[inline_modules.contexts[i] as usize].clone();
-            let mut j = i + 4;
-            while j < bytes.len() && bytes[j].is_ascii_whitespace() {
-                j += 1;
-            }
-            let name_start = j;
-            while j < bytes.len() && is_ident_byte(bytes[j]) {
-                j += 1;
-            }
-            let name = source[name_start..j].to_string();
-            while j < bytes.len() && bytes[j] != b'=' && bytes[j] != b';' {
-                if bytes[j] == b'<' {
-                    j = skip_angles(bytes, j);
-                } else {
-                    j += 1;
-                }
-            }
-            if !name.is_empty() && bytes.get(j) == Some(&b'=') {
-                if let Some(end) = alias_target_end(bytes, j + 1) {
-                    let target = source[j + 1..end].trim();
-                    let target_path = leading_path(target);
-                    if !target_path.is_empty() {
-                        out.push((name, target_path, module));
-                    }
-                    i = end + 1;
-                    continue;
-                }
-            }
-            i = j.max(i + 1);
-            continue;
-        }
-        i += 1;
     }
     out
 }
 
-/// Index of the top-level `;` that terminates a `type … = <target>;`, starting at `from` (just past
-/// the aliasing `=`); the end of input if none. Tracks `[]`/`()`/`{}` nesting and skips `<…>` groups
-/// whole (via [`skip_angles`], so a `->` return arrow's `>` is never miscounted), so a `;` inside an
-/// array/tuple type (`[T; N]`) does not prematurely end the target.
-fn alias_target_end(bytes: &[u8], from: usize) -> Option<usize> {
-    let mut depth = 0i32;
-    let mut k = from;
-    while k < bytes.len() {
-        match bytes[k] {
-            b'<' => {
-                k = skip_angles(bytes, k);
-                continue;
-            }
-            b'[' | b'(' | b'{' => depth += 1,
-            b']' | b')' | b'}' => depth -= 1,
-            b';' if depth <= 0 => return Some(k),
-            _ => {}
-        }
-        k += 1;
-    }
-    None
-}
-
-/// The leading `::`-path of a type expression (`std::time::SystemTime<T>` → `std::time::SystemTime`,
-/// `&Foo` → `Foo`). Stops at the first byte that is neither an identifier byte nor `:`.
-fn leading_path(expr: &str) -> String {
-    let expr = expr.trim_start_matches(['&', ' ', '*']);
-    let bytes = expr.as_bytes();
-    let mut j = 0;
-    while j < bytes.len() && (is_ident_byte(bytes[j]) || bytes[j] == b':') {
-        j += 1;
-    }
-    expr[..j].trim_end_matches(':').to_string()
-}
-
-/// The `pub use …` statement bodies (only `pub` re-exports feed the crate-wide closure; a private
-/// `use` is local to its file and already handled per-file by the use-map).
+/// Resolve a written path — an occurrence's `::`-joined segments, or a glob's own path — standing in
+/// `scope` of table `t`, its last segment read in `ns`, to every canonical path it can name: empty when it names none a prefix can
+/// reach, and a scan error when the resolution walks a chain past the nesting cap.
 ///
-/// **The body is read by [`super::lexer::scan_use_statement`], which is the declared single home for that
-/// question.** This loop re-spelled it — `start = j + 3`, then `find(';')` — and so did not carry the
-/// guard that home has: a `use` followed by `<` is a precise-capturing bound rather than an import, and
-/// scanning to the next `;` there swallows the following real `use`. The extraction that made the reader
-/// shared converged two of the three sites and walked past this one, which is the twin-drift class this
-/// module's own siblings record. What differs here is the surrounding `pub` and visibility-qualifier
-/// walk, and that is what this function keeps.
-fn pub_use_statements(source: &str, base_module: &str) -> Vec<(String, String)> {
-    let bytes = source.as_bytes();
-    let inline_modules = scan_inline_modules(source, base_module);
-    let mut trees = Vec::new();
-    let mut i = 0;
-    while i < bytes.len() {
-        if super::lexer::keyword_starts_at(bytes, i, b"pub") {
-            let module = inline_modules.modules[inline_modules.contexts[i] as usize].clone();
-            let mut j = i + 3;
-            while j < bytes.len() && bytes[j].is_ascii_whitespace() {
-                j += 1;
-            }
-            if bytes.get(j) == Some(&b'(') {
-                let mut depth = 0usize;
-                while j < bytes.len() {
-                    match bytes[j] {
-                        b'(' => depth += 1,
-                        b')' => {
-                            depth -= 1;
-                            if depth == 0 {
-                                j += 1;
-                                break;
-                            }
-                        }
-                        _ => {}
-                    }
-                    j += 1;
-                }
-                while j < bytes.len() && bytes[j].is_ascii_whitespace() {
-                    j += 1;
-                }
-            }
-            if super::lexer::keyword_starts_at(bytes, j, b"use") {
-                match super::lexer::scan_use_statement(bytes, source, j) {
-                    super::lexer::UseStatementScan::Statement { body, next } => {
-                        trees.push((module, body));
-                        i = next;
-                        continue;
-                    }
-                    super::lexer::UseStatementScan::NotAStatement { resume_at } => {
-                        i = resume_at;
-                        continue;
-                    }
-                    super::lexer::UseStatementScan::Unterminated => break,
-                }
-            }
-        }
-        i += 1;
-    }
-    trees
-}
-
-/// The extra crate vocabulary [`resolve_head`] consults ONLY under `.strict_external()`: the
-/// complete crate module-path set (rung iii), the module-qualified top-level item-definition names
-/// (rung iv), and the declared-dependency import identifiers (rung v). Absent (`None`) on the
-/// default path.
-struct ExternalVocab<'a> {
-    module_paths: &'a HashSet<String>,
-    item_defs: &'a HashSet<String>,
-    dep_names: &'a HashSet<String>,
-}
-
-/// Under `.strict_external()`, whether a bare `head` (already declined by the per-file use-map,
-/// rung i) reclassifies as an **external crate** — i.e. it matches a declared dependency name AND
-/// is not claimed by local precedence. `occurrence_module` is the true (inline) module the call
-/// occurs in (inline-`mod`-aware — see `path_occurrences`), not necessarily the file module. Local
-/// precedence
-/// (first match wins) suppresses the dependency match: (ii) a crate-root module shadow; (iii) a
-/// local module `{occurrence_module}::head` (at ANY depth, from the full crate module-path set —
-/// not only crate-root children); (iv) a local top-level item definition `{occurrence_module}::head`
-/// of the true (inline) module (module-qualified, mirroring iii — a same-named item of another module
-/// never suppresses, which would be a false negative). Only when none of these claim the head does
-/// the dependency match fire.
-fn head_is_external_dependency(
-    head: &str,
-    occurrence_module: &str,
-    root_modules: &[String],
-    vocab: &ExternalVocab,
-) -> bool {
-    let locally_shadowed = is_crate_root_shadow(occurrence_module, head, root_modules)
-        || vocab
-            .module_paths
-            .contains(&format!("{occurrence_module}::{head}"))
-        || vocab
-            .item_defs
-            .contains(&format!("{occurrence_module}::{head}"));
-    !locally_shadowed && vocab.dep_names.contains(head)
-}
-
-/// Resolve the head of a written path occurrence (its `::`-joined `segments`) to a canonical path,
-/// via the per-file use-map, then treating a `std`/`core`/`alloc` head as literal, a
-/// `crate`/`self`/`super` head as local, and any other bare head as a local item of the current
-/// module (so a `type`/`pub use` closure can then rewrite it). Returns `None` only for an
-/// empty/degenerate path. Leaf-only matching of an unresolved head is deliberately NOT done.
+/// [`CrateScopes::name`] answers, and this reader's policy is its match. Every path it names through a
+/// binding, a declared item, a sysroot crate or a crate-rooted path is observed. A crate named by its root
+/// (`::dep::…`) is observed under `.strict_external()` only, as its bare spelling is, so `dep::f()` and
+/// `::dep::f()` are reported in the same mode; the root form names a crate whatever its name, so it is observed
+/// without the declared-dependency match a bare head needs. A bare head no scope binds — so no local
+/// module, item or import claims it, at any depth, in the scope the path stands in — is, under
+/// `.strict_external()`, the external crate where it names a declared dependency, and otherwise names
+/// nothing a prefix can reach: the scope table records every item a module declares, so a head it does not
+/// find is a prelude name, a local binding, an attribute's name or an item a macro generates — never an
+/// item of the path's module. A block-local item is named by no path a prefix can reach either. Leaf-only
+/// matching of an unresolved head is deliberately NOT done.
 ///
-/// `external` is `Some` ONLY under `.strict_external()`: an un-`use`d bare head that matches a
-/// declared dependency (and is not locally shadowed — see [`head_is_external_dependency`]) is then
-/// kept as the literal external path (`chrono::Utc::…`) instead of the fake-local
-/// `{module}::chrono::Utc::…`, closing the fully-qualified-external false negative. When `external`
-/// is `None` the default path is unchanged: every non-`use` bare head falls to the load-bearing
-/// `{module}::…` fallback the `type`-alias / re-export closure depends on.
-///
-/// `occurrence_module` is the occurrence's true (inline) module (`{file_module}::inner…`) and is used
-/// ONLY inside the `external` branch, for the local-shadow ladder — so a file-top item cannot mask
-/// an external call in an inline submodule, and a submodule-local item shadows only its own module.
-/// Relative `self`/`super` resolution uses `occurrence_module`; the `{current_module}::…` fallback
-/// and the finding's module continue to use the FILE module `current_module`.
-fn resolve_head(
-    segments: &str,
-    _current_module: &str,
-    occurrence_module: &str,
-    use_map: &HashMap<(String, String), String>,
-    root_modules: &[String],
-    external: Option<&ExternalVocab>,
-) -> Option<String> {
-    let raw = segments.trim();
-    let global = raw.starts_with("::");
-    let raw = raw.trim_start_matches("::");
-    let parts: Vec<String> = raw
-        .split("::")
-        .map(|s| canonical_module_path(s.trim()))
-        .filter(|s| !s.is_empty())
-        .collect();
-    let (head, rest) = parts.split_first()?;
-    let parts_str: Vec<&str> = parts.iter().map(String::as_str).collect();
-    let base: String = match head.as_str() {
-        "std" | "core" | "alloc" => parts.join("::"),
-        "crate" => fold_canonical_segments(&parts_str)?,
-        "self" | "super" => resolve_self_super(occurrence_module, &parts_str)?,
-        _ if global => parts.join("::"),
-        other => {
-            if let Some(target) = use_map.get(&(occurrence_module.to_string(), other.to_string())) {
-                let mut base = target.clone();
-                for seg in rest {
-                    base.push_str("::");
-                    base.push_str(seg);
-                }
-                base
-            } else if external.is_some_and(|v| {
-                head_is_external_dependency(other, occurrence_module, root_modules, v)
-            }) {
-                parts.join("::")
-            } else {
-                format!("{occurrence_module}::{}", parts.join("::"))
-            }
+/// The path's module is the true (inline) module of its scope, so a file-top item cannot mask an
+/// external call in an inline submodule, and a submodule-local item shadows only its own module.
+fn resolve_written(
+    written: &str,
+    site: PathSite,
+    ns: Namespace,
+    scopes: &CrateScopes,
+    t: usize,
+    scope: u32,
+    external_dependencies: Option<&BTreeSet<String>>,
+) -> Result<Vec<String>, String> {
+    match scopes.name(t, scope, written, site, ns) {
+        Named::Paths(paths) => Ok(paths),
+        Named::External(path) => Ok(external_dependencies.map(|_| path).into_iter().collect()),
+        Named::Unbound { head, rest, also } => {
+            let dependency =
+                external_dependencies.is_some_and(|dependencies| dependencies.contains(&head));
+            let path = with_rest(head, &rest);
+            Ok(also.into_iter().chain(dependency.then_some(path)).collect())
         }
-    };
-    Some(base)
-}
-
-/// Chase a candidate path through the `type`-alias / `pub use` closure to a fixpoint: repeatedly
-/// replace the longest local-name prefix that is a `defs` key with its target. Cycle-safe via the
-/// visited set, capped at 256 iterations to guarantee termination on self-referential definitions.
-fn chase_closure(
-    path: &str,
-    defs: &HashMap<String, String>,
-    visited: &mut HashSet<String>,
-) -> String {
-    let mut current = path.to_string();
-    for _ in 0..256 {
-        if !visited.insert(current.clone()) {
-            return current;
-        }
-        let mut matched: Option<(String, String)> = None;
-        let segments: Vec<&str> = current.split("::").collect();
-        for take in (1..=segments.len()).rev() {
-            let key = segments[..take].join("::");
-            if let Some(target) = defs.get(&key) {
-                let remainder = &segments[take..];
-                let mut next = target.clone();
-                for seg in remainder {
-                    next.push_str("::");
-                    next.push_str(seg);
-                }
-                matched = Some((key, next));
-                break;
-            }
-        }
-        match matched {
-            Some((_, next)) => current = next,
-            None => return current,
-        }
-    }
-    current
-}
-
-/// Whether a glob whose resolved module path is `glob` can bring a name resolving under `prefix`
-/// into scope — the fail-closed hazard test, applied recursively to local-module re-export
-/// closures. (a) `glob` is the prefix or beneath it; (b) `glob` is an ancestor of the prefix; (c)
-/// `glob` is a local module whose named re-exports/`type`s reach under the prefix, or which itself
-/// glob-re-exports a path that (recursively) reaches the prefix.
-fn glob_reaches_prefix(
-    glob: &str,
-    prefix: &str,
-    ctx: &ResolveCtx,
-    visited: &mut HashSet<String>,
-) -> bool {
-    if !visited.insert(glob.to_string()) {
-        return false;
-    }
-    if path_within(glob, prefix) || path_within(prefix, glob) {
-        return true;
-    }
-    for (name, target) in &ctx.defs {
-        if path_within(name, glob) {
-            let resolved = chase_closure(target, &ctx.defs, &mut HashSet::new());
-            if path_within(&resolved, prefix) {
-                return true;
-            }
-        }
-    }
-    let inner: Vec<String> = ctx
-        .glob_reexports
-        .iter()
-        .filter(|(module, _)| path_within(module, glob))
-        .map(|(_, gp)| gp.clone())
-        .collect();
-    for gp in inner {
-        if glob_reaches_prefix(&gp, prefix, ctx, visited) {
-            return true;
-        }
-    }
-    false
-}
-
-/// Resolve a *written* module path (from a `use` / `type` / `pub use`) to a canonical absolute
-/// form, for the def closure and use-map. A `std`/`core`/`alloc` head or any external head stays
-/// as written (canonicalized); `crate`/`self`/`super` resolve against `current_module`; a bare
-/// head naming a crate-root module resolves to `crate::…` only at the crate root (the shadow rule).
-fn resolve_written_path(
-    path: &str,
-    current_module: &str,
-    root_modules: &[String],
-) -> Option<String> {
-    let raw = path.trim();
-    let global = raw.starts_with("::");
-    let parts: Vec<String> = raw
-        .trim_start_matches("::")
-        .split("::")
-        .map(|s| canonical_module_path(s.trim()))
-        .filter(|s| !s.is_empty())
-        .collect();
-    let (head, _rest) = parts.split_first()?;
-    let parts_str: Vec<&str> = parts.iter().map(String::as_str).collect();
-    match head.as_str() {
-        "std" | "core" | "alloc" => Some(parts.join("::")),
-        "crate" => fold_canonical_segments(&parts_str),
-        _ if global => Some(parts.join("::")),
-        "self" | "super" => resolve_self_super(current_module, &parts_str),
-        other => {
-            if is_crate_root_shadow(current_module, other, root_modules) {
-                let mut out = vec!["crate".to_string()];
-                out.extend(parts.iter().cloned());
-                Some(out.join("::"))
-            } else {
-                Some(parts.join("::"))
-            }
-        }
+        Named::Local | Named::Invalid => Ok(Vec::new()),
+        Named::PastCap(refusal) => Err(refusal),
     }
 }
 
-/// Resolve a `type`-alias / re-export **target** module-relative: a bare head is looked up in the
-/// file's `use_map`; a `std`/`core`/`alloc`/`crate` head is literal; `self`/`super` resolve as a
-/// path; any other bare head is a **local** item of the current module (so `type B = A;` targets
-/// `{module}::A`, chaining through the closure). Contrast [`resolve_written_path`], which treats a
-/// bare `use`-path head as an external crate.
-fn resolve_target(
-    target: &str,
-    module: &str,
-    use_map: &HashMap<(String, String), String>,
-    root_modules: &[String],
-) -> Option<String> {
-    let raw = target.trim();
-    if raw.starts_with("::") {
-        return resolve_written_path(raw, module, root_modules);
-    }
-    let parts: Vec<String> = raw
-        .split("::")
-        .map(|s| canonical_module_path(s.trim()))
-        .filter(|s| !s.is_empty())
-        .collect();
-    let (head, rest) = parts.split_first()?;
-    if let Some(mapped) = use_map.get(&(module.to_string(), head.to_string())) {
-        let mut base = mapped.clone();
-        for seg in rest {
-            base.push_str("::");
-            base.push_str(seg);
-        }
-        return Some(base);
-    }
-    match head.as_str() {
-        "std" | "core" | "alloc" | "crate" => Some(parts.join("::")),
-        "self" | "super" => resolve_written_path(raw, module, root_modules),
-        _ => Some(format!("{module}::{}", parts.join("::"))),
-    }
+/// Whether an occurrence can react at all: any mention under `strict`, and otherwise only a call. An
+/// occurrence that cannot react is not resolved, so a chain only it would walk is never read; this is the one
+/// place that decides it.
+fn is_judged(strict: bool, is_call: bool) -> bool {
+    strict || is_call
 }
 
-/// Decision helper for whether an occurrence (call or path mention) triggers a boundary reaction.
+/// Decision helper for whether a judged occurrence — one [`is_judged`] admitted before it was resolved —
+/// triggers a boundary reaction, once resolved under the prefix.
 ///
 /// Order of evaluation:
 /// 1. `strict`: any path under the prefix reacts (whether call or mention).
-/// 2. Default (!strict): only calls react; a non-call mention passes.
-/// 3. If narrowed by read verbs (`verbs`), the terminal segment must match a declared verb leaf-exact.
-/// 4. Otherwise, every call under the prefix reacts.
-fn should_react_on_occurrence(
-    strict: bool,
-    is_call: bool,
-    verbs: Option<&[String]>,
-    resolved: &str,
-) -> bool {
+/// 2. If narrowed by read verbs (`verbs`), the terminal segment must match a declared verb leaf-exact.
+/// 3. Otherwise, every call under the prefix reacts.
+fn should_react_on_occurrence(strict: bool, verbs: Option<&[String]>, resolved: &str) -> bool {
     if strict {
         true
-    } else if !is_call {
-        false
     } else if let Some(verbs) = verbs {
         let leaf = resolved
             .rsplit_once("::")
@@ -1167,5 +476,39 @@ fn should_react_on_occurrence(
         verbs.iter().any(|v| v == leaf)
     } else {
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A file cut off anywhere — mid-item, mid-path, after a `type A =`, inside a literal or a comment — is read to its
+    /// end: a reader that steps past the last token answers nothing there rather than indexing beyond it. The fixture
+    /// holds each item form, path form and literal form the readers distinguish, and every prefix of it is read.
+    #[test]
+    fn a_file_cut_off_anywhere_is_read_to_its_end() {
+        let source = "\u{feff}#!/usr/bin/env run\n\
+            #![allow(unused)]\n\
+            use crate::a::{b, c::*, d as e, f::{self, g}};\n\
+            pub(in crate::a) type A<'a, T> = &'a mut (crate::x::Y<T>);\n\
+            type B = *const ::std::cell::Cell<u8>;\n\
+            #[cfg_attr(unix, path = \"u.rs\")] #[path = \"v.rs\"] mod m;\n\
+            #[cfg(any())] extern crate core as std;\n\
+            unsafe extern \"C\" { pub fn ext(x: i32) -> i32; }\n\
+            pub union U { a: u8, b: crate::y::Z }\n\
+            pub enum E { A(crate::y::Z), B { f: u8 } = 1 }\n\
+            pub trait Tr: for<'a> Fn(&'a u8) { const C: u8; fn f(&self) -> <Self as Tr>::X; }\n\
+            impl<T: crate::t::Tr> crate::t::Tr for S<T> where T: Copy {}\n\
+            macro_rules! m { ($x:expr) => { crate::q::f($x) }; }\n\
+            mod inner { use super::*; pub fn h() { if 1 << 2 < 3 { <u8 as crate::k::K>::k(); } } }\n\
+            pub fn run() { let r#ref = 1; crate::z::<u8>::f(&mut r#ref); std::process::id(); \
+            let _ = (b'x', b\"y\", r#\"z\"#, c\"w\", '\\u{1F600}'); /* outer /* nested */ still */ }\n\
+            const S: &str = \"unterminated";
+        for cut in (0..=source.len()).filter(|&cut| source.is_char_boundary(cut)) {
+            for edition in [Edition::Rust2015, Edition::Rust2018, Edition::Rust2021] {
+                FileScan::read(&source[..cut], Path::new("lib.rs"), "crate", edition, 0);
+            }
+        }
     }
 }

@@ -8,7 +8,7 @@
 # The protected file must be the boundary whose edit turns CI green after drift, not a
 # showcase of it:
 #   - crates/shengmo/ is Tianheng's SELF-GOVERNING constitution
-#     — the boundaries it enforces on itself (the 圭表 core is serde_json-only; the core
+#     — the boundaries it enforces on itself (the 圭表 core's dependencies are a closed allowlist; the core
 #     crate must not depend on the gate/shell). It is the file an agent would weaken to
 #     make Tianheng's own CI pass, so it is the primary thing to protect.
 #   - crates/kanhe/ is every REPOSITORY check — whitespace, reference integrity, release

@@ -9,7 +9,8 @@ branch when you pick it up. Every future reaction obeys the drift law:
 Nothing here is "designed" yet — reaction *phases* with their observation sources named,
 not APIs. A new observation dimension is **a crate, born when it is built** (never a
 pre-created empty stub); the heavy dependency it needs is quarantined to that crate so the
-`guibiao` core keeps `serde_json` as its only **external** dependency.
+`guibiao` core keeps only the **external** dependencies its self-law allowlist names (`AGENTS.self-law.md`), with
+no heavy one among them.
 
 ## Backlog governance — evidence before promotion
 
@@ -527,6 +528,246 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH
 
+- **圭表 reads a compilation unit once per boundary rather than once per root.** *Class:* WATCH. *Observed
+  pressure:* none from an adopter. *Observation source:* `check_one_root` in `crates/guibiao/src/module_check.rs`
+  calls `UnitScan::read` for each boundary it judges, so a constitution of *n* boundaries over one root lexes,
+  tables and resolves that root *n* times, each with empty memos. Measured 2026-09-30 in a debug build, one inline
+  boundary over libc 0.2.189 took 5.0 s and over rustix 1.1.4 1.0 s, so the cost is that
+  figure times the boundary count. *Current reaction or bound:* none; the scale directions in
+  `per_target_corpus.rs` bound one boundary's reading. *Risk:* no false negative; a slow check on a large crate
+  under many boundaries. *Promotion trigger:* an adopter or CI run where the check's time is dominated by the
+  repeated read — measured by timing one boundary against the whole constitution — which makes building the
+  scan once per root and sharing it across boundaries a READY-PATCH. *Version class:* patch. *Authority:*
+  `inline-symbol-path-confinement`'s requirement that a large source is read in time its size bounds.
+
+  **The shape of that patch, read 2026-09-30 from `check_one_root`.** Everything from the source directory
+  through `UnitScan::read` depends on the package and the root alone, and a boundary adds only its governed set and
+  its messages, so the patch is one scan per root — a package's source texts read once, each root's reachability
+  and unit scan built once — shared by every boundary over it. Sharing it lets the resolver's memos outlive one
+  boundary, so the patch carries a direction judging a constitution through the shared scan and through a scan per
+  boundary and asserting the two answers equal. This repository's own self-governance run is an instance of the
+  trigger's CI clause, not yet timed.
+
+- **The glob hazard reads a chain of globs once per glob that starts it.** *Class:* WATCH. *Observed pressure:*
+  none from an adopter. *Observation source:* `glob_reaches_prefix` in `crates/guibiao/src/module_scan/glob_hazard.rs`
+  chases a glob's chain of `pub` globs to its end for each glob it is asked about, and keeps no answer, so a chain
+  of *n* modules each globbing the next is read *n* times over. Measured 2026-09-30 in a debug build, with the crate root globbing the first of such a chain and a prefix naming the last module, the inline
+  check took 0.27 s at 250 links, 0.93 s at 500 and 3.5 s at 1000; the lookup through the chain itself is linear.
+  *Current reaction or bound:* `a_long_chain_of_globs_resolves` bounds a chain of three hundred. *Risk:* no false
+  negative; time on a source whose glob chains run to hundreds of links, which no crate measured has. *Promotion
+  trigger:* a crate that builds under rustc whose check time is dominated by this reading, which makes keeping each
+  module's answer for a prefix, independent of the viewer where no private glob is read, a READY-PATCH. *Version
+  class:* patch. *Authority:* `inline-symbol-path-confinement`'s requirement that a large source is read in time
+  its size bounds.
+
+- **Inline-confinement directions are hand-written per WHEN form, and nothing ties a scenario's forms to its
+  test's rows.** *Class:* WATCH. *Observed pressure:* seven review claims in the review record of the scope-table resolver's pull request, each a WHEN form
+  a pinned test had no row for, all closed by adding the row. *Observation source:* those scenarios in
+  `openspec/specs/inline-symbol-path-confinement/spec.md` against their `PINNED-BY` tests in
+  `crates/guibiao/tests/per_target_corpus.rs`. *Current reaction or bound:* none; a reader matching WHEN prose
+  to rows is the prose instrument *Do not add a detector over prose* declines. *Risk:* a scenario claiming a form
+  its pin never runs. *Promotion trigger:* a later review finds another WHEN form with no row. *Version class:*
+  patch. *Authority:* AGENTS.md's *every new or materially changed scenario carries its observation evidence*.
+
+  **Read 2026-09-30 by a gate-ordered static review's contract track.** The clauses it traced to code showed no WHEN
+  form without a row; every scenario it did not trace is unobserved rather than passed.
+
+- **`check_one_root` and `CrateScopes::name_raw` take many arguments, and the both-modes loop is written
+  several times.** *Class:* WATCH. *Observed pressure:* review structural causes, no defect. *Observation
+  source:* `#[allow(clippy::too_many_arguments)]` on `name_raw` and on `check_one_root`'s callers in
+  `crates/guibiao/src/module_check.rs`, whose resolver half has one cause: a scope is passed as two positions,
+  its table `t` and its id, through every lookup method, with a `u32::try_from(..).expect("scope table exceeds u32")`
+  at each place a scope's index is minted; the loops over `[false, true]` for `.strict_external()` in
+  `crates/guibiao/tests/per_target_corpus.rs`, whose size is its own cost to every reader of it. *Current
+  reaction or bound:* none. *Risk:* a new argument or mode added at one site and not another. *Promotion
+  trigger:* the next change that edits `check_one_root`'s signature or adds a both-modes helper, which gathers
+  the arguments into one value and the loop into one helper in that change, or the next lookup method added to
+  `CrateScopes`, which makes the scope one value minted in one place. *Version class:* patch.
+  *Authority:* AGENTS.md's *one rule gets one implementation*.
+
+- **圭表 holds one rule in several places.** *Class:* WATCH. *Observed pressure:* none from an adopter; a static
+  review read each 2026-09-30. *Observation source:* `DeclaredModule::direct_path` is an `Option<Option<String>>`
+  whose unreadable value the walk passes over without refusing — every spelling this reader cannot read, `concat!`,
+  `b"…"` and an embedded NUL, rustc refuses (`malformed path attribute input`), measured against rustc 1.96.0, so no
+  compilable instance exists; the resolver selects a module's or a block's scopes in
+  `glob_edges` and again in `lookup_in_module`, builds a binding's quote in `binding_quote` and again in
+  `binding_names`, and assembles its `LookupKey` by hand at each memo; a macro invocation is detected in
+  `item_head::macro_name_of`, `TokenTree::node_before` and `node_at`; `use_scan` passes two bools by
+  position; and `module_check`'s `Declared` shares a name with `resolve::Declared`. *Current reaction or bound:*
+  none. *Risk:* a fix to one copy and not the other, no current defect. *Promotion trigger:* a change editing one
+  copy, which converges that set in the same change, or a defect one copy has and another lacks, which makes it
+  READY-PATCH. *Version class:* patch. *Authority:* AGENTS.md's *One rule gets one implementation returning a typed
+  result*.
+
+- **圭表's scanner holds functions longer and deeper than a reading follows.** *Class:* WATCH. *Observed pressure:*
+  a static review, no defect. *Observation source:* `token_tree`'s `lex` runs three passes in one body and
+  `decode_str_escapes` nests five deep; `occurrence`'s member-access branch nests five deep; `scope_tree`'s
+  `record_items` and `glob_hazard`'s `read_scope` nest four deep; `resolve` carries the glob fixed point
+  (`glob_targets`, `read_in_pass`, `forget_readings`) beside name resolution, and `denote_in` is long; angle pairing
+  means what `item_head` says while its cache type lives in `token_tree`. Measured 2026-09-30 by
+  `cargo clippy -p guibiao --lib -- -W clippy::too_many_lines`: `denote_in`, `check_one_root`, `lex`, and
+  `bounds.rs`'s table, which is data; `collect_children` was on that list and was split into named steps by the change
+  that next edited it. A static review read 2026-10-01 adds `CrateScopes::new` and `scope_tree::build`, each nesting
+  five to six deep. *Current reaction or bound:* none. *Risk:* a reader, human or
+  model, repairing one branch of a function it cannot hold whole. *Promotion trigger:* the next change to one of
+  them, which splits it in that change; `check_one_root` and `name_raw` keep the entry above. *Version class:*
+  patch. *Authority:* AGENTS.md's *A repair loop is a diagnosis, not a schedule*.
+
+- **The glob fixed point's pass bound is argued by nothing.** *Class:* WATCH. *Observed pressure:* a static review,
+  no instance. *Observation source:* the glob graph's `settle` allows one sweep more than its node count and then
+  refuses; the answers are monotone and finite, so they settle, but a derivation can need more sweeps than that
+  where adding a path waits on a candidate carried in by another. *Current reaction or bound:* the refusal, which is
+  fail-closed. *Risk:* a refusal (exit 2) of a crate rustc builds, never a silent pass. *Promotion trigger:* a crate
+  rustc builds that 圭表 refuses because its globs do not settle, which makes a worklist bounded by the lattice's
+  height a READY-PATCH with that crate as its pin. *Version class:* patch. *Authority:*
+  `inline-symbol-path-confinement`'s fixed-point requirement.
+
+- **Suspicions the static reviews of 2026-09-30 raised and did not demonstrate.** *Class:* WATCH. *Observed
+  pressure:* none from an adopter. *Observation source:* `Visibility::visible_from` answers visible-everywhere for a
+  `pub(in …)` it cannot resolve, reached only by a `super` past the crate root, which rustc refuses; an edition-2015
+  `pub(in a::b)` may be read as the region `a::b` rather than `crate::a::b`, neither measured nor reviewed; a
+  `Self::f()` head may read as unbound; and nested `#[cfg_attr(any(), path = ".")]` candidates grow exponentially,
+  in a fixture no maintainer writes. *Current reaction or bound:* none. *Risk:* each, where real, a wrong answer on
+  the shape it names. *Promotion trigger:* a crate rustc builds on which 圭表 answers one wrongly, which makes that one
+  READY-PATCH with the crate as its pin. *Version class:* by the repair. *Authority:* AGENTS.md's *A violation is a
+  rule, and a rule needs a reachable instance*.
+
+- **Mechanisms that would make a long session's drift visible, measured and not adopted.** *Class:* WATCH.
+  *Observed pressure:* a static review of 圭表's typed-resolver work, 2026-09-30, found, past the linear review rounds its pull request
+  records, fallbacks nothing reaches, docs describing code that had moved, and one rule in several places.
+  *Observation source:* measured 2026-09-30 over `crates/guibiao --lib`: `clippy::option_option` flags exactly the
+  `Option<Option<String>>` field above and `PathAttributes::direct`, which carries it, and nothing else,
+  `clippy::allow_attributes_without_reason` flags six suppressions in guibiao and one in `xuanji`, which the
+  command lints beside it, and `clippy::too_many_lines` flags the functions the entry above names, twenty-two across the
+  workspace; a self-law boundary confining `std::fs::read_to_string` to one source-text module would hold what the
+  per-root scan above makes true, and has three read sites to converge first (`collect_children`, `UnitScan::read`,
+  `governed_module_value_items`); and a step before the cut, beside the trigger reading, that re-reads whole each
+  module a release branch rewrote against the review gates, which is how these were found. *Current reaction or bound:*
+  none. *Risk:* the same classes reappearing in a release window that rewrites a module whole. *Promotion trigger:* a steward decision to
+  adopt one, the pre-cut step first, since it asks nothing of the code. *Version class:* none; each is repository
+  governance. *Authority:* AGENTS.md's *A repair loop is a diagnosis, not a schedule*.
+
+- **渾儀 and 漏刻 may read an inline module's children from its direct `#[path]` base alone.** *Class:* WATCH.
+  *Observed pressure:* none from an adopter. *Observation source:* rustc compiles the first path attribute
+  written, so `#[cfg_attr(unix, path = "c")] #[path = "d"] mod m { pub mod k; }` reads `c/k.rs` on unix —
+  measured against rustc 1.96.0, edition 2021, where a call to an item only `c/k.rs` defines compiles. 圭表 read
+  `d/` alone there and left `c/k.rs` ungoverned; it now reads each base by its position
+  (`a_path_attribute_is_read_by_its_position`). 渾儀's
+  `module_resolve` selects `vec![relocated]` whenever `direct_path_value` answers, which is the shape 圭表 had,
+  **read from the code and not yet demonstrated** by a failing fixture; 漏刻's audit walk is unread for it.
+  *Current reaction or bound:* none in either dimension. *Risk:* a false negative in each dimension where it
+  holds, reachable only by a `cfg_attr` path written before a direct one on an inline module. *Promotion
+  trigger:* a fixture in 渾儀 or 漏刻 that governs `d/k.rs` and not `c/k.rs` for that declaration, which makes it
+  READY-PATCH for that dimension with the fixture as its pin. *Version class:* minor for each dimension it
+  closes, since closing a false negative earns one. *Authority:* `module-boundary` for 圭表's requirement, which
+  the semantic and runtime specs say they match on `#[path]` relocation.
+
+- **漏刻 may compile the last of several direct `#[path]` attributes where rustc compiles the first.**
+  *Class:* WATCH. *Observed pressure:* none from an adopter. *Observation source:* rustc 1.96.0 compiles the
+  first path attribute written on a declaration and reports each later one unused, so `#[path = "a.rs"]
+  #[path = "b.rs"] mod m;` compiles `a.rs`; 漏刻's attribute reader keeps the last (`audit/scan/lexer.rs`, the
+  `b"path"` arm overwriting `attrs.path`) — read from the code, not yet run. *Current reaction or bound:* none.
+  *Risk:* a false negative in 漏刻 over `a.rs`, and a judgement of `b.rs`, which the build does not contain,
+  reachable only by a declaration writing two direct path attributes. *Promotion trigger:* a 漏刻 fixture
+  `#[path = "a.rs"] #[path = "b.rs"] mod m;` with a violation only in `a.rs` that 漏刻 reports clean, which
+  makes it READY-PATCH with that fixture as its pin. *Version class:* minor, since closing a false negative
+  earns one. *Authority:* `module-boundary`'s path-attribute requirement, which the runtime spec says it
+  matches on `#[path]` relocation.
+
+- **渾儀 and 漏刻 tolerate an absent module file only under the declaration's own `cfg` or a `cfg_if!` arm.**
+  *Class:* WATCH. *Observed pressure:* none from an adopter. *Observation source:* rustc loads nothing beneath what
+  a `cfg` removes, so `#[cfg(any())] mod o { mod i; }` and `#[cfg(any())] mod o;` over an `o.rs` declaring `mod i;`
+  build with no `i.rs` — measured against rustc 1.96.0, edition 2021, and held for 圭表 by
+  `an_absent_module_file_beneath_what_a_cfg_removes_is_tolerated`. 漏刻's `absence_is_tolerated` answers from the
+  declaration's own attributes and its arm, and `collect_scope_modules` descends an inline body with the arm flag
+  cleared; 渾儀's `cfg_conditional` in `scan/items.rs` is its arm or `has_cfg_attr` on the item, and
+  `module_resolve.rs` reads the same question a second time. Both **read from the
+  code and not yet run**. *Current reaction or bound:* none in either dimension. *Risk:* a refusal (exit 2) of a
+  crate rustc builds, never a silent pass, reachable by a `mod` with no file beneath a compiled-out item or file.
+  *Promotion trigger:* a fixture in 渾儀 or 漏刻 reproducing one row of that test with exit 2, which makes it
+  READY-PATCH for that dimension with the fixture as its pin. *Version class:* patch, since lifting a refusal asks
+  nothing of an adopter. *Authority:* `module-boundary`'s plain-declaration requirement, which states the runtime
+  dimension's walker as the one exception to that rule.
+
+- **圭表 reads an enclosing `cfg` from outer attributes only, not from an inner `#![cfg]` on a module body or at a
+  file's top.** *Class:* WATCH. *Observed pressure:* none from an adopter. *Observation source:* rustc removes a
+  module whose body or file opens with `#![cfg(pred)]` where `pred` is false, so `mod o { #![cfg(any())] mod i; }`
+  and an `o.rs` opening `#![cfg(any())]` over `mod i;` load no `i.rs` — the same removal the outer form makes, which
+  `an_absent_module_file_beneath_what_a_cfg_removes_is_tolerated` holds. 圭表 refuses both (exit 2), as
+  `module-boundary`'s *An inner attribute is no attribute of the mod after it* pins for a crate root's `#![cfg(unix)]`
+  and for `mod tests { #![cfg(test)] mod c; }`. Measured 2026-09-30 by `git grep -lE '^\s*#!\[cfg\(' -- 'crates/*/src/**.rs'`:
+  this workspace's own sources write no inner `cfg`, so the self-governance gate reaches neither answer. *Current
+  reaction or bound:* the pinned scenario's refusal. *Risk:* a refusal (exit 2) of a crate rustc builds, never a
+  silent pass, reachable only where the file of a `mod` is absent beneath a module an inner `cfg` removes.
+  *Promotion trigger:* a crate that builds under rustc and that 圭表 refuses for that shape, which makes reading an
+  inner `cfg` into `may_be_compiled_out` and the file's lineage a READY-PATCH, amending that scenario's two `cfg`
+  rows in the same change; 漏刻 and 渾儀 read no enclosing `cfg` at all, per the entry above. *Version class:* patch,
+  since lifting a refusal asks nothing of an adopter. *Authority:* `module-boundary`'s plain-declaration
+  requirement.
+
+- **A path in a pattern position is read as a call.** *Class:* WATCH. *Observed pressure:* none from an
+  adopter. *Observation source:* a path's role is read from the tokens beside it, so `let P(x) = p`, a match arm
+  `E::A(x) =>`, a parameter `P(x): P`, `matches!(e, E::A(_))` and a destructuring assignment `P(x) = p` each
+  report under a prefix naming `P` or `E`; telling a pattern from a call needs an expression and pattern reader,
+  which is the shape whose own defects hid real calls, silently. *Current reaction or bound:*
+  `inline-symbol-path-confinement/a-path-in-a-pattern-position-is-read-as-a-call-a-stated-bound`, pinned by
+  `a_path_in_a_pattern_position_is_read_as_a_call`. *Risk:* a false positive only, under a prefix naming the
+  type a pattern destructures; `Some(..)`, `Ok(..)` and `Err(..)` name nothing, since the prelude is not read.
+  *Promotion trigger:* an adopter reporting the over-reaction, or a reader of patterns that can be shown never to
+  hide a call. *Version class:* patch — it removes findings. *Authority:* `inline-symbol-path-confinement`.
+
+- **An answer read past a cut cycle is not remembered, and a cfg-closed re-export ring doubles per link.** *Class:*
+  WATCH. *Observed pressure:* measured 2026-10-01 on a debug build, no adopter: `pub mod m{i} { #[cfg(unix)] pub use
+  crate::m{i+1}::f; #[cfg(not(unix))] pub use crate::forbidden::f; }` for `i` below `n`, closed by an `m{n}` whose
+  `cfg(not(unix))` leaf is `pub use crate::m0::f;`, called as `m0::f()` under a prefix `crate::forbidden`, takes 0.2 s
+  at `n = 8`, 2.3 s at 12 and 48 s at 16, and passes 120 s at 20; rustc 1.96.0, edition 2021, builds it at 12 with an
+  isolated target directory. *Observation source:* `CrateScopes`'s lookup and presence memos in
+  `crates/guibiao/src/module_scan/resolve.rs` store an answer only when the walk that produced it cut no cycle, since
+  an answer read past a cut depends on the walk it was entered from, so every link of the ring is re-read once per
+  path to it. A memo per walk keyed by the frame an answer was read under was tried and did not bound the ring,
+  because the re-reads stand under different frames; keying a frame by its chain of bindings rather than by its
+  instance is the untried repair. *Current reaction or bound:* declared as
+  `inline-symbol-path-confinement/a-cfg-closed-re-export-ring-is-read-in-time-exponential-in-its-length-a-stated-bound`,
+  pinned by eight- and eleven-link rings whose scope reads the pin, a resolver unit test counting reads rather than
+  timing a check, holds to at least a fourfold ratio, so a repair that bounds the reading fails the pin and retires
+  the bound; the chain cap of 64 bounds the depth, not the time. *Risk:* a scan that does not finish on such a ring, never a wrong verdict. *Promotion trigger:* a crate an
+  adopter builds whose scan time is dominated by these re-reads, or a repair keyed by the chain that bounds the ring
+  above with no verdict moving in the corpus. *Version class:* patch — performance. *Authority:*
+  `inline-symbol-path-confinement`'s time-bound requirement.
+
+- **A shared syn-free lexical layer.** *Class:* WATCH. *Observed pressure:* none from an adopter.
+  *Observation source:* hand-written Rust lexers stand in these crates — `crates/guibiao/src/module_scan/token_tree.rs`,
+  the only reader of source bytes in `guibiao`, `crates/louke/src/audit/scan/lexer.rs` and
+  `crates/kanhe/src/comment_scan.rs`. The keyword table `token_tree.rs` holds and the one
+  `louke`'s `is_rust_keyword` matches name the same words; measured by comparing the two word lists as sets,
+  neither holds a word the other lacks. *Current reaction or bound:* inside `guibiao`, the token tree imports no
+  other `guibiao` module, held by the self-law boundary on `crate::module_scan::token_tree`; across the two
+  dimensions, `crates/tianheng/tests/lexical_conformance.rs` feeds one input to `guibiao` and `louke` per row and
+  asserts they agree, and `kanhe`'s finder reads only this repository's own sources. The trigger fired when
+  `guibiao` was taught `Pattern_White_Space` and the edition-2021 C string prefix: on the ledger the two agree on
+  the first, and disagree on the second because `louke` reads source roots with no edition, a disagreement
+  declared as `runtime-origin-assertion/a-raw-string-after-an-identifier-character-is-read-as-one-in-every-edition-a-stated-bound`
+  and pinned on the ledger, rather than closed by a shared layer that would carry the same missing input.
+  *Risk:* a defect repaired in one lexer stays in the others. *Promotion trigger:* a ledger row on which the two
+  disagree for a reason other than an input one of them lacks. *Version class:* internal; a new crate is a law amendment that
+  widens `guibiao`'s and `louke`'s dependency allowlists. *Authority:* `PROJECT.md`'s `xingbiao` criterion —
+  what the tokens in a file mean belongs to the dimension asking, and a widening that cannot be argued across it is
+  a new crate's job — with 三儀 ⊥ 三儀 for `louke`.
+
+- **A prelude name called bare is not read as its standard-library path.** *Class:* WATCH. *Observed
+  pressure:* none from an adopter. *Observation source:* `drop(x)`, `Some(..)` and `Box::new(..)`
+  resolve through the std prelude, which `guibiao` does not read, so `must_not_call_inline("std::mem")` does
+  not see `drop(x)` — nor did 0.7.1, which read it as `{module}::drop`. The producer of the set is the
+  toolchain's own prelude source, `library/std/src/prelude/` under `rustc --print sysroot`'s
+  `lib/rustlib/src/rust/`: measured present, holding `mod.rs` and `v1.rs`, on rustc 1.96.0 stable with
+  rust-src installed. A copied name list would be a second list to hold against it. *Current reaction or
+  bound:* `inline-symbol-path-confinement/a-prelude-name-called-bare-is-not-read-as-its-std-path-a-stated-bound`,
+  pinned by `a_prelude_name_called_bare_is_not_read_as_its_std_path`. *Risk:* a boundary on a std module an
+  item of which the prelude re-exports passes a bare call of it. *Promotion trigger:* an adopter confining a
+  std module whose items the prelude re-exports (`std::mem`, `std::boxed`, `std::option`), or a second
+  reader needing the prelude's contents. *Version class:* minor — new observation depth that reacts by
+  default. *Authority:* `inline-symbol-path-confinement`.
+
 - **The dyn-trait collector does not read an `extern` block's foreign items.**
   *Class:* WATCH. *Observed pressure:* none — the shape compiles and nothing governs it, but no adopter has
   needed it governed. *Observation source:* in `crates/hunyi/src/collect/`, `collect_item_dyn_exposures` has
@@ -1022,6 +1263,27 @@ consumer for an undemonstrated deduplication.
   `constitution-projection`.
 
 ### READY-PATCH
+
+- **An item inserted between another item's `///` and its `fn` takes that item's doc.** *Class:* READY-PATCH,
+  promoted from WATCH when its trigger fired, as the paragraph closing this entry records.
+  *Observed pressure:* four instances across two reviews of one pull request, each a new test or helper
+  placed just above an existing `fn` and so under its doc block, leaving the existing item undocumented
+  and the new one described as something else. *Observation source:* `cargo clippy -p guibiao --lib -- -W
+  clippy::missing_docs_in_private_items`, which names every private item with no doc, an item whose doc a new
+  one took among them. *Current reaction or bound:* none. That lint is the decidable instrument; measured 2026-10-01 by
+  that command, it names 381 items, so adopting it means documenting those first. A text reader deciding that a doc describes a different item than the one it sits on is a
+  judgement over prose, which *Do not add a detector over prose* declines. *Risk:* no false negative; a
+  reader of the doc is misled about which item it describes. *Promotion trigger:* a later review finds
+  the shape again, which makes documenting guibiao's private items and turning the lint on a READY-PATCH.
+  *Version class:* patch. *Authority:* AGENTS.md's doc-comment rules.
+
+  **The trigger fired on 2026-10-01, and the entry is READY-PATCH.** A static review of the fixes after the
+  scope-table change found three more — `is_ident_byte`'s doc on `white_space_len`, `CrateScopes::new`'s on
+  `in_a_proc_macro_crate`, `read_tree`'s fused with `Unread`'s — each an item inserted by an edit anchored on the
+  item's line rather than its doc block, and each repaired by moving the doc back. The patch the trigger names is
+  not taken in the typed-resolver change of 2026-10-01, which carries contract repairs alone and files maintenance here; the next change
+  documenting guibiao's private items takes it. The same class across the workspace is the entry *A private
+  item's doc comment can be stolen by an item inserted above it*, whose public half `deny(missing_docs)` holds.
 
 - **The ambient-ignore guard reads files where its property belongs to call sites, and says something false
   when one file holds both kinds.** *Class:* READY-PATCH — measured, and the correction touches no published
