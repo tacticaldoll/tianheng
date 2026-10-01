@@ -571,10 +571,7 @@ fn alias_target(tree: &TokenTree, from: usize) -> Option<String> {
     }
     let run = path_run(tree, head);
     let end = if super::item_head::opens_an_angle_group(tree, run.end) {
-        match super::item_head::angle_group_end(tree, run.end) {
-            Some(close) => close + 1,
-            None => return None,
-        }
+        super::item_head::angle_group_end(tree, run.end)? + 1
     } else {
         run.end
     };
