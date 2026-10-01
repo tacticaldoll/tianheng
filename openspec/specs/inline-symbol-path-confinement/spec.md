@@ -281,7 +281,10 @@ judgement wherever the lookup meets the scope — where it walks out of a block,
 where a lookup through globs reaches the scope — so a block or a relayed module holding a name only by a gated item
 leaves it to the scope around the block or to the relay's globs; and a bare head every scope on its chain holds only
 so SHALL also be read as what no scope binds, a sysroot crate or a dependency, since a build compiling the gated item
-out reads it so; and what a glob of a crate whose contents are not
+out reads it so. The crate root's `extern crate` answers its name in every module after the module's own scopes, and
+SHALL answer it for certain only where that `extern crate` is one no `cfg` gates; where every one binding the name is
+gated, the name SHALL also be read as the crate it spells, whatever else the root declares under it, since a root's
+`mod` of that name is seen by no other module; and what a glob of a crate whose contents are not
 read brings SHALL stay a candidate beside what the unit's own modules bind, for a path through the scope's module,
 whether the two meet in one scope's globs, in cfg-exclusive files of one module, or in a name's two namespaces. A crate-rooted path
 SHALL name itself and every path each binding on it names: where a segment names something a module binds
@@ -1352,8 +1355,8 @@ for the lookup it answers rather than as a cycle the walk cut.
 - **PINNED-BY** `a_scope_holding_a_name_only_where_a_cfg_gates_it_ends_no_lookup`
 
 #### Scenario: A head held only by a gated item may name a crate
-- **WHEN** `crate::core` writes `#[cfg(any())] mod std {}` and calls `std::process::id()` under a prefix `std::process`; or, depending on `md5x`, writes `#[cfg(any())] mod md5x {}` and calls `md5x::compute()` under a prefix `md5x`; and, as controls, each module written ungated
-- **THEN** the first reports `std::process::id in crate::core` with and without `.strict_external()`, the second `md5x::compute in crate::core` under `.strict_external()` alone, where an un-`use`d dependency call is observed, and the controls report nothing: rustc 1.96.0, edition 2021, calls the crate where the module is compiled out and the module where it is not
+- **WHEN** `crate::core` writes `#[cfg(any())] mod std {}` and calls `std::process::id()` under a prefix `std::process`; or, depending on `md5x`, writes `#[cfg(any())] mod md5x {}` and calls `md5x::compute()` under a prefix `md5x`; and, as controls, each module written ungated; or `crate::core` calls `std::mem::drop(1)` under a prefix `std::mem` where the crate root writes `#[cfg(any())] extern crate core as std;`, alone or beside an ungated `pub mod std {}`, and, as the control, `extern crate core as std;` ungated
+- **THEN** the first reports `std::process::id in crate::core` with and without `.strict_external()`, the second `md5x::compute in crate::core` under `.strict_external()` alone, where an un-`use`d dependency call is observed, both gated aliases `std::mem::drop in crate::core` with and without `.strict_external()`, and the controls report nothing: rustc 1.96.0, edition 2021, calls the crate where the module or the alias is compiled out, the module where it is not, and `core::mem::drop` through the ungated alias
 - **PINNED-BY** `a_head_held_only_by_a_gated_item_may_name_a_crate`
 
 #### Scenario: A crate-rooted path keeps a foreign glob's candidate beside a local one
