@@ -11,8 +11,10 @@
 //! [`resolve`]r; and the [`glob_hazard`].
 //! [`fs_walk`], [`reachability`] and [`symbol_scan`] read the file system; every other module is pure string,
 //! token, and path processing. It depends on no model type but the finding the inline scan
-//! reports.
+//! reports. Above those readers sits [`evaluation`]: one evaluation's scan of each compiled root,
+//! built once and shared by every module boundary judged over that root.
 
+mod evaluation;
 mod fs_walk;
 mod glob_hazard;
 mod item_head;
@@ -26,6 +28,7 @@ mod token_tree;
 mod use_scan;
 mod use_tree;
 
+pub(crate) use evaluation::{EvaluationScans, RootScan};
 pub(crate) use fs_walk::rust_files;
 pub(crate) use path_vocab::{
     PrefixRoot, SymbolPrefix, canonical_module_path, canonical_module_spelling,

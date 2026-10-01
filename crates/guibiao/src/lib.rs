@@ -29,6 +29,7 @@ mod observer;
 pub use observer::StaticObserver;
 
 mod module_scan;
+use module_scan::EvaluationScans;
 mod projection;
 pub use projection::{
     StalePolicy, constitution_json, constitution_text, report_json, report_json_with_stale_policy,
@@ -85,6 +86,18 @@ pub fn check(constitution: &Constitution, manifest_path: &Path) -> Outcome {
 /// `Enforce` dominates `Warn`. A clean verdict states a [`Subject`] of declared boundaries
 /// and reached workspace members.
 fn evaluate(constitution: &Constitution, metadata: &Value) -> Outcome {
+    evaluate_with_scans(constitution, metadata, &EvaluationScans::shared())
+}
+
+/// The whole of [`evaluate`] against caller-held scans. Evaluation itself always builds the shared
+/// form — one scan per compiled root, shared by every module boundary judged over it; a direction
+/// holds the scans itself to read the work they did, or to run the independent form the shared one
+/// is held equal to.
+fn evaluate_with_scans(
+    constitution: &Constitution,
+    metadata: &Value,
+    scans: &EvaluationScans,
+) -> Outcome {
     let workspace = match workspace_member_names(metadata) {
         Members::Read(names) => names,
         Members::Unreadable(why) => return Outcome::ConstitutionError(why),
@@ -101,7 +114,7 @@ fn evaluate(constitution: &Constitution, metadata: &Value) -> Outcome {
             }
             Boundary::Module(module_boundary) => {
                 if let Err(error) =
-                    check_module_boundary(metadata, module_boundary, &mut violations)
+                    check_module_boundary(metadata, scans, module_boundary, &mut violations)
                 {
                     return Outcome::ConstitutionError(error);
                 }

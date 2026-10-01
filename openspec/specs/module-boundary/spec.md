@@ -1152,3 +1152,31 @@ module, import path) pair rather than the path alone.
 - **WHEN** two different modules of one governed subtree each import the same forbidden path
 - **THEN** the system emits two findings distinguished by their importing module, so accepting one in a
   baseline does not suppress the other
+
+### Requirement: One evaluation reads each source once and scans each compilation unit once
+
+Within one evaluation of a constitution, 圭表 SHALL read each source path it meets at most once, on demand, and
+SHALL build each compilation unit root's scan — its file list, its reachability and its unit scan — at most
+once, shared by every module boundary judged over that root. Each file of a unit, read as one module, SHALL have
+its `use` declarations classified at most once, on demand, so a file no rule reads is never classified and its
+refusal never decides the exit code. A boundary's own conditions — its governed set, its prefix and verbs, its
+strict and external modifiers — are applied when that boundary is judged and are never kept as a fact of the
+root. Sharing SHALL NOT change an outcome: a constitution judged through shared scans and through a scan per
+boundary yields the same outcome, in each order its boundaries are declared in.
+
+#### Scenario: Many boundaries over one root build its scan once
+
+- **WHEN** several module boundaries of one constitution are judged over one compilation unit root, or a
+  package compiles more than one root
+- **THEN** the root's scan is built once, shared by every boundary judged over it, and a package of several
+  roots builds each of theirs once
+- **PINNED-BY** `many_boundaries_over_one_root_build_its_scan_once`
+
+#### Scenario: Shared and independent scans yield one outcome
+
+- **WHEN** one constitution is judged through scans shared per root and through a scan rebuilt per boundary,
+  in each order its boundaries are declared in
+- **THEN** the two readings of one order yield the same outcome — the same violations with the same identities
+  and severities, or the same refusal — and nothing is claimed across orders, where the first error an
+  evaluation returns may be a different boundary's
+- **PINNED-BY** `shared_and_independent_scans_yield_one_outcome`
