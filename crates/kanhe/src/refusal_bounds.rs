@@ -78,6 +78,18 @@ pub fn unheld() -> Vec<Unheld> {
              the reads above it",
         ),
         tool(
+            "release-coherence#release-tags-unreadable",
+            "measured on this machine's git, not assumed: a `.git/refs/tags` made unreadable leaves \
+             `git tag --list 'v*'` exiting `0` with an **empty** listing, so the ref-store perturbation a \
+             fixture can build is answered as *no tags* rather than refused, and the judgement reads no \
+             released section — git's own silence, which no reader of its status can split, and which a clean run \
+             therefore states as the count of released sections it held. Over this repository that count is held \
+             to the release snapshots preceding `HEAD` in its own history, so there the silence fails rather than \
+             reads clean. A repository \
+             whose earlier reads succeed and whose tag listing exits non-zero is not a state a fixture was \
+             found to build",
+        ),
+        tool(
             "release-coherence#directory-entry-unreadable",
             "a directory entry that errors while the directory itself enumerates is produced by the \
              filesystem between two syscalls, and a fixture would have to hold that window open",

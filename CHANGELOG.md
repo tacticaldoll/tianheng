@@ -210,6 +210,16 @@ them.
   `inline-symbol-path-confinement/a-prefix-naming-a-macro-generated-item-is-refused-a-stated-bound`. A blank
   prefix keeps its own refusal.
 
+### Self-governance
+
+- **A released `CHANGELOG.md` section is held to its tag.** Release coherence holds every `vX.Y.Z` tag's section
+  to exactly one section of that version at `HEAD`, line for line with each line's own ending from its heading to the next, so an
+  entry written into a released section, a fenced block included, and a released section deleted or renamed are
+  refused, and a tag whose `CHANGELOG.md` holds no one section for its version is a cannot-judge. A clean run says
+  how many released sections it held, since git answers an unreadable `refs/tags` as no tags, and over this
+  repository that count is held to the release snapshots preceding `HEAD`. A rewrite is refused naming its first
+  differing line by its line in `HEAD`'s `CHANGELOG.md`.
+
 ## [0.7.1] - 2026-09-27
 
 ### Static
