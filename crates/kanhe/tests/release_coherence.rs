@@ -141,7 +141,6 @@ fn a_snapshot_is_coherent() {
     let root = scratch("snapshot");
     let fixture = fixture::build(&root, "snapshot", "0.2.0");
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     assert!(verdict.is_ok(), "{:?}", verdict.err());
 }
 
@@ -174,7 +173,6 @@ fn a_release_section_dated_away_from_its_commit_is_a_violation() {
     git(&fixture.repo, &["add", "."]);
     git(&fixture.repo, &["commit", "-q", "--amend", "--no-edit"]);
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a section dated away from its commit must be refused");
     refusal::expect(
         "release-coherence#release-date-disagrees-with-its-commit",
@@ -210,7 +208,6 @@ fn a_released_section_rewritten_after_its_tag_is_a_violation() {
     git(&fixture.repo, &["add", "."]);
     git(&fixture.repo, &["commit", "-q", "--amend", "--no-edit"]);
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     assert!(
         unchanged.is_ok(),
         "the tagged section left as tagged: {:?}",
@@ -274,7 +271,6 @@ fn a_released_section_deleted_or_fenced_into_is_a_violation() {
     git(&fixture.repo, &["tag", "-d", "v0.2.0"]);
     amend(&fixture.repo, &|text| text.replacen(&earlier, "", 1));
     let deleted = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     let kept = kept.expect("the tagged 0.1.0 and 0.2.0 sections kept");
     assert!(
         kept.contains("2 released section(s) held to their tags"),
@@ -312,7 +308,6 @@ fn a_released_line_rewritten_to_another_ending_is_located_in_the_file() {
     git(&fixture.repo, &["add", "."]);
     git(&fixture.repo, &["commit", "-q", "--amend", "--no-edit"]);
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a released line rewritten to end in CRLF must be refused");
     refusal::expect("release-coherence#released-section-rewritten", &refusal);
     assert!(
@@ -338,7 +333,6 @@ fn a_tag_holding_no_changelog_cannot_be_judged_against() {
     );
     git(&fixture.repo, &["tag", "v0.2.0", empty.trim()]);
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a tag without a changelog cannot be judged against");
     refusal::expect("release-coherence#released-changelog-unreadable", &refusal);
 }
@@ -374,7 +368,6 @@ fn a_tag_whose_changelog_lacks_its_section_cannot_be_judged_against() {
     git(&fixture.repo, &["tag", "v0.2.0"]);
     git(&fixture.repo, &["checkout", "-q", "-f", branch.trim()]);
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     let refusal =
         verdict.expect_err("a tag whose changelog lacks its section cannot be judged against");
     refusal::expect("repository-checks#the-only-found-none", &refusal);
@@ -387,7 +380,6 @@ fn development_with_release_notes_is_coherent() {
     fixture::development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "docs: describe pending work");
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     assert!(verdict.is_ok(), "{:?}", verdict.err());
 }
 
@@ -399,7 +391,6 @@ fn a_release_ready_tree_is_coherent() {
     fixture::release_changelog(&fixture.repo, "0.2.1", "0.2.0");
     commit(&fixture.repo, "chore: prepare release");
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     assert!(verdict.is_ok(), "{:?}", verdict.err());
 }
 
@@ -429,7 +420,6 @@ fn a_renamed_family_dependency_is_resolved_by_its_package_field() {
         "release-coherence#example-pin-disagrees",
         &refuse(&fixture.repo, Kind::Violation, "xuanji (as `alias`)"),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// The section dated for the workspace version is adopter-facing while the release is still being written.
@@ -462,7 +452,6 @@ fn a_dated_section_for_the_pending_release_is_adopter_facing() {
             "names this repository's own machinery",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// The dated heading's suffix is parsed as a date, not counted as ten characters.
@@ -494,7 +483,6 @@ fn a_dated_heading_whose_suffix_is_not_a_date_is_a_violation() {
             "missing dated release notes for 0.2.1",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A member whose own name carries `version` still has its pin read.
@@ -523,7 +511,6 @@ fn a_member_whose_name_carries_version_still_reads_its_pin() {
         "chore: add a member whose name carries the word",
     );
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     assert!(
         verdict.is_ok(),
         "a pin on a line whose dependency name carries `version` must still be read: {:?}",
@@ -665,7 +652,6 @@ fn a_feature_named_after_a_family_crate_is_not_a_pin() {
     fixture::development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: a feature named after a family crate");
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     assert!(
         verdict.is_ok(),
         "a `[features]` key is not a dependency and must not be read as one: {:?}",
@@ -703,7 +689,6 @@ fn a_table_whose_dot_is_escaped_is_one_key_and_not_a_dependency_table() {
     fixture::development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: a table whose dot is escaped");
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     assert!(
         verdict.is_ok(),
         "one literal key is no dependency table to cargo, and must not be read as one: {:?}",
@@ -761,7 +746,6 @@ fn a_shallow_history_cannot_be_judged() {
         "release-coherence#release-history-shallow",
         &refuse(&repo, Kind::CannotJudge, "release history is unavailable"),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
@@ -778,7 +762,6 @@ fn a_malformed_release_subject_is_a_violation() {
             "malformed release history subject",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
@@ -796,7 +779,6 @@ fn a_regressed_workspace_version_is_a_violation() {
             "is older than latest release 0.2.0",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
@@ -813,7 +795,6 @@ fn development_with_no_release_narrative_is_a_violation() {
             "requires adopter-facing release narrative",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
@@ -835,7 +816,6 @@ fn a_manifest_that_does_not_inherit_the_workspace_version_is_a_violation() {
             "must inherit version.workspace = true",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
@@ -855,7 +835,6 @@ fn an_internal_pin_that_disagrees_is_a_violation() {
         "release-coherence#internal-pin-disagrees",
         &refuse(&fixture.repo, Kind::Violation, "is pinned to 0.1.0"),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
@@ -873,7 +852,6 @@ fn an_example_pin_the_workspace_version_does_not_satisfy_is_a_violation() {
         "release-coherence#example-pin-disagrees",
         &refuse(&fixture.repo, Kind::Violation, "requires xuanji = \"0.9\""),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A lock file this parser cannot read is a cannot-judge, not a missing package.
@@ -903,7 +881,6 @@ fn a_lock_file_this_parser_cannot_read_cannot_be_judged() {
         "not a lock file this parser can read",
     );
     refusal::expect("release-coherence#lock-unreadable", &refusal);
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// The lockfile direction must reach EVERY workspace package, not only the first.
@@ -932,7 +909,6 @@ fn a_stale_lock_entry_for_the_second_package_is_a_violation() {
             "Cargo.lock package xuanji is 0.2.0",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
@@ -949,7 +925,6 @@ fn a_release_section_repeating_a_heading_is_a_violation() {
         "release-coherence#changelog-section-repeats-a-heading",
         &refuse(&fixture.repo, Kind::Violation, "repeats a heading"),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
@@ -966,7 +941,6 @@ fn a_break_with_nowhere_to_read_what_to_do_is_a_violation() {
         "release-coherence#breaking-without-migration-section",
         &refuse(&fixture.repo, Kind::Violation, "carries no `### Migration`"),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// The control for the direction above: the same break WITH the section is coherent.
@@ -981,7 +955,6 @@ fn a_break_with_its_migration_is_coherent() {
     );
     commit(&fixture.repo, "chore: mark a break and say what to do");
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     assert!(verdict.is_ok(), "{:?}", verdict.err());
 }
 
@@ -1011,7 +984,6 @@ fn prose_about_the_marker_is_read_as_a_marker_a_stated_bound() {
         "release-coherence#breaking-without-migration-section",
         &refuse(&fixture.repo, Kind::Violation, "carries no `### Migration`"),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 // --- adopter narrative names no self-governance machinery ---------------------------------------------------
@@ -1035,7 +1007,6 @@ fn an_adopter_heading_naming_a_gate_is_a_violation() {
             "names this repository's own machinery",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// The same entry under the self-governance heading, so the refusal above is about the heading it sat under.
@@ -1051,7 +1022,6 @@ fn the_same_entry_under_the_self_governance_heading_is_coherent() {
     );
     commit(&fixture.repo, "docs: name a gate where it belongs");
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     assert!(verdict.is_ok(), "{:?}", verdict.err());
 }
 
@@ -1194,7 +1164,6 @@ name = \"wrong_name\"\n\n[package]\nname = \"xuanji\"\nversion.workspace = true\
     fixture::development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: order the tables the other way");
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     assert!(
         verdict.is_ok(),
         "the `[package]` table names this crate whatever order the tables are written in; taking `[lib]`'s \
@@ -1222,7 +1191,6 @@ fn a_package_name_this_reader_cannot_read_is_a_cannot_judge() {
     .expect("write");
     commit(&fixture.repo, "chore: quote the name the other way");
     refuse(&fixture.repo, Kind::CannotJudge, "cannot read");
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A `Cargo.lock` name this reader cannot read is a cannot-judge, not a package that is not there.
@@ -1257,7 +1225,6 @@ fn a_lock_name_this_reader_cannot_read_is_a_cannot_judge() {
         "release-coherence#lock-package-name-unreadable",
         &refuse(&fixture.repo, Kind::CannotJudge, "cannot read"),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// An example pin this reader cannot read is a cannot-judge, not a requirement that is absent.
@@ -1282,7 +1249,6 @@ fn an_example_pin_this_reader_cannot_read_is_a_cannot_judge() {
     fixture::development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: quote an example pin the other way");
     refuse(&fixture.repo, Kind::CannotJudge, "cannot read");
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A registry entry sharing a workspace member's name is not that member's lock entry.
@@ -1310,7 +1276,6 @@ fn a_registry_entry_sharing_a_members_name_is_not_the_members_entry() {
         "chore: add a registry entry sharing a member's name",
     );
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     assert!(
         verdict.is_ok(),
         "the source-less entry is the workspace member's, whichever order the blocks are written in; \
@@ -1339,7 +1304,6 @@ fn two_source_less_entries_under_one_name_cannot_be_judged() {
         "release-coherence#lock-several-sourceless-entries",
         &refuse(&fixture.repo, Kind::CannotJudge, "with no source"),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A table that is not `[[package]]` does not absorb the package block above it.
@@ -1371,7 +1335,6 @@ fn a_non_package_table_does_not_absorb_the_block_above_it() {
     .expect("write");
     commit(&fixture.repo, "chore: add a patch.unused table to the lock");
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     assert!(
         verdict.is_ok(),
         "a `[[patch.unused]]` table carries its own name and version; reading them into the package block \
@@ -1406,7 +1369,6 @@ fn a_commented_out_internal_pin_is_not_a_pin() {
     .expect("write");
     commit(&fixture.repo, "chore: comment out an internal pin");
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     assert!(
         verdict.is_ok(),
         "a commented-out dependency declares nothing, so refusing it names a disagreement no manifest \
@@ -1448,7 +1410,6 @@ fn an_inherit_line_with_a_glued_comment_still_inherits() {
     .expect("write");
     commit(&fixture.repo, "chore: glue a comment to the inherit line");
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     assert!(
         verdict.is_ok(),
         "TOML allows zero whitespace before a comment, so this member still inherits; refusing it would be \
@@ -1484,7 +1445,6 @@ fn a_member_whose_only_inherit_line_is_commented_out_is_refused() {
             "must inherit version.workspace",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A basename the enumerator does not resolve is not machinery, however much it looks like a gate.
@@ -1503,7 +1463,6 @@ fn a_basename_the_enumerator_does_not_resolve_is_coherent() {
         "docs: name a file no scripts/ entry resolves",
     );
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     assert!(verdict.is_ok(), "{:?}", verdict.err());
 }
 
@@ -1558,7 +1517,6 @@ fn a_dated_section_naming_a_gate_is_a_stated_bound() {
     .expect("write");
     commit(&fixture.repo, "docs: a dated section names a gate");
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     assert!(
         verdict.is_ok(),
         "the check must stay silent about a dated section naming machinery — that is the declared bound. \
@@ -1585,7 +1543,6 @@ fn machinery_tracked_by_nothing_is_a_stated_bound() {
     commit(&fixture.repo, "docs: name a gate before it is tracked");
     with_machinery(&fixture.repo); // written, never added
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     assert!(
         verdict.is_ok(),
         "the check must stay silent about machinery no commit tracks. Got: {:?}",
@@ -1618,7 +1575,6 @@ fn a_colliding_basename_is_a_stated_bound() {
         "docs: write a name the repository also tracks",
     );
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     let refusal =
         verdict.expect_err("the false refusal is the declared bound; silence would close it");
     assert!(
@@ -1645,7 +1601,6 @@ fn a_directory_named_without_its_slash_is_a_stated_bound() {
     );
     commit(&fixture.repo, "docs: name a directory without its slash");
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     assert!(
         verdict.is_ok(),
         "the check must stay silent about a directory named without its trailing slash. Got: {:?}",
@@ -1671,7 +1626,6 @@ fn a_name_reached_only_through_a_url_is_a_stated_bound() {
     );
     commit(&fixture.repo, "docs: reach a gate only through a URL");
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     assert!(
         verdict.is_ok(),
         "the check must stay silent about a name reached only through a URL. Got: {:?}",
@@ -1707,7 +1661,6 @@ fn a_heading_inside_a_fenced_block_does_not_reattribute_a_later_entry() {
     );
     commit(&fixture.repo, "docs: put a heading inside a fence");
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err(
         "a fenced `### Self-governance` no longer sets the heading in force, so the entry naming machinery \
          after it is reported rather than exempt",
@@ -1741,7 +1694,6 @@ fn two_unreleased_sections_are_a_violation() {
             "exactly one [Unreleased] section",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
@@ -1771,7 +1723,6 @@ fn a_snapshot_whose_unreleased_carries_an_item_is_a_violation() {
             "must be empty in snapshot state",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
@@ -1789,7 +1740,6 @@ fn a_release_with_no_dated_notes_is_a_violation() {
             "missing dated release notes for 0.2.1",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
@@ -1809,7 +1759,6 @@ fn an_unreleased_comparison_link_that_does_not_start_at_the_version_is_a_violati
             "comparison link must start at v0.2.0",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
@@ -1826,7 +1775,6 @@ fn a_dated_comparison_link_that_does_not_start_at_the_previous_release_is_a_viol
         "release-coherence#release-comparison-link-wrong",
         &refuse(&fixture.repo, Kind::Violation, "must start at v0.2.0"),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
@@ -1854,7 +1802,6 @@ fn a_lockfile_missing_a_workspace_package_is_a_violation() {
             "Cargo.lock is missing workspace package xuanji",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
@@ -1877,7 +1824,6 @@ fn an_internal_dependency_with_no_version_pin_is_a_violation() {
         "release-coherence#internal-pin-absent",
         &refuse(&fixture.repo, Kind::Violation, "has no version pin"),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
@@ -1895,7 +1841,6 @@ fn a_snapshot_whose_version_disagrees_with_its_subject_is_a_violation() {
         Kind::Violation,
         "release snapshot subject is 0.2.0 but workspace version is 0.3.0",
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
@@ -1912,7 +1857,6 @@ fn a_release_subject_with_no_space_is_a_violation() {
             "malformed release history subject",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
@@ -1931,7 +1875,6 @@ fn the_retired_subject_is_history_but_not_a_new_snapshot() {
             "expected chore(release): 0.2.0",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// The vacuity guards — the direction this judgement's own doc-comment argues for, and which nothing covered.
@@ -2026,7 +1969,6 @@ fn a_root_without_a_manifest_cannot_be_judged() {
         "release-coherence#repository-root-has-no-manifest",
         &refuse(&repo, Kind::CannotJudge, "has no Cargo.toml"),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
@@ -2038,7 +1980,6 @@ fn a_root_without_a_changelog_cannot_be_judged() {
         "release-coherence#repository-root-has-no-changelog",
         &refuse(&repo, Kind::CannotJudge, "has no CHANGELOG.md"),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// Not a git worktree at all — a different fact from a history too shallow to read.
@@ -2052,7 +1993,6 @@ fn a_root_that_is_not_a_worktree_cannot_be_judged() {
         "release-coherence#git-unrunnable",
         &refuse(&repo, Kind::CannotJudge, "has no git history"),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
@@ -2074,7 +2014,6 @@ fn a_manifest_with_no_workspace_version_cannot_be_judged() {
             "workspace version is missing or malformed",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A comment on the table heading does not close the table before it opens.
@@ -2102,7 +2041,6 @@ fn a_commented_table_heading_still_opens_the_workspace_package_table() {
             "could not read the release history",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A trailing comment on the version line does not become part of the version.
@@ -2130,7 +2068,6 @@ fn a_trailing_comment_on_the_version_line_still_reads_the_version() {
             "could not read the release history",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A value this reader cannot read is not a value that is absent.
@@ -2162,7 +2099,6 @@ fn a_version_value_this_reader_cannot_read_is_not_one_that_is_absent() {
             "declares a workspace version this check cannot read",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A repository with no commit at all: the release history cannot be read, which is not a shallow clone.
@@ -2185,7 +2121,6 @@ fn a_repository_with_no_commit_cannot_have_its_history_read() {
             "could not read the release history",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A tracked path that is a directory where a file is expected: the read fails rather than returning empty.
@@ -2203,7 +2138,6 @@ fn a_lockfile_that_is_a_directory_cannot_be_read() {
             "could not read Cargo.lock",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
@@ -2219,7 +2153,6 @@ fn an_absent_crate_directory_cannot_be_enumerated() {
             "found no enumerable directory at",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// The directory is there and holds no manifest — a different read from the directory being absent.
@@ -2237,7 +2170,6 @@ fn a_crate_directory_holding_no_manifest_cannot_be_enumerated() {
             "found no workspace crate manifests under crates/",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A member manifest that is a file and is still not readable **as text**.
@@ -2254,7 +2186,6 @@ fn a_member_manifest_that_is_not_text_cannot_be_read() {
     std::fs::write(&manifest, [0x5b, 0x70, 0xff, 0xfe, 0x5d])
         .expect("write bytes that are not UTF-8");
     refuse(&fixture.repo, Kind::CannotJudge, "could not read");
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// The machinery enumeration reads the index; an index git cannot parse cannot be enumerated.
@@ -2267,7 +2198,6 @@ fn machinery_that_cannot_be_enumerated_cannot_be_judged() {
         "release-coherence#directory-listing-unreadable",
         &refuse(&fixture.repo, Kind::CannotJudge, "could not enumerate"),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// An example manifest that exists and cannot be read is a cannot-judge, not a directory holding none.
@@ -2291,7 +2221,6 @@ fn an_example_manifest_that_is_not_text_cannot_be_read() {
             "could not read the example manifest",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A directory under `examples/` holding no manifest is still skipped — absence is not a failed read.
@@ -2307,7 +2236,6 @@ fn an_example_directory_holding_no_manifest_is_skipped() {
         "docs: add a directory that is not an example crate",
     );
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     assert!(
         verdict.is_ok(),
         "a directory with no Cargo.toml was treated as a failed read: {:?}",
@@ -2344,7 +2272,6 @@ fn a_glued_comment_cannot_supply_an_internal_version_pin() {
         "release-coherence#internal-pin-absent",
         &refuse(&fixture.repo, Kind::Violation, "has no version pin"),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A `[package]` heading carrying a trailing comment still opens the package table.
@@ -2374,7 +2301,6 @@ fn a_package_heading_with_a_trailing_comment_still_opens_the_table() {
     fixture::development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: comment the package heading");
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     assert!(
         verdict.is_ok(),
         "a comment after `[package]` is a comment; the table it heads is still the package table, and \
@@ -2456,7 +2382,6 @@ fn a_family_pin_under_a_target_triple_is_read() {
             "requires xuanji = \"0.0.1\"",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A family pin under a **quoted cfg** target table is read, which is where the bound moved to.
@@ -2493,7 +2418,6 @@ fn a_family_pin_under_a_quoted_cfg_target_is_observed() {
         "release-coherence#example-pin-disagrees",
         &refuse(&fixture.repo, Kind::Violation, "requires xuanji"),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A family pin under a cfg target whose expression carries a **dot** is read, which retires a declared bound.
@@ -2620,7 +2544,6 @@ fn a_workspace_table_is_not_a_dependency_of_the_package_carrying_it() {
         "release-coherence#example-requires-no-family-crate",
         &refusal,
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// An example accepting the offer in its own catalog is held to the catalog's version, not called versionless.
@@ -2732,7 +2655,6 @@ fn an_example_inheriting_what_no_catalog_offers_is_not_judged() {
         "release-coherence#example-inherits-what-no-catalog-offers",
         &refusal,
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// An inline field whose key cannot be decoded is not an absent one, and does not read as a clean pin.
@@ -2924,7 +2846,6 @@ fn a_lock_block_writing_version_before_name_still_records_it() {
         "chore: a lock block written the other way round",
     );
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     assert!(
         verdict.is_ok(),
         "the lock records this member's version; which of two keys a block writes first is not a fact \
@@ -2967,7 +2888,6 @@ fn a_dependency_key_whose_name_carries_a_dot_is_one_key() {
         "chore: a dependency key whose name carries a dot",
     );
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     assert!(
         verdict.is_ok(),
         "cargo builds this manifest — the key is named `version.extra`, not structure beneath `version`: {:?}",
@@ -3006,7 +2926,6 @@ fn a_family_crate_offered_with_no_path_is_a_violation() {
     fixture::development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: offer a family crate with no path");
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err(
         "members inheriting this entry build against the registry crate, and the requirement it publishes is \
          whatever it says",
@@ -3195,7 +3114,6 @@ fn a_case_alias_of_a_member_directory_is_a_stated_bound() {
     fixture::development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: offer a member through a case alias");
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err(
         "on a case-sensitive filesystem CRATES/TIANHENG is not a directory this workspace has",
     );
@@ -3230,7 +3148,6 @@ fn a_release_commit_carrying_no_changelog_is_refused() {
     // A readable changelog in the worktree, which is what made the absence invisible.
     fixture::development_changelog(&fixture.repo, "0.2.0", true);
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     refusal::expect(
         "release-coherence#release-commit-carries-no-changelog",
         &verdict.expect_err("a release commit narrates its release, or it is not one"),
@@ -3269,7 +3186,6 @@ fn a_changelog_git_cannot_read_at_head_is_not_a_modified_worktree() {
     fixture::release_changelog(&fixture.repo, "0.2.0", "0.1.0");
 
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     refusal::expect(
         "release-coherence#changelog-blob-unreadable",
         &verdict.expect_err(
@@ -3302,7 +3218,6 @@ fn a_checkout_edited_only_in_trailing_whitespace_is_not_a_snapshot() {
         .expect("write one more newline and nothing else");
 
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
 
     // **A development-only rule firing is what proves the state moved.** The tree carries no `[Unreleased]`
     // narrative, which a snapshot does not owe and development does — so this refusal cannot be reached from
@@ -3343,7 +3258,6 @@ fn editing_at_a_release_snapshot_is_development() {
     // The next cycle's first edit, uncommitted — `head` is still the release commit.
     fixture::development_changelog(&fixture.repo, "0.2.0", true);
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     let ok =
         verdict.expect("an edited checkout of a release is the next cycle, not a dirty snapshot");
     assert!(
@@ -3390,7 +3304,6 @@ fn a_single_quoted_package_name_is_read() {
         "chore: name the package with a single-quoted string",
     );
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("the stale example pin is judged, so the name was read");
     assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
     assert!(
@@ -3440,7 +3353,6 @@ fn a_stale_internal_pin_behind_a_quoted_tail_is_refused() {
         "chore: pin an internal dependency behind a quoted tail",
     );
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     let refusal =
         verdict.expect_err("a path dependency pinned at 0.5 against a workspace at 0.2.0 is stale");
     assert!(
@@ -3526,7 +3438,6 @@ fn a_member_inheriting_through_a_sub_table_heading_is_read_as_inheriting() {
     fixture::development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: inherit through a sub-table heading");
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     assert!(
         verdict.is_ok(),
         "cargo resolves this member at the workspace version through this spelling: {:?}",
@@ -3560,7 +3471,6 @@ fn an_example_manifest_that_is_not_a_regular_file_is_not_an_absent_one() {
             "is not one this check can read",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A crate manifest that is there and is not a regular file is not one that is absent.
@@ -3600,7 +3510,6 @@ fn a_crate_manifest_that_is_not_a_regular_file_is_not_an_absent_one() {
         "release-coherence#crate-manifest-unreadable",
         &refuse(&fixture.repo, Kind::CannotJudge, "is not a regular file"),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// An example directory this reader cannot stat is not an entry holding no example.
@@ -3652,7 +3561,6 @@ fn an_example_directory_that_cannot_be_stated_is_not_an_absent_one() {
         &judge(&fixture.repo)
             .expect_err("an entry this reader cannot stat is not one holding no example"),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A member manifest the parser cannot read is not judged, and the refusal names which member.
@@ -3685,7 +3593,6 @@ fn a_member_manifest_the_parser_cannot_read_is_not_judged() {
         "release-coherence#member-manifest-unparseable",
         &refuse(&fixture.repo, Kind::CannotJudge, "duplicate key"),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A member whose `[package]` name is spelled in quotes is read under that name, not the directory's.
@@ -3715,7 +3622,6 @@ fn a_member_whose_package_name_is_quoted_is_read_under_that_name() {
     fixture::development_changelog(&fixture.repo, "0.2.0", true);
     commit(&fixture.repo, "chore: spell a package name in quotes");
     let verdict = judge(&fixture.repo);
-    let _ = std::fs::remove_dir_all(&root);
     assert!(
         verdict.is_ok(),
         "cargo names this package `xuanji`; a quoted key is not an absent one: {:?}",
@@ -3804,7 +3710,6 @@ fn two_workspace_keys_in_one_dependency_are_not_one_inheritance() {
     commit(&fixture.repo, "chore: two workspace keys in one dependency");
     let refusal = refuse(&fixture.repo, Kind::CannotJudge, "duplicate key");
     refusal::expect("release-coherence#manifest-unparseable", &refusal);
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A catalog entry whose identity this reader cannot resolve stops the inheriting example.
@@ -3845,7 +3750,6 @@ fn a_catalog_entry_whose_identity_is_unresolvable_stops_the_inheriting_example()
         "release-coherence#example-catalog-entry-unresolvable",
         &refusal,
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// An unresolvable catalog entry nothing here takes does not mask a stale pin that is taken.
@@ -3883,7 +3787,6 @@ fn an_unrelated_unresolvable_catalog_entry_does_not_mask_a_stale_pin() {
     commit(&fixture.repo, "chore: a stale offer beside an unread one");
     let refusal = refuse(&fixture.repo, Kind::Violation, "0.0.1");
     refusal::expect("release-coherence#example-pin-disagrees", &refusal);
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A catalog entry that itself takes the offer is named rather than followed.
@@ -3912,7 +3815,6 @@ fn a_catalog_entry_that_itself_inherits_is_named_rather_than_followed() {
         "whose own entry takes its version from the catalog",
     );
     refusal::expect("release-coherence#example-catalog-entry-inherits", &refusal);
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A `package` value this reader cannot read stops the check, and says so as itself.
@@ -3944,7 +3846,6 @@ fn an_example_whose_package_value_is_unreadable_is_not_judged() {
             "`package` value this check cannot read",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// Several `package` keys in one dependency is not one this reader may choose from — and not the same fact
@@ -3972,7 +3873,6 @@ fn an_example_declaring_several_package_keys_is_not_judged() {
         "release-coherence#manifest-unparseable",
         &refuse(&fixture.repo, Kind::CannotJudge, "duplicate key"),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// An example requiring a family crate with no version at all is a violation, not an unreadable pin.
@@ -4002,7 +3902,6 @@ fn an_example_requiring_a_family_crate_with_no_version_is_refused() {
             "requires tianheng with no version",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// Several `version` keys in one dependency is not this reader's to choose from either.
@@ -4030,7 +3929,6 @@ fn an_example_declaring_several_version_keys_is_not_judged() {
         "release-coherence#manifest-unparseable",
         &refuse(&fixture.repo, Kind::CannotJudge, "duplicate key"),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// An internal pin written as a detailed table is read, not refused for the shape of its first line.
@@ -4062,7 +3960,6 @@ fn an_internal_pin_written_as_a_detailed_table_is_read() {
         "chore: write an internal pin as a detailed table",
     );
     judge(&fixture.repo).expect("a detailed internal dependency table is one cargo writes");
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// And a stale pin in that same form is still a violation, so the migration did not buy its silence.
@@ -4089,7 +3986,6 @@ fn a_stale_internal_pin_in_a_detailed_table_is_a_violation() {
         "release-coherence#internal-pin-disagrees",
         &refuse(&fixture.repo, Kind::Violation, "is pinned to 0.0.1"),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A workspace version that is present and not a version is not an absent one.
@@ -4112,7 +4008,6 @@ fn a_workspace_version_that_is_not_a_version_cannot_be_judged() {
         "release-coherence#workspace-version-malformed",
         &refuse(&repo, Kind::CannotJudge, "missing or malformed: banana"),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A crate manifest declaring no package name stops the example-pin check rather than shrinking its family.
@@ -4141,7 +4036,6 @@ fn a_crate_manifest_declaring_no_package_name_stops_the_example_check() {
             "declares no `[package]` name",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// And a package name this reader cannot take is not an absent one.
@@ -4173,7 +4067,6 @@ fn a_crate_package_name_this_reader_cannot_take_stops_the_example_check() {
             "declares a `[package]` name this check cannot read",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// An example pin this reader cannot take is not one that satisfies the workspace version.
@@ -4204,7 +4097,6 @@ fn an_example_pin_this_reader_cannot_take_is_not_one_that_satisfies() {
             "with a version this check cannot read",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A root manifest declaring no dependency on a family crate is a check reporting over nothing.
@@ -4241,7 +4133,6 @@ fn a_root_manifest_with_no_internal_path_dependency_reports_over_nothing() {
             "found no dependency on a family crate",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// An `examples/` that holds no manifest at all is the layout having changed, not every example passing.
@@ -4270,7 +4161,6 @@ fn an_examples_directory_holding_no_manifest_at_all_reports_over_nothing() {
             "found no example manifests under examples/",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// Examples that require no family crate are examples this check has nothing to say about.
@@ -4307,7 +4197,6 @@ fn an_example_requiring_no_family_crate_reports_over_nothing() {
             "declares no family dependency requirement",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// The case the aggregate guard could not see: one example fine, one declaring nothing.
@@ -4347,7 +4236,6 @@ fn an_example_declaring_nothing_is_refused_though_its_sibling_is_fine() {
          siblings that are fine: {}",
         refusal.message
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// And a version it cannot take is not a version that disagrees.
@@ -4382,7 +4270,6 @@ fn a_lock_version_this_reader_cannot_take_stops_the_comparison() {
             "records a version for xuanji that this check cannot read",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A release snapshot naming one version while the workspace declares another.
@@ -4409,7 +4296,6 @@ fn a_release_snapshot_naming_another_version_is_a_violation() {
             "release snapshot subject is 0.3.0 but workspace version is 0.2.0",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A crate manifest that is not text stops the enumeration rather than shrinking it.
@@ -4437,7 +4323,6 @@ fn a_crate_manifest_that_is_not_text_cannot_be_read() {
         "release-coherence#crate-manifest-unreadable",
         &refuse(&fixture.repo, Kind::CannotJudge, "could not read"),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// `cargo metadata` failing over a repository whose surfaces this gate has already read.
@@ -4467,7 +4352,6 @@ fn a_metadata_failure_the_subject_caused_is_reported() {
         "release-coherence#cargo-metadata-failed",
         &refuse(&fixture.repo, Kind::CannotJudge, "cargo metadata failed"),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A workspace whose members carry no tracked file at all.
@@ -4501,7 +4385,6 @@ fn a_workspace_whose_members_are_untracked_reports_over_nothing() {
             "no tracked file was found",
         ),
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// The unpublished members contributing nothing is refused, where a published sibling used to cover for it.
@@ -4561,7 +4444,6 @@ fn unpublished_members_contributing_nothing_is_refused() {
         "the refusal names the members that were expected to contribute: {}",
         refusal.message
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A dotted key whose tail this reader does not judge is still a declared dependency.

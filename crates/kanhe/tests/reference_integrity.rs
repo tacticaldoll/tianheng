@@ -457,7 +457,6 @@ fn a_directory_only_ignore_pattern_reacts_whether_or_not_the_directory_exists() 
     std::fs::write(repo.join(".gitignore"), "/build/\n").expect("write the fixture .gitignore");
 
     let seen = ignored(&repo, "build");
-    let _ = std::fs::remove_dir_all(&repo);
     assert!(
         seen,
         "a directory-only ignore pattern must match its candidate even before the directory is ever \
@@ -484,7 +483,6 @@ fn a_real_file_sharing_a_directory_only_pattern_s_name_is_not_ignored() {
     std::fs::write(repo.join("build"), "not a directory").expect("write the fixture file");
 
     let seen = ignored(&repo, "build");
-    let _ = std::fs::remove_dir_all(&repo);
     assert!(
         !seen,
         "`build` exists on disk as an ordinary file, not a directory, so a directory-only `/build/` \
@@ -992,7 +990,6 @@ fn every_extraction_form_is_seen_when_it_names_something_absent() {
             unseen.push(format!("  {form} — planted in {path} and seen by nothing"));
         }
     }
-    let _ = std::fs::remove_dir_all(&history);
     assert!(
         unseen.is_empty(),
         "an extraction form names something absent and the check says nothing:\n{}",
@@ -1052,7 +1049,6 @@ fn a_dated_changelog_section_keeps_its_paths_and_an_undated_one_does_not() {
             ),
         }
     }
-    let _ = std::fs::remove_dir_all(&scratch);
 }
 
 /// The bare Rust form reacts for a name a repository DELETED, and stays silent for one it never tracked.
@@ -1104,8 +1100,6 @@ fn a_bare_rust_basename_reacts_only_for_a_name_this_repository_deleted() {
         &history_tracked,
         &common::SourceCorpus::of(&[never]),
     );
-    let _ = std::fs::remove_dir_all(&scratch);
-    let _ = std::fs::remove_dir_all(&history);
 
     assert!(
         !seen_deleted.is_empty(),
@@ -1179,7 +1173,6 @@ fn comment_bearing_sources_and_live_test_claims_are_inspected() {
             .then_some(*direction)
         })
         .collect();
-    let _ = std::fs::remove_dir_all(&fixture);
 
     assert!(
         unseen.is_empty(),
@@ -2090,7 +2083,6 @@ fn a_positional_reference_reacts_only_from_a_comment() {
         &fixture,
         &common::SourceCorpus::of(&[commented, executed, manifest]),
     );
-    let _ = std::fs::remove_dir_all(&fixture);
 
     let listed = offences.iter().cloned().collect::<Vec<_>>().join("\n");
     assert_eq!(
