@@ -777,27 +777,16 @@ pub(crate) fn check_module_boundary(
             InlinePrefix::NotInline => Ok(()),
         }
     };
-    let mut declared = std::collections::BTreeSet::new();
-    let mut items = std::collections::BTreeSet::new();
     let compiled = match crate_roots(package) {
         CrateRoots::Compiled(roots) => roots,
         CrateRoots::NoneCompiled => return Err(no_compiled_root_error(&boundary.crate_package)),
         CrateRoots::Unreported => {
-            let mut found = Vec::new();
-            return match check_one_root(
-                scans,
-                package,
-                None,
-                None,
-                boundary,
-                &inline_prefix,
-                &mut declared,
-                &mut items,
-                &mut found,
-            )? {
+            let root = scans.root_scan(package, &boundary.crate_package, None, None)?;
+            let mut judged = check_one_root(&root, package, boundary, &inline_prefix)?;
+            return match judged.outcome {
                 RootOutcome::Governed => {
-                    require_named(&declared, &items)?;
-                    violations.append(&mut found);
+                    require_named(&judged.declared, &judged.items)?;
+                    violations.append(&mut judged.violations);
                     Ok(())
                 }
                 RootOutcome::ModuleAbsent(reason) => Err(reason),
@@ -807,19 +796,21 @@ pub(crate) fn check_module_boundary(
     let roots = compiled.as_slice();
     let mut deferred: Option<String> = None;
     let mut governed_somewhere = false;
+    let mut declared = std::collections::BTreeSet::new();
+    let mut items = std::collections::BTreeSet::new();
     let mut found = Vec::new();
     for root in roots {
-        match check_one_root(
-            scans,
+        let scan = scans.root_scan(
             package,
+            &boundary.crate_package,
             Some(root.as_path()),
             Some(roots),
-            boundary,
-            &inline_prefix,
-            &mut declared,
-            &mut items,
-            &mut found,
-        )? {
+        )?;
+        let mut judged = check_one_root(&scan, package, boundary, &inline_prefix)?;
+        declared.append(&mut judged.declared);
+        items.append(&mut judged.items);
+        found.append(&mut judged.violations);
+        match judged.outcome {
             RootOutcome::Governed => governed_somewhere = true,
             RootOutcome::ModuleAbsent(reason) => {
                 if deferred.is_none() {
@@ -845,6 +836,17 @@ enum RootOutcome {
     ModuleAbsent(String),
 }
 
+/// What one root contributes to its package's judgement: whether it hosted the governed module, the modules
+/// and items it declares — which the named modules and an inline prefix are held to across every root — and
+/// the violations found in it. The caller merges every root's and keeps the violations only when some root is
+/// governed.
+struct RootJudgement {
+    outcome: RootOutcome,
+    declared: std::collections::BTreeSet<String>,
+    items: std::collections::BTreeSet<String>,
+    violations: Vec<Violation>,
+}
+
 /// Derives the package-relative label for an inline module extraction suggestion.
 ///
 /// Uses the same [`compilation_unit_label`] mechanism that derives the root's own unit label,
@@ -857,8 +859,8 @@ fn suggested_module_path(package: &Value, candidate: &Path) -> String {
 /// the walk and the unit scan — custom target roots relative to `src_dir` map to `crate`, roots
 /// outside the package manifest directory error as configuration errors, and sibling compilation
 /// unit roots are excluded from module discovery to prevent duplicate violations — and its refusal
-/// order holds here: a walk refusal and a file the unit scan cannot read both surface ahead of
-/// whether the governed module exists. What remains in this function is the boundary's own: the
+/// order holds here: the caller obtains the scan before this runs, so a walk refusal and a file the
+/// unit scan cannot read both surface ahead of whether the governed module exists. What remains in this function is the boundary's own: the
 /// governed set at the declared depth, the module-absence outcome, and the dispatch to the rule's
 /// family. Inline modules own no source file and cannot be governed targets (exit 2). An inline
 /// target is present in its root rather than absent from it, so that refusal is returned at once:
@@ -876,21 +878,13 @@ fn suggested_module_path(package: &Value, candidate: &Path) -> String {
 /// a file lies within that file's module's subtree, so excluding a file by its module is exact under the subtree
 /// depth. It is not under `ScanDepth::Shallow`, where the permitted region is the anchored module alone and the
 /// permitted file's inline children fall outside it, so a shallow declaration is refused rather than judged.
-#[allow(clippy::too_many_arguments)]
 fn check_one_root(
-    scans: &EvaluationScans,
+    root: &RootScan,
     package: &Value,
-    root_file: Option<&Path>,
-    sibling_roots: Option<&[PathBuf]>,
     boundary: &ModuleBoundary,
     inline_prefix: &InlinePrefix,
-    declared: &mut std::collections::BTreeSet<String>,
-    items: &mut std::collections::BTreeSet<String>,
-    violations: &mut Vec<Violation>,
-) -> Result<RootOutcome, String> {
-    let scan = scans.root_scan(package, &boundary.crate_package, root_file, sibling_roots)?;
-    let root: &RootScan = &scan;
-    declared.extend(root.reachable.iter().cloned());
+) -> Result<RootJudgement, String> {
+    let declared = root.reachable.iter().cloned().collect();
     let governed_module = canonical_module_path(&boundary.module);
     let governed = governed_files(
         &root.src_dir,
@@ -908,9 +902,11 @@ fn check_one_root(
         InlinePrefix::NotInline => None,
         InlinePrefix::Inline(inline) => Some(inline),
     };
-    if inline.is_some() {
-        items.extend(root.item_definitions().iter().cloned());
-    }
+    let items = if inline.is_some() {
+        root.item_definitions().iter().cloned().collect()
+    } else {
+        std::collections::BTreeSet::new()
+    };
 
     let outcome = match (
         governed.is_empty(),
@@ -931,10 +927,15 @@ fn check_one_root(
             ));
         }
         (true, None, Perimeter::GovernedModule) => {
-            return Ok(RootOutcome::ModuleAbsent(unknown_module_error(
-                &boundary.module,
-                &boundary.crate_package,
-            )));
+            return Ok(RootJudgement {
+                outcome: RootOutcome::ModuleAbsent(unknown_module_error(
+                    &boundary.module,
+                    &boundary.crate_package,
+                )),
+                declared,
+                items,
+                violations: Vec::new(),
+            });
         }
         (true, None, Perimeter::WholeRoot) => RootOutcome::ModuleAbsent(unknown_module_error(
             &boundary.module,
@@ -947,22 +948,19 @@ fn check_one_root(
         &boundary.rule,
         ModuleRule::MustNotBeImportedBy { .. } | ModuleRule::MustOnlyBeImportedBy { .. }
     );
+    let mut violations = Vec::new();
     if inbound {
-        check_inbound_rule(root, boundary, &governed_module, rule, violations)?;
-        return Ok(outcome);
-    }
-    if let ModuleRule::ConfineExternalCrate { crate_name } = &boundary.rule {
+        check_inbound_rule(root, boundary, &governed_module, rule, &mut violations)?;
+    } else if let ModuleRule::ConfineExternalCrate { crate_name } = &boundary.rule {
         check_external_confinement(
             root,
             boundary,
             &governed_module,
             rule,
             crate_name,
-            violations,
+            &mut violations,
         )?;
-        return Ok(outcome);
-    }
-    if let Some(inline) = inline {
+    } else if let Some(inline) = inline {
         let permitting = matches!(boundary.rule, ModuleRule::ConfineInlineCall { .. });
         let judged: Vec<(PathBuf, String)> = if permitting {
             root.all_files()
@@ -984,10 +982,22 @@ fn check_one_root(
             inline.ending_with,
             inline.strict,
             inline.external,
-            violations,
+            &mut violations,
         )?;
-        return Ok(outcome);
+    } else {
+        check_outbound_rule(
+            root,
+            boundary,
+            &governed_module,
+            governed,
+            rule,
+            &mut violations,
+        )?;
     }
-    check_outbound_rule(root, boundary, &governed_module, governed, rule, violations)?;
-    Ok(outcome)
+    Ok(RootJudgement {
+        outcome,
+        declared,
+        items,
+        violations,
+    })
 }
