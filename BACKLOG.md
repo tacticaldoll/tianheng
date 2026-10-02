@@ -2813,10 +2813,9 @@ consumer for an undemonstrated deduplication.
   returns early when that is empty. `PROJECT.md` records this project using OpenSpec's `specs` half and not
   its `changes` half, so the corpus is empty by declaration and the early return is always taken.
   *Observation source:* `git ls-files openspec/changes` returns one path, `archive/.gitkeep`; the join was
-  built in the same window the mode was declared, four commits apart, and neither noticed the other. Three
-  sibling `openspec/changes/` carve-outs are in the same position — `law_restatement.rs`'s projection filter
-  and two in `reference_integrity.rs` — though one of those is exercised by a fixture that plants a
-  synthetic change path, so it is a branch with no live subject rather than dead code. *Current reaction or
+  built in the same window the mode was declared, four commits apart, and neither noticed the other. The
+  sibling gates have separate roles: `capability_subjects` reads proposals as its input, while
+  `law_restatement` and `reference_integrity` exclude active plans from their source corpora. *Current reaction or
   bound:* none for the class it guarded. **The filing class is defended by review alone**, and it is live
   rather than hypothetical: `scripts/publish.sh` has two claimants, which is the shape the join was built
   from. *Risk:* a requirement filed under the wrong capability goes unnoticed until someone reads both
