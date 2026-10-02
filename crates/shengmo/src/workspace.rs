@@ -68,8 +68,8 @@ mod tests {
     /// Both answers of the one direction eleven copies each asserted separately.
     #[test]
     fn an_absent_layout_skips_without_the_marker_and_is_loud_with_it() {
-        let absent = xingbiao::scratch_base().join("shengmo-workspace-absent-probe");
-        let _ = std::fs::remove_dir_all(&absent);
+        let root = xingbiao::scratch_root("shengmo-workspace");
+        let absent = root.join("absent-probe");
 
         assert!(
             locate(

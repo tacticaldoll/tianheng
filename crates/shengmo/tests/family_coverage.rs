@@ -312,10 +312,7 @@ fn no_ambient_channel_moves_what_the_family_coverage_builder_reads() {
     };
     let inventory = shengmo::hermetic_probe::read(&root_of);
 
-    let root =
-        xingbiao::scratch_base().join(format!("family-coverage-channels-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    xingbiao::claim_scratch(&root).expect("claim the fixture root");
+    let root = xingbiao::scratch_root("family-coverage-channels");
     let build = |name: &str| {
         let dir = root.join(name);
         std::fs::create_dir_all(&dir).expect("create the fixture repository");
@@ -374,8 +371,6 @@ fn no_ambient_channel_moves_what_the_family_coverage_builder_reads() {
             shengmo::hermetic_probe::reading(&String::from_utf8_lossy(&out.stdout), &case.channel),
         ));
     }
-
-    let _ = std::fs::remove_dir_all(&root);
 
     for (case, reading) in readings {
         shengmo::hermetic_probe::judge(&case, &reading);
