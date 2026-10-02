@@ -986,6 +986,29 @@ fn prose_about_the_marker_is_read_as_a_marker_a_stated_bound() {
     );
 }
 
+// --- an entry still being written names what it points at ------------------------------------------------------
+
+/// An `[Unreleased]` entry pointing at another by position is refused, naming the line and the phrase.
+#[test]
+fn an_unreleased_entry_pointing_by_position_is_a_violation() {
+    let root = scratch("positional-reference");
+    let fixture = fixture::build(&root, "positional-reference", "0.2.0");
+    fixture::development_changelog(&fixture.repo, "0.2.0", true);
+    unreleased_body(
+        &fixture.repo,
+        "### Fixed\n- A repair whose migration step is the one below.",
+    );
+    commit(&fixture.repo, "docs: point at an entry by position");
+    refusal::expect(
+        "release-coherence#entry-points-by-position",
+        &refuse(
+            &fixture.repo,
+            Kind::Violation,
+            "points by position: `below`",
+        ),
+    );
+}
+
 // --- adopter narrative names no self-governance machinery ---------------------------------------------------
 
 #[test]

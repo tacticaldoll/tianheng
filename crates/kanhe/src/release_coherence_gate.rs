@@ -927,6 +927,26 @@ fn require_adopter_narrative(
     Ok(())
 }
 
+/// No entry still being written points at another by its position.
+fn require_named_references(
+    sections: &[Section],
+    version: &str,
+    spine: &Spine,
+) -> Result<(), Refusal> {
+    let positional = positional_references(sections, version, spine.state)?;
+    if !positional.is_empty() {
+        return Err(violation_at(
+            "release-coherence#entry-points-by-position",
+            format!(
+                "a CHANGELOG entry still being written points at another by where it sits, which a regroup of the \
+             headings moves without changing a word — name the entry, step or bound it means:\n{}",
+                positional.join("\n")
+            ),
+        ));
+    }
+    Ok(())
+}
+
 /// Judge a repository's release state, returning what to report or why it cannot be judged.
 ///
 /// Read-only: it never bumps, commits, tags, or publishes.
@@ -1017,6 +1037,7 @@ pub fn judge(repo: &Path) -> Result<String, Refusal> {
     )?;
     require_section_shape(&changelog_sections)?;
     require_adopter_narrative(repo, &changelog_sections, &version, &spine)?;
+    require_named_references(&changelog_sections, &version, &spine)?;
     let released = require_released_sections_unchanged(repo, &changelog_text, &changelog_sections)?;
 
     Ok(format!(
@@ -1961,12 +1982,13 @@ fn unreleased_has_item(sections: &[Section]) -> bool {
     sections
         .iter()
         .filter(|section| section.name == "## [Unreleased]")
-        .any(|section| {
-            section.body.iter().any(|(_, line)| {
-                let trimmed = line.trim_start();
-                trimmed.starts_with("- ") || trimmed.starts_with("* ")
-            })
-        })
+        .any(|section| section.body.iter().any(|(_, line)| is_list_item(line)))
+}
+
+/// Whether `line` opens a Markdown list item, at any depth: `- ` or `* ` after its indentation.
+fn is_list_item(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    trimmed.starts_with("- ") || trimmed.starts_with("* ")
 }
 
 struct Shape {
@@ -1982,7 +2004,7 @@ struct Shape {
 /// a different rule again and is left alone deliberately: `unreleased_has_item` asks *where does
 /// `[Unreleased]` end*, which is a boundary question, not a naming one, and folding it in would make one
 /// function answer two.
-fn section_of(line: &str) -> Option<String> {
+pub(crate) fn section_of(line: &str) -> Option<String> {
     line.starts_with("## [").then(|| {
         line.split_once(" - ")
             .map_or(line, |(section, _)| section)
@@ -2299,16 +2321,8 @@ pub fn cargo_metadata(repo: &Path) -> Result<serde_json::Value, Refusal> {
     })
 }
 
-/// Every adopter-facing `[Unreleased]` entry naming this repository's own machinery.
-///
-/// A name is a **word** — a maximal run of path characters, required to equal a tracked path, a tracked
-/// basename, or an ancestor directory derived from the enumeration. That is exact matching of a lexical token,
-/// not substring matching: the run is delimited by the first character a path cannot hold. An earlier rule
-/// compared whole backticked spans and three shapes this document already uses passed clean — a span carrying
-/// a command, a padded double-backtick span, and an inline span wrapped across a source line.
-///
-/// Adopter-facing is the **complement** of `### Self-governance`, so a heading nobody anticipated reacts
-/// rather than being exempt by default.
+/// Whether `section` is prose still being written rather than record: `## [Unreleased]` always, and the
+/// section dated for `version` in release-ready and snapshot state.
 ///
 /// **A dated section is record only once it is a record.** The exemption's reason is that rewriting a dated
 /// section to satisfy a rule written afterwards would falsify it — and that reason does not reach the section
@@ -2323,6 +2337,140 @@ pub fn cargo_metadata(repo: &Path) -> Result<serde_json::Value, Refusal> {
 /// [`State::Development`] the workspace version *equals* the latest released one, so the section carrying it
 /// is genuinely record and stays exempt — a rule phrased as *versions strictly below the workspace version
 /// stay exempt* would refuse it, which is the reading this comment exists to keep anyone from adopting.
+fn is_being_written(section: &Section, version: &str, state: State) -> bool {
+    section.name == "## [Unreleased]"
+        || (matches!(state, State::ReleaseReady | State::Snapshot)
+            && section.name == format!("## [{version}]"))
+}
+
+/// Words that point at another entry by where it sits rather than by what it is.
+const POSITION_WORDS: [&str; 2] = ["above", "below"];
+
+/// Words that point at a neighbour when an item noun follows them: `the next entry`, `the previous step`.
+const SEQUENCE_WORDS: [&str; 4] = ["next", "previous", "preceding", "following"];
+
+/// The item nouns a [`SEQUENCE_WORDS`] word points through.
+const ITEM_NOUNS: [&str; 9] = [
+    "entry", "entries", "section", "sections", "bullet", "item", "step", "group", "heading",
+];
+
+/// Every reference in a section still being written spelled with one of the declared position words.
+///
+/// **A position is not a name.** A regroup of the sections' headings moves entries without changing a word, so
+/// a reference reading *below* or *the next entry* can come to point at something else, or at nothing, while
+/// every line of the file is still present. The repair is one step: name the entry, step or bound meant.
+///
+/// The question is asked of words, so it has one answer per word. A paragraph is read whole, so a phrase
+/// wrapped across lines is one phrase, and a list item at any depth ([`is_list_item`]) ends it; a backticked
+/// span is taken out first, paired by [`crate::reading::backticked_spans`] and refused where its markers do not
+/// pair, so a word quoted as a word is not read; each finding names the line its word stands
+/// on; and every heading is held, `### Self-governance` included, because a regroup moves its entries too.
+///
+/// **What it refuses beyond the property, stated rather than discovered.** A reference to the entry
+/// immediately after, within one group, survives any regroup and is still refused. So is `above` or `below`
+/// used as a preposition rather than a pointer — *below 1.85*, *above the limit* — whose repair is a rewording
+/// rather than a name. A positional phrase spelled with words outside the declared ones is not read.
+pub(crate) fn positional_references(
+    sections: &[Section],
+    version: &str,
+    state: State,
+) -> Result<Vec<String>, Refusal> {
+    let mut found = Vec::new();
+    for section in sections {
+        if !is_being_written(section, version, state) {
+            continue;
+        }
+        let mut heading = String::new();
+        let mut paragraph: Vec<&(usize, String)> = Vec::new();
+        let mut flush =
+            |paragraph: &mut Vec<&(usize, String)>, heading: &str| -> Result<(), Refusal> {
+                for (line, phrase) in positional_phrases(paragraph)? {
+                    let place = if heading.is_empty() {
+                        "with no heading".to_string()
+                    } else {
+                        format!("under `### {heading}`")
+                    };
+                    found.push(format!(
+                        "  CHANGELOG.md:{line} {} {place} points by position: `{phrase}`",
+                        section.name
+                    ));
+                }
+                paragraph.clear();
+                Ok(())
+            };
+        for line in &section.body {
+            if let Some(next) = line.1.strip_prefix("### ") {
+                flush(&mut paragraph, &heading)?;
+                heading = next.trim_end().to_string();
+            } else if line.1.trim().is_empty() {
+                flush(&mut paragraph, &heading)?;
+            } else if is_list_item(&line.1) {
+                flush(&mut paragraph, &heading)?;
+                paragraph.push(line);
+            } else {
+                paragraph.push(line);
+            }
+        }
+        flush(&mut paragraph, &heading)?;
+    }
+    Ok(found)
+}
+
+/// The positional phrases in one paragraph, each with the line its first word stands on, read after the inline
+/// code spans are taken out. A span is replaced by the line breaks it held, so a word's offset in the paragraph
+/// is its line's index, and the line is looked up there rather than counted from the first: the prose a
+/// section is cut from drops a fence's lines, so a paragraph's lines need not be consecutive.
+fn positional_phrases(paragraph: &[&(usize, String)]) -> Result<Vec<(usize, String)>, Refusal> {
+    let text = paragraph
+        .iter()
+        .map(|(_, line)| line.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut prose = text.clone().into_bytes();
+    for span in crate::reading::backticked_spans("CHANGELOG paragraph", &text)? {
+        for byte in &mut prose[span] {
+            if *byte != b'\n' {
+                *byte = b' ';
+            }
+        }
+    }
+    let prose = String::from_utf8(prose).expect("only ASCII bytes are replaced, by an ASCII space");
+    let words: Vec<(usize, String)> = prose
+        .lines()
+        .enumerate()
+        .flat_map(|(offset, line)| {
+            line.split(|c: char| !c.is_alphabetic())
+                .filter(|word| !word.is_empty())
+                .map(move |word| (paragraph[offset].0, word.to_lowercase()))
+        })
+        .collect();
+    let mut phrases = Vec::new();
+    for (at, (line, word)) in words.iter().enumerate() {
+        if POSITION_WORDS.contains(&word.as_str()) {
+            phrases.push((*line, word.clone()));
+        } else if SEQUENCE_WORDS.contains(&word.as_str())
+            && words
+                .get(at + 1)
+                .is_some_and(|(_, noun)| ITEM_NOUNS.contains(&noun.as_str()))
+        {
+            phrases.push((*line, format!("{word} {}", words[at + 1].1)));
+        }
+    }
+    Ok(phrases)
+}
+
+/// Every adopter-facing `[Unreleased]` entry naming this repository's own machinery.
+///
+/// A name is a **word** — a maximal run of path characters, required to equal a tracked path, a tracked
+/// basename, or an ancestor directory derived from the enumeration. That is exact matching of a lexical token,
+/// not substring matching: the run is delimited by the first character a path cannot hold. An earlier rule
+/// compared whole backticked spans and three shapes this document already uses passed clean — a span carrying
+/// a command, a padded double-backtick span, and an inline span wrapped across a source line.
+///
+/// Adopter-facing is the **complement** of `### Self-governance`, so a heading nobody anticipated reacts
+/// rather than being exempt by default.
+///
+/// Which sections are judged is [`is_being_written`]'s.
 fn adopter_cited_machinery(
     repo: &Path,
     sections: &[Section],
@@ -2343,10 +2491,7 @@ fn adopter_cited_machinery(
             if let Some(next) = line.strip_prefix("### ") {
                 heading = next.trim_end().to_string();
             }
-            let being_written = matches!(state, State::ReleaseReady | State::Snapshot)
-                && section.name == format!("## [{version}]");
-            if (section.name != "## [Unreleased]" && !being_written) || heading == "Self-governance"
-            {
+            if !is_being_written(section, version, state) || heading == "Self-governance" {
                 continue;
             }
             for run in line
