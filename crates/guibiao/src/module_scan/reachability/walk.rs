@@ -39,9 +39,10 @@ enum ScanSource {
         start: usize,
         /// The token index of the body's `}`, which ends the source.
         end: usize,
-        /// One base the body's file-form children may resolve from, the same directory as `child_base`.
+        /// The directory a `#[path]` written in the body resolves against: this registration's base.
         path_base: PathBuf,
-        /// The same directory as `path_base`: a body registered under several bases is one source per base.
+        /// The directory the body's plain `mod x;` children are probed in, always `path_base`, since a body with several
+        /// bases is one source per base.
         child_base: PathBuf,
         /// What the body inherits from the declarations that opened it.
         lineage: Lineage,
@@ -211,12 +212,14 @@ struct ConditionalPathSource {
 /// the order the sources were scanned — an example of a path rustc resolves, which the refusal words as one.
 #[derive(Default)]
 struct ChildSources {
-    /// Whether some source declares the child as a file-form `mod` with no path attribute, the condition under which
-    /// `plain` is pushed to; a remap of a child without one shadows its structurally located file.
+    /// Whether some declaration outside a block declares the child file-form with no direct `#[path]`, which is exactly
+    /// when `plain` is pushed to; `cfg_attr` paths beside it do not unset it. A remap of a child without one shadows
+    /// its structurally located file.
     seen_plain_file: bool,
     /// One per inline declaration of the child.
     bodies: Vec<InlineBody>,
-    /// One per file-form declaration with no direct `#[path]`, to be probed for in the conventional directory.
+    /// One per file-form declaration outside a block with no direct `#[path]`, to be probed for in the conventional
+    /// directory.
     plain: Vec<PlainSource>,
     /// One per file-form declaration whose direct `#[path]` value is readable.
     direct: Vec<DirectPathSource>,
@@ -425,8 +428,8 @@ struct GraphSources {
     /// Each module path's scan sources, which its children are read from; a module reached with none has no children
     /// read.
     by_module: BTreeMap<String, Vec<ScanSource>>,
-    /// Each file opened somewhere other than its module's structural path — a path attribute's target, or a plain file
-    /// off that path — with the module path it is governed as.
+    /// Each file a path attribute opened, or a plain file that resolved off its module's structural path, with the
+    /// module path it is governed as.
     remapped: Vec<(PathBuf, String)>,
     /// Module paths whose structurally located file, where one exists, is not governed as that module: a path
     /// attribute remaps the module and no declaration of it is plain, or every plain file that resolved for it lies off

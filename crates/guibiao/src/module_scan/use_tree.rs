@@ -118,7 +118,7 @@ pub(super) enum UseLeaf {
     /// A path the tree imports, and the name it binds: its `as` alias — `_` for `as _`, which binds no name a path
     /// can head — or else its last segment.
     Name {
-        /// The imported path, each segment as written and led by `::` where the tree was.
+        /// The imported path, each segment as written, `$crate` read as `crate`, and led by `::` where the tree was.
         path: String,
         /// The bound name, canonical (no `r#`).
         binds: String,
@@ -130,7 +130,8 @@ pub(super) enum UseLeaf {
     /// A `{self}` leaf: the group's prefix module itself, and the name it binds — its `as` alias, or
     /// else the module path's last segment, so `use std::io::{self};` binds `io`.
     SelfLeaf {
-        /// The group's prefix path, each segment as written.
+        /// The group's prefix path, each segment as written, `$crate` read as `crate`, and led by `::` where the tree
+        /// was.
         module: String,
         /// The bound name, canonical (no `r#`).
         binds: String,

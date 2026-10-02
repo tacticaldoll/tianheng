@@ -52,7 +52,7 @@ struct FileScan {
     uses: Vec<FileUse>,
     /// The boundary-independent classification, including a bare refusal, read only when an import rule asks.
     classified: OnceCell<Result<Vec<ClassifiedLeaf>, String>>,
-    /// The two projections of the same classification, each built only when its rule family asks.
+    /// The internal-import projection of `classified`, built only when an import rule asks.
     internal: OnceCell<Vec<(String, ImportedPath)>>,
     /// External crates its `use` leaves import, paired with the importer: what `confine_external_crate` judges.
     external: OnceCell<Vec<(String, String)>>,

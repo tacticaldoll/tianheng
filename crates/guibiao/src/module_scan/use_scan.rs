@@ -156,7 +156,8 @@ fn external_imports_with_importers(
 pub(super) enum UseTarget {
     /// A `crate::`-rooted module path of this crate, in `readable_module`'s form.
     Internal(String),
-    /// An external crate, by the head segment that names it.
+    /// An external crate, by the first segment of the path the leaf's head resolves to, the written head where
+    /// nothing binds it.
     External(String),
 }
 

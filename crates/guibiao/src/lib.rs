@@ -46,8 +46,7 @@ use crate_check::check_crate_boundary;
 mod coverage;
 pub use coverage::Coverage;
 use coverage::coverage_from;
-/// The messages of the refusals reported in place of a verdict: a workspace, boundary, or source file that cannot be
-/// judged.
+/// Messages for the constitution and scan refusals shared across the checks.
 mod errors;
 mod finding;
 use errors::unreadable_workspace_error;

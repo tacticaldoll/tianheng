@@ -20,11 +20,9 @@ use unicode_normalization::UnicodeNormalization;
 /// literal is an identifier of its own, since C string literals arrive in 2021.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Edition {
-    /// The edition where `async`, `await`, `dyn` and `try` are identifiers, and a `use` path or a `::`-rooted path
-    /// starts at the crate root.
+    /// `async`, `await`, `dyn` and `try` are identifiers, and `use` and `::` paths start at the crate root.
     Rust2015,
-    /// The edition where those words are keywords, while a `c` before a string literal is still an identifier of its
-    /// own.
+    /// Those words are keywords, and `c"…"` is not yet a C string.
     Rust2018,
     /// 2021 and every edition after it.
     Rust2021,

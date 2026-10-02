@@ -39,8 +39,8 @@ use super::token_tree::Edition;
 /// depth rather than once per path, so a lattice of globs is read in time its size bounds rather than its path count.
 const MAX_RESOLUTION_CHAIN: usize = 64;
 
-/// Maximum candidate entries and path text held by one resolution reading. Depth alone does not bound a branching
-/// glob: these limits refuse its width before another pass can multiply it.
+/// The candidate entries one resolution reading may hold. Depth alone does not bound a branching glob: this limit
+/// and [`MAX_RESOLUTION_BYTES`] refuse its width before another pass can multiply it.
 const MAX_RESOLUTION_PATHS: usize = 32_768;
 /// The bytes of path text one resolution reading may hold, beside [`MAX_RESOLUTION_PATHS`].
 const MAX_RESOLUTION_BYTES: usize = 8 * 1024 * 1024;
@@ -64,7 +64,7 @@ fn width_refusal() -> String {
 /// path text, checked against the per-reading limits or, for a glob graph's held answers, the graph's.
 #[derive(Default)]
 pub(super) struct ReadingSize {
-    /// How many candidate paths have been charged.
+    /// How many paths have been charged.
     paths: usize,
     /// How many bytes of path text have been charged.
     bytes: usize,
@@ -256,8 +256,8 @@ type GlobNode = (usize, u32, String);
 /// or declares it as where that may not hold on every build ([`CrateScopes::may_not_hold_here`]), joined with what the
 /// globs bring.
 enum GlobRead {
-    /// The scope answers on its own — it binds or declares the name for certain, its answer is already kept, or
-    /// its reading refused — and its globs are not read.
+    /// The scope's answer, kept or read from what it binds, ends the lookup — a name bound or declared for certain,
+    /// or a refusal — or reading its globs refused; its globs are not read.
     Answered(Head),
     /// The scope answers what its globs bring, joined with what it binds or declares itself.
     Globs {
@@ -281,7 +281,8 @@ enum GlobEdge {
         /// The graph positions of the module's scopes, one per declaration of the module.
         into: Vec<usize>,
     },
-    /// A glob of a crate whose contents are not read: its path with the name appended, the one thing it can bring.
+    /// A glob of anything but a module of the unit — a crate whose contents are not read, or an item such as an enum:
+    /// its path with the name appended, the one thing it can bring.
     Foreign(String),
 }
 

@@ -306,8 +306,8 @@ struct DeclaredPrefix {
 }
 
 /// What a boundary's rule declares as an inline confinement: nothing, because the rule is no inline confinement; or
-/// the confinement, whose prefix is blank or canonical. Only the second reaches the inline judgement, so a rule with
-/// no inline payload cannot be judged as one.
+/// the confinement, whose prefix is canonical and whose modifiers passed every boundary-local refusal. Only the
+/// second reaches the inline judgement, so a rule with no inline payload cannot be judged as one.
 enum InlinePrefix<'a> {
     /// The rule carries no inline payload; no prefix is judged and no item set is collected.
     NotInline,
@@ -326,8 +326,8 @@ struct Inline<'a> {
     ending_with: Option<&'a [String]>,
     /// Whether any path mention under the prefix reacts, not only calls.
     strict: bool,
-    /// Whether a bare path head matching a declared dependency resolves as that external crate, which
-    /// is what makes the dependency import names get read.
+    /// Whether a bare path head no scope binds, matching a declared dependency's import name, resolves as that
+    /// external crate; only then are the dependency names passed to the findings.
     external: bool,
 }
 

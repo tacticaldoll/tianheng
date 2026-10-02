@@ -691,7 +691,7 @@ pub struct InlineConfinementDraft {
     module: String,
     /// The prefix as written, moved unchanged into the rule.
     prefix: String,
-    /// The read verbs `ending_with` declares; `None` reacts on every call.
+    /// The read verbs `ending_with` declares; `None` does not narrow by verb.
     ending_with: Option<Vec<String>>,
     /// Set by `strict_prefix_only`: any mention under the prefix reacts, not only a call.
     strict: bool,

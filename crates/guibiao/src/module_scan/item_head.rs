@@ -62,11 +62,11 @@ pub(super) enum ItemKeyword {
     Mod,
     /// `struct`: the one keyword whose header records whether it also declares a value.
     Struct,
-    /// `enum`.
+    /// `enum`: a type with a body of variants.
     Enum,
     /// `union`, a contextual word read as an item keyword only when a word follows it.
     Union,
-    /// `trait`.
+    /// `trait`: an item whose body holds associated items.
     Trait,
     /// `type`: an alias, whose header has no brace body.
     Type,
