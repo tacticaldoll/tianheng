@@ -317,7 +317,7 @@ fn compiles(name: &str, source: &str) -> Result<(), String> {
         .arg(&out)
         .output()
         .map_err(|err| format!("rustc could not be run: {err}"))?;
-    let verdict = if run.status.success() {
+    if run.status.success() {
         Ok(())
     } else {
         Err(String::from_utf8_lossy(&run.stderr)
@@ -325,8 +325,7 @@ fn compiles(name: &str, source: &str) -> Result<(), String> {
             .next()
             .unwrap_or("(no stderr)")
             .to_string())
-    };
-    verdict
+    }
 }
 
 /// The shape with no cross-module reference: the source whose legality is the generator's claim.
