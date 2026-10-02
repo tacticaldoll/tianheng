@@ -43,12 +43,11 @@ fn names_the_system_temp(tokens: proc_macro2::TokenStream) -> bool {
             match tree {
                 proc_macro2::TokenTree::Group(group) => pending.push(group.stream()),
                 proc_macro2::TokenTree::Ident(word) if word == "temp_dir" => return true,
-                proc_macro2::TokenTree::Literal(literal) => {
+                proc_macro2::TokenTree::Literal(literal)
                     if syn::parse_str::<syn::LitStr>(&literal.to_string())
-                        .is_ok_and(|text| text.value() == "TMPDIR")
-                    {
-                        return true;
-                    }
+                        .is_ok_and(|text| text.value() == "TMPDIR") =>
+                {
+                    return true;
                 }
                 _ => {}
             }
