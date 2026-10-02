@@ -311,6 +311,14 @@ struct Inline<'a> {
 }
 
 impl<'a> InlinePrefix<'a> {
+    /// The confinement this prefix carries, or `None` when the rule is no inline confinement.
+    fn inline(&self) -> Option<&Inline<'a>> {
+        let InlinePrefix::Inline(inline) = self else {
+            return None;
+        };
+        Some(inline)
+    }
+
     /// Read an inline confinement's declaration, refusing every misdeclaration the boundary alone decides — a
     /// blank or non-canonical prefix, and `confine_inline_call` over `crate` or at `ScanDepth::Shallow` — before
     /// any root is walked, so a scan refusal in some file cannot stand in front of the line the operator must
@@ -864,8 +872,8 @@ fn check_one_root(
 ) -> Result<RootJudgement, String> {
     let facts = collect_root_facts(root, boundary, inline_prefix);
     match decide_root_outcome(root, package, boundary, &facts)? {
-        RootDecision::Complete(outcome) => Ok(RootJudgement {
-            outcome,
+        RootDecision::Absent(reason) => Ok(RootJudgement {
+            outcome: RootOutcome::ModuleAbsent(reason),
             declared: facts.declared,
             items: facts.items,
             violations: Vec::new(),
@@ -908,10 +916,7 @@ fn collect_root_facts(
         root.root_relative.as_deref(),
         boundary.depth,
     );
-    let inline = match inline_prefix {
-        InlinePrefix::NotInline => None,
-        InlinePrefix::Inline(inline) => Some(inline),
-    };
+    let inline = inline_prefix.inline();
     let items = if inline.is_some() {
         root.item_definitions().iter().cloned().collect()
     } else {
@@ -963,8 +968,9 @@ fn decide_root_outcome(
             ));
         }
         (true, None, Perimeter::GovernedModule) => {
-            return Ok(RootDecision::Complete(RootOutcome::ModuleAbsent(
-                unknown_module_error(&boundary.module, &boundary.crate_package),
+            return Ok(RootDecision::Absent(unknown_module_error(
+                &boundary.module,
+                &boundary.crate_package,
             )));
         }
         (true, None, Perimeter::WholeRoot) => RootOutcome::ModuleAbsent(unknown_module_error(
@@ -977,7 +983,9 @@ fn decide_root_outcome(
     Ok(RootDecision::Judge(outcome))
 }
 
-/// Dispatch this root to its rule family without changing the family's inputs or precedence.
+/// Dispatch this root to its rule family, in precedence order: an inbound rule
+/// (`MustNotBeImportedBy` / `MustOnlyBeImportedBy`), then `ConfineExternalCrate`, then an inline
+/// confinement, then an outbound rule.
 /// `confine_inline_call` judges the complement of `must_not_call_inline`'s set: every file of the
 /// root whose module is outside the permitted subtree. An inline finding carries its file's module,
 /// and every inline child of a file lies within that file's module subtree, so excluding a file by
@@ -999,10 +1007,7 @@ fn dispatch_root_rule_family(
         governed,
     } = facts;
     let rule = boundary.rule.label();
-    let inline = match inline_prefix {
-        InlinePrefix::NotInline => None,
-        InlinePrefix::Inline(inline) => Some(inline),
-    };
+    let inline = inline_prefix.inline();
     let inbound = matches!(
         &boundary.rule,
         ModuleRule::MustNotBeImportedBy { .. } | ModuleRule::MustOnlyBeImportedBy { .. }
@@ -1061,8 +1066,10 @@ fn dispatch_root_rule_family(
     })
 }
 
-/// A root either contributes a completed absence or continues through its rule family.
+/// A root either ends here, as an absence no rule family is dispatched for — which carries only the
+/// absence's reason, so an absence reported as governed is unconstructible — or continues through its
+/// rule family with the outcome that dispatch will report.
 enum RootDecision {
-    Complete(RootOutcome),
+    Absent(String),
     Judge(RootOutcome),
 }

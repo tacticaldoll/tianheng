@@ -693,9 +693,8 @@ consumer for an undemonstrated deduplication.
 
   **The `check_one_root` length trigger is closed.** It now calls `collect_root_facts`, `decide_root_outcome`,
   and `dispatch_root_rule_family` in order; the many-arguments entry above remains open for `name_raw` and the
-  both-modes loop. Measured by `cargo clippy -p guibiao --lib -- -W clippy::too_many_lines`, the only reported
-  functions are `observation_bounds` (366/100), `record_items` (101/100), and `lex` (114/100); `check_one_root`
-  and its three steps are absent.
+  both-modes loop. Measured 2026-10-02 by `cargo clippy -p guibiao --lib -- -W clippy::too_many_lines`,
+  `check_one_root` and its three steps are not reported.
 
 - **The glob fixed point's pass bound is argued by nothing.** *Class:* WATCH. *Observed pressure:* a static review,
   no instance. *Observation source:* the glob graph's `settle` allows one sweep more than its node count and then
