@@ -365,9 +365,101 @@ const CHANNEL_CONTROL: &str = "crates/kanhe/src/tests/hermetic_git.rs";
 /// that file still ran an ignore-sensitive read through a `Command` of its own — and a *different* test in
 /// the same file spawns bare for a different property, so the guard went on passing with the ignore control
 /// converted away. A protection can outlive its instance while looking green; what the exception is *for* is
-/// this one direction, so this one direction is what is held.
+/// this one direction, so this one direction is what is held, by its own body: [`runs_the_read_bare`].
 const CHANNEL_CONTROL_PINS: &str =
-    "fn an_ignore_file_outside_the_repository_cannot_reach_a_hermetic_command(";
+    "an_ignore_file_outside_the_repository_cannot_reach_a_hermetic_command";
+
+/// Whether the body of the function `name` in `text` runs an ignore-sensitive read through a `Command` it
+/// builds itself without naming [`NEUTRALISER`]: `None` when no function of that name is found.
+///
+/// **The control's body, not its file.** The file holds other directions, and one of them naming the setting
+/// for a reason of its own is no evidence about the control; asked of the file, that naming hid the control
+/// and the exception was reported unused while the control still ran bare. A doc attribute inside the body is
+/// skipped, so prose about the setting is not read as naming it.
+fn runs_the_read_bare(text: &str, name: &str) -> Option<bool> {
+    use proc_macro2::{Delimiter, TokenStream, TokenTree};
+
+    fn body_of(stream: TokenStream, name: &str) -> Option<TokenStream> {
+        let tokens: Vec<TokenTree> = stream.into_iter().collect();
+        for (at, token) in tokens.iter().enumerate() {
+            match token {
+                TokenTree::Ident(word)
+                    if word == "fn"
+                        && matches!(tokens.get(at + 1), Some(TokenTree::Ident(n)) if n == name) =>
+                {
+                    return tokens[at + 2..].iter().find_map(|after| match after {
+                        TokenTree::Group(group) if group.delimiter() == Delimiter::Brace => {
+                            Some(group.stream())
+                        }
+                        _ => None,
+                    });
+                }
+                TokenTree::Group(group) => {
+                    if let Some(found) = body_of(group.stream(), name) {
+                        return Some(found);
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
+    #[derive(Default)]
+    struct Read {
+        marker: bool,
+        spawn: bool,
+        neutralised: bool,
+    }
+
+    fn read(stream: TokenStream, found: &mut Read) {
+        let tokens: Vec<TokenTree> = stream.into_iter().collect();
+        let mut at = 0;
+        while at < tokens.len() {
+            match &tokens[at] {
+                TokenTree::Punct(hash)
+                    if hash.as_char() == '#'
+                        && matches!(tokens.get(at + 1), Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Bracket) =>
+                {
+                    at += 2;
+                    continue;
+                }
+                TokenTree::Group(group) => read(group.stream(), found),
+                TokenTree::Literal(literal) => {
+                    if let Ok(text) = syn::parse_str::<syn::LitStr>(&literal.to_string()) {
+                        let value = text.value();
+                        if AMBIENT_IGNORE_READS
+                            .iter()
+                            .any(|marker| marker.trim_matches('"') == value)
+                        {
+                            found.marker = true;
+                        }
+                        if value.contains(NEUTRALISER) {
+                            found.neutralised = true;
+                        }
+                    }
+                }
+                TokenTree::Ident(word) if word == "Command" => {
+                    if matches!(
+                        (tokens.get(at + 1), tokens.get(at + 2), tokens.get(at + 3)),
+                        (Some(TokenTree::Punct(a)), Some(TokenTree::Punct(b)), Some(TokenTree::Ident(new)))
+                            if a.as_char() == ':' && b.as_char() == ':' && new == "new"
+                    ) {
+                        found.spawn = true;
+                    }
+                }
+                _ => {}
+            }
+            at += 1;
+        }
+    }
+
+    let stream: TokenStream = text.parse().ok()?;
+    let body = body_of(stream, name)?;
+    let mut found = Read::default();
+    read(body, &mut found);
+    Some(found.marker && found.spawn && !found.neutralised)
+}
 
 /// No judgement runs a subcommand an ambient ignore file answers differently with that channel left open.
 ///
@@ -394,9 +486,15 @@ const CHANNEL_CONTROL_PINS: &str =
 ///
 /// **This does not reach**, each limit measured rather than supposed:
 ///
-/// - **File granularity.** A file that names the setting once and spawns a bare `Command` for something else
-///   passes. Per-call would refuse `publish_source_gate`, where one wrapper closes the channel for every
-///   judgement in the file, so the tighter rule would be wrong on the site that was already right.
+/// - **File granularity, for every file but the control.** A file that names the setting once and spawns a
+///   bare `Command` for something else passes. Per-call would refuse `publish_source_gate`, where one wrapper
+///   closes the channel for every judgement in the file, so the tighter rule would be wrong on the site that
+///   was already right. Per-function was measured on 2026-10-03 and is wrong the same way: besides the control,
+///   the functions holding both a subcommand marker and a `Command::new` without the setting were directions
+///   whose bare spawn re-executes the test binary or reads a different channel, while their marker goes
+///   through the builder. Tying a marker to the construction it reaches is a data-flow question — the
+///   control itself applies its marker through a closure to a command built on another line. The control's
+///   exception is the one place the unit is a function, because what it holds is one direction's body.
 /// - **A literal argument.** A subcommand composed at run time — `format!`, a variable, a `const` — is not
 ///   seen. Every call site in this workspace spells it as a literal (measured).
 /// - **`.git/info/exclude`.** Inside the repository, so no config setting reaches it.
@@ -426,14 +524,14 @@ fn no_judgement_reads_an_ambient_ignore_file() {
             continue;
         }
         reading += 1;
+        if path == CHANNEL_CONTROL {
+            control_seen = true;
+            continue;
+        }
         if lines.iter().any(|line| line.contains(NEUTRALISER)) {
             continue;
         }
         if !lines.iter().any(|line| opens(line, "Command::new(")) {
-            continue;
-        }
-        if path == CHANNEL_CONTROL {
-            control_seen = true;
             continue;
         }
         open.push(path);
@@ -450,15 +548,22 @@ fn no_judgement_reads_an_ambient_ignore_file() {
     assert!(
         control_seen,
         "`{CHANNEL_CONTROL}` is named as the one file that must leave this channel open, and it no longer \
-         runs an ignore-sensitive read through a `Command` of its own — so the exception excuses nothing and \
-         should say so by being removed"
+         names any subcommand an ambient ignore file answers — so the exception excuses nothing and should say \
+         so by being removed"
     );
-    assert!(
-        opens(&read(&root, CHANNEL_CONTROL), CHANNEL_CONTROL_PINS),
-        "`{CHANNEL_CONTROL}` is excused because `{CHANNEL_CONTROL_PINS}` pins the channel by difference, and \
-         that direction is no longer there under that name. Either it moved, in which case name where, or \
-         the exception is now excusing a file with nothing to pin"
-    );
+    match runs_the_read_bare(&read(&root, CHANNEL_CONTROL), CHANNEL_CONTROL_PINS) {
+        None => panic!(
+            "`{CHANNEL_CONTROL}` is excused because `{CHANNEL_CONTROL_PINS}` pins the channel by difference, and \
+             that direction is no longer there under that name. Either it moved, in which case name where, or \
+             the exception is now excusing a file with nothing to pin"
+        ),
+        Some(false) => panic!(
+            "`{CHANNEL_CONTROL_PINS}` in `{CHANNEL_CONTROL}` no longer runs an ignore-sensitive read through a \
+             `Command` it builds itself with `{NEUTRALISER}` unnamed, so it no longer pins the channel by \
+             difference and the file's exception excuses nothing it needs"
+        ),
+        Some(true) => {}
+    }
     assert!(
         open.is_empty(),
         "a judgement runs a subcommand an ambient ignore file answers differently through a `Command` it \
