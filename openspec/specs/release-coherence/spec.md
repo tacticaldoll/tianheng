@@ -815,6 +815,48 @@ always enters; a convenience has to earn its place.
   than a downgrade: with the refusal replaced by a plain redirect, the parser reads the empty capture cleanly
   and reports a document naming a gate as coherent
 
+### Requirement: An entry still being written SHALL name what it points at
+
+An entry SHALL NOT point at another entry by its position, in a section still being written: `[Unreleased]`
+always, and in release-ready and snapshot state the section dated for the workspace version — the sections the
+machinery requirement reads, decided by one predicate. A regroup of the section's headings moves entries
+without changing a word, so a reference by position can come to point at something else, or at nothing, while
+every line of the file is still present, and a line-multiset comparison of the regroup cannot see it.
+
+The question SHALL be asked of words, so it has one syntactic answer: the words `above` and `below`, and `next`,
+`previous`, `preceding` or `following` immediately before `entry`, `entries`, `section`, `sections`, `bullet`,
+`item`, `step`, `group` or `heading`. A paragraph SHALL be read whole, so a phrase wrapped across lines is one
+phrase, and a `- ` or `* ` list item at any depth SHALL end its paragraph, so two entries are not read as one sentence; the
+list-item rule is the one the section's other readers use. A backticked span SHALL be taken out first, paired
+by the shared reader that refuses markers which do not pair, so a word quoted as a word is not read and a stray
+marker is a cannot-judge rather than a shifted pairing. Every heading SHALL be held, `### Self-governance` included, because a
+regroup moves its entries too. The refusal SHALL name the line the word stands on, the heading and the phrase,
+and its repair is one step: name the entry, step or bound meant.
+
+The rule reaches beyond the property, and says so. A reference to the entry immediately after, within one
+group, survives any regroup and is still refused: telling a reference within a group from one across groups is a
+judgement over what the sentence points at, and the price of a question with one answer is that the sound case
+is written as a name too. `above` and `below` used as prepositions — *below 1.85*, *above the limit* — are refused
+as well, and their repair is a rewording rather than a name. A positional phrase spelled with words outside the
+declared ones is not read.
+
+#### Scenario: An entry still being written points by position
+
+- **WHEN** an entry in `[Unreleased]`, or in release preparation the section dated for the workspace version,
+  carries `above`, `below`, or a sequence word before an item noun, outside an inline code span and in any
+  heading, a phrase wrapped across lines and a preposition included
+- **THEN** the check fails naming the line the word stands on, the heading and the phrase
+- **PINNED-BY** `a_changelog_entry_still_being_written_names_what_it_points_at`
+- **PINNED-BY** `an_unreleased_entry_pointing_by_position_is_a_violation`
+
+#### Scenario: What is not a reference by position is not refused
+
+- **WHEN** the word is quoted in an inline code span, a sequence word is followed by a noun outside the item
+  nouns, two `- ` or `* ` list items at any depth would only form the phrase when joined, or the section is record — an older dated
+  section, or in development the section dated for the workspace version
+- **THEN** the check does not report it
+- **PINNED-BY** `a_changelog_entry_still_being_written_names_what_it_points_at`
+
 ### Requirement: An enumeration SHALL NOT pass over content it failed to read
 
 Every enumeration this judgement makes SHALL distinguish **absent** from **unreadable**, and SHALL refuse as a

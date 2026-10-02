@@ -628,3 +628,107 @@ fn a_member_that_is_the_workspace_root_is_not_an_empty_pathspec() {
         .expect_err("a member sitting at the root is a shape this check does not judge");
     crate::refusal::expect("release-coherence#member-is-the-workspace-root", &refusal);
 }
+
+/// Every decision the positional-reference reader makes, one row each, over the section shapes `judge` hands it.
+#[test]
+fn a_changelog_entry_still_being_written_names_what_it_points_at() {
+    use crate::release_coherence_gate::{State, positional_references, section_of};
+    let read = |text: &str, state: State| -> Vec<String> {
+        let source = crate::region::Source::of(text);
+        let sections = crate::sections::cut(source.prose().numbered_lines(), section_of);
+        positional_references(&sections, "0.9.0", state).expect("every fixture pairs its markers")
+    };
+    let unreleased =
+        |body: &str| format!("## [Unreleased]\n\n### Fixed\n\n{body}\n\n## [0.8.0] - 2026-01-01\n");
+    let rows: [(&str, String, State, &[&str]); 13] = [
+        ("an adverb points by position", unreleased("- the bound below declares it."), State::Development, &["below"]),
+        ("a sequence word before an item noun", unreleased("- held in the next entry."), State::Development, &["next entry"]),
+        (
+            "a phrase wrapped across lines is one phrase",
+            unreleased("- held in the next\n  entry, as written."),
+            State::Development,
+            &["next entry"],
+        ),
+        ("a word in a code span is quoted, not read", unreleased("- the flag `--below` and `a below b`."), State::Development, &[]),
+        ("a sequence word before another noun is not a reference", unreleased("- a later or next edition."), State::Development, &[]),
+        (
+            "two entries are not one paragraph",
+            unreleased("- ends with the next\n- entry starts here."),
+            State::Development,
+            &[],
+        ),
+        (
+            "a nested list item ends the paragraph too",
+            unreleased("- a parent ends with the next\n  - entry of a sub-item."),
+            State::Development,
+            &[],
+        ),
+        (
+            "a preposition is refused too, as the rule declares",
+            unreleased("- a rust-version below 1.85 is refused."),
+            State::Development,
+            &["below"],
+        ),
+        (
+            "a sub-item's phrase is its own paragraph's",
+            unreleased("- a parent.\n  - a sub-item says see\n    above."),
+            State::Development,
+            &["above"],
+        ),
+        (
+            "a heading's entries are held whatever the heading",
+            "## [Unreleased]\n\n### Self-governance\n\n- see above.\n".to_string(),
+            State::Development,
+            &["above"],
+        ),
+        (
+            "a released section in development is record",
+            "## [Unreleased]\n\n### Fixed\n\n- named.\n\n## [0.9.0] - 2026-01-01\n\n### Fixed\n\n- see below.\n".to_string(),
+            State::Development,
+            &[],
+        ),
+        (
+            "the section dated for the workspace version is still being written in release preparation",
+            "## [Unreleased]\n\n## [0.9.0] - 2026-01-01\n\n### Fixed\n\n- see below.\n".to_string(),
+            State::ReleaseReady,
+            &["below"],
+        ),
+        (
+            "an older dated section stays record in release preparation",
+            "## [Unreleased]\n\n## [0.9.0] - 2026-01-01\n\n## [0.8.0] - 2025-01-01\n\n### Fixed\n\n- see below.\n".to_string(),
+            State::ReleaseReady,
+            &[],
+        ),
+    ];
+    let at = read(
+        &unreleased("- a parent.\n  - a sub-item says see\n    above."),
+        State::Development,
+    );
+    assert!(
+        at.first()
+            .is_some_and(|line| line.starts_with("  CHANGELOG.md:7 ")),
+        "the finding names the line its word stands on, not its paragraph's first: {at:?}"
+    );
+    let fenced = read(
+        &unreleased("- a fence follows:\n  ```\n  x\n  ```\n  and the step below."),
+        State::Development,
+    );
+    assert!(
+        fenced
+            .first()
+            .is_some_and(|line| line.starts_with("  CHANGELOG.md:9 ")),
+        "a word after a fence names its own line, though the prose drops the fence's lines: {fenced:?}"
+    );
+    for (case, text, state, expected) in rows {
+        let found = read(&text, state);
+        let phrases: Vec<&str> = found
+            .iter()
+            .map(|line| {
+                line.rsplit_once('`')
+                    .and_then(|(head, _)| head.rsplit_once('`'))
+                    .map_or("", |(_, p)| p)
+            })
+            .collect();
+        assert_eq!(phrases, expected, "{case}: {found:?}");
+    }
+}
