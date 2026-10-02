@@ -182,7 +182,7 @@ fn definition_pattern(name: &str) -> String {
 /// definition the same way it matches any other — traced by direct reasoning until now, never by a fixture.
 #[test]
 fn a_raw_identifier_citation_resolves_to_its_definition() {
-    let fixture = std::env::temp_dir().join(format!(
+    let fixture = xingbiao::scratch_base().join(format!(
         "tianheng-bound-register-raw-ident-{}",
         std::process::id()
     ));
@@ -281,7 +281,7 @@ fn search_and_must_panic_on_a_genuine_failure_not_only_on_a_clean_miss() {
 
     // The target repository itself unavailable — the shell era's `cd` failure, ported here as a `root` that
     // does not exist. Neither `search` nor `must` may read this as an ordinary clean miss.
-    let missing_root = std::env::temp_dir().join(format!(
+    let missing_root = xingbiao::scratch_base().join(format!(
         "tianheng-bound-register-missing-root-{}",
         std::process::id()
     ));
@@ -318,7 +318,7 @@ fn search_and_must_panic_on_a_genuine_failure_not_only_on_a_clean_miss() {
 /// every sibling enumeration in this module refuses the same way.
 #[test]
 fn tracked_specs_refuses_a_repository_with_no_spec_md_rather_than_reporting_it_empty() {
-    let fixture = std::env::temp_dir().join(format!(
+    let fixture = xingbiao::scratch_base().join(format!(
         "tianheng-bound-register-no-specs-{}",
         std::process::id()
     ));

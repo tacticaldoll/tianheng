@@ -12,7 +12,7 @@ impl Probe {
     fn new(label: &str, files: &[(&str, &str)]) -> Self {
         use std::sync::atomic::{AtomicU32, Ordering};
         static N: AtomicU32 = AtomicU32::new(0);
-        let dir = std::env::temp_dir().join(format!(
+        let dir = xingbiao::scratch_base().join(format!(
             "guibiao-inbound-value-{label}-{}-{}",
             std::process::id(),
             N.fetch_add(1, Ordering::Relaxed)

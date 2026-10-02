@@ -323,21 +323,12 @@ fn crate_roots_tell_no_target_from_no_compiled_target() {
     );
 }
 
-/// A unique, self-cleaning temp directory for a path-identity fixture: replaces the hand-rolled
-/// `temp_dir().join(format!(...))` + manual `remove_dir_all` at both ends the two directions that follow
-/// otherwise each repeat.
-struct TempDir(PathBuf);
+/// A unique, self-cleaning fixture directory for a path-identity fixture, rooted by [`scratch_root`].
+struct TempDir(ScratchRoot);
 
 impl TempDir {
     fn new(label: &str) -> Self {
-        let dir = std::env::temp_dir().join(format!("xingbiao-{label}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        // Claimed the same way this crate's own `claim_scratch` requires of every other caller: a
-        // predictable, PID-based path directly under the world-writable system temp directory is
-        // exactly the shape `claim_scratch` exists to protect, and this crate's own test fixture is
-        // not exempt from the migration it shipped.
-        claim_scratch(&dir).unwrap();
-        Self(dir)
+        Self(scratch_root(&format!("xingbiao-{label}")))
     }
 
     fn write(&self, name: &str, contents: &str) -> PathBuf {
@@ -348,12 +339,6 @@ impl TempDir {
 
     fn path(&self, name: &str) -> PathBuf {
         self.0.join(name)
-    }
-}
-
-impl Drop for TempDir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
     }
 }
 
@@ -432,4 +417,55 @@ fn claim_scratch_refuses_a_pre_existing_symlink_that_create_dir_all_would_adopt(
         "a symlink at the path must be refused — mkdir cannot follow it, so adopting it would write through \
          to whatever it points at"
     );
+}
+
+#[test]
+fn scratch_base_for_places_tmp_beside_the_profile_directory() {
+    for (exe, base) in [
+        ("/w/target/debug/deps/t-1", "/w/target/tmp"),
+        (
+            "/w/target/x86_64-unknown-linux-gnu/release/deps/t-1",
+            "/w/target/x86_64-unknown-linux-gnu/tmp",
+        ),
+    ] {
+        assert_eq!(
+            scratch_base_for(Path::new(exe)),
+            Ok(PathBuf::from(base)),
+            "{exe}"
+        );
+    }
+}
+
+#[test]
+fn scratch_base_for_refuses_a_layout_it_cannot_recognise_naming_the_executable() {
+    for exe in ["/usr/bin/t", "/w/target/debug/t", "/t", "deps/t"] {
+        let why = scratch_base_for(Path::new(exe)).expect_err(exe);
+        assert!(
+            why.contains(exe),
+            "the refusal names the executable's path: {why}"
+        );
+    }
+}
+
+#[test]
+fn scratch_root_lives_under_the_base_and_is_removed_on_drop() {
+    let root = scratch_root("xingbiao-root-probe");
+    let path = root.path().to_path_buf();
+    assert!(path.starts_with(scratch_base()), "{}", path.display());
+    assert!(path.is_dir());
+    std::fs::write(path.join("f"), "x").unwrap();
+    drop(root);
+    assert!(
+        !path.exists(),
+        "the guard removes the root with what is in it"
+    );
+}
+
+#[test]
+fn scratch_root_names_are_unique_per_call() {
+    let (a, b) = (
+        scratch_root("xingbiao-unique"),
+        scratch_root("xingbiao-unique"),
+    );
+    assert_ne!(a.path(), b.path());
 }

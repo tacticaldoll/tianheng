@@ -12,4 +12,5 @@
 pub mod bash;
 pub mod fixture;
 pub mod streams;
+pub mod tracked_rust;
 pub mod workflow;

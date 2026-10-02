@@ -37,7 +37,7 @@ fn a_valid_signature_from_an_unauthorized_key_is_accepted() {
     let Some(_) = workspace_root() else {
         return;
     };
-    let root = std::env::temp_dir().join(format!(
+    let root = xingbiao::scratch_base().join(format!(
         "tianheng-publish-source-integrity-{}",
         std::process::id()
     ));

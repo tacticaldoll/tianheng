@@ -273,7 +273,7 @@ mod tests {
 
     impl TempHarness {
         fn new(name: &str) -> Self {
-            let root = std::env::temp_dir().join(format!(
+            let root = xingbiao::scratch_base().join(format!(
                 "tianheng-governance-test-{name}-{}",
                 std::process::id()
             ));
@@ -298,7 +298,7 @@ mod tests {
 
     #[test]
     fn relative_paths_resolve_from_their_callers_base() {
-        let base = std::env::temp_dir().join("tianheng-relative-path-base");
+        let base = xingbiao::scratch_base().join("tianheng-relative-path-base");
         assert_eq!(
             resolve_relative(Path::new("fixtures/violating"), &base),
             base.join("fixtures/violating")

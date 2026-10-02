@@ -462,7 +462,7 @@ fn a_comment_shaped_line_inside_a_literal_is_not_a_comment() {
 /// `.md` one, and the file is reported as uninspected rather than as clean.
 #[test]
 fn a_repeated_paragraph_in_a_prose_file_is_outside_the_corpus() {
-    let scratch = std::env::temp_dir().join(format!(
+    let scratch = xingbiao::scratch_base().join(format!(
         "tianheng-repeated-paragraph-prose-{}",
         std::process::id()
     ));
@@ -509,7 +509,7 @@ fn a_repeated_paragraph_in_a_prose_file_is_outside_the_corpus() {
 fn a_tracked_path_that_is_not_utf8_is_refused_rather_than_renamed() {
     use std::os::unix::ffi::OsStrExt;
 
-    let scratch = std::env::temp_dir().join(format!(
+    let scratch = xingbiao::scratch_base().join(format!(
         "tianheng-repeated-paragraph-not-utf8-{}",
         std::process::id()
     ));
@@ -569,7 +569,7 @@ fn a_tracked_path_that_is_not_utf8_is_refused_rather_than_renamed() {
 /// An unreadable tracked file is a cannot-judge, not a file that repeats nothing.
 #[test]
 fn an_unreadable_tracked_rust_file_is_refused_rather_than_skipped() {
-    let scratch = std::env::temp_dir().join(format!(
+    let scratch = xingbiao::scratch_base().join(format!(
         "tianheng-repeated-paragraph-unreadable-{}",
         std::process::id()
     ));
@@ -610,7 +610,7 @@ fn an_unreadable_tracked_rust_file_is_refused_rather_than_skipped() {
 /// the empty shadow map would let through.
 #[test]
 fn a_tracked_rust_file_that_does_not_lex_is_undecided_rather_than_accused() {
-    let scratch = std::env::temp_dir().join(format!(
+    let scratch = xingbiao::scratch_base().join(format!(
         "tianheng-repeated-paragraph-does-not-lex-{}",
         std::process::id()
     ));

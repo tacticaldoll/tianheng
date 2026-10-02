@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**27 of 142 declared bounds have no pinning test.** That figure is the register's
+**27 of 144 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -597,6 +597,18 @@ fallback used where no manifest exists, which the register spec describes.
 > nothing reads it. A rename is decidable inside one file, where `use std::process::Command as Cmd` is written down, and the reader binds those; what a name means when it is bound somewhere else is not written down anywhere a parse tree carries, and answering it needs name resolution — the floor this repository's other reader of its own Rust already names, reached here by the same road
 
 - **pinned by**: `a_construction_through_a_rename_or_inside_a_macro_is_read`
+
+### `repository-checks/a-root-reached-through-a-value-is-not-read-a-stated-bound`
+
+> nothing reads it. Which value a parameter holds, and what a constant names, is name resolution and not something a parse tree carries; the reader names the call that produces a system root and not every path that could hold one
+
+- **pinned by**: `a_root_reached_through_a_value_is_not_read`
+
+### `repository-checks/a-system-temporary-directory-named-in-prose-a-string-or-a-child-environment-is-not-read-a-stated-bound`
+
+> nothing reads it. A comment is what a lexer discards and a literal is one token, so neither is a call; setting a child's `TMPDIR` is a method call and not a read of this process's. What the stop leaves unobserved is the temporary files a child process writes for itself — a script's `mktemp`, rustc and cargo — which this check does not govern
+
+- **pinned by**: `naming_temp_dir_in_a_comment_a_string_or_a_child_environment_is_not_read`
 
 ### `repository-checks/a-paragraph-repeated-out-of-line-is-not-read-a-stated-bound`
 

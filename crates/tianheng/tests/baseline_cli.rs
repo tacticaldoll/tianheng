@@ -15,7 +15,7 @@ fn fixture_manifest(name: &str) -> Option<PathBuf> {
 }
 
 fn temp_baseline(test: &str) -> PathBuf {
-    std::env::temp_dir().join(format!(
+    xingbiao::scratch_base().join(format!(
         "tianheng-{test}-{}-baseline.json",
         std::process::id()
     ))
@@ -494,7 +494,8 @@ fn a_directory_that_cannot_be_flushed_does_not_fail_a_landed_write() {
     let Some(manifest) = fixture_manifest("clean") else {
         return;
     };
-    let dir = std::env::temp_dir().join(format!("tianheng-unflushable-dir-{}", std::process::id()));
+    let dir =
+        xingbiao::scratch_base().join(format!("tianheng-unflushable-dir-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     xingbiao::claim_scratch(&dir).expect("create the test directory");
 
@@ -812,7 +813,7 @@ fn rewriting_through_a_symlink_into_a_non_utf8_named_directory_still_succeeds() 
     let valid_baseline_content = std::fs::read_to_string(&seed).expect("read seed baseline");
     let _ = std::fs::remove_file(&seed);
 
-    let mut dir_name = std::env::temp_dir().into_os_string().into_vec();
+    let mut dir_name = xingbiao::scratch_base().into_os_string().into_vec();
     dir_name.extend_from_slice(format!("/tianheng-nonutf8-{}-", std::process::id()).as_bytes());
     dir_name.push(0xFF);
     let weird_dir = PathBuf::from(OsString::from_vec(dir_name));

@@ -163,7 +163,7 @@ fn a_manifest_without_the_table_is_a_violation() {
 
 #[test]
 fn the_refusal_classes_are_distinct() {
-    let root = std::env::temp_dir().join(format!("kanhe-isolation-{}", std::process::id()));
+    let root = xingbiao::scratch_base().join(format!("kanhe-isolation-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     xingbiao::claim_scratch(&root).expect("create");
     // Not a git repository, so the enumeration cannot answer — which is not the same fact as a manifest
@@ -183,7 +183,8 @@ fn the_refusal_classes_are_distinct() {
 /// reporting agreement over a set it never had.
 #[test]
 fn a_repository_carrying_none_of_the_judged_manifests_holds_over_nothing() {
-    let root = std::env::temp_dir().join(format!("kanhe-isolation-empty-{}", std::process::id()));
+    let root =
+        xingbiao::scratch_base().join(format!("kanhe-isolation-empty-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     xingbiao::claim_scratch(&root).expect("create");
     // Through the shared builder, which closes the ambient ignore channel. A bare `Command` here left
@@ -215,7 +216,8 @@ fn a_repository_carrying_none_of_the_judged_manifests_holds_over_nothing() {
 /// they had written wrongly.
 #[test]
 fn a_tracked_manifest_that_cannot_be_read_is_not_one_that_disagrees() {
-    let root = std::env::temp_dir().join(format!("kanhe-isolation-unread-{}", std::process::id()));
+    let root =
+        xingbiao::scratch_base().join(format!("kanhe-isolation-unread-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     xingbiao::claim_scratch(&root).expect("create");
     // Through the shared builder, which closes the ambient ignore channel. A bare `Command` here left

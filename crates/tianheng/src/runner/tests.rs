@@ -21,7 +21,7 @@ struct TempPath(PathBuf);
 
 impl TempPath {
     fn named(label: &str) -> Self {
-        Self::new(std::env::temp_dir().join(format!("tianheng-{label}-{}", std::process::id())))
+        Self::new(xingbiao::scratch_base().join(format!("tianheng-{label}-{}", std::process::id())))
     }
 
     fn new(path: PathBuf) -> Self {

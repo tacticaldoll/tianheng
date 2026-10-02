@@ -18,7 +18,7 @@ mod visibility;
 
 #[test]
 fn empty_composition_is_clean_without_reading_a_manifest() {
-    let absent = std::env::temp_dir().join(format!(
+    let absent = xingbiao::scratch_base().join(format!(
         "tianheng-empty-semantic-composition-{}-does-not-exist/Cargo.toml",
         std::process::id()
     ));

@@ -35,7 +35,7 @@ fn workspace_root() -> Option<PathBuf> {
 }
 
 fn scratch(name: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!(
+    let root = xingbiao::scratch_base().join(format!(
         "tianheng-release-coherence-{name}-{}",
         std::process::id()
     ));

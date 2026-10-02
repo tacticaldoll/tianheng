@@ -1001,6 +1001,43 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "a_construction_through_a_program_value_is_not_read",
         ),
         BoundDecl::pinned(
+            BoundId::new(
+                "repository-checks/a-root-reached-through-a-value-is-not-read-a-stated-bound",
+            ),
+            "a fixture root built from a path another function passes in, or `TMPDIR` read through a name \
+             bound to a string elsewhere",
+            Extent::Reached(Reached::UnderReacts {
+                because: "which value a parameter holds, and what a constant names, is name resolution and \
+                          not something a parse tree carries. The reader names the call that produces a \
+                          system root and not every path that could hold one, so a root handed in from a \
+                          caller is judged where the caller builds it. No mutation record isolates it: \
+                          reaching through a value means resolving names, which is a different reader \
+                          rather than a perturbation of this one"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "a_root_reached_through_a_value_is_not_read",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "repository-checks/a-system-temporary-directory-named-in-prose-a-string-or-a-child-environment-is-not-read-a-stated-bound",
+            ),
+            "`temp_dir` named in a comment or a string literal, or `TMPDIR` set on a child process's \
+             environment",
+            Extent::Reached(Reached::UnderReacts {
+                because: "a comment is what a lexer discards and a literal is one token, so neither is a \
+                          call; setting a child's `TMPDIR` is a method call and not a read of this \
+                          process's. What the stop leaves unobserved is the temporary files a child \
+                          process writes for itself -- a script's `mktemp`, rustc and cargo -- which this \
+                          check does not govern. No mutation record isolates it: a literal's contents are \
+                          not a token stream, so reaching into them is a different reader rather than a \
+                          perturbation of this one"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "naming_temp_dir_in_a_comment_a_string_or_a_child_environment_is_not_read",
+        ),
+        BoundDecl::pinned(
             BoundId::new("repository-checks/a-git-named-in-prose-is-not-read-a-stated-bound"),
             "a `git` construction written inside a comment rather than executed",
             Extent::Reached(Reached::UnderReacts {

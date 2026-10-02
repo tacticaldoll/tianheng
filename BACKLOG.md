@@ -528,6 +528,19 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH
 
+- **Child processes' own temporary writes and the user-level tool caches are outside the fixture-root rule.**
+  *Class:* WATCH. *Observed pressure:* none beyond the steward's scoping of the build-directory change, 2026-10-02.
+  *Observation source:* `crates/kanhe/tests/support/bash.rs`'s `INHERITED` hands the parent's `TMPDIR` to every
+  `bash` a check runs, so a script's `mktemp` lands wherever the host says; rustc and cargo write to `TMPDIR`
+  while compiling; a fixture `cargo` run reads and writes `~/.cargo`; the Definition of Done's `npm ci` writes
+  `~/.npm`. *Current reaction or bound:* `scratch_roots` reads who constructs a root in Rust and declares the rest
+  unobserved (`repository-checks/a-system-temporary-directory-named-in-prose-a-string-or-a-child-environment-is-not-read-a-stated-bound`).
+  *Risk:* a host whose system temporary directory is unwritable still fails those children, and the failure names
+  the child rather than the fixture. *Promotion trigger:* a run with `TMPDIR` set to an unwritable directory,
+  exported to the test binaries and not to the compile, shows a test failing for a child's write; each such write
+  needs its own observation source. *Version class:* patch. *Authority:* the steward's scoping of the change that
+  introduced `xingbiao::scratch_root`.
+
 - **圭表's libc check retains a latency regression after gated-glob resolution settles.** *Class:* WATCH.
   *Observed pressure:* measured on a registry crate, with no adopter latency requirement. *Observation source:*
   measured 2026-10-02 using a release probe calling `guibiao::check` on libc 0.2.189 with one
@@ -3764,6 +3777,9 @@ consumer for an undemonstrated deduplication.
     guarantee (the file flush) is not in this bound: it is covered by the `baseline_cli`
     suite.
 - **DECLINED:**
+  - A public fixture-root helper for adopters (`xingbiao::scratch_root` as a documented capability). It is outside
+    Tianheng's purpose, and its layout inference depends on cargo's test layout, so promising it would be a SemVer
+    hazard. The alternative is a separate dev-dependency test-support crate. Reopen if an adopter asks for it.
   - Wall-clock auto-decay / auto-expiration (breaks determinism).
   - Trait method set freezing (API contract, not architectural shape).
   - Pre-creating empty crates/modules.

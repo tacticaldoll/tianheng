@@ -2710,6 +2710,77 @@ constructing a `bash` SHALL be held to the builder's file alone, in both directi
   from bash rather than listed, and the names the builder hands back
 - **PINNED-BY** `the_bash_builder_hands_on_only_what_it_names`
 
+### Requirement: A fixture root SHALL be the helper's, never the system temporary directory's
+
+Every fixture root a tracked Rust file builds SHALL come from `xingbiao::scratch_root` or `xingbiao::scratch_base`,
+which place it under the build directory — where the user owns the directory and `cargo clean` reaches it — and
+no tracked Rust file SHALL ask the system for its temporary directory. A root there is claimable by anyone who can
+write the directory, and a fixture stops running when that directory stops being writable. The helper finds the
+build directory from the running executable's path and not from `TMPDIR`, and an executable outside cargo's test
+layout is a refusal naming its path, so there is one behaviour and not a second one that depends on the
+environment.
+
+The tracked Rust files that name the system temporary directory SHALL be held to a declared set, in both
+directions, by the reader and the loop that hold the `git` constructions: every tracked `.rs` file is read, and a
+file that cannot be parsed is refused rather than reported clean. The reader names a path whose last segment is
+`temp_dir`, however it is qualified, imported or renamed on import, and a read of `TMPDIR` through `var`,
+`var_os`, `env!` or `option_env!`. The declared set is empty. This check decides *who constructs a root* and never
+whether a run is isolated.
+
+#### Scenario: A file builds a root from the system temporary directory
+
+- **WHEN** a tracked Rust file calls `temp_dir`, imports it, or reads `TMPDIR`
+- **THEN** it is named in the declared set with why, and the comparison is two-directional — a site that gains
+  one must be named, and a name that outlives its site must go
+- **PINNED-BY** `every_fixture_root_this_repository_builds_is_the_helpers`
+
+#### Scenario: A bare or qualified call is read
+
+- **WHEN** a file writes `temp_dir()`, `env::temp_dir()`, `std::env::temp_dir()`, or passes the function as a
+  value
+- **THEN** the file is reported as asking the system for a temporary directory
+- **PINNED-BY** `a_bare_temp_dir_call_is_read`
+- **PINNED-BY** `a_qualified_temp_dir_call_is_read`
+
+#### Scenario: An imported or renamed temp_dir is read
+
+- **WHEN** a file imports `temp_dir`, alone or in a group, or renames it on import
+- **THEN** the file is reported, because a later call under the new name carries no path to read
+- **PINNED-BY** `an_imported_or_renamed_temp_dir_is_read`
+
+#### Scenario: A read of TMPDIR is read
+
+- **WHEN** a file reads `TMPDIR` through `var`, `var_os`, `env!` or `option_env!`
+- **THEN** the file is reported
+- **PINNED-BY** `a_read_of_tmpdir_is_read`
+
+#### Scenario: A file this reader cannot decide is refused
+
+- **WHEN** a tracked Rust file does not parse, or carries a macro body that is neither an expression list nor
+  statements and names `temp_dir` or the `TMPDIR` variable
+- **THEN** the check refuses, because a file it could not read is not a file that builds no root
+- **PINNED-BY** `a_file_the_root_reader_cannot_parse_is_undecidable`
+- **PINNED-BY** `an_unclassifiable_macro_body_naming_the_system_temp_is_undecidable`
+
+#### Scenario: A root reached through a value is not read — a stated bound
+
+- **WHEN** a root is built from a path another function passes in, or `TMPDIR` is read through a name the
+  file binds to a string elsewhere
+- **THEN** nothing reads it. Which value a parameter holds, and what a constant names, is name resolution and not
+  something a parse tree carries; the reader names the call that produces a system root and not every path that
+  could hold one
+- **PINNED-BY** `a_root_reached_through_a_value_is_not_read`
+
+#### Scenario: A system temporary directory named in prose, a string or a child environment is not read — a stated bound
+
+- **WHEN** `temp_dir` appears in a comment, a doc comment or a string literal, or a call sets `TMPDIR` on a child
+  process's environment
+- **THEN** nothing reads it. A comment is what a lexer discards and a literal is one token, so neither is a call;
+  setting a child's `TMPDIR` is a method call and not a read of this process's. What the stop leaves unobserved is
+  the temporary files a child process writes for itself — a script's `mktemp`, rustc and cargo — which this check
+  does not govern
+- **PINNED-BY** `naming_temp_dir_in_a_comment_a_string_or_a_child_environment_is_not_read`
+
 ### Requirement: A comment paragraph SHALL NOT be written twice in a row
 
 No tracked Rust file SHALL carry a comment paragraph immediately followed by a copy of itself. The

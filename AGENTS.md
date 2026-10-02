@@ -1050,6 +1050,26 @@ trait-driven fold and the built-in composition path to one verdict — two paths
 are the drift a seam is supposed to end.
 
 
+## Test fixtures stay inside the build directory
+
+**The reaction.** A fixture root is made by `xingbiao::scratch_root` (a guard removed on drop) or placed under
+`xingbiao::scratch_base`, which is `tmp/` beside the running test binary's profile directory, and
+`crates/kanhe/tests/scratch_roots.rs` holds every tracked Rust file to that: none asks the system for its
+temporary directory, and none reads `TMPDIR`. The helper is `#[doc(hidden)]`; its layout inference is cargo's test
+layout, which this family does not promise. An executable outside that layout is a refusal naming its path, never a
+fallback. `kanhe::hermetic_git::hermetic` stops git's discovery at the same directory, so a fixture that runs `git`
+without its own `git init` is not answered by the outer repository, and the workspace `exclude` entry for
+`target` keeps a fixture manifest written there from being absorbed into this workspace.
+
+**The reason.** A fixture lives where the user owns the directory and `cargo clean` reaches it, so it cannot be
+claimed first by another user of the machine and does not depend on a directory the system may stop making
+writable.
+
+**What the check does not read**, each carried by a declared bound in `openspec/specs/repository-checks`: a root
+built from a path another function passes in, `temp_dir` named in a comment or a string, and `TMPDIR` set on a
+child's environment. The temporary files a child process writes for itself are outside it and are filed in
+`BACKLOG.md`.
+
 ## Versioning — SemVer honesty (the modou lesson)
 
 Version literals in prose name only an immutable historical/provenance fact, a migration target, or the active

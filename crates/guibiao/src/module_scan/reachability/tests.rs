@@ -39,7 +39,7 @@ struct TempSrcTree {
 
 impl TempSrcTree {
     fn new(label: &str) -> Self {
-        let dir = std::env::temp_dir().join(format!(
+        let dir = xingbiao::scratch_base().join(format!(
             "guibiao-reachability-{label}-{}",
             std::process::id()
         ));

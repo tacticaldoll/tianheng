@@ -352,7 +352,7 @@ fn an_empty_surface_fails_rather_than_reporting_clean() {
     };
     // A repository with the layout and no generated document. Every property of zero documents holds, so a
     // check that did not refuse here would report the register complete.
-    let fixture = std::env::temp_dir().join(format!(
+    let fixture = xingbiao::scratch_base().join(format!(
         "tianheng-projection-register-empty-{}",
         std::process::id()
     ));

@@ -183,7 +183,7 @@ fn a_single_quoted_path_or_version_is_read_and_a_non_string_is_not() {
 /// this direction from the vacuity guard, and it is what a second example cannot do.
 #[test]
 fn a_quoted_dependency_key_names_its_crate_and_its_pin_is_judged() {
-    let root = std::env::temp_dir().join(format!("kanhe-quoted-key-{}", std::process::id()));
+    let root = xingbiao::scratch_base().join(format!("kanhe-quoted-key-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     xingbiao::claim_scratch(&root).expect("the scratch root is writable");
 
@@ -241,7 +241,8 @@ fn a_quoted_dependency_key_names_its_crate_and_its_pin_is_judged() {
 /// copied from the sibling above rather than checked. Asserting the site is what tells the two refusals apart.
 #[test]
 fn a_family_crate_the_catalog_renames_is_resolved_through_it() {
-    let root = std::env::temp_dir().join(format!("kanhe-catalog-rename-{}", std::process::id()));
+    let root =
+        xingbiao::scratch_base().join(format!("kanhe-catalog-rename-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     xingbiao::claim_scratch(&root).expect("the scratch root is writable");
 
@@ -349,7 +350,8 @@ fn an_escaped_path_is_decoded_and_compared_and_an_ordinary_sibling_does_not_cove
 /// without it the vacuity guard would refuse for its own reason.
 #[test]
 fn an_escaped_renamed_package_names_its_crate_and_its_pin_is_judged() {
-    let root = std::env::temp_dir().join(format!("kanhe-escaped-rename-{}", std::process::id()));
+    let root =
+        xingbiao::scratch_base().join(format!("kanhe-escaped-rename-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     xingbiao::claim_scratch(&root).expect("the scratch root is writable");
 
@@ -588,7 +590,8 @@ fn a_crate_directory_that_is_not_utf8_is_refused_by_the_walk() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
 
-    let root = std::env::temp_dir().join(format!("kanhe-crate-dir-bytes-{}", std::process::id()));
+    let root =
+        xingbiao::scratch_base().join(format!("kanhe-crate-dir-bytes-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     xingbiao::claim_scratch(&root).expect("the scratch root is writable");
 
@@ -619,7 +622,7 @@ fn a_crate_directory_that_is_not_utf8_is_refused_by_the_walk() {
 /// repository* and the run reads as decisive about a state it never reached.
 #[test]
 fn a_member_that_is_the_workspace_root_is_not_an_empty_pathspec() {
-    let root = std::env::temp_dir().join(format!("kanhe-root-member-{}", std::process::id()));
+    let root = xingbiao::scratch_base().join(format!("kanhe-root-member-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     xingbiao::claim_scratch(&root).expect("the scratch root is writable");
     std::fs::create_dir_all(root.join("src")).expect("the source directory is writable");

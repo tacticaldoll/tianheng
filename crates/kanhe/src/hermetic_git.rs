@@ -43,6 +43,7 @@ pub const EXCLUDES_SETTING: &str = "core.excludesFile";
 /// | `GIT_CONFIG_PARAMETERS` | **yes** — cleared, see `CONFIG_CHANNELS` below; a channel parallel to the count, which occupying index 0 does nothing to, and which git exports itself under any `git -c …` |
 /// | `GIT_DIR` / `GIT_WORK_TREE` / `GIT_INDEX_FILE` | **yes** — cleared, see `REPOSITORY_SELECTORS` below; this row read **no** until a review asked why a stop nothing declared was policy |
 /// | `GIT_AUTHOR_NAME` / `GIT_COMMITTER_NAME` and their emails | **no** — they override the fixture's own `.git/config` identity |
+/// | an enclosing repository above a fixture root | **yes** — `GIT_CEILING_DIRECTORIES`, see [`scratch_ceiling`] |
 /// | `.git/info/exclude` | **no** — inside the repository, so no config setting reaches it |
 ///
 /// **The ignore row is closed through the row above it, by taking that channel rather than by blocking it.**
@@ -98,7 +99,8 @@ pub fn hermetic(program: &str) -> Command {
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("GIT_CONFIG_COUNT", "1")
         .env("GIT_CONFIG_KEY_0", EXCLUDES_SETTING)
-        .env("GIT_CONFIG_VALUE_0", "/dev/null");
+        .env("GIT_CONFIG_VALUE_0", "/dev/null")
+        .env("GIT_CEILING_DIRECTORIES", scratch_ceiling());
     for selector in REPOSITORY_SELECTORS {
         command.env_remove(selector);
     }
@@ -106,6 +108,45 @@ pub fn hermetic(program: &str) -> Command {
         command.env_remove(channel);
     }
     command
+}
+
+/// The directory fixture roots live under, as git's ceiling: discovery that starts beneath it stops there.
+///
+/// **A fixture root sits inside the outer repository's directory tree**, so a fixture that runs `git` without
+/// its own `git init` would silently act on the outer repository. Measured: from `target/tmp/x`,
+/// `git rev-parse --show-toplevel` answers this repository's root, and with `GIT_CEILING_DIRECTORIES` set to
+/// `target/tmp` it answers *not a git repository*. A ceiling only stops discovery that starts beneath it, so
+/// a command run in the real repository is unaffected.
+///
+/// **This is `xingbiao::scratch_base`'s layout rule, restated**, because `kanhe`'s normal edges may not reach
+/// `xingbiao` (the self-law restricts them). The two are held equal by
+/// `ceiling_is_the_directory_fixture_roots_live_under`, and an executable outside the layout panics naming its
+/// path rather than running without the ceiling.
+pub fn scratch_ceiling() -> std::path::PathBuf {
+    let exe = std::env::current_exe().unwrap_or_else(|err| {
+        panic!("scratch_ceiling: cannot read the running executable's path: {err}")
+    });
+    let base = exe
+        .parent()
+        .filter(|dir| dir.file_name().is_some_and(|name| name == "deps"))
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .map(|above_profile| above_profile.join("tmp"))
+        .unwrap_or_else(|| {
+            panic!(
+                "scratch_ceiling: '{}' is not at <target>/[<triple>/]<profile>/deps/<bin>, so there is no \
+                 build directory fixture roots live under",
+                exe.display()
+            )
+        });
+    std::fs::create_dir_all(&base)
+        .unwrap_or_else(|err| panic!("scratch_ceiling: cannot create '{}': {err}", base.display()));
+    base.canonicalize().unwrap_or_else(|err| {
+        panic!(
+            "scratch_ceiling: cannot resolve '{}': {err}",
+            base.display()
+        )
+    })
 }
 
 /// The environment variables that inject **configuration** past the files this builder empties.

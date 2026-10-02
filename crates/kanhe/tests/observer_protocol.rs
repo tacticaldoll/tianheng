@@ -1321,7 +1321,7 @@ fn trait_object_offenders(root: &Path) -> (usize, Vec<String>) {
 
 #[test]
 fn a_trait_object_in_a_nested_source_file_is_observed() {
-    let root = std::env::temp_dir().join(format!(
+    let root = xingbiao::scratch_base().join(format!(
         "tianheng-observer-protocol-nested-{}",
         std::process::id()
     ));
