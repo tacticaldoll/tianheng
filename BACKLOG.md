@@ -532,17 +532,18 @@ consumer for an undemonstrated deduplication.
   *Observed pressure:* measured on a registry crate, with no adopter latency requirement. *Observation source:*
   measured 2026-10-02 using a release probe calling `guibiao::check` on libc 0.2.189 with one
   `ModuleBoundary::in_crate("libc").module("crate").must_not_call_inline("core::mem")` boundary, under
-  `ulimit -v 4000000` and `timeout 120`: the handoff records 1.21 s before the regression; the repaired resolver's
-  isolated run takes 7.64 s and 201,744 KiB peak RSS, returning violations. The timings come from
+  `ulimit -v 4000000` and `timeout 120`: at `v0.7.1`, the same probe takes 0.62 s and 20,864 KiB peak RSS
+  in two runs; the repaired resolver's isolated run takes 7.64 s and 201,744 KiB peak RSS, returning violations.
+  The timings come from
   `/usr/bin/time`, rather than the probe's process status, which is zero even when its product outcome is
-  violations. The earlier 1.21 s is a recorded baseline, not a fresh same-toolchain comparison.
+  violations. The release tag anchors the baseline to a tree any clone can reproduce.
   An isolated instrumented copy counts 68,835 denotations, 8,062 graph readings, 122,225 hazard queries and
   684,002 target queries; 111,929 hazard queries have distinct `(glob, prefix, viewer)` keys. Its denotation memo
   retains 131,393 readable paths and 136,536 report candidates across 66,569 keys. Nested timer sums overlap and
   cannot establish which reader dominates elapsed time. *Current reaction or bound:* per-reading, glob-graph
   and denotation-memo budgets in `crates/guibiao/src/module_scan/resolve.rs` refuse excess retention, and
   `foreign_candidates_beside_local_ones_are_terminal_for_every_reader` excludes terminal foreign paths from
-  hazard work; these protect retention and verdicts, not a libc latency target. *Risk:* about sixfold slower
+  hazard work; these protect retention and verdicts, not a libc latency target. *Risk:* about twelvefold slower
   checking against the recorded baseline; caching every hazard tuple would save few queries and could increase
   retention. Viewer-dependent visibility and terminal-candidate handling must survive an optimization.
   *Promotion trigger:* an adopter's reproducible check exceeds its stated latency budget, or a same-toolchain
