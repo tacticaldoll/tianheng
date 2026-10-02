@@ -933,7 +933,7 @@ fn require_named_references(
     version: &str,
     spine: &Spine,
 ) -> Result<(), Refusal> {
-    let positional = positional_references(sections, version, spine.state);
+    let positional = positional_references(sections, version, spine.state)?;
     if !positional.is_empty() {
         return Err(violation_at(
             "release-coherence#entry-points-by-position",
@@ -2361,8 +2361,9 @@ const ITEM_NOUNS: [&str; 9] = [
 /// every line of the file is still present. The repair is one step: name the entry, step or bound meant.
 ///
 /// The question is asked of words, so it has one answer per word. A paragraph is read whole, so a phrase
-/// wrapped across lines is one phrase, and a list item at any depth ([`is_list_item`]) ends it; an inline code
-/// span is taken out first, so a word quoted as a word is not read; each finding names the line its word stands
+/// wrapped across lines is one phrase, and a list item at any depth ([`is_list_item`]) ends it; a backticked
+/// span is taken out first, paired by [`crate::reading::backticked_spans`] and refused where its markers do not
+/// pair, so a word quoted as a word is not read; each finding names the line its word stands
 /// on; and every heading is held, `### Self-governance` included, because a regroup moves its entries too.
 ///
 /// **What it refuses beyond the property, stated rather than discovered.** A reference to the entry
@@ -2373,7 +2374,7 @@ pub(crate) fn positional_references(
     sections: &[Section],
     version: &str,
     state: State,
-) -> Vec<String> {
+) -> Result<Vec<String>, Refusal> {
     let mut found = Vec::new();
     for section in sections {
         if !is_being_written(section, version, state) {
@@ -2381,70 +2382,59 @@ pub(crate) fn positional_references(
         }
         let mut heading = String::new();
         let mut paragraph: Vec<&(usize, String)> = Vec::new();
-        let mut flush = |paragraph: &mut Vec<&(usize, String)>, heading: &str| {
-            for (line, phrase) in positional_phrases(paragraph) {
-                let place = if heading.is_empty() {
-                    "with no heading".to_string()
-                } else {
-                    format!("under `### {heading}`")
-                };
-                found.push(format!(
-                    "  CHANGELOG.md:{line} {} {place} points by position: `{phrase}`",
-                    section.name
-                ));
-            }
-            paragraph.clear();
-        };
+        let mut flush =
+            |paragraph: &mut Vec<&(usize, String)>, heading: &str| -> Result<(), Refusal> {
+                for (line, phrase) in positional_phrases(paragraph)? {
+                    let place = if heading.is_empty() {
+                        "with no heading".to_string()
+                    } else {
+                        format!("under `### {heading}`")
+                    };
+                    found.push(format!(
+                        "  CHANGELOG.md:{line} {} {place} points by position: `{phrase}`",
+                        section.name
+                    ));
+                }
+                paragraph.clear();
+                Ok(())
+            };
         for line in &section.body {
             if let Some(next) = line.1.strip_prefix("### ") {
-                flush(&mut paragraph, &heading);
+                flush(&mut paragraph, &heading)?;
                 heading = next.trim_end().to_string();
             } else if line.1.trim().is_empty() {
-                flush(&mut paragraph, &heading);
+                flush(&mut paragraph, &heading)?;
             } else if is_list_item(&line.1) {
-                flush(&mut paragraph, &heading);
+                flush(&mut paragraph, &heading)?;
                 paragraph.push(line);
             } else {
                 paragraph.push(line);
             }
         }
-        flush(&mut paragraph, &heading);
+        flush(&mut paragraph, &heading)?;
     }
-    found
+    Ok(found)
 }
 
 /// The positional phrases in one paragraph, each with the line its first word stands on, read after the inline
 /// code spans are taken out. A span is replaced by the line breaks it held, so a word's offset in the paragraph
 /// is its line's index, and the line is looked up there rather than counted from the first: the prose a
 /// section is cut from drops a fence's lines, so a paragraph's lines need not be consecutive.
-fn positional_phrases(paragraph: &[&(usize, String)]) -> Vec<(usize, String)> {
+fn positional_phrases(paragraph: &[&(usize, String)]) -> Result<Vec<(usize, String)>, Refusal> {
     let text = paragraph
         .iter()
         .map(|(_, line)| line.as_str())
         .collect::<Vec<_>>()
         .join("\n");
-    let mut prose = String::new();
-    let mut rest = text.as_str();
-    while let Some(open) = rest.find('`') {
-        prose.push_str(&rest[..open]);
-        let run = rest[open..].len() - rest[open..].trim_start_matches('`').len();
-        let fence = &rest[open..open + run];
-        let after = &rest[open + run..];
-        match after.find(fence) {
-            Some(close) => {
-                prose.push(' ');
-                prose.extend(std::iter::repeat_n(
-                    '\n',
-                    after[..close].matches('\n').count(),
-                ));
-                rest = &after[close + run..];
-            }
-            None => {
-                rest = after;
+    let mut prose = text.clone().into_bytes();
+    for span in crate::reading::backticked_spans("CHANGELOG paragraph", &text)? {
+        for byte in &mut prose[span] {
+            if *byte != b'\n' {
+                *byte = b' ';
             }
         }
     }
-    prose.push_str(rest);
+    let prose = String::from_utf8(prose).expect("only ASCII bytes are replaced, by an ASCII space");
     let words: Vec<(usize, String)> = prose
         .lines()
         .enumerate()
@@ -2466,7 +2456,7 @@ fn positional_phrases(paragraph: &[&(usize, String)]) -> Vec<(usize, String)> {
             phrases.push((*line, format!("{word} {}", words[at + 1].1)));
         }
     }
-    phrases
+    Ok(phrases)
 }
 
 /// Every adopter-facing `[Unreleased]` entry naming this repository's own machinery.

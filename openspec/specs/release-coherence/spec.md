@@ -827,8 +827,9 @@ The question SHALL be asked of words, so it has one syntactic answer: the words 
 `previous`, `preceding` or `following` immediately before `entry`, `entries`, `section`, `sections`, `bullet`,
 `item`, `step`, `group` or `heading`. A paragraph SHALL be read whole, so a phrase wrapped across lines is one
 phrase, and a `- ` or `* ` list item at any depth SHALL end its paragraph, so two entries are not read as one sentence; the
-list-item rule is the one the section's other readers use. An inline code span SHALL be taken out first, so a
-word quoted as a word is not read. Every heading SHALL be held, `### Self-governance` included, because a
+list-item rule is the one the section's other readers use. A backticked span SHALL be taken out first, paired
+by the shared reader that refuses markers which do not pair, so a word quoted as a word is not read and a stray
+marker is a cannot-judge rather than a shifted pairing. Every heading SHALL be held, `### Self-governance` included, because a
 regroup moves its entries too. The refusal SHALL name the line the word stands on, the heading and the phrase,
 and its repair is one step: name the entry, step or bound meant.
 

@@ -636,7 +636,7 @@ fn a_changelog_entry_still_being_written_names_what_it_points_at() {
     let read = |text: &str, state: State| -> Vec<String> {
         let source = crate::region::Source::of(text);
         let sections = crate::sections::cut(source.prose().numbered_lines(), section_of);
-        positional_references(&sections, "0.9.0", state)
+        positional_references(&sections, "0.9.0", state).expect("every fixture pairs its markers")
     };
     let unreleased =
         |body: &str| format!("## [Unreleased]\n\n### Fixed\n\n{body}\n\n## [0.8.0] - 2026-01-01\n");
@@ -649,7 +649,7 @@ fn a_changelog_entry_still_being_written_names_what_it_points_at() {
             State::Development,
             &["next entry"],
         ),
-        ("a word in a code span is quoted, not read", unreleased("- the flag `--below` and ``a below b``."), State::Development, &[]),
+        ("a word in a code span is quoted, not read", unreleased("- the flag `--below` and `a below b`."), State::Development, &[]),
         ("a sequence word before another noun is not a reference", unreleased("- a later or next edition."), State::Development, &[]),
         (
             "two entries are not one paragraph",
