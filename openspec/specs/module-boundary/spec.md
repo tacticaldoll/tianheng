@@ -883,8 +883,10 @@ construct reaching end-of-file) — never panicking or otherwise aborting the pr
 block comment SHALL be treated as extending through end-of-file: every byte within it, including a
 trailing byte that would otherwise be the orphaned tail of a multi-byte character, is consumed as
 part of the comment rather than re-scanned as code. Whether a group under `cfg_if!` is one of its arms SHALL be one
-reading — a brace group with an attribute or an `else` before it — that every reader of the group takes, and a `mod`
-a block declares that the scan cannot name SHALL refuse its file rather than abort.
+reading — a brace group with an attribute or an `else` before it — that every reader of the group takes. Because the
+reading that names a block's modules and the scope table call that one reading, every `mod` a block declares has the
+name the walk gave it by construction; the scope table looks that name up rather than indexing it, and refuses the
+file if it is missing, so a disagreement reintroduced later is a refusal and never a panic.
 
 #### Scenario: A module in an unmarked group under `cfg_if!` is judged
 
@@ -893,13 +895,6 @@ a block declares that the scan cannot name SHALL refuse its file rather than abo
 - **THEN** the group is read as a block by the reading that names a block's modules and by the scope table alike, so
   an import the file reads through its own scopes is judged rather than refused, and the scan does not panic
 - **PINNED-BY** `a_module_in_an_unlabelled_group_under_cfg_if_is_judged`
-
-#### Scenario: A block module the scan cannot name refuses its file
-
-- **WHEN** the scope table meets a `mod` a block declares that the reading naming a block's modules gave no name
-- **THEN** the file's table holds a refusal naming that module, which the file's judgement reports, instead of the
-  process panicking
-- **PINNED-BY** `a_block_module_left_unnamed_is_refused`
 
 #### Scenario: An unterminated block comment swallowing a multi-byte character does not panic
 
