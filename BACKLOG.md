@@ -4061,8 +4061,7 @@ consumer for an undemonstrated deduplication.
   source:* `syn::ItemStatic` (with `StaticMutability`), `syn::ForeignItemStatic`, `syn::ForeignItem::Verbatim`
   for `safe`/`unsafe`-qualified foreign statics, and item- and statement-position macro invocations whose leaf
   is `thread_local`; measured on rustc 1.96.0 and 1.85.1 over a probe carrying module, fn-body,
-  `thread_local!`, `extern`, `OnceLock` and `safe`/`unsafe`-qualified foreign statics in every
-  edition (edition 2024 requires `unsafe` on the enclosing `extern` block). *Current reaction or bound:*
+  `thread_local!`, `extern`, `OnceLock` and edition-2024 `safe static` shapes. *Current reaction or bound:*
   before it was built, none — `max_visibility(Module)`, `UnsafeBoundary::only_under`, `sans_io_pure` and
   `must_not_call_inline("std::thread")` each exited 0 or reacted on something other than the declaration over
   four private statics. *Risk:* bounded to adopters who declare it; the over-reactions it carries
@@ -4079,6 +4078,10 @@ consumer for an undemonstrated deduplication.
   set, so the name gate stays one name. **Not built, with its trigger:** `.including_macros([...])` for
   `lazy_static!`- or `once_cell`-shaped declarations; reopen when an adopter measures such a declaration it
   must govern. The capability joins no composed profile, `sans_io_pure` included.
+
+  **Re-measured 2026-10-02 with rustc 1.96.0.** `extern "C" { safe static X: u8; }` fails to build in
+  editions 2015, 2018, 2021, and 2024; `unsafe extern "C" { safe static X: u8; }` builds in each measured
+  edition. A foreign-item `safe` or `unsafe` qualifier needs an `unsafe extern` block in these editions.
 
 - **BUILT / HISTORY:**
   - Opt-in gate flag `--disallow-stale` enforcing zero stale baseline entries in CI gate mode.
