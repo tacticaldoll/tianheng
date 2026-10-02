@@ -26,8 +26,9 @@
 
 mod support;
 
+use support::tracked_rust::{Reading, files_where, string_of, workspace_root};
+
 use std::collections::BTreeSet;
-use std::path::PathBuf;
 
 /// What a declared site does about the environment a bare `git` inherits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,38 +64,6 @@ const CONSTRUCTS_GIT_ITSELF: [(&str, Isolation, &str); 3] = [
         "boundary-forced, for the same reason as its sibling above",
     ),
 ];
-
-/// What this reader could decide about a file.
-///
-/// **Three states, because a file it cannot parse is not a file that constructs nothing.** The tokeniser's
-/// failure arm fell back to an exact substring, which answers `false` for a construction split across lines
-/// — so an unparseable file carrying one was reported clean, silently, which is the one direction the Core
-/// Contract forbids.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Reading {
-    Constructs,
-    DoesNot,
-    Undecidable,
-}
-
-/// A string literal's **value**, not its rendering.
-///
-/// `Literal::to_string` gives back the source spelling, so `r"git"` and `"\x67it"` — both of which decode to
-/// `git` — compared unequal to `"git"`, and a construction written either way was not read.
-fn literal_value(literal: &syn::Lit) -> Option<String> {
-    match literal {
-        syn::Lit::Str(text) => Some(text.value()),
-        _ => None,
-    }
-}
-
-/// That expression, where it is a string literal.
-fn string_of(expression: &syn::Expr) -> Option<String> {
-    match expression {
-        syn::Expr::Lit(literal) => literal_value(&literal.lit),
-        _ => None,
-    }
-}
 
 /// **Read with a parser, not by counting tokens around a name.**
 ///
@@ -277,14 +246,6 @@ impl<'ast> syn::visit::Visit<'ast> for Constructions {
     }
 }
 
-fn workspace_root() -> Option<PathBuf> {
-    shengmo::workspace::locate(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
-        |root| root.join("crates/kanhe/src/hermetic_git.rs").is_file(),
-        shengmo::workspace::marker_set(),
-    )
-}
-
 /// Whether `text` constructs a `git`, or says it could not decide.
 fn constructs_git(text: &str) -> Reading {
     constructs(text, "git")
@@ -316,46 +277,6 @@ fn reads(text: &str) -> bool {
     matches!(constructs_git(text), Reading::Constructs)
 }
 
-/// The tracked Rust files constructing `program`, every one read and decided.
-fn files_constructing(root: &std::path::Path, program: &'static str) -> BTreeSet<String> {
-    let tracked = kanhe::hermetic_git::tracked_paths(root, &["*.rs"]).expect(
-        "the tracked Rust is enumerable; a failed enumeration is not a repository with no sources",
-    );
-    let mut constructing = BTreeSet::new();
-    let mut undecidable = Vec::new();
-    let mut examined = 0usize;
-    for path in &tracked {
-        let text = std::fs::read_to_string(root.join(path)).unwrap_or_else(|err| {
-            panic!(
-                "cannot read tracked file '{path}' — a file this check claims to have inspected must have \
-                 been read: {err}"
-            )
-        });
-        examined += 1;
-        match constructs(&text, program) {
-            Reading::Constructs => {
-                constructing.insert(path.clone());
-            }
-            Reading::DoesNot => {}
-            Reading::Undecidable => undecidable.push(path.clone()),
-        }
-    }
-    assert!(
-        examined > 0,
-        "no tracked Rust was inspected, so this check would report clean over nothing"
-    );
-    // A file this reader cannot parse is not a file that constructs nothing. Its predecessor fell back to a
-    // substring, which answers `false` for a construction split across lines — clean, silently, over a file
-    // it never read.
-    assert!(
-        undecidable.is_empty(),
-        "tracked Rust this reader could not decide, so whether it constructs a `{program}` was never \
-         answered:\n  {}",
-        undecidable.join("\n  ")
-    );
-    constructing
-}
-
 #[test]
 fn every_git_this_repository_constructs_is_the_builders_or_is_declared() {
     let Some(root) = workspace_root() else {
@@ -367,7 +288,7 @@ fn every_git_this_repository_constructs_is_the_builders_or_is_declared() {
         .collect();
     assert_eq!(
         declared,
-        files_constructing(&root, "git"),
+        files_where(&root, "constructs a `git`", constructs_git),
         "the files constructing a `git` differ from the set named here. A site that gains one must be \
          named with why; a name that outlives its site must go"
     );
@@ -391,7 +312,9 @@ fn every_bash_this_repository_constructs_is_the_builders() {
         .collect();
     assert_eq!(
         declared,
-        files_constructing(&root, "bash"),
+        files_where(&root, "constructs a `bash`", |text| constructs(
+            text, "bash"
+        )),
         "the files constructing a `bash` differ from the builder; run it through `support::bash::bash`"
     );
 }

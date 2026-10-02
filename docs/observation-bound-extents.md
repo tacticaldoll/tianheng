@@ -3,7 +3,7 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**62 of 142 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**64 of 144 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
@@ -52,6 +52,8 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `repository-checks/a-paragraph-repeated-in-prose-is-not-read-a-stated-bound` — owner: engine
 - `repository-checks/a-paragraph-repeated-out-of-line-is-not-read-a-stated-bound` — owner: engine
 - `repository-checks/a-refusal-constructed-outside-the-register-s-corpus-is-not-triaged-a-stated-bound` — owner: engine
+- `repository-checks/a-root-reached-through-a-value-is-not-read-a-stated-bound` — owner: engine
+- `repository-checks/a-system-temporary-directory-named-in-prose-a-string-or-a-child-environment-is-not-read-a-stated-bound` — owner: engine
 - `repository-checks/a-tool-configuration-set-in-the-environment-is-not-observed-a-stated-bound` — owner: engine
 - `repository-checks/a-whitespace-preceded-shell-marker-inside-quotes-is-cut-a-stated-bound` — owner: engine
 - `repository-checks/an-assignment-that-is-not-an-assignment-word-is-not-read-a-stated-bound` — owner: engine
@@ -733,7 +735,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: refuses to judge
 - **pinned by**: `an_unparseable_thread_local_body_refuses_to_judge`
 
-## under-reacts (62)
+## under-reacts (64)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -1112,6 +1114,22 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the register reads `crates/kanhe/src`, where a construction is held by a named direction or declared unheld. A gate whose judgement and directions share a file has no answer to *which direction observes this branch*, because every direction in the file can see it -- so triaging it means first deciding where such gates belong, which is a question about their location rather than about this register
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *a gate that is its own test is outside the refusal register*
+
+### `repository-checks/a-root-reached-through-a-value-is-not-read-a-stated-bound`
+
+> a fixture root built from a path another function passes in, or `TMPDIR` read through a name bound to a string elsewhere
+
+- **because**: which value a parameter holds, and what a constant names, is name resolution and not something a parse tree carries. The reader names the call that produces a system root and not every path that could hold one, so a root handed in from a caller is judged where the caller builds it. No mutation record isolates it: reaching through a value means resolving names, which is a different reader rather than a perturbation of this one
+- **its defence must show**: does not react
+- **pinned by**: `a_root_reached_through_a_value_is_not_read`
+
+### `repository-checks/a-system-temporary-directory-named-in-prose-a-string-or-a-child-environment-is-not-read-a-stated-bound`
+
+> `temp_dir` named in a comment or a string literal, or `TMPDIR` set on a child process's environment
+
+- **because**: a comment is what a lexer discards and a literal is one token, so neither is a call; setting a child's `TMPDIR` is a method call and not a read of this process's. What the stop leaves unobserved is the temporary files a child process writes for itself -- a script's `mktemp`, rustc and cargo -- which this check does not govern. No mutation record isolates it: a literal's contents are not a token stream, so reaching into them is a different reader rather than a perturbation of this one
+- **its defence must show**: does not react
+- **pinned by**: `naming_temp_dir_in_a_comment_a_string_or_a_child_environment_is_not_read`
 
 ### `repository-checks/a-tool-configuration-set-in-the-environment-is-not-observed-a-stated-bound`
 
