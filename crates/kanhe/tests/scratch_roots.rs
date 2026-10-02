@@ -394,7 +394,7 @@ fn a_call_to_the_helpers_base_is_read() {
         "fn f() { let _ = ::xingbiao::scratch_base(); }"
     ));
     assert!(reads_the_base(
-        "fn f() { let _ = crate::hermetic_git::scratch_ceiling(); }"
+        "fn f() { let _ = crate::ceiling::scratch_ceiling(); }"
     ));
     assert!(reads_the_base(
         "fn f() { let _ = Some(1).map(|_| xingbiao::scratch_base()); }"
@@ -414,7 +414,7 @@ fn an_imported_or_renamed_base_is_read() {
         "use xingbiao::{claim_scratch, scratch_base};\nfn f() {}"
     ));
     assert!(reads_the_base(
-        "use crate::hermetic_git::scratch_ceiling as ceiling;\nfn f() {}"
+        "use crate::ceiling::scratch_ceiling as ceiling;\nfn f() {}"
     ));
     assert!(reads_the_base(
         "fn f() { use xingbiao::scratch_base; let _ = scratch_base(); }"
