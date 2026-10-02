@@ -283,13 +283,12 @@ impl<'ast> Visit<'ast> for StaticCollector<'_> {
 }
 
 /// The statics a `thread_local!` body declares, read by the macro's own grammar: attributed,
-/// visibility-qualified `static NAME: T = init` declarations separated by `;`, where the last one's
-/// `;` is optional.
+/// visibility-qualified `static NAME: T = init` declarations separated by `;`, with the final `;`
+/// optional.
 ///
-/// std's `thread_local!` matches a declaration's initializer as `$init:expr $(; $($rest:tt)*)?`, and
-/// its own documentation writes `thread_local!(static FOO: Cell<u32> = Cell::new(1));`, so a reader
-/// requiring every declaration to end in `;` would refuse a body std accepts. Only `static`
-/// declarations are read, because std's grammar admits nothing else.
+/// std's documented `thread_local!(static FOO: Cell<u32> = Cell::new(1));` form accepts a body with
+/// the final separator omitted. Requiring every declaration to end in `;` would refuse a body std
+/// accepts. Only `static` declarations are read, because std's grammar admits nothing else.
 fn thread_local_statics(
     input: syn::parse::ParseStream,
 ) -> syn::Result<Vec<(syn::Ident, syn::Type, syn::Expr)>> {

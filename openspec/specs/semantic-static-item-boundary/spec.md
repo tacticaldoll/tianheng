@@ -80,7 +80,7 @@ and a `const` or `static` initializer. It SHALL observe a foreign `static` and `
 foreign-item decoder the visibility and signature-coupling capabilities share. It SHALL observe each
 static a `thread_local!` invocation declares, at item and at statement position: the invocation's body
 is read by the macro's own grammar — attributed, visibility-qualified `static NAME: T = init`
-declarations separated by `;`, the last one's `;` optional, as std's `$init:expr $(;)?` makes it — and
+declarations separated by `;`, with the final `;` optional — and
 every `static` in it is its own finding. A `'static` lifetime, a `let` binding
 and a `const` item declare no static and SHALL NOT react.
 
