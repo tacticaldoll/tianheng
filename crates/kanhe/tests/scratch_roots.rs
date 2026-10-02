@@ -88,17 +88,17 @@ impl<'ast> syn::visit::Visit<'ast> for Roots {
     /// A read of `TMPDIR`: `var("TMPDIR")` or `var_os("TMPDIR")` under any qualification. A call that *sets* a
     /// child's `TMPDIR` is a method call and not a path call, so it is not this.
     fn visit_expr_call(&mut self, node: &'ast syn::ExprCall) {
-        if let syn::Expr::Path(callee) = &*node.func
-            && matches!(
+        if let syn::Expr::Path(callee) = &*node.func {
+            if matches!(
                 last_segment(&callee.path).as_deref(),
                 Some("var" | "var_os")
-            )
-            && node
+            ) && node
                 .args
                 .iter()
                 .any(|arg| string_of(arg).as_deref() == Some("TMPDIR"))
-        {
-            self.found = true;
+            {
+                self.found = true;
+            }
         }
         syn::visit::visit_expr_call(self, node);
     }
