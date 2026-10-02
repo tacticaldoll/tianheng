@@ -23,8 +23,8 @@
 //! one notch finer than the last, on the same
 //! question of what the tree holds.
 //!
-//! **Fixture infrastructure.** This widening is test-only: [`claim_scratch`], [`scratch_root`] and `Unreadable`.
-//! Both are `#[doc(hidden)]` items that exist because integration and unit test trees across member
+//! **Fixture infrastructure.** This widening is test-only: the hidden scratch-root helpers ([`claim_scratch`], [`scratch_base`], [`scratch_root`]) and `Unreadable`.
+//! All of these are `#[doc(hidden)]` items that exist because integration and unit test trees across member
 //! crates cannot share a `cfg(test)` helper, yet must enforce identical policies (atomic temporary
 //! root reservation without adopting pre-existing symlinks, and permission-removal verification that
 //! restores on drop and asserts under `TIANHENG_WORKSPACE_TESTS`). They ship hidden in the published

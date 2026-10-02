@@ -315,14 +315,7 @@ fn no_ambient_channel_moves_what_the_family_coverage_builder_reads() {
     let root =
         xingbiao::scratch_base().join(format!("family-coverage-channels-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    // `xingbiao::claim_scratch` owns this elsewhere and `shengmo` cannot reach it without a dependency
-    // edge, so the property it holds — a scratch root that refuses to adopt a pre-existing path — is held
-    // here instead of dropped.
-    assert!(
-        std::fs::symlink_metadata(&root).is_err(),
-        "the scratch root must not exist before it is made"
-    );
-    std::fs::create_dir_all(&root).expect("create the fixture root");
+    xingbiao::claim_scratch(&root).expect("claim the fixture root");
     let build = |name: &str| {
         let dir = root.join(name);
         std::fs::create_dir_all(&dir).expect("create the fixture repository");

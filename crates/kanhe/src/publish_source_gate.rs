@@ -744,12 +744,10 @@ fn verify_tag_signature(repo: &Path, tag: &str, tag_object: &str) -> Result<(), 
     // matrix runs in parallel, so a key built from the tag had each test's `Drop` deleting another's scratch
     // mid-verification — a test that passed alone and failed beside its siblings.
     //
-    // Inside the repository's own git directory: it holds the signature the check reads back, so it must be a
-    // directory only the publisher can write. This crate cannot reach the fixture-root helper (the self-law
-    // restricts its normal edges), and a checkout whose `.git` is a file cannot take the claim, which is
-    // refused as unclaimable rather than adopted.
+    // Under the build directory the running test binary sits in, beside every fixture root, and not in the
+    // repository being judged.
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-    let scratch = repo.join(".git").join(format!(
+    let scratch = crate::hermetic_git::scratch_ceiling().join(format!(
         "tianheng-publish-source-sig-{}-{}",
         std::process::id(),
         NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
