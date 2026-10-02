@@ -618,6 +618,18 @@ consumer for an undemonstrated deduplication.
   `CrateScopes`, which makes the scope one value minted in one place. *Version class:* patch.
   *Authority:* AGENTS.md's *one rule gets one implementation*.
 
+  **The `check_one_root` half fired and is repaired as written; the other two halves did not fire, read
+  2026-10-02.** *perf(guibiao): read each source once and scan each root once per evaluation* gave
+  `check_one_root` a ninth parameter, the evaluation's scan set, and the next change to touch the function
+  did not gather anything. Now the caller obtains the root's `RootScan`, and the function returns what
+  the root contributes as one `RootJudgement` (its outcome, declared modules, items and violations), which the
+  caller merges. It takes four parameters and its `too_many_arguments` allow is gone. The `name_raw` half
+  was read against every method *fix(guibiao)!: settle gated-glob resolution and bound what it retains* added to
+  `CrateScopes`: `hazard_paths`, `denotation`, `readable_paths`, `crate_named`, `read_glob_paths` and
+  `depending_on` each take a path or a name, and none takes a scope as `(t, id)`, so no lookup method was added
+  and that half stays open as written. No change in the window added a both-modes helper to
+  `crates/guibiao/tests/per_target_corpus.rs`, so its loop half stays open too.
+
 - **圭表 holds one rule in several places.** *Class:* WATCH. *Observed pressure:* none from an adopter; a static
   review read each 2026-09-30. *Observation source:* `DeclaredModule::direct_path` is an `Option<Option<String>>`
   whose unreadable value the walk passes over without refusing — every spelling this reader cannot read, `concat!`,
@@ -646,6 +658,23 @@ consumer for an undemonstrated deduplication.
   them, which splits it in that change; `check_one_root` and `name_raw` keep the entry above. *Version class:*
   patch. *Authority:* AGENTS.md's *A repair loop is a diagnosis, not a schedule*.
 
+  **Fired on four functions, read 2026-10-02. Two are repaired as written and two are left with the reason.** The
+  corpus was every function this entry names, each read with `git log -L` over its body's current line range,
+  from the change that wrote this entry to the window's tip. *fix(guibiao)!: settle gated-glob resolution and
+  bound what it retains* rewrote `denote_in`, adding two parameters and a width charge at every push. It is now
+  the crate-rooted split and the worklist loop. `read_branch` reads one branch with one arm per
+  `lookup_in_module` answer, and the `Candidates` arm's bound-following is `Reading::follow_bound`. The worklist
+  is one `Reading` value, which charges the per-reading width budget when a branch is taken up, a path is
+  found, a branch is pushed and a foreign candidate is projected, so a step does not charge it itself. The same
+  change rewrote `glob_hazard`'s `read_scope` to read through `hazard_paths` and to charge each queued glob
+  target. It is now its three reads: re-exports, `extern crate`s, and queued globs. The same change gave
+  `CrateScopes::new` one field initialiser, and *perf(guibiao): read each source once and scan each root once
+  per evaluation* gave `scope_tree::build` a `#[cfg(test)]` build counter. Neither edit reads or changes a
+  branch of its function, so neither was split: the trigger exists so that someone reading a function splits
+  it, and these edits did not read the functions. They stay watched, and this reading takes the trigger as a
+  change to a function's branches. `lex`, `decode_str_escapes`, `record_items` and `occurrence`'s
+  member-access reader were not edited. `check_one_root` left this list by the entry above.
+
 - **The glob fixed point's pass bound is argued by nothing.** *Class:* WATCH. *Observed pressure:* a static review,
   no instance. *Observation source:* the glob graph's `settle` allows one sweep more than its node count and then
   refuses; the answers are monotone and finite, so they settle, but a derivation can need more sweeps than that
@@ -654,6 +683,26 @@ consumer for an undemonstrated deduplication.
   rustc builds that 圭表 refuses because its globs do not settle, which makes a worklist bounded by the lattice's
   height a READY-PATCH with that crate as its pin. *Version class:* patch. *Authority:*
   `inline-symbol-path-confinement`'s fixed-point requirement.
+
+  **Fired twice in the window rooted at the `v0.7.1` snapshot, and neither firing was this entry's mechanism.
+  Read 2026-10-02; stays WATCH.** The corpus was every *globs do not settle* refusal the window met: the
+  `per_target_corpus.rs` directions whose doc names one, by `git grep -n 'do not settle' -- crates`, and
+  the pull requests that added them. First, `a_glob_read_later_in_a_pass_is_not_read_through_itself`: a glob
+  read from an answer remembered earlier in its pass read through itself and grew every pass. That was met
+  inside *fix(guibiao)!: resolve inline path heads from one scope table over one token tree*, the change that
+  introduced the fixed point, and was repaired before it merged by reading each glob with no answer
+  remembered. Second, on the release branch, `gated_sibling_globs_settle_and_observe_calls`: two cfg-gated sibling globs,
+  which rustc 1.96.0 builds, were refused with *globs do not settle on what they name within 64 passes*,
+  because a gated module's bare head was read as an unread crate and each pass lengthened the foreign path.
+  *fix(guibiao)!: settle gated-glob resolution and bound what it retains* repaired that at the head's reading.
+  In both cases the answers grew without limit, so a fixed point never existed. That is the fail-closed refusal
+  doing its job, and a worklist bounded by the lattice's height would have refused both just the same. The
+  mechanism this entry names, a monotone and finite derivation that needs more sweeps than its bound allows,
+  has no instance, and `globs_whose_readings_grow_more_than_once_settle` is the control: a chain that grows
+  several times settles inside the bound. So the worklist does not earn READY-PATCH. A trigger reading should
+  also know that two bounds refuse here: the glob graph's `settle` this entry names, and `glob_targets`' pass
+  count, `MAX_RESOLUTION_CHAIN` or twice the glob count plus two, whichever is larger. Both firings were the
+  second.
 
 - **Suspicions the static reviews of 2026-09-30 raised and did not demonstrate.** *Class:* WATCH. *Observed
   pressure:* none from an adopter. *Observation source:* `Visibility::visible_from` answers visible-everywhere for a
@@ -845,6 +894,17 @@ consumer for an undemonstrated deduplication.
   this entry still watches, together with the `Drop` guards across the crates' tests that still discard their
   cleanup's result: `git grep -n -A6 'impl Drop for' -- crates | grep 'let _ ='` lists them, fourteen when this
   was written. Each is a caller `settle_cleanup` would take; the trigger stays a new one being written.
+
+  **The shared scratch form now exists, and the narrowed half is unchanged, read 2026-10-02.** *test: keep every
+  fixture root inside the build directory* built the shared form in `xingbiao`: `scratch_base`, the build
+  directory's `tmp/` beside the running test binary's profile, and `scratch_root`, which returns a
+  `ScratchRoot` guard removed on drop through `settle_cleanup`. `crates/kanhe/tests/scratch_roots.rs` holds
+  every fixture root to one of the two. So the deferral above, *each is a new `#[doc(hidden)]` item in a
+  published crate for a single caller*, no longer describes the shared form, which is built and paid for. What this entry still watches is the half that
+  change left on purpose: scratch fixtures in other test binaries keep their own names and cleanup over
+  `scratch_base()` rather than taking `ScratchRoot`, and the `Drop` guards that discard their cleanup's
+  result. The same grep, re-run on 2026-10-02 at the tip of the window rooted at the `v0.7.1` snapshot,
+  lists thirteen.
 
 - **A mutation record is held to killing its pin, not to perturbing the behaviour its bound names.** *Class:*
   WATCH. *Observed pressure:* the non-word assignment bound's record perturbed the `+=` row beside the bound's
@@ -2186,6 +2246,14 @@ consumer for an undemonstrated deduplication.
   local list rather than arriving red in CI after a green one. What it does not close is a contributor who
   lacks the toolchain and skips the line, which is the same trade the two env-gated lines beside it already
   take, stated in theirs and taken here.
+
+  **The local line was withdrawn, and one more instance was measured, read 2026-10-02.** The Definition of Done
+  no longer carries the MSRV suite. AGENTS.md's *The MSRV build is CI-only* owns that decision and the trade
+  it makes, and `require_ci_green` is again what stops a red `msrv` job reaching a release branch. In the window
+  rooted at the `v0.7.1` snapshot, a `let` chain in `crates/kanhe/tests/scratch_roots.rs` passed locally and
+  failed CI's `msrv` job on *test: keep every fixture root inside the build directory*. It was fixed before
+  that pull request merged, so the CI-only arrangement cost one CI round as stated. This is one more measured
+  instance of the same construct. It changes no decision.
 
 - **WATCH: A constant's literal copies outside its reach are unheld.** *Class:* WATCH. *Observed pressure:*
   `shengmo::workspace::MARKER` owns `TIANHENG_WORKSPACE_TESTS`, and seven sites in `tianheng`, `louke` and
