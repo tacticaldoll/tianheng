@@ -4078,9 +4078,15 @@ consumer for an undemonstrated deduplication.
   `lazy_static!`- or `once_cell`-shaped declarations; reopen when an adopter measures such a declaration it
   must govern. The capability joins no composed profile, `sans_io_pure` included.
 
-  **Re-measured 2026-10-02 with rustc 1.96.0.** `extern "C" { safe static X: u8; }` fails to build in
-  editions 2015, 2018, 2021, and 2024; `unsafe extern "C" { safe static X: u8; }` builds in each measured
-  edition. A foreign-item `safe` or `unsafe` qualifier needs an `unsafe extern` block in these editions.
+  **Re-measured 2026-10-02 with rustc 1.96.0.** A foreign static was written with each of `safe`, `unsafe`
+  and no qualifier, in an `extern "C"` block and in an `unsafe extern "C"` block, under editions 2015, 2018,
+  2021 and 2024. In an `unsafe extern` block all three build in every edition. In a plain `extern` block,
+  `safe static X: u8;` and `unsafe static X: u8;` fail in every edition. In 2015, 2018 and 2021 the
+  refusal is the qualifier (*items in `extern` blocks without an `unsafe` qualifier cannot have safety
+  qualifiers*) and the unqualified item builds. In 2024 the unqualified item fails too, because that edition
+  requires every extern block to be `unsafe` (*extern blocks must be unsafe*); the qualified items there
+  carry both errors. A foreign-item `safe` or `unsafe` qualifier therefore needs an `unsafe extern` block in
+  every edition, and in 2024 the block needs it with or without a qualifier.
 
 - **BUILT / HISTORY:**
   - Opt-in gate flag `--disallow-stale` enforcing zero stale baseline entries in CI gate mode.
