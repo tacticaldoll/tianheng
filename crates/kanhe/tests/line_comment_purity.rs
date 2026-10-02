@@ -165,12 +165,7 @@ fn a_corpus_with_an_inner_comment_is_refused() {
 /// A newly publishable crate enters the same corpus the gate judges; an unpublished one does not.
 #[test]
 fn a_new_published_crate_with_an_inner_comment_is_refused() {
-    let root = xingbiao::scratch_base().join(format!(
-        "kanhe-line-comment-new-crate-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&root);
-    xingbiao::claim_scratch(&root).expect("create fixture root");
+    let root = xingbiao::scratch_root("kanhe-line-comment-new-crate");
     for (name, publish, source) in [
         ("existing", "", "pub fn clean() {}\n"),
         ("newly_published", "", "// newly published prose\n"),
@@ -190,7 +185,6 @@ fn a_new_published_crate_with_an_inner_comment_is_refused() {
     git(&["add", "crates"]);
 
     let (inspected, offences) = published_source_offences(&root);
-    let _ = std::fs::remove_dir_all(&root);
     assert_eq!(inspected, 2);
     assert_eq!(offences.len(), 1);
     assert!(

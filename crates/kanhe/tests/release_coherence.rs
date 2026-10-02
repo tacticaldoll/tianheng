@@ -34,14 +34,8 @@ fn workspace_root() -> Option<PathBuf> {
     )
 }
 
-fn scratch(name: &str) -> PathBuf {
-    let root = xingbiao::scratch_base().join(format!(
-        "tianheng-release-coherence-{name}-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&root);
-    xingbiao::claim_scratch(&root).expect("the fixture root is writable");
-    root
+fn scratch(name: &str) -> xingbiao::ScratchRoot {
+    xingbiao::scratch_root(&format!("tianheng-release-coherence-{name}"))
 }
 
 /// Every `git` this file runs goes through the fixture builder, dates and all.

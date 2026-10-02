@@ -33,14 +33,8 @@ fn workspace_root() -> Option<PathBuf> {
     )
 }
 
-fn scratch(name: &str) -> PathBuf {
-    let root = xingbiao::scratch_base().join(format!(
-        "tianheng-publish-source-{name}-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&root);
-    xingbiao::claim_scratch(&root).expect("the fixture root is writable");
-    root
+fn scratch(name: &str) -> xingbiao::ScratchRoot {
+    xingbiao::scratch_root(&format!("tianheng-publish-source-{name}"))
 }
 
 /// Every `git` this file runs to BUILD a fixture goes through the shared builder, dates and all.
@@ -845,7 +839,7 @@ fn a_tag_whose_commit_is_missing_cannot_be_resolved() {
 // wiring.
 
 /// A repository whose only commit tracks whatever `tracked` names, with `stray` present and untracked.
-fn hiding(name: &str, tracked: &[(&str, &str)], stray: &str) -> (PathBuf, PathBuf) {
+fn hiding(name: &str, tracked: &[(&str, &str)], stray: &str) -> (xingbiao::ScratchRoot, PathBuf) {
     let root = scratch(name);
     let repo = root.join("repo");
     std::fs::create_dir_all(&repo).expect("create");
@@ -1020,7 +1014,7 @@ const MANY_PATHS_ONE_SOURCE: usize = 400;
 ///
 /// Long deliberately: the deadlock needs the conversation to exceed the kernel's pipe buffers in **bytes**,
 /// so bytes-per-file is the cheap axis and files-created is the expensive one.
-fn crowded(name: &str, count: usize) -> (PathBuf, PathBuf) {
+fn crowded(name: &str, count: usize) -> (xingbiao::ScratchRoot, PathBuf) {
     let (root, repo) = hiding(name, &[(".gitignore", "/ignored/\n")], "kept.txt");
     let ignored = repo.join("ignored");
     std::fs::create_dir_all(&ignored).expect("create the ignored directory");

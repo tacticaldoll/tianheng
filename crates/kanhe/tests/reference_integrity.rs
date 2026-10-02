@@ -26,7 +26,6 @@ mod common;
 use std::collections::{BTreeSet, HashSet};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// The top-level directories a bare reference may name, and the extensions a bare basename may carry.
 const PATH_PREFIXES: [&str; 6] = [
@@ -60,20 +59,8 @@ fn workspace_root() -> Option<PathBuf> {
     )
 }
 
-fn scratch(label: &str) -> PathBuf {
-    static NEXT: AtomicUsize = AtomicUsize::new(0);
-    loop {
-        let candidate = xingbiao::scratch_base().join(format!(
-            "tianheng-reference-integrity-{label}-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        match xingbiao::claim_scratch(&candidate) {
-            Ok(()) => return candidate,
-            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(err) => panic!("cannot acquire reference-integrity fixture root: {err}"),
-        }
-    }
+fn scratch(label: &str) -> xingbiao::ScratchRoot {
+    xingbiao::scratch_root(&format!("tianheng-reference-integrity-{label}"))
 }
 
 /// How a tracked format carries prose.
@@ -868,7 +855,7 @@ fn offences_in(
 ///
 /// A consequence worth stating: re-adding or removing any real file can no longer repoint these probes. The
 /// premise is owned here rather than by what this repository happens to have deleted.
-fn a_repository_recording_a_deletion(label: &str) -> (PathBuf, String, String) {
+fn a_repository_recording_a_deletion(label: &str) -> (xingbiao::ScratchRoot, String, String) {
     let repo = scratch(label);
     let gone_rust = "zzz_probe_removed.rs";
     let gone_shell = "zzz_probe_removed.sh";
@@ -920,12 +907,7 @@ fn every_extraction_form_is_seen_when_it_names_something_absent() {
     };
     let tracked_paths = tracked(&root);
 
-    let scratch = xingbiao::scratch_base().join(format!(
-        "tianheng-reference-integrity-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&scratch);
-    xingbiao::claim_scratch(&scratch).expect("scratch is writable");
+    let scratch = xingbiao::scratch_root("tianheng-reference-integrity");
     std::fs::create_dir_all(scratch.join("crates/tianheng")).expect("scratch is writable");
 
     // The corpus is judged against THIS repository's tracked paths, so "absent" means absent here.
@@ -1010,7 +992,6 @@ fn every_extraction_form_is_seen_when_it_names_something_absent() {
             unseen.push(format!("  {form} — planted in {path} and seen by nothing"));
         }
     }
-    let _ = std::fs::remove_dir_all(&scratch);
     let _ = std::fs::remove_dir_all(&history);
     assert!(
         unseen.is_empty(),
@@ -1218,12 +1199,7 @@ fn an_active_plan_may_name_a_path_it_intends_to_create() {
         return;
     };
     let tracked_paths = tracked(&root);
-    let scratch = xingbiao::scratch_base().join(format!(
-        "tianheng-reference-integrity-plan-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&scratch);
-    xingbiao::claim_scratch(&scratch).expect("scratch is writable");
+    let scratch = xingbiao::scratch_root("tianheng-reference-integrity-plan");
 
     // Under a **tracked** member: an untracked crate directory is unenforceable by design, so a probe there
     // would be unrefused for a reason that has nothing to do with the exclusion being tested.
@@ -1253,7 +1229,6 @@ fn an_active_plan_may_name_a_path_it_intends_to_create() {
         &tracked_paths,
         &common::SourceCorpus::of(&[inside, control]),
     );
-    let _ = std::fs::remove_dir_all(&scratch);
 
     assert!(
         !seen_outside.is_empty(),
@@ -1673,10 +1648,7 @@ fn relative_anchor_offences_in(
 /// specimens on this page as the corpus.
 #[test]
 fn a_wrapped_anchor_reacts_in_every_marker_shape() {
-    let fixture =
-        xingbiao::scratch_base().join(format!("kanhe-anchor-wrap-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&fixture);
-    xingbiao::claim_scratch(&fixture).expect("create the fixture root");
+    let fixture = xingbiao::scratch_root("kanhe-anchor-wrap");
 
     let shell = "wrapped.sh";
     let doc = "wrapped_doc.rs";
@@ -1712,7 +1684,6 @@ fn a_wrapped_anchor_reacts_in_every_marker_shape() {
         &fixture,
         &common::SourceCorpus::of(&[shell, doc, inner, executed]),
     );
-    let _ = std::fs::remove_dir_all(&fixture);
 
     let listed = offences.iter().cloned().collect::<Vec<_>>().join("\n");
     assert_eq!(
@@ -2405,9 +2376,7 @@ fn live_prose(kind: Prose, text: &str, records: &kanhe::record::Records) -> Stri
 /// reports 0 of 3.
 #[test]
 fn a_citation_glued_to_punctuation_is_read() {
-    let root = xingbiao::scratch_base().join(format!("kanhe-citation-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    xingbiao::claim_scratch(&root).expect("the fixture root is writable");
+    let root = xingbiao::scratch_root("kanhe-citation");
 
     // Assembled from pieces no piece of which is itself object-shaped, because this file is inside the
     // corpus the live direction sweeps: a literal abbreviated object written here would be an offence of
@@ -2430,8 +2399,6 @@ fn a_citation_glued_to_punctuation_is_read() {
             "an offence must name the object it found: {offence}"
         );
     }
-
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A third party's pin is not this repository's object, and everything narrower than that still is.
@@ -2449,9 +2416,7 @@ fn a_citation_glued_to_punctuation_is_read() {
 /// is a way to spell the prohibited form behind the sanctioned one's prefix, so each is a row here.
 #[test]
 fn a_third_partys_action_pin_is_not_read_as_this_repositorys_object() {
-    let root = xingbiao::scratch_base().join(format!("kanhe-action-pin-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    xingbiao::claim_scratch(&root).expect("the fixture root is writable");
+    let root = xingbiao::scratch_root("kanhe-action-pin");
 
     // The manifest, because the exclusion is a fact about the repository being read rather than a constant:
     // `own_repository` takes it from the field the workspace already declares.
@@ -2489,7 +2454,6 @@ fn a_third_partys_action_pin_is_not_read_as_this_repositorys_object() {
     std::fs::write(root.join("GUIDE.md"), document).expect("the fixture document is writable");
 
     let offences = unanchored_citation_offences_in(&root, &common::SourceCorpus::of(&["GUIDE.md"]));
-    let _ = std::fs::remove_dir_all(&root);
 
     assert_eq!(
         offences.len(),
@@ -2693,7 +2657,7 @@ fn is_abbreviated_object(span: &str) -> bool {
         && span.chars().any(|c| c.is_ascii_alphabetic())
 }
 
-fn change_path_fixture(label: &str) -> (PathBuf, String) {
+fn change_path_fixture(label: &str) -> (xingbiao::ScratchRoot, String) {
     let root = scratch(label);
     std::fs::create_dir_all(&root).expect("create fixture root");
     std::fs::write(

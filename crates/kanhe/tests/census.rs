@@ -140,10 +140,7 @@ fn a_figure_the_sweep_cannot_represent_is_a_cannot_judge() {
         phrase: "{} bounds across {} capabilities",
         figures: vec![1, 1],
     }];
-    let scratch =
-        xingbiao::scratch_base().join(format!("tianheng-census-wide-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&scratch);
-    xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
+    let scratch = xingbiao::scratch_root("tianheng-census-wide");
     std::fs::write(
         scratch.join("wide.md"),
         "  a line writing 99999999999999999999999999 bounds across 1 capabilities
@@ -160,7 +157,6 @@ fn a_figure_the_sweep_cannot_represent_is_a_cannot_judge() {
     )
     .expect("write");
     let control = sweep(&scratch, &["narrow.md".to_string()], &declared).offences;
-    let _ = std::fs::remove_dir_all(&scratch);
 
     assert_eq!(
         offences.len(),
@@ -206,10 +202,7 @@ fn the_sweep_names_a_disagreement_it_is_shown() {
         phrase: "{} bounds across {} capabilities",
         figures: vec![2, 1],
     }];
-    let scratch =
-        xingbiao::scratch_base().join(format!("tianheng-census-control-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&scratch);
-    xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
+    let scratch = xingbiao::scratch_root("tianheng-census-control");
     // A document stating the phrase with figures that disagree, and beside it one that agrees. Without the
     // second, the refusal could be the phrase matching nothing rather than the figures differing.
     std::fs::write(
@@ -224,7 +217,6 @@ fn the_sweep_names_a_disagreement_it_is_shown() {
     .expect("write");
     let offences = sweep(&scratch, &["disagrees.md".to_string()], &declared).offences;
     let control = sweep(&scratch, &["agrees.md".to_string()], &declared).offences;
-    let _ = std::fs::remove_dir_all(&scratch);
     assert!(
         control.is_empty(),
         "the agreeing document must be silent, or the refusal below is about the phrase rather than the \
@@ -262,9 +254,7 @@ fn a_count_in_an_undeclared_phrasing_is_a_stated_bound() {
         bounds.len() + 1,
         capabilities.len()
     );
-    let scratch = xingbiao::scratch_base().join(format!("tianheng-census-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&scratch);
-    xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
+    let scratch = xingbiao::scratch_root("tianheng-census");
     std::fs::write(scratch.join("control.md"), &control).expect("write");
     assert!(
         !sweep(&scratch, &["control.md".to_string()], &declared)
@@ -284,7 +274,6 @@ fn a_count_in_an_undeclared_phrasing_is_a_stated_bound() {
     )
     .expect("write");
     let offences = sweep(&scratch, &["undeclared.md".to_string()], &declared).offences;
-    let _ = std::fs::remove_dir_all(&scratch);
     assert!(
         offences.is_empty(),
         "the sweep must stay silent about a count written in an undeclared phrasing — that is the declared \
@@ -308,10 +297,7 @@ fn a_word_form_at_one_hundred_or_above_is_a_stated_bound() {
         phrase: "{} bounds across {} capabilities",
         figures: vec![99, 24],
     }];
-    let scratch =
-        xingbiao::scratch_base().join(format!("tianheng-census-words-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&scratch);
-    xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
+    let scratch = xingbiao::scratch_root("tianheng-census-words");
 
     // The control: a disagreeing figure written in words the reader reaches.
     std::fs::write(
@@ -334,7 +320,6 @@ fn a_word_form_at_one_hundred_or_above_is_a_stated_bound() {
     )
     .expect("write");
     let offences = sweep(&scratch, &["above.md".to_string()], &declared).offences;
-    let _ = std::fs::remove_dir_all(&scratch);
     assert!(
         offences.is_empty(),
         "the sweep must stay silent about a figure spelled at one hundred or above — that is the declared \
@@ -369,10 +354,7 @@ fn a_census_outside_markdown_is_a_stated_bound() {
         capabilities.len()
     );
 
-    let scratch =
-        xingbiao::scratch_base().join(format!("tianheng-census-corpus-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&scratch);
-    xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
+    let scratch = xingbiao::scratch_root("tianheng-census-corpus");
     std::fs::write(scratch.join("held.md"), &wrong).expect("write the Markdown control");
     std::fs::write(scratch.join("unheld.rs"), &wrong).expect("write the Rust subject");
 
@@ -386,7 +368,6 @@ fn a_census_outside_markdown_is_a_stated_bound() {
     );
     // The bound: the same figures, in a Rust source, are not.
     let unheld = sweep(&scratch, &["unheld.rs".to_string()], &declared).offences;
-    let _ = std::fs::remove_dir_all(&scratch);
     assert!(
         unheld.is_empty(),
         "the corpus is tracked Markdown, so a census outside it is a stated bound rather than a finding, got \
@@ -409,10 +390,7 @@ fn an_undecidable_record_boundary_is_a_cannot_judge() {
         phrase: "{} bounds across {} capabilities",
         figures: vec![2, 1],
     }];
-    let scratch =
-        xingbiao::scratch_base().join(format!("tianheng-census-boundary-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&scratch);
-    xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
+    let scratch = xingbiao::scratch_root("tianheng-census-boundary");
     for (name, heading) in [
         ("CHANGELOG.md", "## [0.6.0]"),
         ("CHANGELOG.md", "## [0.6.0] - 2026-02-31"),
@@ -443,7 +421,6 @@ fn an_undecidable_record_boundary_is_a_cannot_judge() {
     )
     .expect("write");
     let control = sweep(&scratch, &[String::from("CHANGELOG.md")], &declared);
-    let _ = std::fs::remove_dir_all(&scratch);
     assert!(
         control.offences.is_empty(),
         "`[Unreleased]` carries no date legitimately and its figure agrees: {:?}",
