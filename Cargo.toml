@@ -30,6 +30,7 @@ members = ["crates/xuanji", "crates/xingbiao", "crates/hunyi", "crates/guibiao",
 #   `sub/*` (glob)                         not inside a member         NOT excluded — no glob support
 #   `m/tests/fixtures/a` (exact path)      inside member `m`           NOT excluded
 #   `crates/tianheng/tests/fixtures`       inside member `tianheng`    NOT excluded
+#   `target` (top-level directory)         `target/tmp/<root>/a`        excluded, cargo proceeds
 #
 # The deciding variable is nesting: a package inside a workspace member's own directory cannot be
 # excluded at all, whichever form the entry takes. Every in-repo fixture is at
@@ -40,8 +41,16 @@ members = ["crates/xuanji", "crates/xingbiao", "crates/hunyi", "crates/guibiao",
 # holding: `crates/kanhe/tests/workspace_isolation.rs` asserts every tracked fixture and example
 # manifest carries one. `examples/` is top-level, so its entry below does work, and it stays.
 #
+# `target` is the second entry that does work, for the fixture roots a test writes at run time under
+# `<target>/tmp/` (`xingbiao::scratch_root`). Measured: a manifest there without `[workspace]` makes
+# `cargo metadata` exit 101 (*current package believes it's in a workspace when it's not*) with no entry, and
+# exit 0 with this one, which also leaves the workspace's own metadata at exit 0. The in-repo fixtures above
+# still rely on their own `[workspace]`, and `workspace_isolation.rs` holds only *tracked* manifests, so a
+# manifest a test writes at run time is defended by this entry alone. A `CARGO_TARGET_DIR` outside the
+# repository puts those roots outside it too, and nothing is discovered.
+#
 # CI exercises the examples in isolation through `crates/shengmo/tests/examples_suite.rs`.
-exclude = ["examples"]
+exclude = ["examples", "target"]
 
 [workspace.package]
 version = "0.7.1"
