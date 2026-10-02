@@ -31,6 +31,8 @@ them.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-03
+
 ### Semantic
 
 - **BREAKING** — **渾儀 observes `safe`- and `unsafe`-qualified foreign items.** Inside an `unsafe extern`
@@ -4500,7 +4502,8 @@ them.
   96 tarballs then on the books, and the six new ones were audited on 2026-08-28, so the sentence says which
   audit covered what instead of letting one date stand for both.
 
-[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/tacticaldoll/tianheng/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/tacticaldoll/tianheng/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/tacticaldoll/tianheng/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/tacticaldoll/tianheng/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/tacticaldoll/tianheng/compare/v0.6.0...v0.6.1
