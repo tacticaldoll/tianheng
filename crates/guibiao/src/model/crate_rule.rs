@@ -6,11 +6,17 @@ use xuanji::{Polarity, RuleKey, Severity};
 /// A boundary attached to one crate target, with a human-readable reason.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CrateBoundary {
+    /// The crate governed, by package name.
     pub(crate) target: CrateTarget,
+    /// What the boundary forbids or restricts; its key and label identify every violation it emits.
     pub(crate) rule: Rule,
+    /// The declared intent the boundary protects, carried on every violation as the repair direction.
     pub(crate) reason: String,
+    /// Whether a violation fails the reaction (`Enforce`) or is only reported (`Warn`).
     pub(crate) severity: Severity,
+    /// The dependency table the rule observes.
     pub(crate) kind: DependencyKind,
+    /// A durable governance pointer, distinct from `reason`; `None` unless `with_anchor` sets one.
     pub(crate) anchor: Option<String>,
 }
 
@@ -389,6 +395,8 @@ impl Rule {
             .collect()
     }
 
+    /// The target's offences against this rule in its `kind` table, as typed facts each carrying `kind`, so one
+    /// dependency offending in two tables is two identities.
     pub(crate) fn facts(
         &self,
         package: &Value,
@@ -451,6 +459,7 @@ impl Rule {
 /// Fluent builder: `CrateBoundary::crate_("x").deny_external_dependencies().because("…")`
 /// or `CrateBoundary::crate_("x").forbid_dependency_on(["y"]).because("…")`.
 pub struct CrateBoundaryBuilder {
+    /// The crate the finished boundary governs.
     target: CrateTarget,
 }
 
@@ -630,9 +639,13 @@ impl CrateBoundaryBuilder {
 
 /// A deny-external boundary awaiting an optional allowlist, severity, and reason.
 pub struct DenyExternalDraft {
+    /// The crate the finished boundary governs.
     target: CrateTarget,
+    /// External crates exempted from the deny rule, accumulated across `allow_external` calls.
     allowed: Vec<String>,
+    /// `Enforce` until `warn` makes the boundary advisory.
     severity: Severity,
+    /// The dependency table the rule observes; `Normal` until `dependency_kind` changes it.
     kind: DependencyKind,
 }
 
@@ -676,9 +689,13 @@ impl DenyExternalDraft {
 
 /// A crate boundary awaiting its severity and reason.
 pub struct CrateBoundaryDraft {
+    /// The crate the finished boundary governs.
     target: CrateTarget,
+    /// The rule the builder method chose, moved unchanged into the boundary.
     rule: Rule,
+    /// `Enforce` until `warn` makes the boundary advisory.
     severity: Severity,
+    /// The dependency table the rule observes; `Normal` until `dependency_kind` changes it.
     kind: DependencyKind,
 }
 

@@ -83,20 +83,27 @@ pub(super) fn glob_reaches_prefix(
 /// What one read of a scope asks about: the confined `prefix`, the module `target` the glob being chased names, and
 /// the `viewer` module the reacting glob is written in.
 struct Reading<'a> {
+    /// The confined path a binding of the scope is tested as lying under.
     prefix: &'a str,
+    /// The module the chased glob names, the only module whose private globs are followed.
     target: &'a str,
+    /// The module a private glob of `target` must be visible from to be followed.
     viewer: &'a str,
 }
 
 /// What the hazard walk has found: whether any module reaches the prefix, and the least refusal of a chain it read.
 #[derive(Default)]
 struct Hazard {
+    /// Whether some chain read so far reaches the prefix; the answer only where `refused` is `None`.
     reaches: bool,
+    /// The least refusal met so far, which is the answer whatever `reaches` holds.
     refused: Option<String>,
+    /// The candidate paths queued for the walk, held to the resolution's width limit.
     work_size: ReadingSize,
 }
 
 impl Hazard {
+    /// Hold `refusal` if it is less than the refusal already held, so the one answered is independent of reading order.
     fn refuse(&mut self, refusal: String) {
         self.refused = least(self.refused.take(), refusal);
     }

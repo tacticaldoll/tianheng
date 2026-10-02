@@ -20,7 +20,9 @@ use super::use_tree::{UseLeaf, UseStatement};
 /// can tell an import of a module from an import of something in it.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct ImportedPath {
+    /// The `crate::`-rooted module path the leaf names, in `readable_module`'s form.
     pub path: String,
+    /// The source wrote the path as a glob's base, so what it imports is the module's contents, not the module.
     pub is_glob: bool,
     /// The source wrote the path as a `{self}` leaf — `use m::foo::{self};`, or `{self as f}`.
     ///
@@ -152,7 +154,9 @@ fn external_imports_with_importers(
 /// names neither — a `super` past the crate root, `::self`, a block-local item — is no target at all.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum UseTarget {
+    /// A `crate::`-rooted module path of this crate, in `readable_module`'s form.
     Internal(String),
+    /// An external crate, by the head segment that names it.
     External(String),
 }
 
@@ -200,9 +204,13 @@ fn classify(
 /// One leaf of a file's `use` statements, classified: the importer's identity, one thing the leaf names, and whether
 /// it is a glob base or a `{self}` leaf.
 pub(super) struct ClassifiedLeaf {
+    /// The identity of the module the leaf's statement is written in, as its `FileUse` carries it.
     importer: String,
+    /// One thing the leaf names; a leaf whose head can name several yields one classified leaf per target.
     target: UseTarget,
+    /// Whether the leaf is a glob, classified by its base path.
     is_glob: bool,
+    /// Whether the leaf is a `{self}` leaf, classified by the prefix module it names.
     is_self_leaf: bool,
 }
 
@@ -238,8 +246,11 @@ pub(super) fn classify_uses(
 /// One `use` statement of a file: the identity of the module it is written in, the scope it stands in, and its
 /// leaves, or the refusal of a tree nested past the parser's cap.
 pub(super) struct FileUse {
+    /// The identity of the module the statement is written in, numbered apart where two block modules read alike.
     pub importer: String,
+    /// The index, in its file's scope table, of the scope the statement stands in.
     pub scope: u32,
+    /// The statement's leaves, or the refusal of a tree the parser would not read.
     pub leaves: Result<Vec<UseLeaf>, String>,
 }
 

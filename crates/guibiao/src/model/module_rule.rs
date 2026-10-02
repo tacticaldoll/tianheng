@@ -7,12 +7,19 @@ use xuanji::{Polarity, RuleKey, ScanDepth, Severity};
 /// see. Observed from the target crate's source `use` declarations (PROJECT.md).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModuleBoundary {
+    /// The crate the governed module lives in, by package name.
     pub(crate) crate_package: String,
+    /// The governed module path as declared; a spelling other than the canonical one is refused at evaluation.
     pub(crate) module: String,
+    /// What the boundary forbids, restricts, or confines.
     pub(crate) rule: ModuleRule,
+    /// The declared intent the boundary protects, carried on every violation as the repair direction.
     pub(crate) reason: String,
+    /// Whether a violation fails the reaction (`Enforce`) or is only reported (`Warn`).
     pub(crate) severity: Severity,
+    /// A durable governance pointer, distinct from `reason`; `None` unless `with_anchor` sets one.
     pub(crate) anchor: Option<String>,
+    /// How far below `module` the boundary observes; a `Shallow` depth enters its rule key, `Subtree` does not.
     pub(crate) depth: ScanDepth,
 }
 
@@ -461,6 +468,7 @@ impl ModuleRule {
 
 /// Fluent builder for a [`ModuleBoundary`].
 pub struct ModuleBoundaryBuilder {
+    /// The crate the governed module lives in, by package name.
     crate_package: String,
 }
 
@@ -481,7 +489,9 @@ impl ModuleBoundaryBuilder {
 
 /// A module boundary awaiting its module rule.
 pub struct ModuleTargetDraft {
+    /// The crate the governed module lives in, by package name.
     crate_package: String,
+    /// The governed module as written; its spelling is judged when the boundary is checked.
     module: String,
 }
 
@@ -612,6 +622,7 @@ impl ModuleTargetDraft {
         }
     }
 
+    /// The draft every non-inline rule method returns: `rule` over this target, enforced, at `Subtree` depth.
     fn with_rule(self, rule: ModuleRule) -> ModuleBoundaryDraft {
         ModuleBoundaryDraft {
             crate_package: self.crate_package,
@@ -625,10 +636,15 @@ impl ModuleTargetDraft {
 
 /// A module boundary awaiting its severity and reason.
 pub struct ModuleBoundaryDraft {
+    /// The crate the governed module lives in, by package name.
     crate_package: String,
+    /// The governed module as written; its spelling is judged when the boundary is checked.
     module: String,
+    /// The rule the target draft's method chose, moved unchanged into the boundary.
     rule: ModuleRule,
+    /// `Enforce` until `warn` makes the boundary advisory.
     severity: Severity,
+    /// `Subtree` until `depth` changes it.
     depth: ScanDepth,
 }
 
@@ -669,16 +685,24 @@ impl ModuleBoundaryDraft {
 /// [`strict_prefix_only`](Self::strict_prefix_only) (they are mutually exclusive), and
 /// [`warn`](Self::warn), before [`because`](Self::because).
 pub struct InlineConfinementDraft {
+    /// The crate the governed module lives in, by package name.
     crate_package: String,
+    /// The governed module as written; its spelling is judged when the boundary is checked.
     module: String,
+    /// The prefix as written, moved unchanged into the rule.
     prefix: String,
+    /// The read verbs `ending_with` declares; `None` reacts on every call.
     ending_with: Option<Vec<String>>,
+    /// Set by `strict_prefix_only`: any mention under the prefix reacts, not only a call.
     strict: bool,
+    /// Set by `strict_external`: a bare head no scope binds that matches a declared dependency resolves as that crate.
     external: bool,
     /// Whether the governed module is the permitted region ([`ModuleRule::ConfineInlineCall`]) rather than the
     /// judged one ([`ModuleRule::ConfineInlineSymbolPath`]).
     permitted: bool,
+    /// `Enforce` until `warn` makes the boundary advisory.
     severity: Severity,
+    /// `Subtree` until `depth` changes it.
     depth: ScanDepth,
 }
 

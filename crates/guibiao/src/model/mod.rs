@@ -1,5 +1,7 @@
 //! Structural model and rules for guibiao.
 
+/// The accessors and `with_anchor` a module boundary type exposes, for a `$boundary` carrying `crate_package`,
+/// `anchor` and `severity` fields.
 macro_rules! boundary_common {
     ($boundary:ty) => {
         impl $boundary {
@@ -29,6 +31,7 @@ macro_rules! boundary_common {
     };
 }
 
+/// The `warn` modifier a module-boundary draft exposes, for a `$draft` carrying a `severity` field.
 macro_rules! draft_common {
     ($draft:ty) => {
         impl $draft {

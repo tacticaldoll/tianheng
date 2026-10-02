@@ -13,10 +13,13 @@ const MAX_USE_TREE_NESTING: usize = 128;
 /// One `use … ;` statement: its `use` keyword's token, the visibility its qualifier gives what it binds, and its
 /// leaves as the one use-tree parser reads them from its tokens, or the refusal quoting the tree as written.
 pub(super) struct UseStatement {
+    /// The token index of the `use` keyword.
     pub at: usize,
     /// The statement's `;`.
     pub end: usize,
+    /// The visibility the qualifier before `use` gives every name the statement binds.
     pub visibility: Visibility,
+    /// Every leaf of the tree, or the refusal quoting the tree; a tree is never read in part.
     pub leaves: Result<Vec<UseLeaf>, String>,
 }
 
@@ -114,14 +117,24 @@ fn render(tree: &TokenTree, from: usize, to: usize) -> String {
 pub(super) enum UseLeaf {
     /// A path the tree imports, and the name it binds: its `as` alias — `_` for `as _`, which binds no name a path
     /// can head — or else its last segment.
-    Name { path: String, binds: String },
+    Name {
+        /// The imported path, each segment as written and led by `::` where the tree was.
+        path: String,
+        /// The bound name, canonical (no `r#`).
+        binds: String,
+    },
     /// A glob, by its base path: `a::b::*` and the `*` of `a::b::{*}` are both `a::b`, and a glob with no path before
     /// it — `::*`, `*`, `{*}` — is `::`, which names the crate root in edition 2015, where each of those spellings
     /// reads from it.
     Glob(String),
     /// A `{self}` leaf: the group's prefix module itself, and the name it binds — its `as` alias, or
     /// else the module path's last segment, so `use std::io::{self};` binds `io`.
-    SelfLeaf { module: String, binds: String },
+    SelfLeaf {
+        /// The group's prefix path, each segment as written.
+        module: String,
+        /// The bound name, canonical (no `r#`).
+        binds: String,
+    },
     /// An empty group, by the path before it: `use crate::a::{};` imports and binds nothing, and still names
     /// `crate::a`, which rustc resolves — `use crate::a::nothere::{};` is refused with E0432 — so a reader of
     /// mentions reads it while a reader of imports passes it over.
@@ -131,11 +144,14 @@ pub(super) enum UseLeaf {
 /// The path a use tree has read so far: its segments as written, and whether it began with `::`.
 #[derive(Clone, Default)]
 struct Path {
+    /// Whether the tree began with `::`.
     global: bool,
+    /// Each segment as its token is written, `r#` kept.
     segments: Vec<String>,
 }
 
 impl Path {
+    /// The segments joined by `::`, led by `::` where the tree began with one: the path as written, not canonicalized.
     fn written(&self) -> String {
         let joined = self.segments.join("::");
         if self.global {
@@ -145,6 +161,7 @@ impl Path {
         }
     }
 
+    /// The last segment as written, or `None` before any segment is read.
     fn last(&self) -> Option<&str> {
         self.segments.last().map(String::as_str)
     }
@@ -155,7 +172,9 @@ impl Path {
 /// leaf dropped.
 #[derive(Debug)]
 enum Unread {
+    /// Brace nesting went past the cap, which it carries for the refusal to name.
     PastCap(usize),
+    /// The index of the token no path segment is; an index at the statement's end means the path ended in `::`.
     Token(usize),
 }
 

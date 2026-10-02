@@ -33,20 +33,28 @@ use super::use_tree::{UseLeaf, macro_use_statements, use_statements};
 
 /// One inline offence: the `finding` string (per the identity requirement) and the source file.
 pub(crate) struct InlineFinding {
+    /// The offence's identity; findings are deduplicated on it alone.
     pub fact: ModuleFact,
+    /// The displayed path of the file it was met in — the first in sort order where several files share one fact.
     pub file: String,
 }
 
 /// One file of a compilation unit, read once: its path, its module, and the occurrences its tree holds.
 struct FileScan {
+    /// The path the text was read from, which every refusal about this scan names.
     file: PathBuf,
+    /// The module the file is read as; a file read as two modules is two scans.
     module: String,
+    /// Every call and path mention outside the statements `uses` and `macro_uses` hold.
     occurrences: Vec<Occurrence>,
+    /// The file's `use` statements outside any macro's group, each with its scope; a refused tree is kept as its
+    /// refusal.
     uses: Vec<FileUse>,
     /// The boundary-independent classification, including a bare refusal, read only when an import rule asks.
     classified: OnceCell<Result<Vec<ClassifiedLeaf>, String>>,
     /// The two projections of the same classification, each built only when its rule family asks.
     internal: OnceCell<Vec<(String, ImportedPath)>>,
+    /// External crates its `use` leaves import, paired with the importer: what `confine_external_crate` judges.
     external: OnceCell<Vec<(String, String)>>,
     /// The `use` statements a macro's group holds whose trees read, which a strict confinement judges as it judges
     /// the rest and no import rule reads.
@@ -93,11 +101,16 @@ impl FileScan {
 /// Every file of one compilation unit, each read once into its scope table and its occurrences, and the resolver
 /// over all of them: what the prefix existence check and the inline findings both read.
 pub(crate) struct UnitScan {
+    /// One scan per `(file, module)` pair read, in reading order; a scan's position is its scope table's index in
+    /// `scopes`.
     files: Vec<FileScan>,
+    /// Each `(file, module)` pair to its position in `files`; a pair read twice keeps its first.
     index: HashMap<(PathBuf, String), usize>,
     /// Classification work, counted at the classifier call by the file and module it reads.
     #[cfg(test)]
     classifications: std::cell::RefCell<HashMap<(PathBuf, String), usize>>,
+    /// The resolver over every file's scope table, knowing the declared dependencies and, in a proc-macro crate,
+    /// `proc_macro`.
     scopes: CrateScopes,
 }
 
@@ -326,10 +339,17 @@ impl UnitScan {
 
 /// One confinement's judgement over the unit.
 struct Judgement<'a> {
+    /// The unit's resolver, through which every occurrence, glob and `use` leaf is read.
     scopes: &'a CrateScopes,
+    /// The confined prefix in its canonical form; a resolved path within it is a finding.
     prefix: &'a str,
+    /// Canonical verbs a non-strict confinement narrows to, matched against a resolved path's last segment; `None`
+    /// judges every call.
     verbs: Option<Vec<String>>,
+    /// Whether every path mention and every `use` leaf is judged, not only calls.
     strict: bool,
+    /// The declared dependencies an unbound head is read as under strict-external observation; `None` when not opted
+    /// in.
     external_dependencies: Option<BTreeSet<String>>,
 }
 

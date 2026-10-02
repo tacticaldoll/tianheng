@@ -21,13 +21,18 @@ use super::token_tree::{Delimiter, Kind, Node, TokenTree};
 /// A path occurrence: the token its run starts at — the head, or the `::` rooting it — its `::`-joined segments,
 /// `::`-prefixed where rooted, and whether it is applied as a call.
 pub(super) struct Occurrence {
+    /// The token the run starts at, which places the occurrence in its scope and against the `use` statements.
     pub at: usize,
+    /// The run's segments joined with `::`, with a leading `::` where the run is rooted; a turbofish is no segment.
     pub segments: String,
+    /// Whether a parenthesized group follows the run and the run does not name the `fn`, tuple struct or tuple
+    /// variant being declared.
     pub is_call: bool,
 }
 
 /// A path run whose head is at `head`.
 pub(super) struct PathRun {
+    /// The head's text and each `::`-separated segment after it, unjoined; a turbofish is no segment.
     pub segments: Vec<String>,
     /// The index just past the run — past a trailing turbofish too.
     pub end: usize,
@@ -118,12 +123,16 @@ pub(super) fn occurrences(tree: &TokenTree, statements: &[(usize, usize)]) -> Ve
 
 /// What the scan of one tree carries between the ranges it reads.
 struct Scan<'t, 's> {
+    /// The tree every range on `work` indexes into.
     tree: &'t TokenTree<'s>,
+    /// The token index of every enum variant name, so a variant's name where it is declared is read as a definition
+    /// rather than a call or a mention.
     variants: BTreeSet<usize>,
     /// The `::` beginning each qualified path's tail, which the scan does not read as a path.
     qualified_tails: BTreeSet<usize>,
     /// Ranges waiting to be read: turbofish contents and attribute arguments.
     work: Vec<(usize, usize)>,
+    /// Every occurrence read so far, in the order its range was read, `use` statements' paths not yet removed.
     out: Vec<Occurrence>,
 }
 

@@ -172,7 +172,9 @@ fn is_symbol_path_spelling(written: &str) -> bool {
 /// for the readers that judge what the written first segment may name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PrefixRoot {
+    /// Written with no leading `::`, as `std::time`.
     Bare,
+    /// Written from the extern-crate root, as `::std::time`.
     Global,
 }
 
@@ -182,7 +184,9 @@ pub(crate) enum PrefixRoot {
 /// disagree about which prefix a finding belongs to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SymbolPrefix {
+    /// The canonical segments joined by `::`, with no leading `::` and no `r#`: the prefix's identity.
     pub path: String,
+    /// The root form it was written in; not part of the identity.
     pub root: PrefixRoot,
 }
 
@@ -425,7 +429,9 @@ pub(super) fn resolve_self_super(current_module: &str, parts: &[&str]) -> Option
 /// an expression, or a `type` alias's target.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub(super) enum PathSite {
+    /// A `use` path: in edition 2015 its bare head is looked up from the crate root.
     Use,
+    /// Any other path: its bare head is looked up in the scope it is written in, in every edition.
     Expr,
 }
 
@@ -436,14 +442,29 @@ pub(super) enum WrittenRoot {
     /// `crate::…`, or a `self`/`super` path folded against its module: crate-rooted.
     Crate(String),
     /// `::head::…` in edition 2018 and later: the crate named `head`, a sysroot crate or a dependency.
-    Extern { head: String, rest: Vec<String> },
+    Extern {
+        /// The first segment, canonical (no `r#`).
+        head: String,
+        /// The segments after `head`, each canonical, in written order.
+        rest: Vec<String>,
+    },
     /// In edition 2015, a `use` path or a path beginning with `::`: `head` is looked up in the crate
     /// root's scope, where an `extern crate` is itself an item, and names a crate where nothing there
     /// binds it.
-    FromCrateRoot { head: String, rest: Vec<String> },
+    FromCrateRoot {
+        /// The first segment, canonical (no `r#`).
+        head: String,
+        /// The segments after `head`, each canonical, in written order.
+        rest: Vec<String>,
+    },
     /// A bare head, looked up in the scope the path is written in — in edition 2018 and later a `use`
     /// path's too, as a uniform path.
-    Bare { head: String, rest: Vec<String> },
+    Bare {
+        /// The first segment, canonical (no `r#`).
+        head: String,
+        /// The segments after `head`, each canonical, in written order.
+        rest: Vec<String>,
+    },
     /// Nothing a path can start from: no segment, a `super` past the crate root, or `::self`,
     /// `::super`, `::Self`.
     Invalid,

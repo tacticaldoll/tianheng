@@ -20,7 +20,11 @@ use unicode_normalization::UnicodeNormalization;
 /// literal is an identifier of its own, since C string literals arrive in 2021.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Edition {
+    /// The edition where `async`, `await`, `dyn` and `try` are identifiers, and a `use` path or a `::`-rooted path
+    /// starts at the crate root.
     Rust2015,
+    /// The edition where those words are keywords, while a `c` before a string literal is still an identifier of its
+    /// own.
     Rust2018,
     /// 2021 and every edition after it.
     Rust2021,
@@ -37,33 +41,50 @@ impl Edition {
     }
 }
 
+/// The bracket a group is written with: an opener pairs only a closer of its own delimiter.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Delimiter {
+    /// `(` and `)`.
     Parenthesis,
+    /// `[` and `]`.
     Bracket,
+    /// `{` and `}`.
     Brace,
 }
 
+/// A token's lexical class, decided once by the lexer; the tree's edition decides a word between [`Kind::Keyword`]
+/// and [`Kind::Ident`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Kind {
+    /// A word other than `_` that the edition does not reserve, a contextual keyword such as `union` or `macro_rules`
+    /// among them.
     Ident,
     /// `r#name`; its [`TokenTree::text`] is `name`.
     RawIdent,
+    /// A word [`is_keyword`] reserves in the tree's edition, `self`, `super`, `crate` and `Self` among them.
     Keyword,
     /// A lifetime or a label: `'a`, `'static`.
     Lifetime,
     /// Any literal: string, raw string, byte or C string, character, byte character, number.
     Literal,
+    /// Punctuation read by maximal munch over [`MULTI_BYTE_PUNCTUATION`]; also `_`, a `'` that opens no lifetime or
+    /// literal, and a closer that pairs no opener.
     Punct,
+    /// An opener; [`TokenTree::partner`] names its closer.
     Open(Delimiter),
+    /// A closer paired with its opener. One the source never wrote, closing an opener left unclosed, stands past the
+    /// last written token with an empty span.
     Close(Delimiter),
     /// Past the last token: what [`TokenTree::kind`] answers there, so a reader stepping off the end of a cut-off file
     /// reads a token that is none of the others. No token has it.
     End,
 }
 
+/// One lexed token: what it is, and the bytes of the source it was read from.
 #[derive(Clone, Debug)]
 pub(super) struct Token {
+    /// What the token is. Once the tree is built, every [`Kind::Open`] and [`Kind::Close`] token is paired with its
+    /// partner.
     pub kind: Kind,
     /// The bytes of the source the token was read from. A closer the source never wrote, pairing an unclosed
     /// opener at the end of the text, has an empty span there.
@@ -74,22 +95,33 @@ pub(super) struct Token {
 /// indices that bound it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Node {
+    /// A token that starts none of the other nodes, such as a `#` with no `[` after it or a name with no `!` and group.
     Token(usize),
+    /// A `(…)`, `[…]` or `{…}` group, from its opener to its closer.
     Group {
+        /// The opener.
         open: usize,
+        /// The closer paired with `open`.
         close: usize,
     },
     /// `name ! group`, or `macro_rules ! name group`, with `name` the first token of the node.
     Macro {
+        /// The node's first token: the macro's name, or `macro_rules`.
         name: usize,
+        /// The `!` straight after `name`.
         bang: usize,
+        /// The opener of the group the macro is called with, past the defined name for `macro_rules`.
         open: usize,
+        /// The closer paired with `open`, the node's last token.
         close: usize,
     },
     /// `# [ … ]` or `# ! [ … ]`.
     Attribute {
+        /// The `#`.
         hash: usize,
+        /// The `[`, past the `!` of an inner attribute.
         open: usize,
+        /// The `]` paired with `open`.
         close: usize,
     },
 }
@@ -116,9 +148,13 @@ impl Node {
     }
 }
 
+/// One source file as tokens, each `(`, `[` and `{` paired with its closer: a closer no opener pairs reads as
+/// [`Kind::Punct`], and an opener the source leaves unclosed is closed past its last token.
 pub(super) struct TokenTree<'s> {
     /// The source the tokens' spans index: as written, or with its identifiers in NFC ([`identifiers_in_nfc`]).
     source: Cow<'s, str>,
+    /// Every token in source order, with a closer for each opener the source left unclosed appended after the last;
+    /// a token's index here is its position in every question the tree answers.
     tokens: Vec<Token>,
     /// For an opener, its closer; for a closer, its opener; for any other token, itself.
     partner: Vec<usize>,
@@ -134,8 +170,13 @@ pub(super) struct TokenTree<'s> {
 /// level holds it. What the entries mean is that reader's question; this module only keeps them.
 #[derive(Clone, Copy, Default)]
 pub(super) struct AngleSlot {
+    /// For a `<` or `<<` that opens a group, the token closing it; `None` for every other token, and for an opener a
+    /// `;` or the end of its level reaches first.
     pub(super) close: Option<usize>,
+    /// For a `<<` that opens a group, the token closing the inner group its second `<` opens — the same token as
+    /// `close` where one `>>` closes both.
     pub(super) inner_close: Option<usize>,
+    /// For a `(`, `[` or `{`, whether a `<…>` group among its sibling nodes spans it; `false` for every other token.
     pub(super) enclosed: bool,
 }
 
@@ -241,6 +282,7 @@ pub(super) fn is_ident_byte(byte: u8) -> bool {
     byte == b'_' || byte.is_ascii_alphanumeric() || byte >= 0x80
 }
 
+/// Whether `byte` may begin an identifier: what [`is_ident_byte`] accepts, less the ASCII digits.
 fn is_ident_start(byte: u8) -> bool {
     byte == b'_' || byte.is_ascii_alphabetic() || byte >= 0x80
 }
@@ -370,6 +412,8 @@ impl<'s> TokenTree<'s> {
         self.angles.get_or_init(read)
     }
 
+    /// How many tokens the tree holds, the closers appended for unclosed openers included; [`TokenTree::kind`] answers
+    /// [`Kind::End`] from this index on.
     pub(super) fn len(&self) -> usize {
         self.tokens.len()
     }
@@ -649,6 +693,8 @@ fn decode_str_escapes(inner: &[u8]) -> Option<String> {
     Some(out)
 }
 
+/// The byte length of the UTF-8 character `lead` begins, read from its high bits; a continuation byte or one no
+/// character begins with counts as one.
 fn utf8_len(lead: u8) -> usize {
     match lead {
         0xC0..=0xDF => 2,
@@ -658,6 +704,8 @@ fn utf8_len(lead: u8) -> usize {
     }
 }
 
+/// Past the run of bytes [`is_ident_byte`] accepts starting at `i`, stopping before a whitespace character past
+/// ASCII; a number's digits and suffix are read as such a run too.
 fn word_end(bytes: &[u8], mut i: usize) -> usize {
     while i < bytes.len() && is_ident_byte(bytes[i]) && white_space_len(bytes, i) == 0 {
         i += 1;

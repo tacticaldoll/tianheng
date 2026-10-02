@@ -4,28 +4,43 @@ use xuanji::{Finding, StructuredFactIdentity};
 
 use crate::{DependencyKind, SourceKind};
 
+/// One offending manifest declaration a crate boundary observed.
 pub(crate) enum CrateFact {
+    /// A dependency the rule does not permit.
     Dependency {
+        /// The dependency's package name, never its local rename.
         package: String,
+        /// The dependency table it is declared in.
         kind: DependencyKind,
     },
+    /// A feature a dependency declaration requests on a crate whose features the rule restricts or
+    /// forbids.
     Feature {
+        /// The crate the rule names, whose feature it is.
         package: String,
+        /// The feature's name.
         feature: String,
+        /// The dependency table the declaration is in.
         kind: DependencyKind,
     },
+    /// A dependency declared from a source kind the rule does not permit.
     Source {
+        /// The dependency's package name, never its local rename.
         package: String,
+        /// The source the declaration names.
         source: SourceKind,
+        /// The dependency table it is declared in.
         kind: DependencyKind,
     },
 }
 
 impl CrateFact {
+    /// A [`CrateFact::Dependency`].
     pub(crate) fn dependency(package: String, kind: DependencyKind) -> Self {
         Self::Dependency { package, kind }
     }
 
+    /// A [`CrateFact::Feature`].
     pub(crate) fn feature(package: String, feature: String, kind: DependencyKind) -> Self {
         Self::Feature {
             package,
@@ -34,6 +49,7 @@ impl CrateFact {
         }
     }
 
+    /// A [`CrateFact::Source`].
     pub(crate) fn source(package: String, source: SourceKind, kind: DependencyKind) -> Self {
         Self::Source {
             package,
@@ -42,6 +58,8 @@ impl CrateFact {
         }
     }
 
+    /// Project the fact into its finding: the text names the package (with `/feature` for a feature),
+    /// suffixed ` (dev)` or ` (build)` outside the normal table, and the identity keys every field.
     pub(crate) fn into_finding(self) -> Finding {
         match self {
             CrateFact::Dependency { package, kind } => Finding::new(
@@ -88,13 +106,37 @@ impl CrateFact {
     }
 }
 
+/// One offence a module boundary observed in a compilation unit, before it is keyed by the governing
+/// package and the unit.
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum ModuleFact {
-    ImportedPath { path: String, importer: String },
+    /// An outbound-rule offence: a `use` inside the governed module that the rule forbids.
+    ImportedPath {
+        /// The `crate::`-rooted path the `use` names.
+        path: String,
+        /// The module lexically declaring the `use`.
+        importer: String,
+    },
+    /// An inbound-rule offence: the module outside the governed one that imports it.
     ImporterModule(String),
+    /// An external-crate-confinement offence: the module outside the permitted subtree that imports
+    /// the confined crate.
     ExternalImporter(String),
-    InlinePath { path: String, module: String },
-    InlineGlob { path: String, module: String },
+    /// An inline-confinement offence: a resolved path under the confined prefix, named in `module`.
+    InlinePath {
+        /// The canonical path the occurrence resolved to.
+        path: String,
+        /// The module whose file the occurrence stands in.
+        module: String,
+    },
+    /// An inline-confinement offence by a glob import whose reach covers the confined prefix, rather
+    /// than by a named path.
+    InlineGlob {
+        /// The glob's own resolved path.
+        path: String,
+        /// The module whose file the glob stands in.
+        module: String,
+    },
 }
 
 impl ModuleFact {
@@ -191,6 +233,8 @@ impl ModuleFact {
     }
 }
 
+/// The structured identity of one guibiao fact: fact type `tianheng.fact/guibiao/<family>`, with
+/// `shape` and `fields` passed through unchanged.
 fn fact<const N: usize>(
     family: &str,
     shape: &str,
