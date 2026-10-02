@@ -1978,16 +1978,17 @@ fn require_lock_versions(repo: &Path, members: &[Member], version: &str) -> Resu
 /// `any` over the matching sections rather than the first of them: the caller refuses a changelog with more
 /// than one before reaching here, so the two agree — and reading *the first* would be a choice this function
 /// has no reason to make.
+/// Whether `line` opens a Markdown list item, at any depth: `- ` or `* ` after its indentation.
+fn is_list_item(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    trimmed.starts_with("- ") || trimmed.starts_with("* ")
+}
+
 fn unreleased_has_item(sections: &[Section]) -> bool {
     sections
         .iter()
         .filter(|section| section.name == "## [Unreleased]")
-        .any(|section| {
-            section.body.iter().any(|(_, line)| {
-                let trimmed = line.trim_start();
-                trimmed.starts_with("- ") || trimmed.starts_with("* ")
-            })
-        })
+        .any(|section| section.body.iter().any(|(_, line)| is_list_item(line)))
 }
 
 struct Shape {
@@ -2353,17 +2354,21 @@ const ITEM_NOUNS: [&str; 9] = [
     "entry", "entries", "section", "sections", "bullet", "item", "step", "group", "heading",
 ];
 
-/// Every reference in a section still being written that points at another entry by its position.
+/// Every reference in a section still being written spelled with one of the declared position words.
 ///
 /// **A position is not a name.** A regroup of the sections' headings moves entries without changing a word, so
 /// a reference reading *below* or *the next entry* can come to point at something else, or at nothing, while
 /// every line of the file is still present. The repair is one step: name the entry, step or bound meant.
 ///
-/// The question is asked of words, so it has one answer per word: a paragraph is read whole, so a phrase
-/// wrapped across lines is one phrase; an inline code span is taken out first, so a word quoted as a word is
-/// not read; and every heading is held, `### Self-governance` included, because a regroup moves its entries
-/// too. The refusal reaches beyond the property — a reference to the entry immediately after, within one group,
-/// survives any regroup and is still refused — and that is the price of a question with one syntactic answer.
+/// The question is asked of words, so it has one answer per word. A paragraph is read whole, so a phrase
+/// wrapped across lines is one phrase, and a list item at any depth ([`is_list_item`]) ends it; an inline code
+/// span is taken out first, so a word quoted as a word is not read; each finding names the line its word stands
+/// on; and every heading is held, `### Self-governance` included, because a regroup moves its entries too.
+///
+/// **What it refuses beyond the property, stated rather than discovered.** A reference to the entry
+/// immediately after, within one group, survives any regroup and is still refused. So is `above` or `below`
+/// used as a preposition rather than a pointer — *below 1.85*, *above the limit* — whose repair is a rewording
+/// rather than a name. A positional phrase spelled with words outside the declared ones is not read.
 pub(crate) fn positional_references(
     sections: &[Section],
     version: &str,
@@ -2376,33 +2381,29 @@ pub(crate) fn positional_references(
         }
         let mut heading = String::new();
         let mut paragraph: Vec<&(usize, String)> = Vec::new();
-        let mut flush =
-            |paragraph: &mut Vec<&(usize, String)>, heading: &str| {
-                if let Some((start, _)) = paragraph.first() {
-                    let text: String = paragraph
-                        .iter()
-                        .map(|(_, line)| line.as_str())
-                        .collect::<Vec<_>>()
-                        .join(" ");
-                    for phrase in positional_phrases(&text) {
-                        found.push(format!(
-                        "  CHANGELOG.md:{start} {} under `### {}` points by position: `{phrase}`",
-                        section.name,
-                        if heading.is_empty() { "(no heading)" } else { heading }
-                    ));
-                    }
-                }
-                paragraph.clear();
-            };
+        let mut flush = |paragraph: &mut Vec<&(usize, String)>, heading: &str| {
+            for (line, phrase) in positional_phrases(paragraph) {
+                let place = if heading.is_empty() {
+                    "with no heading".to_string()
+                } else {
+                    format!("under `### {heading}`")
+                };
+                found.push(format!(
+                    "  CHANGELOG.md:{line} {} {place} points by position: `{phrase}`",
+                    section.name
+                ));
+            }
+            paragraph.clear();
+        };
         for line in &section.body {
             if let Some(next) = line.1.strip_prefix("### ") {
                 flush(&mut paragraph, &heading);
                 heading = next.trim_end().to_string();
-            } else if line.1.trim().is_empty() || line.1.starts_with("- ") {
+            } else if line.1.trim().is_empty() {
                 flush(&mut paragraph, &heading);
-                if !line.1.trim().is_empty() {
-                    paragraph.push(line);
-                }
+            } else if is_list_item(&line.1) {
+                flush(&mut paragraph, &heading);
+                paragraph.push(line);
             } else {
                 paragraph.push(line);
             }
@@ -2412,10 +2413,19 @@ pub(crate) fn positional_references(
     found
 }
 
-/// The positional phrases in `text`, with inline code spans taken out first.
-fn positional_phrases(text: &str) -> Vec<String> {
+/// The positional phrases in one paragraph, each with the line its first word stands on, read after the inline
+/// code spans are taken out. A span is replaced by the line breaks it held, so every word keeps its line.
+fn positional_phrases(paragraph: &[&(usize, String)]) -> Vec<(usize, String)> {
+    let Some((first, _)) = paragraph.first() else {
+        return Vec::new();
+    };
+    let text = paragraph
+        .iter()
+        .map(|(_, line)| line.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
     let mut prose = String::new();
-    let mut rest = text;
+    let mut rest = text.as_str();
     while let Some(open) = rest.find('`') {
         prose.push_str(&rest[..open]);
         let run = rest[open..].len() - rest[open..].trim_start_matches('`').len();
@@ -2424,6 +2434,10 @@ fn positional_phrases(text: &str) -> Vec<String> {
         match after.find(fence) {
             Some(close) => {
                 prose.push(' ');
+                prose.extend(std::iter::repeat_n(
+                    '\n',
+                    after[..close].matches('\n').count(),
+                ));
                 rest = &after[close + run..];
             }
             None => {
@@ -2432,21 +2446,25 @@ fn positional_phrases(text: &str) -> Vec<String> {
         }
     }
     prose.push_str(rest);
-    let words: Vec<String> = prose
-        .split(|c: char| !c.is_alphabetic())
-        .filter(|word| !word.is_empty())
-        .map(str::to_lowercase)
+    let words: Vec<(usize, String)> = prose
+        .lines()
+        .enumerate()
+        .flat_map(|(offset, line)| {
+            line.split(|c: char| !c.is_alphabetic())
+                .filter(|word| !word.is_empty())
+                .map(move |word| (first + offset, word.to_lowercase()))
+        })
         .collect();
     let mut phrases = Vec::new();
-    for (at, word) in words.iter().enumerate() {
+    for (at, (line, word)) in words.iter().enumerate() {
         if POSITION_WORDS.contains(&word.as_str()) {
-            phrases.push(word.clone());
+            phrases.push((*line, word.clone()));
         } else if SEQUENCE_WORDS.contains(&word.as_str())
             && words
                 .get(at + 1)
-                .is_some_and(|noun| ITEM_NOUNS.contains(&noun.as_str()))
+                .is_some_and(|(_, noun)| ITEM_NOUNS.contains(&noun.as_str()))
         {
-            phrases.push(format!("{word} {}", words[at + 1]));
+            phrases.push((*line, format!("{word} {}", words[at + 1].1)));
         }
     }
     phrases

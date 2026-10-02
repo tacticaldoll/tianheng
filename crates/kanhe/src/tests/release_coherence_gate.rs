@@ -644,7 +644,7 @@ fn a_changelog_entry_still_being_written_names_what_it_points_at() {
     };
     let unreleased =
         |body: &str| format!("## [Unreleased]\n\n### Fixed\n\n{body}\n\n## [0.8.0] - 2026-01-01\n");
-    let rows: [(&str, String, State, &[&str]); 10] = [
+    let rows: [(&str, String, State, &[&str]); 13] = [
         ("an adverb points by position", unreleased("- the bound below declares it."), State::Development, &["below"]),
         ("a sequence word before an item noun", unreleased("- held in the next entry."), State::Development, &["next entry"]),
         (
@@ -660,6 +660,24 @@ fn a_changelog_entry_still_being_written_names_what_it_points_at() {
             unreleased("- ends with the next\n- entry starts here."),
             State::Development,
             &[],
+        ),
+        (
+            "a nested list item ends the paragraph too",
+            unreleased("- a parent ends with the next\n  - entry of a sub-item."),
+            State::Development,
+            &[],
+        ),
+        (
+            "a preposition is refused too, as the rule declares",
+            unreleased("- a rust-version below 1.85 is refused."),
+            State::Development,
+            &["below"],
+        ),
+        (
+            "a sub-item's phrase is its own paragraph's",
+            unreleased("- a parent.\n  - a sub-item says see\n    above."),
+            State::Development,
+            &["above"],
         ),
         (
             "a heading's entries are held whatever the heading",
@@ -686,6 +704,15 @@ fn a_changelog_entry_still_being_written_names_what_it_points_at() {
             &[],
         ),
     ];
+    let at = read(
+        &unreleased("- a parent.\n  - a sub-item says see\n    above."),
+        State::Development,
+    );
+    assert!(
+        at.first()
+            .is_some_and(|line| line.starts_with("  CHANGELOG.md:7 ")),
+        "the finding names the line its word stands on, not its paragraph's first: {at:?}"
+    );
     for (case, text, state, expected) in rows {
         let found = read(&text, state);
         let phrases: Vec<&str> = found
