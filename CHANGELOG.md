@@ -671,7 +671,22 @@ them.
   fixture manifest written there does not make `cargo metadata` exit 101. `crates/kanhe/tests/scratch_roots.rs`
   holds every tracked Rust file to the helper, with the loop it shares with `hermetic_invocations`: none asks the
   system for a temporary directory, and none outside `crates/xingbiao` names `scratch_base` or `scratch_ceiling`
-  except the files its declared set names with why. No adopter-visible behavior moves.
+  except the files its declared set names with why. A label that is not one ordinary path component is a refusal
+  naming it: the name is built from the label, so a separator, a leading `..` or a root named a directory the base
+  does not contain — measured, `../escaped` built one at `target/tmp/../escaped-<pid>-<counter>`, which is
+  `target/`, and removed it recursively before the claim and again on drop. The removal of a root a previous
+  process left behind tells absence from every other error, so a stale root that cannot be removed names itself
+  and its cause rather than reaching the claim as a failure to create. `scratch_root` is withheld from the API
+  contract (`#[doc(hidden)]`), so no documented surface moves.
+
+- **Two prose claims narrowed to what their code holds.** 漏刻's raw-string reader documented that no identifier
+  can precede a string, which the bound
+  `runtime-origin-assertion/a-raw-string-after-an-identifier-character-is-read-as-one-in-every-edition-a-stated-bound`
+  falsifies — before edition 2021 `cr#"x"` is the identifier `cr`, a `#` and a string — and now states the
+  edition-blind reading and names that bound. 星表's separator direction claimed that no label carries the
+  platform's separator, over a corpus of three paths that cannot reach `Component::Prefix`; it now claims that of
+  ordinary components and records the prefix arm as a coverage limitation rather than a bound. Neither reader
+  moves.
 
 ## [0.7.1] - 2026-09-27
 

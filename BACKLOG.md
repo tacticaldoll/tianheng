@@ -4071,6 +4071,20 @@ consumer for an undemonstrated deduplication.
     canonical, existing module*.
   - Detailed shipped capability ledgers for 0.1.x through 0.3.0 are not carried here; this repository's history begins at the `0.6.0` snapshot.
 
+- **A path dependency reaching a workspace member through a symlink alias.** *Class:* DECLINED, 2026-10-03.
+  *Observed pressure:* a review reading `release_coherence_gate::normalized_directory` as a lexical comparison
+  that would call `crates/tianheng-link` a different directory from the member it links to, and so refuse a pin
+  cargo accepts. *What was measured, and what it refutes:* cargo 1.96.0, two variants of that shape. With both the
+  member directory and its symlink reachable, cargo refuses the workspace outright — `error: two packages named
+  core-pkg in this workspace`, naming both manifests — so nothing builds and the reader's reading agrees with
+  cargo's. With only the symlink reachable, cargo does not canonicalize: `cargo metadata` reports the member's
+  `manifest_path` through the symlink as given, so both sides of the comparison spell the alias and are equal.
+  There is no divergence to repair and none to declare as a bound. *Reopening condition, as a property:* cargo
+  resolves a path dependency to a member's directory the manifest does not spell — whether by accepting two
+  manifests of one package name in one workspace, or by canonicalizing a dependency path before naming the member.
+  *Authority:* review finding, refuted by measurement; the reader stays lexical and touches no filesystem, which
+  is what `Unresolvable::Traversal` already states.
+
 ## Version horizons
 
 The version follows SemVer honesty (`AGENTS.md`), not milestone size: **non-breaking →
