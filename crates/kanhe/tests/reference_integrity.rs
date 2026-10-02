@@ -197,7 +197,6 @@ fn every_tracked_format_is_classified() {
         unclassified.into_iter().collect::<Vec<_>>().join(", ")
     );
 
-    let (fixture, _paths, _) = change_path_fixture("format-classification");
     let inside = common::SourceCorpus::of(&["openspec/changes/zzz-reference-probe/evidence.log"]);
     let outside = common::SourceCorpus::of(&["measurements/evidence.log"]);
     assert!(
@@ -208,7 +207,6 @@ fn every_tracked_format_is_classified() {
         unclassified_formats(&outside).contains(".log"),
         "the same unclassified format outside `openspec/changes/` must remain visible"
     );
-    let _ = std::fs::remove_dir_all(fixture);
 }
 
 fn unclassified_formats(corpus: &common::SourceCorpus) -> BTreeSet<String> {
@@ -2695,7 +2693,7 @@ fn is_abbreviated_object(span: &str) -> bool {
         && span.chars().any(|c| c.is_ascii_alphabetic())
 }
 
-fn change_path_fixture(label: &str) -> (PathBuf, Vec<String>, String) {
+fn change_path_fixture(label: &str) -> (PathBuf, String) {
     let root = scratch(label);
     std::fs::create_dir_all(&root).expect("create fixture root");
     std::fs::write(
@@ -2733,14 +2731,9 @@ fn change_path_fixture(label: &str) -> (PathBuf, Vec<String>, String) {
     let citation = format!("This measurement cites `{development_commit}`.\n");
     for (path, body) in [
         (
-            "openspec/changes/zzz-reference-probe/evidence.log",
-            "raw measurement output\n",
-        ),
-        (
             "openspec/changes/zzz-reference-probe/measurement.md",
             citation.as_str(),
         ),
-        ("measurements/evidence.log", "raw measurement output\n"),
         ("measurements/measurement.md", citation.as_str()),
         (
             "openspec/specs/control.md",
@@ -2759,7 +2752,7 @@ fn change_path_fixture(label: &str) -> (PathBuf, Vec<String>, String) {
         "-m",
         "test(probe): add active change and outside evidence",
     ]);
-    (root.clone(), tracked(&root), development_commit)
+    (root, development_commit)
 }
 
 /// No live governance document cites a moment a reader of a fresh clone cannot reach.
@@ -2786,7 +2779,7 @@ fn no_live_document_cites_a_moment_a_fresh_clone_cannot_reach() {
         offences.iter().cloned().collect::<Vec<_>>().join("\n")
     );
 
-    let (fixture, _paths, development_commit) = change_path_fixture("citation-exclusion");
+    let (fixture, development_commit) = change_path_fixture("citation-exclusion");
     let inside = "openspec/changes/zzz-reference-probe/measurement.md";
     let outside = "measurements/measurement.md";
     let control = "openspec/specs/control.md";

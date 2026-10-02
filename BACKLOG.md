@@ -2816,8 +2816,8 @@ consumer for an undemonstrated deduplication.
   built in the same window the mode was declared, four commits apart, and neither noticed the other. The
   sibling gates have separate roles: `capability_subjects` reads proposals as its input, while
   `law_restatement` and `reference_integrity` take their source corpora through `SourceCorpus`, whose
-  constructor excludes `openspec/changes/`. *Current reaction or bound:* none for the class it guarded. **The filing class is defended by review alone**, and it is live
-  rather than hypothetical: `scripts/publish.sh` has two claimants, which is the shape the join was built
+  constructor excludes `openspec/changes/`. *Current reaction or bound:* none for the class it guarded.
+  **The filing class is defended by review alone**, and it is live rather than hypothetical: `scripts/publish.sh` has two claimants, which is the shape the join was built
   from. *Risk:* a requirement filed under the wrong capability goes unnoticed until someone reads both
   specs. Bounded — the mistake is visible in the diff of any PR that makes it. *Why not re-point it:* the
   join compares a proposal's **declared** capability set against the subjects a diff touches, and where no

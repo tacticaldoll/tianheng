@@ -79,13 +79,14 @@ declaration does not name SHALL fail, naming that format — not default either 
 reads a new format as having none and a guessed marker asserts one it may not have. The corpus, and which of a
 file's lines are read, SHALL both derive from that one declaration. Every direction SHALL exclude source paths
 under `openspec/changes/`, the archive directory included, across format classification, reference resolution, and
-citation checks. A direction reads its source corpus through one type whose only constructor applies that
-exclusion, so a direction cannot read a change directory by omission; because a direction's counts, vacuity guards
-included, are taken over the excluded corpus, a corpus holding only change-directory paths is empty. That exclusion
-applies to the source corpus; tracked paths remain evidence for resolving references. Outside `openspec/changes/`, the gate SHALL inspect every classified format's prose, including Rust rustdoc
-forms. A Rust
-test source SHALL NOT be excluded wholesale; its admitted comment lines are judged through the same region rule
-as other Rust.
+citation checks. A direction that takes the source-corpus type holds a corpus whose only constructor has
+already excluded the change directory, so for that direction the exclusion cannot be omitted; its counts, vacuity
+guards included, are taken over the excluded corpus, and a corpus holding only change-directory paths is empty.
+The type does not decide whether a direction reads source or evidence: that is the direction's intent, and a
+direction that reads the plain tracked list as source is judged by no check. The exclusion applies to the source
+corpus; tracked paths remain evidence for resolving references. Outside `openspec/changes/`, the gate SHALL
+inspect every classified format's prose, including Rust rustdoc forms. A Rust test source SHALL NOT be excluded
+wholesale; its admitted comment lines are judged through the same region rule as other Rust.
 
 **Two lists is the shape that breaks.** An extension filter deciding what to open while a marker rule decides
 which lines to read risks formats sitting in one and not the other. Discovery by declared format classifies

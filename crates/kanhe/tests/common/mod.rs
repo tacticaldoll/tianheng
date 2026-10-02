@@ -16,9 +16,11 @@ pub(super) fn is_openspec_change_path(path: &str) -> bool {
 /// excluded.
 ///
 /// The only constructor is [`SourceCorpus::of`], and it applies [`is_openspec_change_path`], so a direction
-/// that takes this type cannot read a change directory and cannot forget to exclude it. A direction that
-/// resolves a reference, or asks what the repository once tracked, is asking about **evidence** and takes
-/// the plain tracked list instead: a plan's files still exist there, and a reference to one still resolves.
+/// that holds this type holds a corpus already free of change-directory paths. The type does not decide
+/// whether a direction reads source or evidence, which is the direction's intent: a direction that reads the
+/// plain tracked list as source is judged by no check. A direction that resolves a reference, or asks what
+/// the repository once tracked, is asking about **evidence** and takes the plain tracked list instead: a
+/// plan's files still exist there, and a reference to one still resolves.
 ///
 /// Every count a direction takes over its corpus, a vacuity guard included, is taken over the **excluded**
 /// corpus. A corpus holding only change-directory paths is therefore empty, and the direction's guard
