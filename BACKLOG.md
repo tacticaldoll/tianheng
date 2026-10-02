@@ -2818,17 +2818,17 @@ consumer for an undemonstrated deduplication.
   returns early when that is empty. `PROJECT.md` records this project using OpenSpec's `specs` half and not
   its `changes` half, so the corpus is empty by declaration and the early return is always taken.
   *Observation source:* `git ls-files openspec/changes` returns one path, `archive/.gitkeep`; the join was
-  built in the same window the mode was declared, four commits apart, and neither noticed the other. Three
-  sibling `openspec/changes/` carve-outs are in the same position — `law_restatement.rs`'s projection filter
-  and two in `reference_integrity.rs` — though one of those is exercised by a fixture that plants a
-  synthetic change path, so it is a branch with no live subject rather than dead code. *Current reaction or
-  bound:* none for the class it guarded. **The filing class is defended by review alone**, and it is live
-  rather than hypothetical: `scripts/publish.sh` has two claimants, which is the shape the join was built
-  from. *Risk:* a requirement filed under the wrong capability goes unnoticed until someone reads both
-  specs. Bounded — the mistake is visible in the diff of any PR that makes it. *Why not re-point it:* the
-  join compares a proposal's **declared** capability set against the subjects a diff touches, and where no
-  proposal is present there is no independent declaration to compare against — reading the set from the
-  touched spec paths is near-tautological, since touching a spec is naming its capability. *Promotion
+  built in the same window the mode was declared, four commits apart, and neither noticed the other. The
+  sibling gates have separate roles: `capability_subjects` reads proposals as its input, while
+  `law_restatement` and `reference_integrity` take their source corpora through `SourceCorpus`, whose
+  constructor excludes `openspec/changes/`. *Current reaction or bound:* none for the class it guarded.
+  **The filing class is defended by review alone**, and it is live rather than hypothetical:
+  `scripts/publish.sh` has two claimants, which is the shape the join was built from. *Risk:* a requirement
+  filed under the wrong capability goes unnoticed until someone reads both specs. Bounded — the mistake is
+  visible in the diff of any PR that makes it. *Why not re-point it:* the join compares a proposal's
+  **declared** capability set against the subjects a diff touches, and where no proposal is present there is
+  no independent declaration to compare against — reading the set from the touched spec paths is
+  near-tautological, since touching a spec is naming its capability. *Promotion
   trigger:* a requirement found filed under the wrong capability. **Not fired** (evaluated 2026-08-31; the filing join
   passes, and the scenarios the `0.6.0` window rewrote stayed under the capabilities that already held them).
   *Version class:* patch; repository-internal, shipping in no crate. *Authority:* `capability-subjects`, and
@@ -4066,8 +4066,7 @@ consumer for an undemonstrated deduplication.
   source:* `syn::ItemStatic` (with `StaticMutability`), `syn::ForeignItemStatic`, `syn::ForeignItem::Verbatim`
   for `safe`/`unsafe`-qualified foreign statics, and item- and statement-position macro invocations whose leaf
   is `thread_local`; measured on rustc 1.96.0 and 1.85.1 over a probe carrying module, fn-body,
-  `thread_local!`, `extern`, `OnceLock` and `safe`/`unsafe`-qualified foreign statics in every
-  edition (edition 2024 requires `unsafe` on the enclosing `extern` block). *Current reaction or bound:*
+  `thread_local!`, `extern`, `OnceLock` and edition-2024 `safe static` shapes. *Current reaction or bound:*
   before it was built, none — `max_visibility(Module)`, `UnsafeBoundary::only_under`, `sans_io_pure` and
   `must_not_call_inline("std::thread")` each exited 0 or reacted on something other than the declaration over
   four private statics. *Risk:* bounded to adopters who declare it; the over-reactions it carries
@@ -4084,6 +4083,16 @@ consumer for an undemonstrated deduplication.
   set, so the name gate stays one name. **Not built, with its trigger:** `.including_macros([...])` for
   `lazy_static!`- or `once_cell`-shaped declarations; reopen when an adopter measures such a declaration it
   must govern. The capability joins no composed profile, `sans_io_pure` included.
+
+  **Re-measured 2026-10-02 with rustc 1.96.0.** A foreign static was written with each of `safe`, `unsafe`
+  and no qualifier, in an `extern "C"` block and in an `unsafe extern "C"` block, under editions 2015, 2018,
+  2021 and 2024. In an `unsafe extern` block all three build in every edition. In a plain `extern` block,
+  `safe static X: u8;` and `unsafe static X: u8;` fail in every edition. In 2015, 2018 and 2021 the
+  refusal is the qualifier (*items in `extern` blocks without an `unsafe` qualifier cannot have safety
+  qualifiers*) and the unqualified item builds. In 2024 the unqualified item fails too, because that edition
+  requires every extern block to be `unsafe` (*extern blocks must be unsafe*); the qualified items there
+  carry both errors. A foreign-item `safe` or `unsafe` qualifier therefore needs an `unsafe extern` block in
+  every edition, and in 2024 the block needs it with or without a qualifier.
 
 - **BUILT / HISTORY:**
   - Opt-in gate flag `--disallow-stale` enforcing zero stale baseline entries in CI gate mode.

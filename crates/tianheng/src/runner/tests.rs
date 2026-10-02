@@ -1019,12 +1019,8 @@ fn composed_runtime_audit_uses_custom_roots_and_rejects_orphan_only_coverage() {
     let _ = std::fs::remove_dir_all(base);
 }
 
-/// Every semantic module boundary carrying a depth projects it in one vocabulary, read from the
-/// boundary: the JSON carries `including_submodules: true` and `scan_depth: "subtree"` for a subtree
-/// boundary and neither field for a shallow one, and the text rule line ends in
-/// ` (including submodules)` exactly when the subtree is observed. Re-export-only is the kind that
-/// spoke its own dialect, `(scan_depth: shallow)` in text and `scan_depth` on every JSON entry;
-/// static-item is the kind whose depth the shell supplied instead of asking the boundary.
+/// Every semantic module boundary carrying a depth projects it with the same vocabulary, and the projected
+/// depth is read from the boundary itself.
 #[test]
 fn every_semantic_depth_projects_in_one_vocabulary_read_from_the_boundary() {
     let reexport = |depth| {

@@ -255,6 +255,22 @@ error (exit 2).
 - **WHEN** a boundary declares `must_not_expose_impl_trait_bounded_by(["Clone"])`
 - **THEN** the system exits 2, reporting that `Clone` is not a recognized auto trait and directing the author to use `must_not_expose_impl_trait_of`
 
+#### Scenario: A qualified impl-trait auto-trait bound names its defining module
+
+- **WHEN** the forbidden path and public impl Trait bound spell each of `Send`, `Sync` and `Unpin` under `marker`
+  and each of `UnwindSafe` and `RefUnwindSafe` under `panic`, with `std` and with `core` as the root, or spell
+  any of those five under the other module with either root
+- **THEN** a defining-module path produces an enforced finding, while a path under the wrong module
+  is a constitution error (exit 2)
+- **PINNED-BY** `auto_bound_qualified_path_matrix`
+- **PINNED-BY** `declared_auto_traits_and_the_producer_are_the_same_set`
+
+#### Scenario: An impl-trait auto-trait path outside the defining modules is refused
+
+- **WHEN** the boundary's forbidden auto-trait path is `foo::Send`
+- **THEN** the declaration is a constitution error (exit 2)
+- **PINNED-BY** `impl_auto_bound_invalid_qualifier_exits_2_shallow_and_subtree`
+
 #### Scenario: A local trait sharing an auto-trait leaf name over-reacts as an impl auto bound - a stated bound
 
 - **WHEN** a module defines a local trait named `Send` and returns `impl Send`, under `must_not_expose_impl_trait_bounded_by(["Send"])`
@@ -272,3 +288,9 @@ error (exit 2).
 - **WHEN** an impl-trait auto-bound boundary is declared with any of `["Send"]`, `["std::marker::Send"]`, `["core::marker::Send"]`, `["r#Send"]`, or `["Send", "std::marker::Send"]`
 - **THEN** the system produces the identical rule key (`tianheng.rule/hunyi/impl-trait-auto-bound` with parameter `forbidden_auto_bounds` as `["Send"]`)
 - **PINNED-BY** `impl_auto_bound_rule_key_normalized_identity`
+
+#### Scenario: The impl-trait projection carries sorted, distinct auto-trait leaves
+
+- **WHEN** an impl-trait auto-bound boundary is declared with `std::marker::Send`, `r#Sync`, and bare `Send`
+- **THEN** JSON carries `forbidden_auto_bounds` as `["Send", "Sync"]`, and text carries `Send, Sync`
+- **PINNED-BY** `auto_bound_projection_uses_normalized_leaf_set`

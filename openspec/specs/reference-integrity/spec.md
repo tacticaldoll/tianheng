@@ -77,9 +77,16 @@ this repository tracks SHALL be named as whole-document prose, as prose on the l
 token is a stated line-comment marker, or as carrying no prose at all. A format the repository holds and the
 declaration does not name SHALL fail, naming that format — not default either way, since a silent *no prose*
 reads a new format as having none and a guessed marker asserts one it may not have. The corpus, and which of a
-file's lines are read, SHALL both derive from that one declaration. Outside active `openspec/changes/` plans, the
-gate SHALL inspect every classified format's prose, including Rust rustdoc forms. A Rust test source SHALL NOT be
-excluded wholesale; its admitted comment lines are judged through the same region rule as other Rust.
+file's lines are read, SHALL both derive from that one declaration. Every direction SHALL exclude source paths
+under `openspec/changes/`, the archive directory included, across format classification, reference resolution, and
+citation checks. A direction that takes the source-corpus type holds a corpus whose only constructor has
+already excluded the change directory, so for that direction the exclusion cannot be omitted; its counts, vacuity
+guards included, are taken over the excluded corpus, and a corpus holding only change-directory paths is empty.
+The type does not decide whether a direction reads source or evidence: that is the direction's intent, and a
+direction that reads the plain tracked list as source is judged by no check. The exclusion applies to the source
+corpus; tracked paths remain evidence for resolving references. Outside `openspec/changes/`, the gate SHALL
+inspect every classified format's prose, including Rust rustdoc forms. A Rust test source SHALL NOT be excluded
+wholesale; its admitted comment lines are judged through the same region rule as other Rust.
 
 **Two lists is the shape that breaks.** An extension filter deciding what to open while a marker rule decides
 which lines to read risks formats sitting in one and not the other. Discovery by declared format classifies
@@ -107,10 +114,27 @@ source; absence of any prerequisite SHALL fail loudly rather than read as clean.
 - **WHEN** tracked prose names a missing path under an illustrative crate and only an untracked `crates/<name>/Cargo.toml` gives that crate member shape
 - **THEN** the gate leaves the reference outside its existence judgment and retains the verdict produced from tracked evidence alone
 
-#### Scenario: An active OpenSpec plan names future paths
+#### Scenario: A plan under `openspec/changes/` names future paths
 
 - **WHEN** a tracked file under `openspec/changes/` references a path the plan intends to create
 - **THEN** that transient plan is excluded from the inspected corpus and does not produce a stale-reference verdict
+- **PINNED-BY** `an_active_plan_may_name_a_path_it_intends_to_create`
+
+#### Scenario: Evidence under `openspec/changes/` is excluded from every direction
+
+- **WHEN** a tracked `.log` file and a development-commit citation are under `openspec/changes/`
+- **THEN** neither enters format classification or citation checks, because a change directory's files are outside each
+  source corpus
+- **PINNED-BY** `every_tracked_format_is_classified`
+- **PINNED-BY** `no_live_document_cites_a_moment_a_fresh_clone_cannot_reach`
+
+#### Scenario: The same evidence outside `openspec/changes/` is judged
+
+- **WHEN** a tracked `.log` file and a development-commit citation are outside `openspec/changes/`
+- **THEN** format classification refuses the unclassified `.log` file and citation checks refuse the unreachable
+  commit object
+- **PINNED-BY** `every_tracked_format_is_classified`
+- **PINNED-BY** `no_live_document_cites_a_moment_a_fresh_clone_cannot_reach`
 
 #### Scenario: A comment names an absent path, in any classified format
 
@@ -122,6 +146,7 @@ source; absence of any prerequisite SHALL fail loudly rather than read as clean.
 - **WHEN** a tracked file's format is not named by the declaration
 - **THEN** the reaction fails naming that format, because a format read by nothing leaves every sweep here
   reporting clean over prose it never opened
+- **PINNED-BY** `every_tracked_format_is_classified`
 
 #### Scenario: A test source names a deleted live path
 
