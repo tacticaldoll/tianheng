@@ -567,6 +567,12 @@ them.
 - **圭表 reads a file cut off mid-item to its end.** A file ending at `pub type A =`, or after a `&` in an alias's
   target, stopped the scan with a panic where it now answers 0, 1 or 2 as every other malformed file does.
 
+- **圭表 reads a group under `cfg_if!` as an arm in one place.** A brace group directly under `cfg_if!` with neither an
+  attribute nor an `else` before it — `cfg_if! { { mod m; } }` under a local `cfg_if!` — was an arm to the reading that
+  names a block's modules and a block to the scope table, and a `mod` in it stopped the scan with a panic. Both now
+  read it as a block, and a block's `mod` the scan cannot name refuses its file. A refusal of an import read through
+  another file now says that file holds what the scanner cannot read, naming the cause after it.
+
 - **圭表 declares the time a cfg-closed re-export ring takes.** A ring of modules each re-exporting a name from the
   next under one `cfg` and from elsewhere under its negation is judged, in time that doubles per link, rather than
   refused; declared as

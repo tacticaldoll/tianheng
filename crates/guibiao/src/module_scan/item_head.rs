@@ -289,16 +289,12 @@ pub(super) fn block_modules(tree: &TokenTree) -> Vec<BlockModule> {
         let mut owner = None;
         let mut at = tree.enclosing(i);
         while let Some(open) = at {
-            let arm = tree
-                .enclosing(open)
-                .is_some_and(|outer| macro_group_kind(tree, outer) == Some(GroupKind::CfgIf));
             match classify_group(tree, open, None) {
                 GroupKind::ModuleBody(_) => {
                     owner = Some(open);
                     break;
                 }
-                GroupKind::CfgIf => {}
-                _ if arm => {}
+                GroupKind::CfgIf | GroupKind::CfgArm => {}
                 _ => in_block = true,
             }
             at = tree.enclosing(open);
@@ -325,6 +321,18 @@ pub(super) fn block_modules(tree: &TokenTree) -> Vec<BlockModule> {
     found
 }
 
+/// Whether the brace group at `open` is an arm of the `cfg_if!` enclosing it: a group directly under that macro's
+/// group with an attribute or an `else` before it. A group there with neither is a block.
+pub(super) fn is_cfg_if_arm(tree: &TokenTree, open: usize) -> bool {
+    tree.kind(open) == Kind::Open(Delimiter::Brace)
+        && macro_group_kind(tree, open).is_none()
+        && tree
+            .enclosing(open)
+            .is_some_and(|outer| macro_group_kind(tree, outer) == Some(GroupKind::CfgIf))
+        && (matches!(tree.node_before(open), Some(Node::Attribute { .. }))
+            || open.checked_sub(1).is_some_and(|e| tree.is(e, "else")))
+}
+
 /// Classify the group opening at `open`, given the kind of the group enclosing it (`None` at a file's top level).
 pub(super) fn classify_group(
     tree: &TokenTree,
@@ -337,15 +345,11 @@ pub(super) fn classify_group(
     if tree.kind(open) != Kind::Open(Delimiter::Brace) {
         return GroupKind::Other;
     }
-    match parent {
-        Some(GroupKind::UseGroup) => return GroupKind::UseGroup,
-        Some(GroupKind::CfgIf)
-            if matches!(tree.node_before(open), Some(Node::Attribute { .. }))
-                || open.checked_sub(1).is_some_and(|e| tree.is(e, "else")) =>
-        {
-            return GroupKind::CfgArm;
-        }
-        _ => {}
+    if is_cfg_if_arm(tree, open) {
+        return GroupKind::CfgArm;
+    }
+    if parent == Some(&GroupKind::UseGroup) {
+        return GroupKind::UseGroup;
     }
     match item_owning(tree, open) {
         Some(head) => match head.keyword {

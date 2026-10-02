@@ -512,6 +512,29 @@ pub(super) fn a_missing_module_file_declared_inside_a_cfg_if_arm_is_tolerated() 
     );
 }
 
+/// A group directly under `cfg_if!` with neither an attribute nor an `else` before it is no arm, so a `mod` in it
+/// stands in a block, and the reading that numbers a block's modules and the one that builds the scopes agree on it.
+/// The input compiles: the local `cfg_if!` expands to nothing.
+#[test]
+pub(super) fn a_module_in_an_unlabelled_group_under_cfg_if_is_judged() {
+    let (result, violations) = run_module_check(
+        "unlabelled-cfg-if-group",
+        &[(
+            "lib.rs",
+            "pub mod forbidden {}\nmacro_rules! cfg_if { ($($t:tt)*) => {} }\ncfg_if! { { mod m; } }\n",
+        )],
+        ModuleBoundary::in_crate("x")
+            .module("crate")
+            .must_not_import("crate::forbidden")
+            .because("probe"),
+    );
+    assert!(
+        result.is_ok(),
+        "a module in an unlabelled group under cfg_if! must be judged: {result:?}"
+    );
+    assert!(violations.is_empty(), "{violations:?}");
+}
+
 /// The control for the test above: tolerating the fileless sibling arm must not stop the arm whose
 /// file DOES exist from being reached and governed. Without this, the tolerance could pass by
 /// dropping both arm modules from the graph.

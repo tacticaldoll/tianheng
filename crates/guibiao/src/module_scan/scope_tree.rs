@@ -147,8 +147,9 @@ impl Scope {
     }
 }
 
-/// One file's scopes, with the innermost scope of every token of the tree it was built from, and the refusal of a
-/// `use` tree the scanner could not read, which the file's judgement reports.
+/// One file's scopes, with the innermost scope of every token of the tree it was built from, and the refusal of what
+/// in it the scanner could not read — a `use` tree, or a module a block declares that the reading naming a block's
+/// modules gave no name — which the file's judgement reports.
 pub(super) struct ScopeTable {
     pub scopes: Vec<Scope>,
     /// The table's place among its unit's tables, which names its blocks.
@@ -206,6 +207,17 @@ impl ScopeTable {
     /// `fn g() { mod k { #[path = "y.rs"] pub mod m; } k::m::s(); }` reaches the `s` that `y.rs` binds; one inside a
     /// macro's group has no label, since nothing there is recorded, and takes its block's own segment.
     pub(super) fn build(tree: &TokenTree, file_module: &str, table: usize) -> Self {
+        Self::build_naming(tree, file_module, table, &block_modules(tree))
+    }
+
+    /// [`ScopeTable::build`], with the block modules `blocks` names: a `mod` a block declares that `blocks` leaves
+    /// unnamed is refused rather than recorded.
+    fn build_naming(
+        tree: &TokenTree,
+        file_module: &str,
+        table: usize,
+        blocks: &[super::item_head::BlockModule],
+    ) -> Self {
         #[cfg(test)]
         TABLE_BUILDS.with(|builds| {
             *builds
@@ -227,7 +239,6 @@ impl ScopeTable {
         let mut frames: Vec<Frame> = Vec::new();
         let (mut scope, mut record, mut in_macro, mut macro_block) =
             (0u32, Some(0u32), false, None::<u32>);
-        let blocks = block_modules(tree);
         let labels: BTreeMap<usize, &str> = blocks
             .iter()
             .flat_map(|block| {
@@ -313,7 +324,7 @@ impl ScopeTable {
         self.scope_of[at.min(self.scope_of.len() - 1)]
     }
 
-    /// The refusal of a `use` tree in the file the scanner could not read, if any.
+    /// The refusal of what in the file the scanner could not read, if any.
     pub(super) fn refusal(&self) -> Option<&str> {
         self.refusal.as_deref()
     }
@@ -452,6 +463,21 @@ impl ScopeTable {
                 | ItemKeyword::MacroRules => continue,
             };
             let name = tree.text(name_at).to_string();
+            let label = match (head.keyword, self.scopes[scope as usize].kind) {
+                (ItemKeyword::Mod, ScopeKind::Block) => match labels.get(&head.keyword_at) {
+                    Some(label) => Some(*label),
+                    None => {
+                        self.refusal.get_or_insert_with(|| {
+                            format!(
+                                "cannot judge the module `{name}` a block declares: the reading that names a \
+                                 block's modules gave it no name"
+                            )
+                        });
+                        continue;
+                    }
+                },
+                _ => None,
+            };
             let entry = &mut self.scopes[scope as usize];
             if head.keyword == ItemKeyword::Type {
                 let target = alias_target(tree, name_at + 1);
@@ -473,14 +499,11 @@ impl ScopeTable {
                     continue;
                 }
             }
-            let kind = match (head.keyword, entry.kind) {
-                (ItemKeyword::Mod, ScopeKind::Module) => {
-                    DeclKind::Module(format!("{}::{name}", entry.module))
+            let kind = match (head.keyword, label) {
+                (ItemKeyword::Mod, None) => DeclKind::Module(format!("{}::{name}", entry.module)),
+                (ItemKeyword::Mod, Some(label)) => {
+                    DeclKind::Module(format!("{}::{label}::{name}", entry.module))
                 }
-                (ItemKeyword::Mod, ScopeKind::Block) => DeclKind::Module(format!(
-                    "{}::{}::{name}",
-                    entry.module, labels[&head.keyword_at]
-                )),
                 (keyword, _) => DeclKind::Item(keyword),
             };
             if !gated {
@@ -610,4 +633,26 @@ fn alias_target(tree: &TokenTree, from: usize) -> Option<String> {
     } else {
         joined
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::token_tree::Edition;
+    use super::*;
+
+    /// A `mod` a block declares that the block reading leaves unnamed is a refusal of its file, never an index into a
+    /// missing label.
+    #[test]
+    fn a_block_module_left_unnamed_is_refused() {
+        let tree = TokenTree::lex("fn f() { mod m; }\n", Edition::Rust2021);
+        let table = ScopeTable::build_naming(&tree, "crate", 0, &[]);
+        let refusal = table
+            .refusal()
+            .expect("an unnamed block module must refuse its file");
+        assert!(
+            refusal.contains("cannot judge the module `m` a block declares"),
+            "{refusal}"
+        );
+        assert!(ScopeTable::build(&tree, "crate", 0).refusal().is_none());
+    }
 }
