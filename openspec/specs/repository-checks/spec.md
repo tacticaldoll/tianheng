@@ -3521,13 +3521,16 @@ out of reach otherwise reads as compliance.
 Where a file must leave the channel open to pin it, the check SHALL name that file and SHALL hold the
 exception against **the direction that earns it**, not against the file's continuing to spawn — measured: a
 different test in the same file spawns bare for a different property, and the first form of the guard went on
-passing with the control converted away.
+passing with the control converted away. That direction is judged by **its own body**: it SHALL still name a
+subcommand marker and build a `Command` of its own, both written in that body, without a literal whose value
+begins with `core.excludesFile`, whatever the rest of the file names. Another direction in the same file naming
+the setting is no evidence about the control, and a sentence mentioning the setting is not the setting.
 
-What this holds is **file granularity**: the neutraliser in the same file's executed text, not in the same
-call. A per-call rule would refuse the one site that was already right, where a single wrapper closes the
-channel for every judgement in that file. A subcommand composed at run time is not seen, and
-`.git/info/exclude` is inside the repository, so no setting reaches it — the row the publish gate classifies
-rather than refuses.
+What this holds for every file but the control is **file granularity**: the neutraliser in the same file's
+executed text, not in the same call. A per-call rule would refuse the one site that was already right, where a
+single wrapper closes the channel for every judgement in that file. A subcommand composed at run time is not
+seen, and `.git/info/exclude` is inside the repository, so no setting reaches it — the row the publish gate
+classifies rather than refuses.
 
 #### Scenario: A judgement asks an ignore question through an unisolated read
 
@@ -3548,6 +3551,19 @@ rather than refuses.
 - **WHEN** the direction that earns the named exception is renamed or removed
 - **THEN** the check fails rather than going on excusing that file
 - **PINNED-BY** `no_judgement_reads_an_ambient_ignore_file`
+
+#### Scenario: The setting named elsewhere in the excused file does not hide the control
+
+- **WHEN** another direction in the excused file names `core.excludesFile`, while the control still runs its read
+  bare
+- **THEN** the check passes, because the setting named elsewhere in the file says nothing about the control
+- **PINNED-BY** `the_ambient_ignore_control_is_judged_by_its_own_body`
+
+#### Scenario: The control stops running its read bare
+
+- **WHEN** the control itself names `core.excludesFile`, or stops building a `Command` of its own
+- **THEN** the check fails naming the control, because it no longer pins the channel by difference
+- **PINNED-BY** `the_ambient_ignore_control_is_judged_by_its_own_body`
 
 #### Scenario: The check loses its reach
 
