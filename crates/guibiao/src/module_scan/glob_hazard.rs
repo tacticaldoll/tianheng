@@ -123,6 +123,20 @@ fn read_scope(
     hazard: &mut Hazard,
     work: &mut Vec<String>,
 ) {
+    read_reexports(scopes, t, s, reading, hazard);
+    read_extern_crates(scopes, t, s, reading, hazard);
+    queue_globs(scopes, t, s, reading, hazard, work);
+}
+
+/// Every binding of the scope another module can name through it — a non-private import or a `type` alias — read
+/// for a path under the prefix.
+fn read_reexports(
+    scopes: &CrateScopes,
+    t: usize,
+    s: u32,
+    reading: &Reading<'_>,
+    hazard: &mut Hazard,
+) {
     let scope = &scopes.tables[t].scopes[s as usize];
     for (name, bindings) in &scope.bindings {
         for binding in bindings {
@@ -148,6 +162,17 @@ fn read_scope(
             }
         }
     }
+}
+
+/// Every non-private `extern crate` of the scope, read for a path under the prefix.
+fn read_extern_crates(
+    scopes: &CrateScopes,
+    t: usize,
+    s: u32,
+    reading: &Reading<'_>,
+    hazard: &mut Hazard,
+) {
+    let scope = &scopes.tables[t].scopes[s as usize];
     for declaration in scope.declarations.values().flatten() {
         if let DeclKind::ExternCrate { target, .. } = &declaration.kind {
             if declaration.visibility != Visibility::Private {
@@ -163,6 +188,19 @@ fn read_scope(
             }
         }
     }
+}
+
+/// Every module a `pub` glob of the scope, or a private glob of the target visible from the viewer, names, pushed
+/// onto `work` and charged to the walk's width budget as it is pushed.
+fn queue_globs(
+    scopes: &CrateScopes,
+    t: usize,
+    s: u32,
+    reading: &Reading<'_>,
+    hazard: &mut Hazard,
+    work: &mut Vec<String>,
+) {
+    let scope = &scopes.tables[t].scopes[s as usize];
     for (i, inner) in scope.globs.iter().enumerate() {
         if inner.visibility != Visibility::Private
             || (scope.module == reading.target

@@ -1835,180 +1835,103 @@ impl CrateScopes {
         hazard: Option<(&str, bool)>,
     ) -> Result<Denoted, String> {
         ReadingSize::default().add(path)?;
-        let mut found: Vec<String> = Vec::new();
-        let mut beside: Vec<String> = Vec::new();
-        let mut presence = Presence::Absent;
-        let mut terminal_reaches = false;
-        let mut seen: BTreeSet<(String, Vec<String>)> = BTreeSet::new();
-        let mut work: Vec<(String, Vec<String>, Vec<Link>)> = Vec::new();
-        match path
-            .split("::")
-            .map(str::to_string)
-            .collect::<Vec<_>>()
-            .split_first()
-        {
-            Some((root, rest)) if root == "crate" => {
-                work.push((root.clone(), rest.to_vec(), Vec::new()));
-            }
-            _ => {
-                return Ok(Denoted {
-                    paths: vec![path.to_string()],
-                    beside: Vec::new(),
-                    presence: Presence::Unknown,
-                    terminal_reaches: false,
-                });
-            }
+        let Some(rest) = crate_rooted(path) else {
+            return Ok(Denoted {
+                paths: vec![path.to_string()],
+                beside: Vec::new(),
+                presence: Presence::Unknown,
+                terminal_reaches: false,
+            });
+        };
+        let mut reading = Reading::new(rest, candidates, hazard);
+        while let Some((module, rest, chain)) = reading.next()? {
+            self.read_branch(&mut reading, module, &rest, chain, ns, walk)?;
         }
-        let mut size = ReadingSize::default();
-        while let Some((module, rest, chain)) = work.pop() {
-            size.add(&module)?;
-            size.bytes = size
-                .bytes
-                .saturating_add(rest.iter().map(String::len).sum::<usize>());
-            size.check()?;
-            if size.paths.saturating_add(work.len()) > MAX_RESOLUTION_PATHS {
-                return Err(width_refusal());
-            }
-            if !seen.insert((module.clone(), rest.clone())) {
-                continue;
-            }
-            let Some((segment, after)) = rest.split_first() else {
-                size.add(&module)?;
-                found.push(module);
-                presence = presence.max(Presence::Known);
-                continue;
-            };
-            let here = format!("{module}::{segment}");
-            if is_block_segment(segment) {
-                if let Some((name, beyond)) = after.split_first() {
-                    let file_module = format!("{here}::{name}");
-                    if !self.blocks.contains_key(&here) && self.modules.contains_key(&file_module) {
-                        work.push((file_module, beyond.to_vec(), chain));
-                        continue;
-                    }
+        Ok(reading.denoted())
+    }
+
+    /// One branch of a [`CrateScopes::denote_in`] reading: `rest` read from `module`, which `chain` reached. No
+    /// segment left names the module; a block segment steps into the block, or into the file-form module it
+    /// declares; and any other segment is looked up in `module` and its answer read by one arm each.
+    fn read_branch(
+        &self,
+        reading: &mut Reading,
+        module: String,
+        rest: &[String],
+        chain: Vec<Link>,
+        ns: Namespace,
+        walk: &mut Walk,
+    ) -> Result<(), String> {
+        let Some((segment, after)) = rest.split_first() else {
+            reading.find(module)?;
+            reading.raise(Presence::Known);
+            return Ok(());
+        };
+        let here = format!("{module}::{segment}");
+        if is_block_segment(segment) {
+            if let Some((name, beyond)) = after.split_first() {
+                let file_module = format!("{here}::{name}");
+                if !self.blocks.contains_key(&here) && self.modules.contains_key(&file_module) {
+                    reading.step(file_module, beyond.to_vec(), chain);
+                    return Ok(());
                 }
-                work.push((here, after.to_vec(), chain));
-                continue;
             }
-            let segment_ns = if after.is_empty() {
-                ns
-            } else {
-                Namespace::Type
-            };
-            match self.lookup_in_module(&module, segment, segment_ns, &module, walk) {
-                Head::Candidates {
-                    bound,
-                    declared,
-                    through,
-                    foreign,
-                    ..
-                } => {
-                    for path in through {
-                        let path = with_rest(path, after);
-                        size.add(&path)?;
-                        found.push(path);
-                    }
-                    if !foreign.is_empty() {
-                        terminal_candidates(
-                            foreign,
-                            after,
-                            candidates,
-                            hazard,
-                            &mut beside,
-                            &mut terminal_reaches,
-                            &mut size,
-                        )?;
-                        presence = presence.max(Presence::Unknown);
-                    }
-                    for declaration in declared {
-                        match declaration {
-                            Declared::Module(inner) if !after.is_empty() => {
-                                size.add(&with_rest(inner.clone(), after))?;
-                                work.push((inner, after.to_vec(), chain.clone()));
-                            }
-                            Declared::Module(path) | Declared::Item(path) => {
-                                let path = with_rest(path, after);
-                                size.add(&path)?;
-                                found.push(path);
-                                presence = presence.max(Presence::Known);
-                            }
+            reading.step(here, after.to_vec(), chain);
+            return Ok(());
+        }
+        let segment_ns = if after.is_empty() {
+            ns
+        } else {
+            Namespace::Type
+        };
+        match self.lookup_in_module(&module, segment, segment_ns, &module, walk) {
+            Head::Candidates {
+                bound,
+                declared,
+                through,
+                foreign,
+                ..
+            } => {
+                for path in through {
+                    reading.find(with_rest(path, after))?;
+                }
+                if !foreign.is_empty() {
+                    reading.terminal(foreign, after)?;
+                    reading.raise(Presence::Unknown);
+                }
+                for declaration in declared {
+                    match declaration {
+                        Declared::Module(inner) if !after.is_empty() => {
+                            reading.branch(inner, after.to_vec(), chain.clone())?;
                         }
-                    }
-                    if bound.is_empty() {
-                        continue;
-                    }
-                    let path = with_rest(here.clone(), after);
-                    size.add(&path)?;
-                    found.push(path);
-                    if chain
-                        .iter()
-                        .any(|(m, name, _)| *m == module && name == segment)
-                    {
-                        walk.cuts += 1;
-                        presence = presence.max(Presence::Unknown);
-                        continue;
-                    }
-                    if chain.len() >= MAX_RESOLUTION_CHAIN {
-                        return Err(chain_refusal(&chain[0].2, &chain[0].0));
-                    }
-                    for (target, quote) in bound {
-                        let link = (module.clone(), segment.clone(), quote);
-                        let target = with_rest(target, after);
-                        size.add(&target)?;
-                        let target: Vec<String> = target.split("::").map(str::to_string).collect();
-                        match target.split_first() {
-                            Some((root, rest)) if root == "crate" => {
-                                let mut chain = chain.clone();
-                                chain.push(link);
-                                work.push((root.clone(), rest.to_vec(), chain));
-                            }
-                            _ => {
-                                let path = target.join("::");
-                                size.add(&path)?;
-                                found.push(path);
-                                presence = presence.max(Presence::Unknown);
-                            }
+                        Declared::Module(path) | Declared::Item(path) => {
+                            reading.find(with_rest(path, after))?;
+                            reading.raise(Presence::Known);
                         }
                     }
                 }
-                Head::Foreign(paths) => {
-                    let path = with_rest(here, after);
-                    size.add(&path)?;
-                    found.push(path);
-                    terminal_candidates(
-                        paths,
-                        after,
-                        candidates,
-                        hazard,
-                        &mut beside,
-                        &mut terminal_reaches,
-                        &mut size,
-                    )?;
-                    presence = presence.max(Presence::Unknown);
+                if !bound.is_empty() {
+                    reading.follow_bound(&module, segment, after, chain, bound, walk)?;
                 }
-                Head::PastCap(refusal) => return Err(refusal),
-                Head::Local => {
-                    let path = with_rest(here, after);
-                    size.add(&path)?;
-                    found.push(path);
-                    presence = presence.max(Presence::Known);
-                }
-                Head::Unbound => {
-                    let path = with_rest(here, after);
-                    size.add(&path)?;
-                    found.push(path);
-                    if !after.is_empty() || self.may_generate_items(&module) {
-                        presence = presence.max(Presence::Unknown);
-                    }
+            }
+            Head::Foreign(paths) => {
+                reading.find(with_rest(here, after))?;
+                reading.terminal(paths, after)?;
+                reading.raise(Presence::Unknown);
+            }
+            Head::PastCap(refusal) => return Err(refusal),
+            Head::Local => {
+                reading.find(with_rest(here, after))?;
+                reading.raise(Presence::Known);
+            }
+            Head::Unbound => {
+                reading.find(with_rest(here, after))?;
+                if !after.is_empty() || self.may_generate_items(&module) {
+                    reading.raise(Presence::Unknown);
                 }
             }
         }
-        Ok(Denoted {
-            paths: sorted_unique(found),
-            beside: sorted_unique(beside),
-            presence,
-            terminal_reaches,
-        })
+        Ok(())
     }
 
     /// Whether a scope of `module` holds a macro invocation where an item can stand, which may generate an item the
@@ -2022,31 +1945,170 @@ impl CrateScopes {
     }
 }
 
-/// Project foreign names to the requested consumer: findings keep them; a hazard compares them without reading
-/// through them; a presence reading needs only the caller's Unknown contribution.
-fn terminal_candidates(
-    paths: Vec<String>,
-    after: &[String],
+/// The segments after `crate` of a crate-rooted path, or `None` for a path rooted anywhere else.
+fn crate_rooted(path: &str) -> Option<Vec<String>> {
+    if path == "crate" {
+        return Some(Vec::new());
+    }
+    path.strip_prefix("crate::")
+        .map(|rest| rest.split("::").map(str::to_string).collect())
+}
+
+/// A branch of a [`CrateScopes::denote_in`] reading still to read: the module reached, the segments after it, and
+/// the chain of bindings followed to reach it.
+type Branch = (String, Vec<String>, Vec<Link>);
+
+/// What a [`CrateScopes::denote_in`] reading holds while it reads, and the one place its width budget is charged:
+/// a branch as it is taken up, a path as it is found, a branch as it is pushed, and a foreign candidate as it is
+/// projected. A step of the reading names what it found or what to read next, and never charges the budget itself.
+struct Reading<'h> {
+    work: Vec<Branch>,
+    seen: BTreeSet<(String, Vec<String>)>,
+    found: Vec<String>,
+    beside: Vec<String>,
+    presence: Presence,
+    terminal_reaches: bool,
+    size: ReadingSize,
     candidates: bool,
-    hazard: Option<(&str, bool)>,
-    beside: &mut Vec<String>,
-    reaches: &mut bool,
-    size: &mut ReadingSize,
-) -> Result<(), String> {
-    if !candidates && hazard.is_none() {
-        return Ok(());
-    }
-    for path in paths {
-        let path = with_rest(path, after);
-        size.add(&path)?;
-        if let Some((prefix, ancestors)) = hazard {
-            *reaches |= path_within(&path, prefix) || (ancestors && path_within(prefix, &path));
+    hazard: Option<(&'h str, bool)>,
+}
+
+impl<'h> Reading<'h> {
+    /// A reading of the crate-rooted path whose segments after `crate` are `rest`.
+    fn new(rest: Vec<String>, candidates: bool, hazard: Option<(&'h str, bool)>) -> Self {
+        Reading {
+            work: vec![("crate".to_string(), rest, Vec::new())],
+            seen: BTreeSet::new(),
+            found: Vec::new(),
+            beside: Vec::new(),
+            presence: Presence::Absent,
+            terminal_reaches: false,
+            size: ReadingSize::default(),
+            candidates,
+            hazard,
         }
-        if candidates {
-            beside.push(path);
+    }
+
+    /// The next branch not read before. Every branch taken up is charged, one already read too, and the reading is
+    /// refused once what it holds and what it has still to read pass the width budget together.
+    fn next(&mut self) -> Result<Option<Branch>, String> {
+        while let Some((module, rest, chain)) = self.work.pop() {
+            self.size.add(&module)?;
+            self.size.bytes = self
+                .size
+                .bytes
+                .saturating_add(rest.iter().map(String::len).sum::<usize>());
+            self.size.check()?;
+            if self.size.paths.saturating_add(self.work.len()) > MAX_RESOLUTION_PATHS {
+                return Err(width_refusal());
+            }
+            if self.seen.insert((module.clone(), rest.clone())) {
+                return Ok(Some((module, rest, chain)));
+            }
+        }
+        Ok(None)
+    }
+
+    /// A path the reading names.
+    fn find(&mut self, path: String) -> Result<(), String> {
+        self.size.add(&path)?;
+        self.found.push(path);
+        Ok(())
+    }
+
+    /// A branch to read, charged as the path it denotes.
+    fn branch(
+        &mut self,
+        module: String,
+        rest: Vec<String>,
+        chain: Vec<Link>,
+    ) -> Result<(), String> {
+        self.size.add(&with_rest(module.clone(), &rest))?;
+        self.work.push((module, rest, chain));
+        Ok(())
+    }
+
+    /// A branch spelling the same path through a block, which holds no text the branch it came from did not.
+    fn step(&mut self, module: String, rest: Vec<String>, chain: Vec<Link>) {
+        self.work.push((module, rest, chain));
+    }
+
+    fn raise(&mut self, presence: Presence) {
+        self.presence = self.presence.max(presence);
+    }
+
+    /// Project foreign names to the requested consumer: findings keep them; a hazard compares them without reading
+    /// through them; a presence reading needs only the caller's Unknown contribution.
+    fn terminal(&mut self, paths: Vec<String>, after: &[String]) -> Result<(), String> {
+        if !self.candidates && self.hazard.is_none() {
+            return Ok(());
+        }
+        for path in paths {
+            let path = with_rest(path, after);
+            self.size.add(&path)?;
+            if let Some((prefix, ancestors)) = self.hazard {
+                self.terminal_reaches |=
+                    path_within(&path, prefix) || (ancestors && path_within(prefix, &path));
+            }
+            if self.candidates {
+                self.beside.push(path);
+            }
+        }
+        Ok(())
+    }
+
+    /// The segment `segment` of `module`, which the module binds to each of `bound`: the segment's own path is
+    /// found, and each binding's target with `after` is read again from the root, the chain extended by the
+    /// binding — or, rooted outside the crate, found. A binding the chain already followed is a cycle and ends the
+    /// branch, unknown; a chain of [`MAX_RESOLUTION_CHAIN`] links is refused, quoting the binding it started from.
+    /// A target rooted outside the crate is charged as the target it was read as and again as the path found.
+    fn follow_bound(
+        &mut self,
+        module: &str,
+        segment: &str,
+        after: &[String],
+        chain: Vec<Link>,
+        bound: Vec<Bound>,
+        walk: &mut Walk,
+    ) -> Result<(), String> {
+        self.find(with_rest(format!("{module}::{segment}"), after))?;
+        if chain
+            .iter()
+            .any(|(m, name, _)| m == module && name == segment)
+        {
+            walk.cuts += 1;
+            self.raise(Presence::Unknown);
+            return Ok(());
+        }
+        if chain.len() >= MAX_RESOLUTION_CHAIN {
+            return Err(chain_refusal(&chain[0].2, &chain[0].0));
+        }
+        for (target, quote) in bound {
+            let target = with_rest(target, after);
+            match crate_rooted(&target) {
+                Some(rest) => {
+                    let mut chain = chain.clone();
+                    chain.push((module.to_string(), segment.to_string(), quote));
+                    self.branch("crate".to_string(), rest, chain)?;
+                }
+                None => {
+                    self.size.add(&target)?;
+                    self.find(target)?;
+                    self.raise(Presence::Unknown);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn denoted(self) -> Denoted {
+        Denoted {
+            paths: sorted_unique(self.found),
+            beside: sorted_unique(self.beside),
+            presence: self.presence,
+            terminal_reaches: self.terminal_reaches,
         }
     }
-    Ok(())
 }
 
 /// How `binding`, binding `name`, is written, for a refusal of a chain through it to quote.
