@@ -298,10 +298,7 @@ fn corpus() -> Vec<Shape> {
 
 /// Compile `source` as a crate and hand back rustc's own first line on failure.
 fn compiles(name: &str, source: &str) -> Result<(), String> {
-    let dir =
-        xingbiao::scratch_base().join(format!("tianheng-spelling-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    xingbiao::claim_scratch(&dir).expect("the rustc scratch root is writable");
+    let dir = xingbiao::scratch_root(&format!("tianheng-spelling-{name}"));
     let out = dir.join("out");
     std::fs::create_dir_all(&out).expect("create out dir");
     std::fs::write(
@@ -329,7 +326,6 @@ fn compiles(name: &str, source: &str) -> Result<(), String> {
             .unwrap_or("(no stderr)")
             .to_string())
     };
-    let _ = std::fs::remove_dir_all(&dir);
     verdict
 }
 

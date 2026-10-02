@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 /// A minimal, dependency-free single-crate fixture (so `cargo metadata --no-deps` never touches
 /// the network), written under a unique temp directory and cleaned up on drop.
 pub struct TempFixture {
-    dir: PathBuf,
+    dir: xingbiao::ScratchRoot,
     manifest: PathBuf,
     lib: PathBuf,
 }
@@ -28,12 +28,7 @@ impl TempFixture {
     /// The same fixture carrying extra manifest lines (an autotargets switch, a target table), for
     /// a package shape the plain form cannot express.
     pub fn with_manifest_extra(name: &str, manifest_extra: &str, body: &str) -> Self {
-        let dir = xingbiao::scratch_base().join(format!(
-            "tianheng-conformance-{name}-{}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        xingbiao::claim_scratch(&dir).expect("the fixture root is writable");
+        let dir = xingbiao::scratch_root(&format!("tianheng-conformance-{name}"));
         let src = dir.join("src");
         std::fs::create_dir_all(&src).expect("create temp src");
         let manifest = dir.join("Cargo.toml");
@@ -63,12 +58,6 @@ impl TempFixture {
 
     pub fn lib(&self) -> &Path {
         &self.lib
-    }
-}
-
-impl Drop for TempFixture {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
     }
 }
 

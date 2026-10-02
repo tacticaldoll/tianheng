@@ -13,17 +13,12 @@ use serde_json::Value;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-/// A unique temp path, cleaned up (as a directory tree or a lone file, whichever this test
-/// builds) before use and on drop — replaces the hand-rolled `remove_dir_all`/`remove_file`
-/// pre/post pairs this file's fixture tests otherwise each repeat. Doesn't create anything
-/// itself; each test still builds its own directory tree or file content under the path.
+/// A path cleaned up (as a directory tree or a lone file, whichever this test builds) before use and
+/// on drop. It exists for the one artifact that must be a working-directory-relative path, which no
+/// fixture root can hold; every other fixture here takes a `xingbiao::scratch_root`.
 struct TempPath(PathBuf);
 
 impl TempPath {
-    fn named(label: &str) -> Self {
-        Self::new(xingbiao::scratch_base().join(format!("tianheng-{label}-{}", std::process::id())))
-    }
-
     fn new(path: PathBuf) -> Self {
         let guard = Self(path);
         guard.clean();
@@ -972,9 +967,8 @@ fn the_runtime_audit_reports_the_declared_unprobed_seam() {
 
 #[test]
 fn composed_runtime_audit_uses_custom_roots_and_rejects_orphan_only_coverage() {
-    let base = TempPath::named("runtime-root");
+    let base = xingbiao::scratch_root("tianheng-runtime-root");
     let base = base.path();
-    xingbiao::claim_scratch(base).unwrap();
     std::fs::write(
         base.join("Cargo.toml"),
         "[package]\nname='runtime-root-fixture'\nversion='0.0.0'\nedition='2021'\n\
@@ -2297,14 +2291,15 @@ fn write_baseline_rejects_a_flag_that_cannot_apply_to_it() {
         vec!["--format", "text"],
         vec!["--format=json"],
     ] {
-        let out = TempPath::named("inapplicable-flag-baseline");
+        let root = xingbiao::scratch_root("tianheng-inapplicable-flag-baseline");
+        let out = root.path().join("baseline.json");
         let mut args = vec![
             "tianheng".to_string(),
             "check".to_string(),
             "--manifest-path".to_string(),
             fixture("clean"),
             "--write-baseline".to_string(),
-            out.path().to_string_lossy().into_owned(),
+            out.to_string_lossy().into_owned(),
         ];
         args.extend(extra.iter().map(|a| (*a).to_string()));
         let argv: Vec<&str> = args.iter().map(String::as_str).collect();
@@ -2314,7 +2309,7 @@ fn write_baseline_rejects_a_flag_that_cannot_apply_to_it() {
             "--write-baseline with {extra:?} must be a usage error, not a silent no-op",
         );
         assert!(
-            !out.path().exists(),
+            !out.exists(),
             "a rejected invocation must write no baseline: {extra:?}",
         );
     }
@@ -2328,7 +2323,8 @@ fn write_baseline_still_accepts_the_flags_that_do_apply() {
     let Some(manifest) = fixture_manifest("clean") else {
         return;
     };
-    let out = TempPath::named("applicable-flag-baseline");
+    let root = xingbiao::scratch_root("tianheng-applicable-flag-baseline");
+    let out = root.path().join("baseline.json");
     assert_eq!(
         run_args(&[
             "tianheng",
@@ -2336,12 +2332,12 @@ fn write_baseline_still_accepts_the_flags_that_do_apply() {
             "--manifest-path",
             &manifest,
             "--write-baseline",
-            &out.path().to_string_lossy(),
+            &out.to_string_lossy(),
         ]),
         0,
         "a plain --write-baseline must still record and exit 0",
     );
-    assert!(out.path().exists(), "the baseline must have been written");
+    assert!(out.exists(), "the baseline must have been written");
 }
 
 #[test]
@@ -2566,9 +2562,8 @@ fn warn_uncovered_never_changes_the_exit_code() {
 fn nearest_manifest_walks_up_to_the_nearest_cargo_toml() {
     // `check` defaults its target to the nearest `Cargo.toml`, cargo-style. Drive the pure
     // ascent over a real temp tree so the walk is proven without touching the process cwd.
-    let root = TempPath::named("nearest");
+    let root = xingbiao::scratch_root("tianheng-nearest");
     let root = root.path();
-    xingbiao::claim_scratch(root).expect("mkdir root");
     let outer = root.join("outer");
     let inner = outer.join("inner");
     let leaf = inner.join("a").join("b");
@@ -2603,8 +2598,9 @@ fn nearest_manifest_walks_up_to_the_nearest_cargo_toml() {
 fn write_baseline_preserves_hand_added_metadata_across_regeneration() {
     // The metadata-preserving merge, driven through the real write path + a temp file: write a
     // baseline, hand-annotate an entry, re-write from the same report — the annotation survives.
-    let path = TempPath::named("baseline-merge");
-    let path = path.path();
+    let root = xingbiao::scratch_root("tianheng-baseline-merge");
+    let path = root.path().join("baseline.json");
+    let path = path.as_path();
     let path_str = path.to_str().expect("utf-8 temp path");
 
     let outcome = Outcome::Violations(Report::new(vec![violation("core", "rule", "serde", None)]));
@@ -2638,8 +2634,9 @@ fn write_baseline_preserves_hand_added_metadata_across_regeneration() {
 
 #[test]
 fn write_baseline_refuses_every_unsupported_existing_document_without_modifying_it() {
-    let path = TempPath::named("baseline-v1-upgrade");
-    let path = path.path();
+    let root = xingbiao::scratch_root("tianheng-baseline-v1-upgrade");
+    let path = root.path().join("baseline.json");
+    let path = path.as_path();
     let path_str = path.to_str().expect("utf-8 temp path");
     let outcome = Outcome::Violations(Report::new(vec![violation("core", "rule", "serde", None)]));
     for unsupported in [
@@ -2661,8 +2658,9 @@ fn write_baseline_refuses_every_unsupported_existing_document_without_modifying_
 
 #[test]
 fn missing_baseline_creation_cannot_clobber_a_file_that_appeared() {
-    let path = TempPath::named("baseline-create-race");
-    let path = path.path();
+    let root = xingbiao::scratch_root("tianheng-baseline-create-race");
+    let path = root.path().join("baseline.json");
+    let path = path.as_path();
     std::fs::write(path, "appeared concurrently").unwrap();
 
     let err = super::create_baseline_file(path.to_str().unwrap(), "replacement")
@@ -2684,7 +2682,7 @@ fn missing_baseline_creation_cannot_clobber_a_file_that_appeared() {
 fn projection_gate_reacts_to_missing_stale_and_regenerates_on_bless() {
     // Pass `bless` as a bool (the helper reads no environment), so this test mutates no
     // process-global state and cannot race the parallel self-law gate.
-    let dir = TempPath::named("gate");
+    let dir = xingbiao::scratch_root("tianheng-gate");
     // A not-yet-existing subdir, so bless must `create_dir_all` the parent.
     let path = dir.path().join("sub").join("law.md");
     let hint = "BLESS=1 cargo test";
@@ -2734,8 +2732,7 @@ fn projection_gate_reacts_to_missing_stale_and_regenerates_on_bless() {
 #[cfg(unix)]
 #[test]
 fn a_symlink_is_reported_dangling_only_when_its_target_does_not_resolve() {
-    let dir = TempPath::named("symlink-classification");
-    xingbiao::claim_scratch(dir.path()).expect("create dir");
+    let dir = xingbiao::scratch_root("tianheng-symlink-classification");
 
     let dangling = dir.path().join("dangling-baseline.json");
     std::os::unix::fs::symlink(dir.path().join("absent.json"), &dangling).expect("dangling link");
