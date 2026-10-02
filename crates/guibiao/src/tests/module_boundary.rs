@@ -514,14 +514,18 @@ pub(super) fn a_missing_module_file_declared_inside_a_cfg_if_arm_is_tolerated() 
 
 /// A group directly under `cfg_if!` with neither an attribute nor an `else` before it is no arm, so a `mod` in it
 /// stands in a block, and the reading that numbers a block's modules and the one that builds the scopes agree on it.
-/// The input compiles: the local `cfg_if!` expands to nothing.
+/// The input compiles: the local `cfg_if!` expands to nothing. The import is read through the file's own scopes, so a
+/// disagreement between the two readings refuses it rather than passing unseen.
 #[test]
 pub(super) fn a_module_in_an_unlabelled_group_under_cfg_if_is_judged() {
     let (result, violations) = run_module_check(
         "unlabelled-cfg-if-group",
         &[(
             "lib.rs",
-            "pub mod forbidden {}\nmacro_rules! cfg_if { ($($t:tt)*) => {} }\ncfg_if! { { mod m; } }\n",
+            "pub mod forbidden { pub struct T; }\n\
+             macro_rules! cfg_if { ($($t:tt)*) => {} }\n\
+             cfg_if! { { mod m; } }\n\
+             use forbidden::T;\n",
         )],
         ModuleBoundary::in_crate("x")
             .module("crate")
@@ -532,7 +536,8 @@ pub(super) fn a_module_in_an_unlabelled_group_under_cfg_if_is_judged() {
         result.is_ok(),
         "a module in an unlabelled group under cfg_if! must be judged: {result:?}"
     );
-    assert!(violations.is_empty(), "{violations:?}");
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].finding, "crate::forbidden::T");
 }
 
 /// The control for the test above: tolerating the fileless sibling arm must not stop the arm whose

@@ -890,8 +890,8 @@ a block declares that the scan cannot name SHALL refuse its file rather than abo
 
 - **WHEN** a `cfg_if!` invocation holds a brace group with neither an attribute nor an `else` before it, and that
   group declares a `mod` — `cfg_if! { { mod m; } }` under a local `cfg_if!` that expands to nothing
-- **THEN** the group is read as a block by the reading that names a block's modules and by the scope table alike, and
-  the source is judged without panicking
+- **THEN** the group is read as a block by the reading that names a block's modules and by the scope table alike, so
+  an import the file reads through its own scopes is judged rather than refused, and the scan does not panic
 - **PINNED-BY** `a_module_in_an_unlabelled_group_under_cfg_if_is_judged`
 
 #### Scenario: A block module the scan cannot name refuses its file
