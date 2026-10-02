@@ -5,15 +5,13 @@ use std::path::{Path, PathBuf};
 
 #[allow(dead_code)]
 pub(super) struct TempWorkspace {
-    pub(super) dir: PathBuf,
+    pub(super) dir: xingbiao::ScratchRoot,
     pub(super) src: PathBuf,
 }
 
 impl TempWorkspace {
     pub(super) fn new(label: &str) -> Self {
-        let dir = xingbiao::scratch_base().join(format!("guibiao-{label}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        xingbiao::claim_scratch(&dir).expect("the fixture root is writable");
+        let dir = xingbiao::scratch_root(&format!("guibiao-{label}"));
         let src = dir.join("src");
         std::fs::create_dir_all(&src).expect("mkdir src");
         Self { dir, src }
@@ -87,12 +85,6 @@ impl TempWorkspace {
                 }],
             }],
         })
-    }
-}
-
-impl Drop for TempWorkspace {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
     }
 }
 

@@ -15,21 +15,13 @@ use guibiao::{Constitution, ModuleBoundary, Outcome, check};
 /// A minimal, single-crate probe workspace, decoupled from Tianheng's own workspace via its own
 /// `[workspace]` table (the same convention `crates/guibiao/tests/*` already uses).
 struct ProbeWorkspace {
-    dir: PathBuf,
+    dir: xingbiao::ScratchRoot,
     manifest: PathBuf,
 }
 
 impl ProbeWorkspace {
     fn new(name: &str, lib_rs: &str, extra_files: &[(&str, &str)]) -> Self {
-        use std::sync::atomic::{AtomicU32, Ordering};
-        static COUNTER: AtomicU32 = AtomicU32::new(0);
-        let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let dir = xingbiao::scratch_base().join(format!(
-            "guibiao-cfg-attr-path-only-{name}-{}-{unique}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        xingbiao::claim_scratch(&dir).expect("the fixture root is writable");
+        let dir = xingbiao::scratch_root(&format!("guibiao-cfg-attr-path-only-{name}"));
         std::fs::create_dir_all(dir.join("src")).expect("create temp src dir");
         let manifest = dir.join("Cargo.toml");
         std::fs::write(
@@ -52,12 +44,6 @@ impl ProbeWorkspace {
 
     fn manifest(&self) -> &Path {
         &self.manifest
-    }
-}
-
-impl Drop for ProbeWorkspace {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
     }
 }
 
