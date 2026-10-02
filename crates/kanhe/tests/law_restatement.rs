@@ -12,6 +12,8 @@
 //! Generated documents are excluded, and not as a convenience: a projection names every member of every
 //! allowlist because rendering them is its job.
 
+mod common;
+
 use std::path::PathBuf;
 
 use kanhe::region::{Source, declares_itself_generated};
@@ -140,7 +142,7 @@ fn no_governance_document_restates_a_declared_allowlist() {
     let mut offences = Vec::new();
     let mut read = 0usize;
     for path in paths {
-        if path.starts_with("openspec/changes/") || path == "CHANGELOG.md" {
+        if common::is_active_openspec_change_path(path) || path == "CHANGELOG.md" {
             continue;
         }
         let text = std::fs::read_to_string(root.join(path))
