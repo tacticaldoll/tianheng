@@ -1260,9 +1260,10 @@ impl CrateScopes {
     /// What one scope binds or declares `head` as in `ns`, seen from `from`, or `None` where it binds and declares
     /// nothing `from` can see, which leaves the name to the scope's globs.
     ///
-    /// The one lookup that reads a scope's own bindings, so it is where a scope of a file holding a `use` tree the
-    /// scanner could not read is refused rather than read: the bindings that tree makes are missing from it, and an answer read
-    /// without them could name less than rustc does. A lookup that reaches such a scope — directly, or through a glob
+    /// The one lookup that reads a scope's own bindings, so it is where a scope of a file holding what the scanner could
+    /// not read — a `use` tree, or a block's module it could not name — is refused rather than read: the bindings that
+    /// tree makes, or the declaration of that module, are missing from it, and an answer read without them could name
+    /// less than rustc does. A lookup that reaches such a scope — directly, or through a glob
     /// into it — refuses, whichever query asked it, while one that never reads it is judged. The glob hazard also walks a
     /// scope's bindings, outside any lookup; it meets the same refusal before it runs, since `UnitScan::findings` refuses
     /// a unit any of whose tables holds one.
@@ -1278,7 +1279,7 @@ impl CrateScopes {
         let entry = &self.tables[t].scopes[id as usize];
         if let Some(refusal) = self.tables[t].refusal() {
             return Some(Head::PastCap(format!(
-                "it reads names through `{}`, whose file holds a `use` tree the scanner cannot read: {refusal}",
+                "it reads names through `{}`, whose file holds what the scanner cannot read: {refusal}",
                 entry.module
             )));
         }

@@ -882,7 +882,19 @@ malformed in a way rustc itself would reject (an unterminated block comment, or 
 construct reaching end-of-file) — never panicking or otherwise aborting the process. An unterminated
 block comment SHALL be treated as extending through end-of-file: every byte within it, including a
 trailing byte that would otherwise be the orphaned tail of a multi-byte character, is consumed as
-part of the comment rather than re-scanned as code.
+part of the comment rather than re-scanned as code. Whether a group under `cfg_if!` is one of its arms SHALL be one
+reading — a brace group with an attribute or an `else` before it — that every reader of the group takes. Because the
+reading that names a block's modules and the scope table call that one reading, every `mod` a block declares has the
+name the walk gave it by construction; the scope table looks that name up rather than indexing it, and refuses the
+file if it is missing, so a disagreement reintroduced later is a refusal and never a panic.
+
+#### Scenario: A module in an unmarked group under `cfg_if!` is judged
+
+- **WHEN** a `cfg_if!` invocation holds a brace group with neither an attribute nor an `else` before it, and that
+  group declares a `mod` — `cfg_if! { { mod m; } }` under a local `cfg_if!` that expands to nothing
+- **THEN** the group is read as a block by the reading that names a block's modules and by the scope table alike, so
+  an import the file reads through its own scopes is judged rather than refused, and the scan does not panic
+- **PINNED-BY** `a_module_in_an_unlabelled_group_under_cfg_if_is_judged`
 
 #### Scenario: An unterminated block comment swallowing a multi-byte character does not panic
 

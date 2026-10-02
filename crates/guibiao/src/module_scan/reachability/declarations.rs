@@ -1,7 +1,7 @@
 //! Extraction of top-level `mod` declarations and their cfg/path attributes, read from a file's [`TokenTree`].
 
 use super::super::item_head::{
-    BlockModule, GroupKind, attribute_path, cfg_attr_metas, cfg_written_before, classify_group,
+    BlockModule, GroupKind, attribute_path, cfg_attr_metas, cfg_written_before, is_cfg_if_arm,
     is_outer_attribute, item_at_keyword, macro_group_kind, owner_start,
 };
 use super::super::path_vocab::canonical_segment;
@@ -148,7 +148,7 @@ fn cfg_if_arms<'t>(
             let child = tree.node_at(k);
             k = child.last() + 1;
             if let Node::Group { open, close } = child {
-                if classify_group(tree, open, Some(&GroupKind::CfgIf)) == GroupKind::CfgArm {
+                if is_cfg_if_arm(tree, open) {
                     return Some((open, close));
                 }
             }
@@ -172,11 +172,8 @@ fn may_be_compiled_out(tree: &TokenTree, at: usize) -> bool {
     let mut group = tree.enclosing(at);
     while let Some(open) = group {
         let outer = tree.enclosing(open);
-        let arm = outer.is_some_and(|outer| {
-            macro_group_kind(tree, outer) == Some(GroupKind::CfgIf)
-                && classify_group(tree, open, Some(&GroupKind::CfgIf)) == GroupKind::CfgArm
-        });
-        if arm || attributes_before(tree, owner_start(tree, open)).cfg_written {
+        if is_cfg_if_arm(tree, open) || attributes_before(tree, owner_start(tree, open)).cfg_written
+        {
             return true;
         }
         group = outer;
