@@ -92,7 +92,8 @@ conventional orphan file.
 with `RuleKey` + `StructuredFactIdentity`. The adopter-written boundary DSL remains the guarded
 surface; callers may inspect the returned structured `Outcome` directly through this crate.
 
-Adopt 圭表 on its own — the footprint is just `guibiao` (+ `serde_json` and the two Unicode tables), no `syn` — or graduate to
+Adopt 圭表 on its own — the footprint is `guibiao` and the normal dependencies `cargo tree -p guibiao -e normal`
+lists, none of them `syn` — or graduate to
 the composed constitution through the [`tianheng`](https://crates.io/crates/tianheng) shell (which
 re-exports this crate's surface): a single 儀 is an on-ramp, the suite is the destination. Onboard
 without a red wall — declare at `.warn()`, `Baseline::of(...)` to grandfather an existing codebase,

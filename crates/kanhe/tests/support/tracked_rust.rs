@@ -1,6 +1,7 @@
-//! The reading every repository check over tracked Rust shares: a tri-state answer for a file, the string
-//! literal's value, the workspace locator, and the loop that reads **every** tracked `.rs` file and refuses to
-//! report over one it could not decide.
+//! A reading of tracked Rust for the repository checks that `use support::tracked_rust` — that import is the set
+//! of its consumers, and a check reading tracked Rust its own way is outside it: a tri-state answer for a file,
+//! the string literal's value, the workspace locator, and the loop that reads **every** tracked `.rs` file and
+//! refuses to report over one it could not decide.
 //!
 //! Extracted from `hermetic_invocations` so the check that holds who constructs a scratch root decides the
 //! way the check that holds who constructs a `git` does, rather than writing the loop a second time.

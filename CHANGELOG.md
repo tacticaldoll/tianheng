@@ -64,7 +64,7 @@ them.
   `including_submodules` with `scan_depth` in JSON. Items inside a transparent `cfg_if!` arm are observed; an item
   inside a function body is not a direct item, and items produced only by a macro's expansion are not read.
   Existing visibility-ceiling and `must_not_declare_pub` rule keys and identities are unchanged. The
-  new field requires the construction migration below.
+  new field requires the *Migration* step *Construct `SemanticBoundaries` with `SemanticBoundaries::default()`*.
 
   A finding's identity is its item kind, module-qualified rendered name, compilation unit and governing
   package, never its position, so direct items of one module that render alike share one identity: two
@@ -115,7 +115,7 @@ them.
   stated bound, and cfg is observed as written.
   Calls with process-global effects, such as `std::env::set_var`, are `must_not_call_inline`'s, not this
   boundary's. `SemanticBoundaries` gains the `static_item` field, which needs no migration beyond the
-  `SemanticBoundaries` construction step below.
+  *Migration* step *Construct `SemanticBoundaries` with `SemanticBoundaries::default()`*.
 
 ### Migration
 
@@ -204,6 +204,10 @@ them.
   ASCII, such as a soft hyphen or a word joiner copied in with the path, in the ASCII the sysroot's paths are written
   in, and remove from any prefix or module path a character no identifier holds, and from a prefix a `_` segment; the check now refuses them (exit 2) where it accepted
   a path that never reacted.
+
+- Where 圭表 refuses a resolution, a glob graph or a denotation memo past its budget (exit 2, naming the limit
+  it passed), reduce the branching imports, globs or re-exports the governed code resolves through. The budgets
+  are fixed, and a refusal is a scan error rather than a finding, so a baseline cannot record it.
 
 ### Static
 

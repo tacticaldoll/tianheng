@@ -174,6 +174,22 @@ The system SHALL observe module imports by scanning the target crate's source `u
 - **WHEN** a source file contains a non-ASCII char literal immediately adjacent to a `'{'` or `'}'` char literal (e.g. `['«','{']`, no separating space)
 - **THEN** neither literal's payload is mistaken for a real structural brace, and every `mod` declared after it remains reachable and governed exactly as if the literals were not present
 
+#### Scenario: An unreadable governed source file is a scan error
+
+- **WHEN** a governed module resolves to a source file that exists but cannot be read
+- **THEN** the system reports a scan error naming the file and exits 2, rather than skipping the file
+
+#### Scenario: An unreadable source file no boundary governs is a scan error
+
+- **WHEN** a boundary governs one module and another reachable module's source file exists but cannot be read
+- **THEN** the system reports a scan error naming that file and exits 2, rather than skipping it
+- **PINNED-BY** `an_unreadable_reachable_source_file_is_a_scan_error`
+
+#### Scenario: An unreadable governed source directory is a scan error
+
+- **WHEN** a governed module's source subtree contains a directory that cannot be traversed
+- **THEN** the system reports a scan error naming the directory and exits 2, rather than skipping the subtree
+
 ### Requirement: A transparent control-flow macro's body is read as items
 
 The system SHALL recognize transparent control-flow macros (specifically `cfg_if!`) and SHALL read their inner structural body contents. Enclosed `use` import declarations, `mod` module declarations, and inline symbol call paths inside `cfg_if!` macro bodies SHALL be observed by `use_scan`, `reachability`, and `symbol_scan` as real items, matching the system's cfg-blind union-scanning policy. Other code-generating or declarative macro bodies (`macro_rules!` definitions and non-transparent macro invocations) SHALL be passed over as macro-generated items.
@@ -220,22 +236,6 @@ The system SHALL normalize embedded `self` and `super` segments appearing anywhe
 
 - **WHEN** a governed module declares `use crate::a::{self::b::Thing};` and a boundary governs `crate::a::b`
 - **THEN** the system normalizes the import path to `crate::a::b::Thing` and evaluates boundary rules against the canonical path
-
-#### Scenario: An unreadable governed source file is a scan error
-
-- **WHEN** a governed module resolves to a source file that exists but cannot be read
-- **THEN** the system reports a scan error naming the file and exits 2, rather than skipping the file
-
-#### Scenario: An unreadable source file no boundary governs is a scan error
-
-- **WHEN** a boundary governs one module and another reachable module's source file exists but cannot be read
-- **THEN** the system reports a scan error naming that file and exits 2, rather than skipping it
-- **PINNED-BY** `an_unreadable_reachable_source_file_is_a_scan_error`
-
-#### Scenario: An unreadable governed source directory is a scan error
-
-- **WHEN** a governed module's source subtree contains a directory that cannot be traversed
-- **THEN** the system reports a scan error naming the directory and exits 2, rather than skipping the subtree
 
 ### Requirement: Forbidden module import is a violation
 
