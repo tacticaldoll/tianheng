@@ -1476,27 +1476,6 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
-- **An item inserted between another item's `///` and its `fn` takes that item's doc.** *Class:* READY-PATCH,
-  promoted from WATCH when its trigger fired, as the paragraph closing this entry records.
-  *Observed pressure:* four instances across two reviews of one pull request, each a new test or helper
-  placed just above an existing `fn` and so under its doc block, leaving the existing item undocumented
-  and the new one described as something else. *Observation source:* `cargo clippy -p guibiao --lib -- -W
-  clippy::missing_docs_in_private_items`, which names every private item with no doc, an item whose doc a new
-  one took among them. *Current reaction or bound:* none. That lint is the decidable instrument; measured 2026-10-01 by
-  that command, it names 381 items, so adopting it means documenting those first. A text reader deciding that a doc describes a different item than the one it sits on is a
-  judgement over prose, which *Do not add a detector over prose* declines. *Risk:* no false negative; a
-  reader of the doc is misled about which item it describes. *Promotion trigger:* a later review finds
-  the shape again, which makes documenting guibiao's private items and turning the lint on a READY-PATCH.
-  *Version class:* patch. *Authority:* AGENTS.md's doc-comment rules.
-
-  **The trigger fired on 2026-10-01, and the entry is READY-PATCH.** A static review of the fixes after the
-  scope-table change found three more — `is_ident_byte`'s doc on `white_space_len`, `CrateScopes::new`'s on
-  `in_a_proc_macro_crate`, `read_tree`'s fused with `Unread`'s — each an item inserted by an edit anchored on the
-  item's line rather than its doc block, and each repaired by moving the doc back. The patch the trigger names is
-  not taken in the typed-resolver change of 2026-10-01, which carries contract repairs alone and files maintenance here; the next change
-  documenting guibiao's private items takes it. The same class across the workspace is the entry *A private
-  item's doc comment can be stolen by an item inserted above it*, whose public half `deny(missing_docs)` holds.
-
 - **Every normative SHALL either has a reaction or is a declared bound.** *Class:* READY-PATCH — by the
   definition above, which classifies evidence and compatibility rather than remaining design effort: the
   pressure is measured and the correction preserves every published API. It declared no class at all until
@@ -2566,6 +2545,13 @@ consumer for an undemonstrated deduplication.
   by whoever next reads it, which is the same shape as a requirement whose clause has no reaction, and it is
   the way this class of entry fails. It was caught by a review arriving at it sideways from an unrelated
   finding.
+
+  **Read 2026-10-03: another private instance, and guibiao now holds the lint.** While writing the CHANGELOG
+  positional-reference reaction, `is_list_item` was inserted between `unreleased_has_item`'s doc and its `fn` in
+  `crates/kanhe/src/release_coherence_gate.rs`; an independent review found it, no check would have, and it was
+  moved. `guibiao` now denies `clippy::missing_docs_in_private_items`, which closes its own READY-PATCH entry. The
+  decision for `kanhe` is unchanged: the instance is evidence on the trigger, and the cost this entry measures is
+  what it is weighed against.
 
 - **WATCH: A reader's corpus can be narrower than the requirement it serves, and this repository's own dimensions
   cannot see the shape.** *Class:* WATCH. *Observed pressure:* the dominant class of the 0.5.0 window. Live
@@ -4120,6 +4106,32 @@ Two properties from those windows do not expire with a version, so they stay:
 A closed item leaves the live class it was filed under; it does not stay there struck through. Its
 reproduction record moves here, where closed reproduction records belong, so a live class heading
 cannot read as a queue holding work that is already done.
+
+- ~~**An item inserted between another item's `///` and its `fn` takes that item's doc.**~~ *Class:* READY-PATCH —
+  closed on 2026-10-03 by *docs(guibiao): document every private item and deny the lint that holds it*, the patch
+  the trigger named. Every private item in `guibiao` carries a doc stating its contract, each read against the
+  code it sits on by an independent pass that corrected the ones saying more than the code does, and the crate
+  denies `clippy::missing_docs_in_private_items` beside `missing_docs`, so an item an insertion strips of its doc
+  is a clippy failure in CI. The workspace-wide class stays with *A private item's doc comment can be stolen by an
+  item inserted above it*. The record as filed: *Observed pressure:* four instances across two reviews of one pull
+  request, each a new test or helper placed just above an existing `fn` and so under its doc block, leaving the
+  existing item undocumented and the new one described as something else. *Observation source:* `cargo clippy -p
+  guibiao --lib -- -W clippy::missing_docs_in_private_items`, which names every private item with no doc, an item
+  whose doc a new one took among them. *Current reaction or bound:* none. That lint is the decidable instrument;
+  measured 2026-10-01 by that command, it names 381 items, so adopting it means documenting those first. A text
+  reader deciding that a doc describes a different item than the one it sits on is a judgement over prose, which
+  *Do not add a detector over prose* declines. *Risk:* no false negative; a reader of the doc is misled about
+  which item it describes. *Promotion trigger:* a later review finds the shape again, which makes documenting
+  guibiao's private items and turning the lint on a READY-PATCH. *Version class:* patch. *Authority:* AGENTS.md's
+  doc-comment rules.
+
+  **The trigger fired on 2026-10-01, and the entry is READY-PATCH.** A static review of the fixes after the
+  scope-table change found three more — `is_ident_byte`'s doc on `white_space_len`, `CrateScopes::new`'s on
+  `in_a_proc_macro_crate`, `read_tree`'s fused with `Unread`'s — each an item inserted by an edit anchored on the
+  item's line rather than its doc block, and each repaired by moving the doc back. The patch the trigger names is
+  not taken in the typed-resolver change of 2026-10-01, which carries contract repairs alone and files maintenance here; the next change
+  documenting guibiao's private items takes it. The same class across the workspace is the entry *A private
+  item's doc comment can be stolen by an item inserted above it*, whose public half `deny(missing_docs)` holds.
 
 - ~~**A changelog entry that refers to another by position breaks when the entries are regrouped.**~~ *Class:*
   READY-PATCH — closed on 2026-10-03 by *fix(kanhe): refuse a CHANGELOG entry that points at another by position*,

@@ -58,19 +58,34 @@ impl Visibility {
 /// The keyword an item header is named by.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum ItemKeyword {
+    /// `mod`: a named one with a brace body opens an inline module body.
     Mod,
+    /// `struct`: the one keyword whose header records whether it also declares a value.
     Struct,
+    /// `enum`: a type with a body of variants.
     Enum,
+    /// `union`, a contextual word read as an item keyword only when a word follows it.
     Union,
+    /// `trait`: an item whose body holds associated items.
     Trait,
+    /// `type`: an alias, whose header has no brace body.
     Type,
+    /// `fn`: its brace body is a block, not a member body.
     Fn,
+    /// `const` followed by a name or `_` and a `:` — an item, not a `const fn` qualifier or a `const`
+    /// block.
     Const,
+    /// `static`, whose name follows a `mut` where one is written.
     Static,
+    /// `impl`: unnamed, with a member body.
     Impl,
+    /// `use`: unnamed, and every brace in its tree is a use group.
     Use,
+    /// `extern crate`, named by the token after `crate`, which may be `self`.
     ExternCrate,
+    /// `extern`, optionally with an ABI literal, directly before a `{`: unnamed.
     ExternBlock,
+    /// `macro_rules!`, named by the word after the `!`.
     MacroRules,
 }
 
@@ -81,11 +96,20 @@ pub(super) enum ItemKeyword {
 pub(super) struct ItemHead {
     /// The header's first token: its first qualifier, or its keyword.
     pub start: usize,
+    /// The kind of item the header declares.
     pub keyword: ItemKeyword,
+    /// The token of the keyword itself, after every qualifier.
     pub keyword_at: usize,
+    /// The token naming the item: `None` for an `impl`, a `use` or an extern block, and wherever the
+    /// token in the name's position is not a word.
     pub name: Option<usize>,
+    /// What the header's `pub` qualifier gives, or `Visibility::Private` when it has none.
     pub visibility: Visibility,
+    /// The `{` of the item's brace body: read only for `mod`, `struct`, `enum`, `union`, `trait`,
+    /// `impl`, `fn` and extern-block headers, and `None` where the header has no brace body.
     pub body: Option<usize>,
+    /// Whether a `struct` is a tuple or unit struct, declaring a value as well as a type; `false` for
+    /// every other keyword.
     pub value_struct: bool,
 }
 
@@ -265,11 +289,15 @@ pub(super) fn in_attribute(tree: &TokenTree, i: usize) -> bool {
 
 /// One `mod` a block declares, and the segment its module's path carries through that block.
 pub(super) struct BlockModule {
+    /// The `mod` item's header.
     pub head: ItemHead,
+    /// The token naming the module; a `mod` header without a name is never a block module.
     pub name_at: usize,
     /// The `{` of the module body the block stands in, or `None` at a file's top level: the module whose blocks
     /// number this one among the modules of its name.
     pub owner: Option<usize>,
+    /// The block segment its module's path carries: `{block}` for the first module of its name under
+    /// `owner`, `{block N}` for the Nth.
     pub label: String,
 }
 
@@ -682,7 +710,10 @@ fn item_body(tree: &TokenTree, from: usize, keyword: ItemKeyword) -> (Option<usi
 /// The `<…>` group a `<` or `<<` opens: the token closing it, and for a `<<` the token closing the inner group
 /// its second `<` opens — the same token where one `>>` closes both.
 pub(super) struct AngleGroup {
+    /// The token closing the group the opener opens.
     pub close: usize,
+    /// For a `<<`, the token closing the group its second `<` opens, which is `close` itself where one
+    /// `>>` closes both; `None` for a `<` or `<-`.
     pub inner_close: Option<usize>,
 }
 

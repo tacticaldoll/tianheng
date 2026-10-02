@@ -11,7 +11,9 @@ pub(crate) use xingbiao::{
 /// proc-macro crate, whose extern prelude holds `proc_macro` without an `extern crate` — measured against rustc 1.96.0,
 /// edition 2021, a `[lib] proc-macro = true` crate calls `proc_macro::TokenStream::new()` with none.
 pub(crate) struct RootReading {
+    /// The one edition the root is read in; a mix of 2018 and later reads as 2018, and a mix with 2015 is refused.
     pub(crate) edition: Edition,
+    /// Whether any target rooted at the file is a proc-macro crate, so `proc_macro` resolves with no `extern crate`.
     pub(crate) proc_macro: bool,
 }
 

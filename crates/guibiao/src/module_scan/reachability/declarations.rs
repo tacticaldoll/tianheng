@@ -11,6 +11,8 @@ use super::super::token_tree::{Delimiter, Kind, Node, TokenTree};
 /// (`{ … }`) — the token indices of its body's braces, `None` for a file declaration (`;`), so a caller can re-scan
 /// just that body to find further declarations nested inside it.
 pub(super) struct DeclaredModule {
+    /// The name in canonical spelling; for a module a block declares, prefixed with the block's readable label as
+    /// `{block}::name`.
     pub(super) name: String,
     /// The inline body's `{` and `}`, and `None` for a file declaration — one field, so an inline declaration
     /// without a body, or a file declaration with one, cannot be built.
@@ -63,8 +65,12 @@ pub(super) struct DeclaredModule {
 /// What the attributes before one `mod` declare about where its source is.
 #[derive(Default)]
 struct PathAttributes {
+    /// The first direct `#[path = …]` written, as [`DeclaredModule::direct_path`] reads it.
     direct: Option<Option<String>>,
+    /// Whether a readable `cfg_attr` path is written before the direct `#[path]`; false where there is no direct one.
     direct_after_candidate: bool,
+    /// Each readable `cfg_attr` path value with the token its meta starts at, in textual order, none written after
+    /// the direct `#[path]`.
     conditional: Vec<(usize, String)>,
     /// Whether a `cfg` is written on the declaration, directly or applied through `cfg_attr`.
     cfg_written: bool,

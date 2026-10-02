@@ -3,6 +3,8 @@ use crate::module_scan::canonical_module_path;
 use super::crate_rule::CrateBoundary;
 use super::module_rule::ModuleBoundary;
 
+/// `values` as a rule-key component: sorted, deduplicated, and serialized as a JSON array of strings, so the order
+/// and repetition a declaration was written with do not move its identity.
 pub(crate) fn canonical_set<I, S>(values: I) -> String
 where
     I: IntoIterator<Item = S>,
@@ -40,7 +42,9 @@ where
 /// The governed shape, declared in Rust (the single source of truth).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Constitution {
+    /// A label for the project, never read as a path.
     name: String,
+    /// Every declared boundary, in declaration order.
     boundaries: Vec<Boundary>,
 }
 

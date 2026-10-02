@@ -18,19 +18,33 @@ use std::rc::Rc;
 /// to this exact source path and must never be merged across cfg-blind sibling sources.
 #[derive(Clone)]
 enum ScanSource {
+    /// A whole file, read from its first token to its last.
     File {
+        /// The path the file is opened by, not its canonical form.
         file: PathBuf,
+        /// The directory a path attribute written in the file resolves against: that of the path it is opened by, and
+        /// the source directory for the crate root.
         path_base: PathBuf,
+        /// The directory the file's conventional children are probed under: its module's directory, or `path_base`
+        /// for a file a path attribute opened or for the crate root.
         child_base: PathBuf,
+        /// What the file inherits from the declarations that opened it.
         lineage: Lineage,
     },
     /// An inline module's body, by the token indices of its `{` and `}` in the file's tree.
     Body {
+        /// The file whose token tree holds the body.
         file: PathBuf,
+        /// The token index of the body's `{`; the source starts just past it.
         start: usize,
+        /// The token index of the body's `}`, which ends the source.
         end: usize,
+        /// The directory a `#[path]` written in the body resolves against: this registration's base.
         path_base: PathBuf,
+        /// The directory the body's plain `mod x;` children are probed in, always `path_base`, since a body with several
+        /// bases is one source per base.
         child_base: PathBuf,
+        /// What the body inherits from the declarations that opened it.
         lineage: Lineage,
     },
 }
@@ -42,7 +56,9 @@ enum ScanSource {
 /// with no `i.rs`. Per source, since a module's several cfg-blind sources are opened by different declarations.
 #[derive(Clone, Default)]
 struct Lineage {
+    /// The canonical path of every file opened along the declarations leading here, this source's own included.
     files: HashSet<PathBuf>,
+    /// Whether some declaration along them may be compiled out, which tolerates a missing file beneath it.
     compiled_out: bool,
     /// Whether the source is a module a block declares, or one inside it that no path attribute gave a directory of its
     /// own, where rustc refuses a file-form `mod` with no path attribute: `fn f() { mod k { mod m; } }` is refused with "cannot declare a file module inside a block
@@ -73,17 +89,23 @@ impl Lineage {
     }
 }
 
+/// A [`ScanSource`] with its file and inline-body forms read as one shape.
 struct LoadedSource {
+    /// The file whose token tree holds this source.
     file: PathBuf,
     /// The token range whose top-level declarations this source holds: the whole file, or an inline body between
     /// its braces. `None` is the whole file, whose length is known only once it is lexed.
     range: Option<Range<usize>>,
+    /// The directory a path attribute written in this source resolves against.
     path_base: PathBuf,
+    /// The directory this source's conventional file-form children are probed under.
     child_base: PathBuf,
+    /// What this source inherits from the declarations that opened it.
     lineage: Lineage,
 }
 
 impl ScanSource {
+    /// This source in the one shape both forms share, an inline body's range lying strictly between its braces.
     fn load(&self) -> LoadedSource {
         let (file, range, path_base, child_base, lineage) = match self {
             Self::File {
@@ -111,10 +133,17 @@ impl ScanSource {
     }
 }
 
+/// An inline `mod name { … }` body, with what [`register_inline_sources`] decides the bases of its file-form children
+/// from.
 struct InlineBody {
+    /// The file whose token tree holds the body.
     file: PathBuf,
+    /// The token index of the body's `{`.
     start: usize,
+    /// The token index of the body's `}`.
     end: usize,
+    /// The directory the conventional base is taken under: the declaring source's `child_base`, or its `path_base`
+    /// for a module a block declares.
     base: PathBuf,
     /// The directory the conventional base takes under `base`: the module's own name, which a block's `{block}::`
     /// naming is no part of.
@@ -130,6 +159,7 @@ struct InlineBody {
     /// inline module compiled without its path attribute holds no file-form `mod` rustc accepts, so only the paths
     /// its `cfg_attr`s name are bases.
     conventional_compiles: bool,
+    /// The lineage every source registered for this body carries, its `in_block` already decided for the body.
     lineage: Lineage,
 }
 
@@ -137,26 +167,41 @@ struct InlineBody {
 /// `mod` declares it, which each refusal of the source names, so a module several sources declare says which line to
 /// change.
 struct PlainSource {
+    /// The directory `child.rs` and `child/mod.rs` are probed in: the declaring source's `child_base`.
     base: PathBuf,
+    /// The file holding the `mod` declaration.
     declared_in: PathBuf,
+    /// The declaring source's lineage, continued through this declaration.
     lineage: Lineage,
+    /// Whether finding neither conventional file is tolerated: the lineage may be compiled out, or one of the
+    /// declaration's `cfg_attr` path targets exists.
     is_cfg_conditional: bool,
 }
 
 /// A direct `#[path]` declaration's source; `declared_in` as [`PlainSource`] has it.
 struct DirectPathSource {
+    /// The `#[path]` value as written, resolved against `base`.
     relative: PathBuf,
+    /// The declaring source's `path_base`.
     base: PathBuf,
+    /// The file holding the `mod` declaration.
     declared_in: PathBuf,
+    /// The declaring source's lineage, continued through this declaration.
     lineage: Lineage,
+    /// Whether a missing target is tolerated: the lineage may be compiled out, or a `cfg_attr` path written before
+    /// the direct one names a file that exists.
     is_cfg_conditional: bool,
 }
 
 /// A `cfg_attr(…, path = …)` declaration's source whose target exists; `declared_in` as [`PlainSource`] has it.
 struct ConditionalPathSource {
+    /// The `cfg_attr` path value as written, resolved against `base`.
     relative: PathBuf,
+    /// The declaring source's `path_base`.
     base: PathBuf,
+    /// The file holding the `mod` declaration.
     declared_in: PathBuf,
+    /// The declaring source's lineage, continued through this declaration.
     lineage: Lineage,
 }
 
@@ -167,10 +212,18 @@ struct ConditionalPathSource {
 /// the order the sources were scanned — an example of a path rustc resolves, which the refusal words as one.
 #[derive(Default)]
 struct ChildSources {
+    /// Whether some declaration outside a block declares the child file-form with no direct `#[path]`, which is exactly
+    /// when `plain` is pushed to; `cfg_attr` paths beside it do not unset it. A remap of a child without one shadows
+    /// its structurally located file.
     seen_plain_file: bool,
+    /// One per inline declaration of the child.
     bodies: Vec<InlineBody>,
+    /// One per file-form declaration outside a block with no direct `#[path]`, to be probed for in the conventional
+    /// directory.
     plain: Vec<PlainSource>,
+    /// One per file-form declaration whose direct `#[path]` value is readable.
     direct: Vec<DirectPathSource>,
+    /// One per `cfg_attr` path target of a file-form declaration that exists as a regular file.
     conditional: Vec<ConditionalPathSource>,
 }
 
@@ -369,10 +422,18 @@ fn unbuildable_block_module(
     }
 }
 
+/// The graph the walk accumulates: every module's scan sources, and the remap facts [`reachable_modules`] returns.
 #[derive(Default)]
 struct GraphSources {
+    /// Each module path's scan sources, which its children are read from; a module reached with none has no children
+    /// read.
     by_module: BTreeMap<String, Vec<ScanSource>>,
+    /// Each file a path attribute opened, or a plain file that resolved off its module's structural path, with the
+    /// module path it is governed as.
     remapped: Vec<(PathBuf, String)>,
+    /// Module paths whose structurally located file, where one exists, is not governed as that module: a path
+    /// attribute remaps the module and no declaration of it is plain, or every plain file that resolved for it lies off
+    /// its structural path.
     remap_shadowed: BTreeSet<String>,
 }
 
@@ -568,8 +629,11 @@ fn resolve_plain_sources(
     Ok(plain_file_resolved)
 }
 
+/// Which path attribute remapped a source, so a cycle refusal names the attribute to change.
 enum RemapKind {
+    /// An unconditional `#[path = …]`.
     Direct,
+    /// A `cfg_attr(…, path = …)`.
     Conditional,
 }
 
@@ -616,6 +680,9 @@ fn register_remapped_source(
     Ok(())
 }
 
+/// Register each direct `#[path]` target of `child_path` as a source, refusing a missing target unless its
+/// declaration is cfg-conditional. With no plain declaration of the child beside them, its structurally located file
+/// is marked shadowed.
 fn resolve_direct_paths(
     child_path: &str,
     seen_plain_file: bool,
@@ -662,6 +729,8 @@ fn resolve_direct_paths(
     Ok(())
 }
 
+/// Register each `cfg_attr` path target of `child_path` that exists as a source, passing over one that does not.
+/// With no plain declaration of the child beside them, its structurally located file is marked shadowed.
 fn resolve_conditional_paths(
     child_path: &str,
     seen_plain_file: bool,

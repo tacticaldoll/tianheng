@@ -209,6 +209,7 @@ type RootKey = (String, Option<PathBuf>);
 /// asks for its root and shared by every boundary that asks again, so a root's sources are read
 /// once per evaluation however many boundaries are judged over them.
 pub(crate) struct EvaluationScans {
+    /// Each root scan built so far, by its root's key. A failed build is not held; the evaluation stops at that error.
     scans: RefCell<HashMap<RootKey, Rc<RootScan>>>,
     /// The evaluation's one reading of each source path, shared by every root scan it builds.
     sources: Rc<SourceTexts>,

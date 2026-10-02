@@ -31,8 +31,11 @@ use super::use_tree::{UseLeaf, macro_use_statements, use_statements};
 /// never hides what a glob brings in the other.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub(super) enum Namespace {
+    /// Modules, types, traits and crates.
     Type,
+    /// Functions, constants, statics and struct constructors.
     Value,
+    /// Both, looked up in each and the answers joined.
     Either,
 }
 
@@ -47,9 +50,14 @@ impl Namespace {
     }
 }
 
+/// What a scope is to a lookup and to the paths its items are named by.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum ScopeKind {
+    /// The file or an inline `mod name { … }`: a lookup that misses here ends rather than read the scopes around it,
+    /// and an item declared here is named by a path through the module.
     Module,
+    /// A `{ … }` block: a lookup that misses here reads on into the enclosing scope, and an item declared here is
+    /// local to it.
     Block,
 }
 
@@ -60,19 +68,27 @@ pub(super) enum Binding {
     /// which imports the module its group names and nothing else of that name: rustc 1.96.0, edition 2021, resolves
     /// `both()` past `use crate::local::both::{self};` to the scope around it though `local` declares a `fn both`.
     Import {
+        /// The imported path, the group's prefix included, led by `::` where the tree is; for a `{self}` leaf, the
+        /// module the group names.
         written: String,
+        /// The `use` statement's visibility.
         visibility: Visibility,
+        /// Whether this is a `{self}` leaf, which holds its name in the type namespace alone.
         module_only: bool,
     },
     /// A `type Name = Target;` written directly in a module body or a block, by its written target, read from its
     /// own scope when looked up.
     Alias {
+        /// The target's path, its segments joined by `::` with any generic arguments left off, and led by `::` where
+        /// the target is rooted.
         written: String,
+        /// The alias item's visibility.
         visibility: Visibility,
     },
 }
 
 impl Binding {
+    /// The binding's visibility, of either kind: a lookup from a module it does not reach passes the binding over.
     pub(super) fn visibility(&self) -> &Visibility {
         match self {
             Binding::Import { visibility, .. } | Binding::Alias { visibility, .. } => visibility,
@@ -83,7 +99,10 @@ impl Binding {
 /// A glob written in a scope: its base path as written, read from that scope when a lookup reaches it, and who may
 /// reach through it.
 pub(super) struct Glob {
+    /// The base path the glob reads from — `a::b` for `a::b::*` and `a::b::{*}` — and `::` for a glob with no path
+    /// before it.
     pub written: String,
+    /// The `use` statement's visibility, which decides which modules a lookup may reach through the glob from.
     pub visibility: Visibility,
 }
 
@@ -95,7 +114,13 @@ pub(super) enum DeclKind {
     Module(String),
     /// An `extern crate`, by the crate it names — `crate` for `extern crate self` — and whether a `cfg` gates it,
     /// which a crate root's ungated declaration of the same name does not make certain.
-    ExternCrate { target: String, gated: bool },
+    ExternCrate {
+        /// The crate the name stands for, `crate` where it names `self`.
+        target: String,
+        /// Whether a `cfg` may gate the declaration; only an ungated one at the crate root makes the name certain in
+        /// the extern prelude.
+        gated: bool,
+    },
     /// Any other item, by its keyword: it names itself, and a path through it reads what the item holds.
     Item(ItemKeyword),
 }
@@ -105,13 +130,19 @@ pub(super) enum DeclKind {
 /// recorded, with its own namespaces and its own visibility.
 #[derive(Clone, Debug)]
 pub(super) struct Declaration {
+    /// Whether it declares the name in the type namespace: a module, a type, a trait or an `extern crate`.
     pub type_ns: bool,
+    /// Whether it declares the name in the value namespace: a function, a constant, a static, or the constructor of
+    /// a tuple or unit struct.
     pub value_ns: bool,
+    /// The item's visibility, which decides which modules a lookup may find it from.
     pub visibility: Visibility,
+    /// What a path through the declared name reads next.
     pub kind: DeclKind,
 }
 
 impl Declaration {
+    /// Whether the declaration declares its name in `ns`; in [`Namespace::Either`], whether it does in either.
     pub(super) fn in_namespace(&self, ns: Namespace) -> bool {
         match ns {
             Namespace::Type => self.type_ns,
@@ -121,12 +152,19 @@ impl Declaration {
     }
 }
 
+/// One module body or block of a file, with what is written directly in it.
 pub(super) struct Scope {
+    /// The id of the scope enclosing this one; `None` only for the file's own module body.
     pub parent: Option<u32>,
+    /// Whether a lookup that misses here ends here or reads on into `parent`.
     pub kind: ScopeKind,
+    /// The module path the scope stands in: a module body's own, a block's enclosing module's.
     pub module: String,
+    /// Each name a `use` leaf or a `type` alias written here binds, with every binding of it.
     pub bindings: BTreeMap<String, Vec<Binding>>,
+    /// Each name an item written here declares, with every declaration of it.
     pub declarations: BTreeMap<String, Vec<Declaration>>,
+    /// Every glob `use` written here.
     pub globs: Vec<Glob>,
     /// Every name with a binding or a declaration here that no configuration leaves out, by the namespaces it holds,
     /// `(type, value)`: a binding counts in both, its target not read here. A name bound or declared only by what a
@@ -151,10 +189,15 @@ impl Scope {
 /// in it the scanner could not read — a `use` tree, or a module a block declares that the reading naming a block's
 /// modules gave no name — which the file's judgement reports.
 pub(super) struct ScopeTable {
+    /// Every scope of the file, by its id as the index: id `0` is the file's own module body, and a scope's parent
+    /// precedes it.
     pub scopes: Vec<Scope>,
     /// The table's place among its unit's tables, which names its blocks.
     pub table: usize,
+    /// The innermost scope of each token by its index, with one entry more for the end of the text, where
+    /// [`ScopeTable::scope_at`] answers for any index past it.
     scope_of: Vec<u32>,
+    /// The first refusal met while recording, kept over any met after it.
     refusal: Option<String>,
 }
 
@@ -175,11 +218,16 @@ pub(crate) fn take_table_builds() -> std::collections::HashMap<(String, usize), 
 /// What stands open while the tree is read forward: the group's kind, and outside it the scope, the recording scope,
 /// whether a macro's group encloses it, and the block inside one that records its `use` statements.
 struct Frame {
+    /// The token closing the group, where the frame is popped and `outer` restored.
     close: usize,
+    /// How the group was classified, which [`classify_group`] reads as the enclosing kind of a group opened in it.
     kind: GroupKind,
+    /// The scope, the recording scope, whether a macro's group encloses, and the macro block, as they stood before
+    /// the group opened.
     outer: (u32, Option<u32>, bool, Option<u32>),
 }
 
+/// Append to `scopes` a scope holding nothing yet, and answer its id: its index in `scopes`.
 fn push_scope(
     scopes: &mut Vec<Scope>,
     parent: Option<u32>,

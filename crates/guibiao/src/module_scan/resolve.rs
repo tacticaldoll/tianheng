@@ -39,16 +39,20 @@ use super::token_tree::Edition;
 /// depth rather than once per path, so a lattice of globs is read in time its size bounds rather than its path count.
 const MAX_RESOLUTION_CHAIN: usize = 64;
 
-/// Maximum candidate entries and path text held by one resolution reading. Depth alone does not bound a branching
-/// glob: these limits refuse its width before another pass can multiply it.
+/// The candidate entries one resolution reading may hold. Depth alone does not bound a branching glob: this limit
+/// and [`MAX_RESOLUTION_BYTES`] refuse its width before another pass can multiply it.
 const MAX_RESOLUTION_PATHS: usize = 32_768;
+/// The bytes of path text one resolution reading may hold, beside [`MAX_RESOLUTION_PATHS`].
 const MAX_RESOLUTION_BYTES: usize = 8 * 1024 * 1024;
 
 /// The held answers of a whole glob graph have their own aggregate budget: a long chain repeats its intermediate
 /// paths in each scope's answer even though no individual answer is wide.
 const MAX_GLOB_GRAPH_PATHS: usize = 1_048_576;
+/// The bytes of path text a glob graph's held answers may total, beside [`MAX_GLOB_GRAPH_PATHS`].
 const MAX_GLOB_GRAPH_BYTES: usize = 64 * 1024 * 1024;
 
+/// The refusal of a reading holding more than [`MAX_RESOLUTION_PATHS`] paths or [`MAX_RESOLUTION_BYTES`] bytes of
+/// path text: the one wording every reading past that per-reading budget uses.
 fn width_refusal() -> String {
     format!(
         "cannot judge a resolution holding more than {MAX_RESOLUTION_PATHS} candidate paths or \
@@ -56,19 +60,26 @@ fn width_refusal() -> String {
     )
 }
 
+/// What a reading has charged against its width budget: how many candidate paths it holds and how many bytes of
+/// path text, checked against the per-reading limits or, for a glob graph's held answers, the graph's.
 #[derive(Default)]
 pub(super) struct ReadingSize {
+    /// How many paths have been charged.
     paths: usize,
+    /// How many bytes of path text have been charged.
     bytes: usize,
 }
 
 impl ReadingSize {
+    /// Charge one path and its text, refused once the reading passes the per-reading budget.
     pub(super) fn add(&mut self, path: &str) -> Result<(), String> {
         self.paths = self.paths.saturating_add(1);
         self.bytes = self.bytes.saturating_add(path.len());
         self.check()
     }
 
+    /// Charge every path `head` holds — bound, declared, passed, the name's own heads and foreign names — refused
+    /// once the per-reading budget is passed. An answer holding no paths charges nothing.
     fn head(&mut self, head: &Head) -> Result<(), String> {
         match head {
             Head::Candidates {
@@ -100,6 +111,7 @@ impl ReadingSize {
         }
     }
 
+    /// Refuse once what is charged passes [`MAX_GLOB_GRAPH_PATHS`] paths or [`MAX_GLOB_GRAPH_BYTES`] bytes.
     fn check_graph(&self) -> Result<(), String> {
         if self.paths > MAX_GLOB_GRAPH_PATHS || self.bytes > MAX_GLOB_GRAPH_BYTES {
             Err(format!(
@@ -111,6 +123,7 @@ impl ReadingSize {
         }
     }
 
+    /// Refuse, with [`width_refusal`], once what is charged passes the per-reading budget.
     fn check(&self) -> Result<(), String> {
         if self.paths > MAX_RESOLUTION_PATHS || self.bytes > MAX_RESOLUTION_BYTES {
             Err(width_refusal())
@@ -145,8 +158,11 @@ pub(super) enum Named {
     /// a crate the head may name, judged by the reader's policy, beside `also`, what scopes binding the head only
     /// where that may not hold named it as — empty where no scope binds it at all.
     Unbound {
+        /// The head no scope binds for certain, which may name a crate.
         head: String,
+        /// The segments written after the head.
         rest: Vec<String>,
+        /// What scopes binding the head where that may not hold named it as; empty where no scope binds it.
         also: Vec<String>,
     },
     /// A block-local item. It is named by no path outside its block, so no prefix reaches it.
@@ -171,6 +187,7 @@ pub(super) enum Declared {
 }
 
 impl Declared {
+    /// The path the declaration names, a module's or an item's alike.
     pub(super) fn path(&self) -> &str {
         match self {
             Declared::Module(path) | Declared::Item(path) => path,
@@ -201,16 +218,23 @@ enum Head {
     /// an answer with this one — cfg-exclusive globs or files, or the two namespaces of one lookup — since either can
     /// be the live one; it is read as [`Head::Foreign`] is, by a path through the scope's module alone.
     Candidates {
+        /// The paths the scope's bindings name, still to be read, each with how its binding is written.
         bound: Vec<Bound>,
+        /// What the scope declares the name as, each by what a path through it reads next.
         declared: Vec<Declared>,
+        /// The paths a name a glob brings passes on its way, reported under but not read again.
         through: Vec<String>,
+        /// What the name alone names where the lookup found it, before anything it names is read further.
         heads: Vec<String>,
+        /// What a glob of a crate whose contents are not read brings the name as, from an answer of that kind
+        /// a fold joined with this one.
         foreign: Vec<String>,
         /// Whether the lookup read past every scope on its chain without one ending it, every answer here one that
         /// may not hold on every build, so the head may also name what no scope binds: a sysroot crate or a
         /// dependency.
         open: bool,
     },
+    /// The scope declares or imports the name only as a block-local item, which no path outside its block names.
     Local,
     /// Nothing the scope binds or declares, and nothing its globs of this compilation unit bring, but a glob of
     /// a crate whose contents are not read can: that glob's path with the name appended, for each such glob.
@@ -218,6 +242,7 @@ enum Head {
     /// written in the scope may instead name a prelude or a local binding, so the lexical lookup reads it as
     /// [`Head::Unbound`] and the glob's own finding is what reacts.
     Foreign(Vec<String>),
+    /// Nothing the scope binds or declares under the name, and nothing any of its globs brings.
     Unbound,
     /// A refusal of the walk, as [`Named::PastCap`] carries one.
     PastCap(String),
@@ -231,9 +256,15 @@ type GlobNode = (usize, u32, String);
 /// or declares it as where that may not hold on every build ([`CrateScopes::may_not_hold_here`]), joined with what the
 /// globs bring.
 enum GlobRead {
+    /// The scope's answer, kept or read from what it binds, ends the lookup — a name bound or declared for certain,
+    /// or a refusal — or reading its globs refused; its globs are not read.
     Answered(Head),
+    /// The scope answers what its globs bring, joined with what it binds or declares itself.
     Globs {
+        /// What the scope binds or declares the name as where that may not hold on every build; `None` where it
+        /// binds and declares nothing.
         own: Option<Head>,
+        /// One edge per target of each glob of the scope that the module it is seen from can see.
         edges: Vec<GlobEdge>,
     },
 }
@@ -241,19 +272,29 @@ enum GlobRead {
 /// One glob of a scope a lookup through globs reads: into the scopes of a module of the unit, by their positions in
 /// the graph, or a name of a crate whose contents are not read.
 enum GlobEdge {
+    /// A glob naming a module of the unit, read through that module's scopes.
     Into {
+        /// How the glob is written, which a declaration it brings is bound through.
         quote: String,
+        /// The module the glob names; that path followed by the name is the path a name it brings passes.
         target: String,
+        /// The graph positions of the module's scopes, one per declaration of the module.
         into: Vec<usize>,
     },
+    /// A glob of anything but a module of the unit — a crate whose contents are not read, or an item such as an enum:
+    /// its path with the name appended, the one thing it can bring.
     Foreign(String),
 }
 
 /// The scopes a lookup through globs reaches, each once, in the order they were met, and what each read.
 #[derive(Default)]
 struct GlobGraph {
+    /// Every scope reached, each with the module it is seen from, in the order met; a node's position here is its
+    /// position in `reads` and in a settled answer.
     nodes: Vec<GlobNode>,
+    /// Each node's position in `nodes`, so a scope met again from the same module is not added twice.
     index: HashMap<GlobNode, usize>,
+    /// What each node read, at the node's own position.
     reads: Vec<GlobRead>,
 }
 
@@ -418,9 +459,13 @@ fn brought_through(found: Head, quote: &str, target: &str, head: &str) -> Head {
 /// a cycle. Ordered from what says least to what says most, so the answer over several readings is their maximum.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 enum Presence {
+    /// Its last segment names nothing its module binds or declares in that namespace.
     #[default]
     Absent,
+    /// What it reaches is not read: a crate whose contents are not read, a cycle, a segment before the last that
+    /// names nothing, or a name a module's macro invocations may generate.
     Unknown,
+    /// It reaches a declaration or a binding there.
     Known,
 }
 
@@ -428,13 +473,17 @@ enum Presence {
 /// names something in the namespace its last segment was read in.
 #[derive(Clone, Debug, Default)]
 struct Denoted {
+    /// Every path the reading passed through or named, sorted and deduplicated.
     paths: Vec<String>,
     /// The paths a glob of a crate whose contents are not read brings a segment as, beside what the segment's module
     /// binds or declares, or as the only foreign answer: candidates of what the path names, and never a module a
     /// glob reads names through, since
     /// what such a glob brings is a name and not a module the unit holds.
     beside: Vec<String>,
+    /// Whether the path names something in the namespace its last segment was read in: the most any branch said.
     presence: Presence,
+    /// Whether a foreign candidate lies within the hazard's prefix or, where ancestors are compared, is one of its
+    /// ancestors; false where no hazard is compared.
     terminal_reaches: bool,
 }
 
@@ -464,13 +513,19 @@ pub(super) fn extern_crate_names(target: &str) -> Declared {
 /// is counted beside it, so an answer is remembered only where no cycle was cut at all.
 #[derive(Default)]
 pub(super) struct Walk {
+    /// Every binding and glob the walk is inside, outermost first.
     resolving: Vec<Resolving>,
+    /// How many cycles the walk has ended; an answer read while it grew is not memoized.
     cuts: usize,
 }
 
+/// One binding or glob a [`Walk`] is inside.
 struct Resolving {
+    /// The binding by its table, scope and name — a glob by `*` and its position — which a cycle is recognised by.
     key: (usize, u32, String),
+    /// How the binding is written, which a refusal of a chain measured from it quotes.
     quote: String,
+    /// The module the binding is written in, which that refusal names.
     module: String,
 }
 
@@ -509,6 +564,7 @@ impl Walk {
         Ok(())
     }
 
+    /// Leave the binding or glob entered last.
     fn leave(&mut self) {
         self.resolving.pop();
     }
@@ -517,8 +573,11 @@ impl Walk {
 /// What one binding names, read from its own scope: the paths still to be read, and the paths passed on the way
 /// that are not.
 pub(super) enum BindingNames {
+    /// The paths the binding names, still to be read, and beside them the paths the reading passed on the way.
     Paths(Vec<String>, Vec<String>),
+    /// The binding names a block-local item, which no path outside its block names.
     Local,
+    /// A refusal of the walk, as [`Named::PastCap`] carries one.
     PastCap(String),
 }
 
@@ -535,9 +594,14 @@ type DenoteKey = (String, Namespace, bool, Option<(String, bool)>);
 
 /// Denotations retained by one unit, with keys and answers charged before insertion.
 struct DenotationMemo {
+    /// Each reading's answer by [`DenoteKey`], a refusal held as the answer so it is not read again.
     answers: HashMap<DenoteKey, Result<Rc<Denoted>, String>>,
+    /// The candidate paths charged across every held answer.
     paths: usize,
+    /// The bytes of key, path and refusal text charged across every held answer.
     bytes: usize,
+    /// The most entries, candidate paths and bytes the memo holds, in that order; an insertion past any one is
+    /// refused and holds nothing.
     limits: (usize, usize, usize),
 }
 
@@ -553,10 +617,13 @@ impl Default for DenotationMemo {
 }
 
 impl DenotationMemo {
+    /// The answer held for `key`, a refusal included.
     fn get(&self, key: &DenoteKey) -> Option<&Result<Rc<Denoted>, String>> {
         self.answers.get(key)
     }
 
+    /// Hold `answer` under `key`, charging the key's text and the answer's paths or refusal; an insertion past the
+    /// limits holds nothing and refuses the reading.
     fn insert(
         &mut self,
         key: DenoteKey,
@@ -588,6 +655,7 @@ impl DenotationMemo {
         Ok(())
     }
 
+    /// Drop every held answer and its charges, keeping the limits.
     fn clear(&mut self) {
         self.answers.clear();
         self.paths = 0;
@@ -612,7 +680,9 @@ type LookupKey = (usize, u32, String, Namespace, String, usize, bool);
 /// never when it is recorded, and answers what a head names from a scope and what a crate-rooted path
 /// names.
 pub(super) struct CrateScopes {
+    /// The scope table of each file of the unit, by the table position every key and lookup carries.
     pub(super) tables: Vec<ScopeTable>,
+    /// The edition a written path's root is read in.
     edition: Edition,
     /// Whether the unit is a proc-macro crate, whose extern prelude holds `proc_macro` beside the sysroot crates.
     proc_macro: bool,
@@ -632,7 +702,9 @@ pub(super) struct CrateScopes {
     /// certain: `extern crate core as std;` leaves no sysroot `std` to read, while a gated one leaves the name open in
     /// every module, whatever else the root declares under it.
     certain_externs: BTreeSet<String>,
+    /// What [`CrateScopes::name`] answered, by [`NameKey`].
     named: RefCell<HashMap<NameKey, Named>>,
+    /// What [`CrateScopes::denotation`] read each path as, under the memo's own budget.
     denoted: RefCell<DenotationMemo>,
     /// What [`CrateScopes::scope_lookup`] answered, by [`LookupKey`], where no cycle was cut while answering.
     looked: RefCell<HashMap<LookupKey, Head>>,
@@ -751,6 +823,7 @@ impl CrateScopes {
         }
     }
 
+    /// The scope table of the unit's file at table position `t`.
     pub(super) fn table(&self, t: usize) -> &ScopeTable {
         &self.tables[t]
     }
@@ -891,6 +964,8 @@ impl CrateScopes {
             .map(|denoted| (denoted.paths.clone(), denoted.terminal_reaches))
     }
 
+    /// [`CrateScopes::denote_in`] from a fresh walk, memoized by the path, the namespace, whether candidates are
+    /// requested and the hazard compared, a refusal included; a memo past its budget refuses the reading.
     fn denotation(
         &self,
         path: &str,
@@ -1793,6 +1868,8 @@ impl CrateScopes {
         }
     }
 
+    /// `found` followed by every readable path each of `paths` names in the type namespace inside `walk`, all charged
+    /// against one width budget; what a foreign glob brings is not among them.
     fn read_glob_paths(
         &self,
         paths: &[String],
@@ -1963,14 +2040,25 @@ type Branch = (String, Vec<String>, Vec<Link>);
 /// a branch as it is taken up, a path as it is found, a branch as it is pushed, and a foreign candidate as it is
 /// projected. A step of the reading names what it found or what to read next, and never charges the budget itself.
 struct Reading<'h> {
+    /// The branches still to read, the one pushed last taken up first.
     work: Vec<Branch>,
+    /// Every module and remaining segments already taken up, so a branch reached twice is read once.
     seen: BTreeSet<(String, Vec<String>)>,
+    /// Every path the reading named, sorted and deduplicated only when the reading ends.
     found: Vec<String>,
+    /// What foreign globs bring a segment as, held only where candidates are requested.
     beside: Vec<String>,
+    /// The most any branch has said about whether the path names something in its namespace.
     presence: Presence,
+    /// Whether a foreign candidate lies within the hazard's prefix or, where ancestors are compared, is one of its
+    /// ancestors.
     terminal_reaches: bool,
+    /// Everything the reading has charged against the width budget: what it holds and what it took up.
     size: ReadingSize,
+    /// Whether foreign candidates are kept in `beside` as candidates of what the path names.
     candidates: bool,
+    /// The prefix a hazard compares foreign candidates with, and whether its ancestors are compared too; `None`
+    /// outside a hazard reading.
     hazard: Option<(&'h str, bool)>,
 }
 
@@ -2034,6 +2122,8 @@ impl<'h> Reading<'h> {
         self.work.push((module, rest, chain));
     }
 
+    /// Raise the presence reported to `presence` where it says more; it never falls, so the answer over every
+    /// branch is their maximum.
     fn raise(&mut self, presence: Presence) {
         self.presence = self.presence.max(presence);
     }
@@ -2102,6 +2192,8 @@ impl<'h> Reading<'h> {
         Ok(())
     }
 
+    /// The reading's answer: what it found and what foreign globs brought, each sorted and deduplicated, with the
+    /// most any branch said about presence.
     fn denoted(self) -> Denoted {
         Denoted {
             paths: sorted_unique(self.found),
@@ -2196,6 +2288,7 @@ pub(super) fn least(held: Option<String>, refusal: String) -> Option<String> {
     })
 }
 
+/// `paths` sorted with duplicates removed, so answers built in different orders compare equal.
 fn sorted_unique<T: Ord>(paths: impl IntoIterator<Item = T>) -> Vec<T> {
     let mut paths: Vec<T> = paths.into_iter().collect();
     paths.sort();

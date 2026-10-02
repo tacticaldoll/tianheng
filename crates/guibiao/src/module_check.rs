@@ -24,6 +24,9 @@ use crate::module_scan::{
 };
 use crate::{BoundaryKind, ModuleBoundary, ModuleRule, Violation, ViolationId};
 
+/// Push the module violation `fact` produces under `boundary`: its identity is `target`, the
+/// boundary's rule key, and the fact keyed by the governing package and compilation `unit`, so the
+/// same fact in two roots or two declaring crates stays distinct.
 #[allow(clippy::too_many_arguments)]
 fn push_module_violation(
     violations: &mut Vec<Violation>,
@@ -219,12 +222,18 @@ fn canonical_spelling_or_error(written: &str, crate_package: &str) -> Result<Str
 /// passes through here or through the governed module's own check in [`check_module_boundary`], so
 /// none is matched against the module graph in a spelling the graph never produces.
 struct NamedModules {
+    /// The builder method a refusal names; empty for a confinement rule, which names no modules.
     rule_method: &'static str,
+    /// Whether the modules are permitted (an unknown one is an unknown *allowed* module) rather than
+    /// forbidden.
     allowlist: bool,
+    /// The named modules in canonical spelling.
     modules: Vec<String>,
 }
 
 impl NamedModules {
+    /// Read the modules `boundary`'s rule names, refusing the first one written in a non-canonical
+    /// spelling.
     fn of(boundary: &ModuleBoundary) -> Result<Self, String> {
         let (rule_method, allowlist, written): (&'static str, bool, Vec<&String>) =
             match &boundary.rule {
@@ -288,25 +297,37 @@ impl NamedModules {
 /// package is read; what the prefix names is judged by [`DeclaredPrefix::require_names_something`]
 /// once every root has been, since a module or item present in one compilation unit is real.
 struct DeclaredPrefix {
+    /// The builder the prefix was declared through, named in every refusal of it.
     rule_method: &'static str,
+    /// The prefix exactly as the boundary wrote it, which a refusal quotes back.
     written: String,
+    /// The canonical spelling every call is compared with.
     prefix: SymbolPrefix,
 }
 
 /// What a boundary's rule declares as an inline confinement: nothing, because the rule is no inline confinement; or
-/// the confinement, whose prefix is blank or canonical. Only the second reaches the inline judgement, so a rule with
-/// no inline payload cannot be judged as one.
+/// the confinement, whose prefix is canonical and whose modifiers passed every boundary-local refusal. Only the
+/// second reaches the inline judgement, so a rule with no inline payload cannot be judged as one.
 enum InlinePrefix<'a> {
+    /// The rule carries no inline payload; no prefix is judged and no item set is collected.
     NotInline,
+    /// The rule is `must_not_call_inline` or `confine_inline_call`, with a declaration that passed
+    /// every boundary-local refusal.
     Inline(Inline<'a>),
 }
 
 /// An inline confinement's declaration: the builder method it was declared through, its prefix and the modifiers
 /// the judgement reads.
 struct Inline<'a> {
+    /// The prefix as written and in canonical spelling, with the builder method that declared it.
     declared: DeclaredPrefix,
+    /// The terminal-segment verbs a call must end with to react; `None` reacts on every call under the
+    /// prefix, and `Some` is never empty nor combined with `strict`.
     ending_with: Option<&'a [String]>,
+    /// Whether any path mention under the prefix reacts, not only calls.
     strict: bool,
+    /// Whether a bare path head no scope binds, matching a declared dependency's import name, resolves as that
+    /// external crate; only then are the dependency names passed to the findings.
     external: bool,
 }
 
@@ -840,7 +861,10 @@ pub(crate) fn check_module_boundary(
 /// Whether one root hosted the governed module. Distinguishing absence from failure is what keeps a real
 /// scan error from being deferred away by a sibling root — see the loop above.
 enum RootOutcome {
+    /// The root has at least one file backing the governed module.
     Governed,
+    /// The root has no file backing the governed module; the string is the unknown-module
+    /// constitution error, returned only when no root of the package is governed.
     ModuleAbsent(String),
 }
 
@@ -849,9 +873,15 @@ enum RootOutcome {
 /// the violations found in it. The caller merges every root's and keeps the violations only when some root is
 /// governed.
 struct RootJudgement {
+    /// Whether this root hosted the governed module.
     outcome: RootOutcome,
+    /// Every module path reachable in this root.
     declared: std::collections::BTreeSet<String>,
+    /// The `module::item` names this root defines at module scope, collected only for an inline
+    /// confinement.
     items: std::collections::BTreeSet<String>,
+    /// The violations this root's rule family produced; always empty for a root decided absent
+    /// before dispatch.
     violations: Vec<Violation>,
 }
 
@@ -886,9 +916,15 @@ fn check_one_root(
 
 /// The root-level sets derived from one shared scan and one boundary.
 struct RootFacts {
+    /// Every module path reachable in this root.
     declared: std::collections::BTreeSet<String>,
+    /// The `module::item` names this root defines at module scope; read only for an inline
+    /// confinement, and empty for every other rule.
     items: std::collections::BTreeSet<String>,
+    /// The boundary's target module in canonical `crate::…` form.
     governed_module: String,
+    /// Each file backing the governed module at the boundary's depth, paired with the module it is
+    /// read as; empty when this root does not have the governed module.
     governed: Vec<(PathBuf, String)>,
 }
 
@@ -1070,6 +1106,11 @@ fn dispatch_root_rule_family(
 /// absence's reason, so an absence reported as governed is unconstructible — or continues through its
 /// rule family with the outcome that dispatch will report.
 enum RootDecision {
+    /// The root lacks the governed module and its rule's perimeter is the governed module, so nothing in
+    /// it is judged; the string is the unknown-module constitution error the caller reports if no root
+    /// is governed.
     Absent(String),
+    /// The root is dispatched to its rule family, which reports this outcome — `Governed`, or
+    /// `ModuleAbsent` for a whole-root perimeter judged with an empty permitted region.
     Judge(RootOutcome),
 }
