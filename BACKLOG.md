@@ -524,6 +524,73 @@ consumer for an undemonstrated deduplication.
   *Reopening:* a decidable form that tells a claim about an enumerable set from a sentence about a mechanism, or
   a false set-membership claim found in a released artifact that the sweep's vocabulary would not have reached.
 
+- **Most pinning citations have never been seen to fail.** *Class:* ACCEPTED DEBT — **reclassified from
+  READY-PATCH on 2026-10-03, because no patch closes it.** Its own decision of 2026-09-03 makes coverage an
+  obligation on each citation rather than a campaign over the standing set, and `pin_bites` prints the uncovered
+  part on every clean run, so the bound is the obligation and the printed figure, chosen as sufficient; what an
+  entry under READY-PATCH promises, a change someone may make now that ends it, does not exist. *Reopening:*
+  biting coverage becoming the rule, or a derivation that ties a citation to the behaviour it pins, either of
+  which changes what a citation is held to. *Observed pressure:* the register decides a citation names a test that
+  RUNS and cannot decide that it BITES; gutting a cited pin's body in a worktree left the suite green and the
+  register clean. `crates/kanhe/tests/pin_bites.rs` closes that for the citations that declare a mutation, and it
+  prints how many do not on every clean run — the figure is produced there, not
+  typed here. *Observation source:* that gutting, and the anchor-counting rule in `observer_protocol.rs` losing
+  its only assertions during the composition-body retirement, found by a reviewer reading the diff.
+  *Current reaction or bound:* `crates/kanhe/tests/pin_bites.rs` over the declared mutations; nothing over the rest.
+  *Risk:* a defence that has stopped defending is indistinguishable from one that has not, which is the failure
+  the register was built to end one level down. *Promotion trigger:* fired — the gate exists; what remains is
+  coverage. **Decided 2026-09-03: coverage grows as an obligation on citing, not as a campaign.** Grinding the
+  standing set was costed and declined on its rate — `pin_bites` reports the uncovered part on every clean
+  run, and the citation set grows faster than mutations can be authored, so chasing the numerator loses to
+  stopping the denominator. `AGENTS.md` now requires a citation to arrive with its mutation or with the reason
+  it has none, in the same change. The debt this entry already carries from the `0.6.0` window is answered
+  collectively rather than per-citation, above: six requirements gained citations, none declared a mutation,
+  and the reason is recorded where the economics are. What remains is
+  coverage, which grows one considered record at a time. That last claim was false while the tree under test
+  was an export of tracked content: a pin reading the repository through git failed its own control run, so no
+  record could ever exercise it — `units_outside_the_gate_pairing_are_outside_the_surface` was one. The tree is
+  a detached worktree now and the claim holds. One citation is still outside it for a different reason:
+  `a_cfg_gated_module_with_no_file_is_skipped_not_errored` is defined in two files under `crates/`, so the
+  target to run it in cannot be derived from a set and any record naming it refuses. Both episodes are kept
+  because the entry's economics rest on the claim. **This entry's residue grew by the citations added on 2026-09-02, and the growth is recorded here rather
+  than left in the change that caused it.** Six requirements in `repository-checks` gained citations, and
+  **none of them declares a mutation**, so every one landed in the part of the citation set this check
+  reports as uncovered on each clean run. The figure is produced there and not typed here; what is written
+  down is the direction it moved and why — a citation is cheap to add and its mutation is not, so any work
+  that cites more pins enlarges this entry unless it authors the mutations too. That is the economics this
+  entry rests on, observed on itself.
+
+  **Two more additions in the window rooted at the `v0.6.0` snapshot, and the second one changes this
+  entry's arithmetic.** Three `PINNED-BY` citations landed with the line-comment requirement and declared no
+  mutation. Unlike the six above, the reason is structural rather than economic and the change stated it:
+  `every_declared_mutation_s_name_resolves_to_a_real_bound_id` refuses a record whose name resolves to no
+  bound id, so an ordinary scenario's citation **cannot** carry one. What that exposes is the second
+  addition. The figure `pin_bites` printed counted every distinct `PINNED-BY` name under `openspec/specs`,
+  while a mutation may only name a test that a **pinned bound** cites. Measured 2026-09-20, by extracting
+  the `PINNED-BY` names across `openspec/specs` and the `pinned by` names from the two bound projections and
+  comparing the distinct sets: **258 cited, 79 eligible**. Most of the remainder that gate reported was
+  therefore not coverage anyone can author — it was a denominator the numerator cannot reach by construction.
+  The gate now reads coverage against the tests a declared bound cites and prints the ordinary-only citations
+  as a separate figure, so *coverage grows one considered record at a time* is measured against the set a
+  record can reach; its eligible figure, taken from its own output on 2026-09-24, agreed with the extraction
+  above.
+
+  **Not fired, measured 2026-09-08.** The obligation this entry settled on is that citing carries the
+  mutation, so the sweep is what the window cited. Measured over the delta: `+.*PINNED-BY` in
+  `openspec/**` answers **zero**, and new rows in `pin_mutations.tsv` answer **zero** — a window that added
+  no citation created no debt for the obligation to be owed on. One spec scenario was added and deliberately
+  carries no citation, being an ordinary scenario rather than a declared bound.
+
+  *What closing it costs, measured while seeding:* a
+  mutation must genuinely perturb the pinned point, and authoring one is per-bound expert work. One attempt
+  during this change did not — masking a brace inside a block comment left the exact one-statement comparison
+  refusing the body anyway, so the pin held and the record reported a biting pin as a dead one. That direction
+  is safe, and it is why coverage cannot be swept. (Two further failures that looked the same were gate defects,
+  not authoring cost: a lib test registering under its module path, and the cargo target derived from the
+  mutated file rather than from the test's definition. Both are fixed and neither recurs.) *Version class:* not release-affecting; a
+  repository gate over this repository's own governance tests. *Authority:* `observation-bound-register`, whose
+  added requirement states the obligation and the arrangements that make it observable.
+
 ### WATCH
 
 - **Child processes' own temporary writes and the user-level tool caches are outside the fixture-root rule.**
@@ -1492,67 +1559,6 @@ consumer for an undemonstrated deduplication.
   the setting is spelled within the construction whose marker matched, and the control's two commands become
   two answers instead of one.
 
-- **Most pinning citations have never been seen to fail.** *Class:* READY-PATCH. *Observed pressure:* the
-  register decides a citation names a test that RUNS and cannot decide that it BITES; gutting a cited pin's body
-  in a worktree left the suite green and the register clean. `crates/kanhe/tests/pin_bites.rs` closes that for the citations
-  that declare a mutation, and it prints how many do not on every clean run — the figure is produced there, not
-  typed here. *Observation source:* that gutting, and the anchor-counting rule in `observer_protocol.rs` losing
-  its only assertions during the composition-body retirement, found by a reviewer reading the diff.
-  *Current reaction or bound:* `crates/kanhe/tests/pin_bites.rs` over the declared mutations; nothing over the rest.
-  *Risk:* a defence that has stopped defending is indistinguishable from one that has not, which is the failure
-  the register was built to end one level down. *Promotion trigger:* fired — the gate exists; what remains is
-  coverage. **Decided 2026-09-03: coverage grows as an obligation on citing, not as a campaign.** Grinding the
-  standing set was costed and declined on its rate — `pin_bites` reports the uncovered part on every clean
-  run, and the citation set grows faster than mutations can be authored, so chasing the numerator loses to
-  stopping the denominator. `AGENTS.md` now requires a citation to arrive with its mutation or with the reason
-  it has none, in the same change. The debt this entry already carries from the `0.6.0` window is answered
-  collectively rather than per-citation, above: six requirements gained citations, none declared a mutation,
-  and the reason is recorded where the economics are. What remains is
-  coverage, which grows one considered record at a time. That last claim was false while the tree under test
-  was an export of tracked content: a pin reading the repository through git failed its own control run, so no
-  record could ever exercise it — `units_outside_the_gate_pairing_are_outside_the_surface` was one. The tree is
-  a detached worktree now and the claim holds. One citation is still outside it for a different reason:
-  `a_cfg_gated_module_with_no_file_is_skipped_not_errored` is defined in two files under `crates/`, so the
-  target to run it in cannot be derived from a set and any record naming it refuses. Both episodes are kept
-  because the entry's economics rest on the claim. **This entry's residue grew by the citations added on 2026-09-02, and the growth is recorded here rather
-  than left in the change that caused it.** Six requirements in `repository-checks` gained citations, and
-  **none of them declares a mutation**, so every one landed in the part of the citation set this check
-  reports as uncovered on each clean run. The figure is produced there and not typed here; what is written
-  down is the direction it moved and why — a citation is cheap to add and its mutation is not, so any work
-  that cites more pins enlarges this entry unless it authors the mutations too. That is the economics this
-  entry rests on, observed on itself.
-
-  **Two more additions in the window rooted at the `v0.6.0` snapshot, and the second one changes this
-  entry's arithmetic.** Three `PINNED-BY` citations landed with the line-comment requirement and declared no
-  mutation. Unlike the six above, the reason is structural rather than economic and the change stated it:
-  `every_declared_mutation_s_name_resolves_to_a_real_bound_id` refuses a record whose name resolves to no
-  bound id, so an ordinary scenario's citation **cannot** carry one. What that exposes is the second
-  addition. The figure `pin_bites` printed counted every distinct `PINNED-BY` name under `openspec/specs`,
-  while a mutation may only name a test that a **pinned bound** cites. Measured 2026-09-20, by extracting
-  the `PINNED-BY` names across `openspec/specs` and the `pinned by` names from the two bound projections and
-  comparing the distinct sets: **258 cited, 79 eligible**. Most of the remainder that gate reported was
-  therefore not coverage anyone can author — it was a denominator the numerator cannot reach by construction.
-  The gate now reads coverage against the tests a declared bound cites and prints the ordinary-only citations
-  as a separate figure, so *coverage grows one considered record at a time* is measured against the set a
-  record can reach; its eligible figure, taken from its own output on 2026-09-24, agreed with the extraction
-  above.
-
-  **Not fired, measured 2026-09-08.** The obligation this entry settled on is that citing carries the
-  mutation, so the sweep is what the window cited. Measured over the delta: `+.*PINNED-BY` in
-  `openspec/**` answers **zero**, and new rows in `pin_mutations.tsv` answer **zero** — a window that added
-  no citation created no debt for the obligation to be owed on. One spec scenario was added and deliberately
-  carries no citation, being an ordinary scenario rather than a declared bound.
-
-  *What closing it costs, measured while seeding:* a
-  mutation must genuinely perturb the pinned point, and authoring one is per-bound expert work. One attempt
-  during this change did not — masking a brace inside a block comment left the exact one-statement comparison
-  refusing the body anyway, so the pin held and the record reported a biting pin as a dead one. That direction
-  is safe, and it is why coverage cannot be swept. (Two further failures that looked the same were gate defects,
-  not authoring cost: a lib test registering under its module path, and the cargo target derived from the
-  mutated file rather than from the test's definition. Both are fixed and neither recurs.) *Version class:* not release-affecting; a
-  repository gate over this repository's own governance tests. *Authority:* `observation-bound-register`, whose
-  added requirement states the obligation and the arrangements that make it observable.
-
 - **Every normative SHALL either has a reaction or is a declared bound.** *Class:* READY-PATCH — by the
   definition above, which classifies evidence and compatibility rather than remaining design effort: the
   pressure is measured and the correction preserves every published API. It declared no class at all until
@@ -1669,12 +1675,12 @@ consumer for an undemonstrated deduplication.
   turns them red, so they cannot rot silently. The claim being declined is that the road ends somewhere good,
   not that the steps taken were wrong.
 
-  *Nothing is added to the specs by this decision, deliberately.* The biting limits are already declared —
-  three unpinned bounds in `crates/kanhe/src/bounds.rs`, each tracking to the sibling entry — so stating them
-  again here would be the *saying it twice held it nowhere* failure this file records for its own governance
-  section. What is **not** declared anywhere is the higher fact above, that the requirement-to-test pairing is
-  intent rather than shape; it stays prose with its reason, under the bar the `0.6.0` window set — a cannot-judge
-  not a rule and needs no instance.
+  *Nothing is added to the specs by this decision, deliberately.* The biting limits are already declared — the
+  unpinned bounds in `crates/kanhe/src/bounds.rs` that track to *Most pinning citations have never been seen to
+  fail* — so stating them again here would be the *saying it twice held it nowhere* failure this file records
+  for its own governance section. What is **not** declared anywhere is the higher fact above, that the
+  requirement-to-test pairing is intent rather than shape; it stays prose with its reason, under the bar the
+  `0.6.0` window set — a cannot-judge not a rule and needs no instance.
 
   *Reopening:* the derived binding of part two, or biting coverage becoming the rule rather than the
   exception, either of which changes what a citation is held to rather than how many there are.
