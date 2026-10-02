@@ -533,6 +533,68 @@ type PresenceKey = (usize, u32, String, String, Namespace);
 /// are requested for findings, or compared with a hazard prefix (and, for glob targets, its ancestors).
 type DenoteKey = (String, Namespace, bool, Option<(String, bool)>);
 
+/// Denotations retained by one unit, with keys and answers charged before insertion.
+struct DenotationMemo {
+    answers: HashMap<DenoteKey, Result<Rc<Denoted>, String>>,
+    paths: usize,
+    bytes: usize,
+    limits: (usize, usize, usize),
+}
+
+impl Default for DenotationMemo {
+    fn default() -> Self {
+        Self {
+            answers: HashMap::new(),
+            paths: 0,
+            bytes: 0,
+            limits: (262_144, 1_048_576, 64 * 1024 * 1024),
+        }
+    }
+}
+
+impl DenotationMemo {
+    fn get(&self, key: &DenoteKey) -> Option<&Result<Rc<Denoted>, String>> {
+        self.answers.get(key)
+    }
+
+    fn insert(
+        &mut self,
+        key: DenoteKey,
+        answer: Result<Rc<Denoted>, String>,
+    ) -> Result<(), String> {
+        let mut paths = self.paths;
+        let mut bytes = self.bytes.saturating_add(key.0.len());
+        if let Some((prefix, _)) = &key.3 {
+            bytes = bytes.saturating_add(prefix.len());
+        }
+        match &answer {
+            Ok(answer) => {
+                for path in answer.paths.iter().chain(&answer.beside) {
+                    paths = paths.saturating_add(1);
+                    bytes = bytes.saturating_add(path.len());
+                }
+            }
+            Err(message) => bytes = bytes.saturating_add(message.len()),
+        }
+        let (entries_limit, paths_limit, bytes_limit) = self.limits;
+        if self.answers.len() >= entries_limit || paths > paths_limit || bytes > bytes_limit {
+            return Err(format!(
+                "cannot judge a denotation memo holding more than {entries_limit} readings, {paths_limit} candidate paths or {bytes_limit} bytes of key and answer text; reduce the branching imports, globs or re-exports"
+            ));
+        }
+        self.answers.insert(key, answer);
+        self.paths = paths;
+        self.bytes = bytes;
+        Ok(())
+    }
+
+    fn clear(&mut self) {
+        self.answers.clear();
+        self.paths = 0;
+        self.bytes = 0;
+    }
+}
+
 /// A glob, by its table, its scope and its position among that scope's globs.
 type GlobKey = (usize, u32, usize);
 
@@ -571,7 +633,7 @@ pub(super) struct CrateScopes {
     /// every module, whatever else the root declares under it.
     certain_externs: BTreeSet<String>,
     named: RefCell<HashMap<NameKey, Named>>,
-    denoted: RefCell<HashMap<DenoteKey, Result<Rc<Denoted>, String>>>,
+    denoted: RefCell<DenotationMemo>,
     /// What [`CrateScopes::scope_lookup`] answered, by [`LookupKey`], where no cycle was cut while answering.
     looked: RefCell<HashMap<LookupKey, Head>>,
     /// Whether each import names something in a namespace, by the import's table, scope, name, written path and
@@ -848,7 +910,7 @@ impl CrateScopes {
         let found = self
             .denote_in(path, ns, &mut Walk::default(), candidates, hazard)
             .map(Rc::new);
-        self.denoted.borrow_mut().insert(key, found.clone());
+        self.denoted.borrow_mut().insert(key, found.clone())?;
         found
     }
 
@@ -2147,12 +2209,13 @@ mod tests {
                 .unwrap()
                 .contains(&"std::process::V".to_string())
         );
-        assert!(
-            scopes
-                .hazard_paths("crate::s::V", Namespace::Type, "std::process", false)
-                .unwrap()
-                .1
-        );
+        for ancestors in [false, true] {
+            let (paths, reaches) = scopes
+                .hazard_paths("crate::s::V", Namespace::Type, "std::process", ancestors)
+                .unwrap();
+            assert!(!paths.contains(&"std::process::V".to_string()));
+            assert!(reaches);
+        }
         assert_eq!(
             scopes
                 .denote_in(
@@ -2166,6 +2229,71 @@ mod tests {
                 .presence,
             Presence::Known
         );
+    }
+
+    #[test]
+    fn distinct_denotations_share_a_retention_budget() {
+        for limits in [
+            (2, usize::MAX, usize::MAX),
+            (usize::MAX, 2, usize::MAX),
+            (usize::MAX, usize::MAX, 24),
+        ] {
+            let scopes = CrateScopes::new(Vec::new(), Edition::Rust2021);
+            scopes.denoted.borrow_mut().limits = limits;
+            for path in ["std::a", "std::b"] {
+                assert_eq!(scopes.denote(path, Namespace::Type).unwrap(), vec![path]);
+                assert_eq!(scopes.denote(path, Namespace::Type).unwrap(), vec![path]);
+            }
+            let error = scopes.denote("std::c", Namespace::Type).unwrap_err();
+            assert!(error.contains("cannot judge a denotation memo"), "{error}");
+            assert_eq!(scopes.denoted.borrow().answers.len(), 2);
+            scopes.forget_readings();
+            assert_eq!(
+                scopes.denote("std::c", Namespace::Type).unwrap(),
+                vec!["std::c"]
+            );
+        }
+    }
+
+    #[test]
+    fn denotation_retention_charges_terminal_candidates_and_hazard_keys() {
+        let source = "pub mod a { pub struct V; } pub mod s { #[cfg(any())] pub use crate::a::*; #[cfg(not(any()))] pub use std::process::*; }";
+        let tree = TokenTree::lex(source, Edition::Rust2021);
+        let scopes = CrateScopes::new(
+            vec![ScopeTable::build(&tree, "crate", 0)],
+            Edition::Rust2021,
+        );
+        scopes.denoted.borrow_mut().limits = (usize::MAX, 1, usize::MAX);
+        assert!(
+            scopes
+                .denote("crate::s::V", Namespace::Type)
+                .unwrap_err()
+                .contains("denotation memo")
+        );
+        assert!(scopes.denoted.borrow().answers.is_empty());
+
+        let scopes = CrateScopes::new(Vec::new(), Edition::Rust2021);
+        scopes.denoted.borrow_mut().limits = (usize::MAX, usize::MAX, 12);
+        assert!(
+            scopes
+                .hazard_paths("std::a", Namespace::Type, "std", false)
+                .unwrap_err()
+                .contains("denotation memo")
+        );
+        assert!(scopes.denoted.borrow().answers.is_empty());
+
+        let mut memo = DenotationMemo {
+            limits: (usize::MAX, usize::MAX, 6),
+            ..Default::default()
+        };
+        assert!(
+            memo.insert(
+                ("std::a".to_string(), Namespace::Type, false, None),
+                Err("refusal".to_string())
+            )
+            .is_err()
+        );
+        assert!(memo.answers.is_empty());
     }
 
     #[test]

@@ -1462,6 +1462,11 @@ scope answers, crate-rooted denotation work, combined path readings and the haza
 chain-depth cap. Each expansion SHALL charge the budget before retaining its output. A whole glob graph's held
 answers SHALL have a separate aggregate budget of 1,048,576 candidate entries and 67,108,864 bytes of path text,
 so a long chain's repeated intermediate paths do not consume an individual reading's width budget.
+The denotation memo of each compilation unit SHALL separately retain at most 262,144 readings,
+1,048,576 candidate paths (including terminal candidates kept for findings), and 67,108,864 bytes of key and
+answer text, including cached refusal text. Inserting an answer past any aggregate limit SHALL refuse with exit 2
+without retaining that answer. Cache hits SHALL consume no additional budget; invalidating the memo SHALL reset
+its retained usage. These limits govern these named collections, rather than total process memory.
 Each refusal SHALL name its entry and byte limits and ask the author to reduce branching imports, globs or re-exports.
 
 #### Scenario: Gated sibling globs settle while calls remain observed
@@ -1481,7 +1486,7 @@ Each refusal SHALL name its entry and byte limits and ask the author to reduce b
 
 #### Scenario: Foreign candidates beside local ones are terminal
 - **WHEN** cfg-exclusive globs bring a local declaration and a foreign candidate for a crate-rooted path
-- **THEN** the finding reader keeps the foreign candidate, the readable-path view excludes it, and the hazard still detects its prefix, and a known local candidate keeps its known presence
+- **THEN** the finding reader keeps the foreign candidate, the readable-path and hazard-worklist views exclude it, and the hazard still detects its prefix, and a known local candidate keeps its known presence
 - **PINNED-BY** `foreign_candidates_beside_local_ones_are_terminal_for_every_reader`
 
 #### Scenario: Mutually globbed gated modules have bounded reading work
@@ -1493,3 +1498,13 @@ Each refusal SHALL name its entry and byte limits and ask the author to reduce b
 - **WHEN** a scope-answer join holds more than 32,768 foreign candidate paths, a combined path or glob-target reading exceeds that entry count, the graph's retained answers exceed 1,048,576 entries, or a path-text reading exceeds 8,388,608 bytes
 - **THEN** the resolver returns the named width refusal before another expansion
 - **PINNED-BY** `resolution_width_and_path_bytes_refuse_before_growth`
+
+#### Scenario: Distinct denotations share the memo retention budget
+- **WHEN** individually legal denotations collectively exceed the memo's reading, candidate-path or text limit
+- **THEN** the next insertion refuses without retention, repeated cache hits consume no additional budget, and invalidating the memo permits new readings within the reset budget
+- **PINNED-BY** `distinct_denotations_share_a_retention_budget`
+
+#### Scenario: Denotation retention includes terminal candidates and all cached text
+- **WHEN** a memo insertion exceeds its candidate limit through terminal foreign candidates, or its text limit through a hazard prefix or cached refusal
+- **THEN** the insertion refuses without retaining the key or answer
+- **PINNED-BY** `denotation_retention_charges_terminal_candidates_and_hazard_keys`
