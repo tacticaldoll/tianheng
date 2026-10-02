@@ -241,6 +241,21 @@ error (exit 2).
 - **WHEN** a boundary declares `must_not_expose_dyn_bounded_by(["Clone"])`
 - **THEN** the system exits 2, reporting that `Clone` is not a recognized auto trait and directing the author to use `must_not_expose_dyn_of`
 
+#### Scenario: A qualified dyn auto-trait bound names its defining module
+
+- **WHEN** the forbidden path and public dyn bound use `std::panic::UnwindSafe`,
+  `core::panic::RefUnwindSafe`, or `std::marker::Send`, or use `std::marker::UnwindSafe` or
+  `std::panic::Send`
+- **THEN** a defining-module path produces an enforced finding, while a path under the wrong module
+  is a constitution error (exit 2)
+- **PINNED-BY** `auto_bound_qualified_path_matrix`
+
+#### Scenario: A dyn auto-trait path outside the defining modules is refused
+
+- **WHEN** the boundary's forbidden auto-trait path is `foo::Send`
+- **THEN** the declaration is a constitution error (exit 2)
+- **PINNED-BY** `dyn_auto_bound_invalid_qualifier_exits_2`
+
 #### Scenario: A local trait sharing an auto-trait leaf name over-reacts as a dyn auto bound - a stated bound
 
 - **WHEN** a module defines a local trait named `Send` and exposes `Box<dyn Send>`, under `must_not_expose_dyn_bounded_by(["Send"])`
@@ -264,3 +279,11 @@ error (exit 2).
 - **WHEN** a dyn-trait auto-bound boundary is declared with any of `["Send"]`, `["std::marker::Send"]`, `["core::marker::Send"]`, `["r#Send"]`, or `["Send", "std::marker::Send"]`
 - **THEN** the system produces the identical rule key (`tianheng.rule/hunyi/dyn-trait-auto-bound` with parameter `forbidden_auto_bounds` as `["Send"]`)
 - **PINNED-BY** `dyn_auto_bound_rule_key_normalized_identity`
+
+#### Scenario: The dyn projection carries sorted, distinct auto-trait leaves
+
+- **WHEN** a dyn auto-bound boundary is declared with `std::panic::UnwindSafe`,
+  `core::panic::RefUnwindSafe`, and bare `UnwindSafe`
+- **THEN** JSON carries `forbidden_auto_bounds` as `["RefUnwindSafe", "UnwindSafe"]`, and text carries
+  `RefUnwindSafe, UnwindSafe`
+- **PINNED-BY** `auto_bound_projection_uses_normalized_leaf_set`
