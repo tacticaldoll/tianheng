@@ -965,7 +965,7 @@ fn value_as_bash_holds_it(root: &Path, library: &str, name: &str) -> Option<Stri
 /// the name, and that is what refuses it — including where the library itself prints what the probe would.
 #[test]
 fn a_word_spelled_as_a_declaration_is_one_only_where_bash_reads_it() {
-    let scratch = support::fixture::Scratch::claim("tianheng-declared-value");
+    let scratch = xingbiao::scratch_root("tianheng-declared-value");
     for (text, expected) in [
         ("X=1\n", Ok("1".to_string())),
         (
@@ -1013,7 +1013,7 @@ fn no_closed_stream_moves_the_library_s_classes() {
         return;
     };
     let library = root.join(kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY);
-    let scratch_root = support::fixture::Scratch::claim("tianheng-closed-stream");
+    let scratch_root = xingbiao::scratch_root("tianheng-closed-stream");
     let scratch = scratch_root.path();
     // Every stop here comes before the act, so `gh` and `cargo` are never this run's to reach. Each is a stub that
     // leaves a mark, found first on `PATH`: a stop that did reach one runs no host tool, and says so below.
@@ -1184,7 +1184,7 @@ fn a_wrapper_without_its_library_is_the_unjudged_class() {
         ("scripts/merge-pr.sh", vec!["42", "--body-file", "body.md"]),
         ("scripts/publish.sh", vec!["--dry-run"]),
     ] {
-        let claimed = support::fixture::Scratch::claim("tianheng-missing-library");
+        let claimed = xingbiao::scratch_root("tianheng-missing-library");
         let scratch = claimed.path();
         std::fs::create_dir_all(scratch.join("scripts"))
             .expect("create the fixture's scripts directory");
@@ -2008,7 +2008,7 @@ fn a_site_after_an_ansi_c_escaped_newline_reports_its_own_line() {
 /// exist; passed as a positional parameter it is one word, whatever it holds.
 #[test]
 fn a_library_path_holding_a_space_is_one_argument() {
-    let scratch = support::fixture::Scratch::claim("tianheng-bash-body");
+    let scratch = xingbiao::scratch_root("tianheng-bash-body");
     let dir = scratch.path().join("a b");
     std::fs::create_dir(&dir).expect("create a directory whose name holds a space");
     std::fs::write(dir.join("lib.sh"), "stop() {\n    exit 7\n}\n").expect("write the library");
@@ -2022,7 +2022,7 @@ fn a_library_path_holding_a_space_is_one_argument() {
 /// A scratch root that cannot be removed fails the run that dropped it, rather than being left behind unsaid.
 #[test]
 fn a_scratch_root_that_cannot_be_removed_is_a_failure() {
-    let scratch = support::fixture::Scratch::claim("tianheng-unremovable");
+    let scratch = xingbiao::scratch_root("tianheng-unremovable");
     let held = scratch.path().join("held");
     std::fs::create_dir(&held).expect("create a directory inside the scratch root");
     std::fs::write(held.join("file"), "x").expect("write a file the removal must reach");
@@ -2039,7 +2039,7 @@ fn a_scratch_root_that_cannot_be_removed_is_a_failure() {
         .map(|message| *message)
         .unwrap_or_default();
     assert!(
-        message.starts_with("Scratch: removing"),
+        message.starts_with("ScratchRoot: removing"),
         "the failure names what it could not remove: {message}"
     );
 }
@@ -2050,7 +2050,7 @@ fn a_scratch_root_that_cannot_be_removed_is_a_failure() {
 /// reads the host's executable instead.
 #[test]
 fn a_library_named_without_a_slash_is_the_fixture_s_file() {
-    let scratch = support::fixture::Scratch::claim("tianheng-slashless-library");
+    let scratch = xingbiao::scratch_root("tianheng-slashless-library");
     std::fs::write(scratch.path().join("bash"), "X=1\n").expect("write the library");
     assert_eq!(
         value_as_bash_holds_it(scratch.path(), "bash", "X"),
@@ -2074,7 +2074,7 @@ fn a_declared_name_assigned_again_is_the_unjudged_class() {
     let unjudged = i32::from(verdict_channel::wrapper_exit(Kind::CannotJudge));
     // The gate's channel carries a violation, so the refusal after the assignment exits by the declared values:
     // a moved one is seen in the status rather than hidden behind a channel that carries nothing.
-    let scratch = support::fixture::Scratch::claim("tianheng-reassigned-name");
+    let scratch = xingbiao::scratch_root("tianheng-reassigned-name");
     let verdict = scratch.path().join("verdict");
     std::fs::write(&verdict, verdict_channel::rendered(Kind::Violation))
         .expect("write the gate's verdict");

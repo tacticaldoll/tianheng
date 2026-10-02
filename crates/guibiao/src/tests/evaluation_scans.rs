@@ -21,6 +21,24 @@ fn constitution_of(boundaries: Vec<ModuleBoundary>) -> Constitution {
     constitution
 }
 
+/// Two workspaces built from one label hold separate roots, so the second does not remove what the first
+/// wrote.
+///
+/// The corpus builders below share a label across tests, and a root named from the label alone had the
+/// second test's construction delete the first test's files mid-run. The direction builds both in one
+/// thread, in the order that lost the first's files, and reads the first back; it needs no parallel schedule.
+#[test]
+fn two_workspaces_built_from_one_label_hold_separate_roots() {
+    let first = TempWorkspace::new("eq-same-label");
+    let written = first.write("lib.rs", "pub fn first() {}\n");
+    let second = TempWorkspace::new("eq-same-label");
+    assert!(
+        written.is_file(),
+        "building a second workspace of the same label removed the first workspace's file"
+    );
+    assert_ne!(first.dir(), second.dir());
+}
+
 /// `module-boundary` scenario "Many boundaries over one root build its scan once": a constitution
 /// of several module boundaries over one root builds the root's scan once, and a package of two
 /// compiled roots builds each of theirs once — the work counted where a scan is built, never where

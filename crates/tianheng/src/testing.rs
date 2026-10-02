@@ -268,17 +268,12 @@ mod tests {
     use super::*;
 
     struct TempHarness {
-        root: PathBuf,
+        root: xingbiao::ScratchRoot,
     }
 
     impl TempHarness {
         fn new(name: &str) -> Self {
-            let root = xingbiao::scratch_base().join(format!(
-                "tianheng-governance-test-{name}-{}",
-                std::process::id()
-            ));
-            let _ = std::fs::remove_dir_all(&root);
-            xingbiao::claim_scratch(&root).unwrap();
+            let root = xingbiao::scratch_root(&format!("tianheng-governance-test-{name}"));
             std::fs::create_dir_all(root.join("src")).unwrap();
             std::fs::write(
                 root.join("Cargo.toml"),
@@ -290,15 +285,10 @@ mod tests {
         }
     }
 
-    impl Drop for TempHarness {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.root);
-        }
-    }
-
     #[test]
     fn relative_paths_resolve_from_their_callers_base() {
-        let base = xingbiao::scratch_base().join("tianheng-relative-path-base");
+        let root = xingbiao::scratch_root("tianheng-relative-path-base");
+        let base = root.path().to_path_buf();
         assert_eq!(
             resolve_relative(Path::new("fixtures/violating"), &base),
             base.join("fixtures/violating")
@@ -314,7 +304,7 @@ mod tests {
         let mode = std::env::var("TIANHENG_PROJECTION_TEST_MODE").unwrap();
         let temp = TempHarness::new("projection");
         let harness = GovernanceTest::for_constitution(Constitution::new("fixture"))
-            .with_manifest_dir(&temp.root);
+            .with_manifest_dir(temp.root.path());
         let path = temp.root.join("law.md");
         let live = constitution_markdown(harness.constitution());
 
@@ -393,7 +383,7 @@ mod tests {
             .must_not_expose("crate::infra")
             .because("the fixture API owns its vocabulary");
         GovernanceTest::for_constitution(Constitution::new("fixture").signature_boundary(semantic))
-            .with_manifest_dir(&temp.root)
+            .with_manifest_dir(temp.root.path())
             .assert_all_workspace_members_covered();
 
         let runtime = crate::RuntimeBoundary::at("fixture-seam")
@@ -401,7 +391,7 @@ mod tests {
             .because("only the fixture crosses this seam");
         let runtime_only =
             GovernanceTest::for_constitution(Constitution::new("fixture").runtime(runtime))
-                .with_manifest_dir(&temp.root);
+                .with_manifest_dir(temp.root.path());
         assert!(
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 runtime_only.assert_all_workspace_members_covered();

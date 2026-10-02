@@ -16,7 +16,7 @@ use guibiao::{Constitution, ModuleBoundary, Outcome, check};
 /// A real single-package workspace with a real manifest, so the root resolution under test is the one
 /// adopters get rather than a synthetic `targets` array.
 struct RootProbe {
-    dir: PathBuf,
+    dir: xingbiao::ScratchRoot,
     manifest: PathBuf,
 }
 
@@ -33,15 +33,7 @@ impl RootProbe {
         manifest_extra: &str,
         files: &[(&str, &str)],
     ) -> Self {
-        use std::sync::atomic::{AtomicU32, Ordering};
-        static COUNTER: AtomicU32 = AtomicU32::new(0);
-        let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let dir = xingbiao::scratch_base().join(format!(
-            "guibiao-single-root-{name}-{}-{unique}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        xingbiao::claim_scratch(&dir).expect("the fixture root is writable");
+        let dir = xingbiao::scratch_root(&format!("guibiao-single-root-{name}"));
         std::fs::create_dir_all(dir.join("src")).expect("create src dir");
         let manifest = dir.join("Cargo.toml");
         std::fs::write(
@@ -93,12 +85,6 @@ impl RootProbe {
 
 /// The crate the external-confinement fixtures confine: a unit struct `B` and a function `helper`.
 const BRICK: &str = "pub struct B;\npub fn helper() {}\n";
-
-impl Drop for RootProbe {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
-    }
-}
 
 /// The same forbidden construct in every root, so which roots react is the only variable.
 const OFFENDING: &str = "pub fn touch() { let _ = std::fs::canonicalize(\".\"); }\n";
@@ -279,12 +265,7 @@ fn a_root_cargo_reports_twice_is_scanned_once() {
 #[test]
 fn a_target_root_outside_the_package_directory_is_refused_not_labeled() {
     // The shared source lives beside the package, so the package's own directory does not contain it.
-    let shared = xingbiao::scratch_base().join(format!(
-        "guibiao-out-of-package-shared-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&shared);
-    xingbiao::claim_scratch(&shared).expect("create shared dir");
+    let shared = xingbiao::scratch_root("guibiao-out-of-package-shared");
     std::fs::write(
         shared.join("outside.rs"),
         format!("fn main() {{}}\n{OFFENDING}"),
@@ -311,7 +292,6 @@ fn a_target_root_outside_the_package_directory_is_refused_not_labeled() {
             "a target root outside the package directory must be refused, not labeled: {other:?}"
         ),
     }
-    let _ = std::fs::remove_dir_all(&shared);
 }
 
 /// A constitution over one named package.

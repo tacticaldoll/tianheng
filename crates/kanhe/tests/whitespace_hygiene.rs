@@ -139,16 +139,10 @@ fn whitespace_hygiene_across_tracked_text_files() {
 /// does not exist under the root, which is exactly what `read` meets when a tracked file cannot be opened.
 #[test]
 fn an_unreadable_tracked_file_is_refused_rather_than_skipped() {
-    let scratch = xingbiao::scratch_base().join(format!(
-        "tianheng-whitespace-unreadable-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&scratch);
-    xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
+    let scratch = xingbiao::scratch_root("tianheng-whitespace-unreadable");
 
     let listing = vec!["i/lf\tzzz_absent_whitespace_probe.md".to_string()];
     let (offences, inspected) = offences(&scratch, &listing);
-    let _ = std::fs::remove_dir_all(&scratch);
 
     assert_eq!(
         offences.len(),
@@ -196,12 +190,7 @@ fn a_listing_line_without_a_path_separator_is_refused() {
 /// two kinds are held apart in the direction that matters as well as in the one above.
 #[test]
 fn each_offence_shape_is_named_when_it_is_shown() {
-    let scratch = xingbiao::scratch_base().join(format!(
-        "tianheng-whitespace-offences-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&scratch);
-    xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
+    let scratch = xingbiao::scratch_root("tianheng-whitespace-offences");
 
     for (name, body, expected) in [
         (
@@ -227,7 +216,6 @@ fn each_offence_shape_is_named_when_it_is_shown() {
     // rather than about a judgement that reports everything.
     std::fs::write(scratch.join("clean.md"), "text\n").expect("write the control");
     let (clean, inspected) = offences(&scratch, &["i/lf\tclean.md".to_string()]);
-    let _ = std::fs::remove_dir_all(&scratch);
     assert_eq!(inspected, 1);
     assert!(
         clean.is_empty(),

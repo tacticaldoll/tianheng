@@ -927,6 +927,22 @@ consumer for an undemonstrated deduplication.
   result. The same grep, re-run on 2026-10-02 at the tip of the window rooted at the `v0.7.1` snapshot,
   lists thirteen.
 
+  **The scratch half fired and is converged; the `Drop` half is narrowed, read 2026-10-03.** What fired it was the
+  first reachable instance of the half the previous reading left on purpose: two guibiao tests building a fixture
+  from one label, through the corpus builders in `evaluation_scans`, removed each other's files, because a name
+  composed from a label and the process id is unique only while no two callers choose one label. Every fixture root
+  now comes from `xingbiao::scratch_root`, whose per-process counter makes two roots distinct whatever their labels,
+  and `scratch_roots` holds every tracked Rust file outside `crates/xingbiao` to not naming `scratch_base` or
+  `scratch_ceiling` except in a declared set of files, each with why (`repository-checks`, the requirement on
+  fixture roots). kanhe's `support::fixture::Scratch`, a second implementation of the root's claim and cleanup, is
+  gone, and the two readings above that say scratch fixtures keep their own names and cleanup no longer describe
+  the tree. What stays declared is kanhe's restatement of the layout rule, `scratch_ceiling`: its normal edges may
+  not reach `xingbiao`, so it neither takes a root from the helper nor calls `settle_cleanup`. The grep for `Drop`
+  guards that discard a cleanup's result, re-run 2026-10-03 at the tip of this change, lists three, none a test
+  fixture's root: the publish gate's own signature scratch, which is production code under that restatement,
+  `pin_bites`' removal of its git worktree, and the runner's atomic-write temp file. The entry stays WATCH for
+  those; the trigger is a new `Drop` guard that discards a removal's result.
+
 - **A mutation record is held to killing its pin, not to perturbing the behaviour its bound names.** *Class:*
   WATCH. *Observed pressure:* the non-word assignment bound's record perturbed the `+=` row beside the bound's
   shape, and `pin_bites` passed, because it asks only whether the cited test fails. *Observation source:* the

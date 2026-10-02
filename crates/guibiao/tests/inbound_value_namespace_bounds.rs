@@ -6,19 +6,11 @@
 use guibiao::{Constitution, ModuleBoundary, Outcome, check};
 use std::path::{Path, PathBuf};
 
-struct Probe(PathBuf);
+struct Probe(xingbiao::ScratchRoot);
 
 impl Probe {
     fn new(label: &str, files: &[(&str, &str)]) -> Self {
-        use std::sync::atomic::{AtomicU32, Ordering};
-        static N: AtomicU32 = AtomicU32::new(0);
-        let dir = xingbiao::scratch_base().join(format!(
-            "guibiao-inbound-value-{label}-{}-{}",
-            std::process::id(),
-            N.fetch_add(1, Ordering::Relaxed)
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        xingbiao::claim_scratch(&dir).expect("the fixture root is writable");
+        let dir = xingbiao::scratch_root(&format!("guibiao-inbound-value-{label}"));
         std::fs::create_dir_all(dir.join("src")).expect("create src");
         std::fs::write(
             dir.join("Cargo.toml"),
@@ -35,12 +27,6 @@ impl Probe {
 
     fn manifest(&self) -> PathBuf {
         self.0.join("Cargo.toml")
-    }
-}
-
-impl Drop for Probe {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
     }
 }
 

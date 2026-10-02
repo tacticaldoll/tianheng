@@ -352,12 +352,7 @@ fn an_empty_surface_fails_rather_than_reporting_clean() {
     };
     // A repository with the layout and no generated document. Every property of zero documents holds, so a
     // check that did not refuse here would report the register complete.
-    let fixture = xingbiao::scratch_base().join(format!(
-        "tianheng-projection-register-empty-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&fixture);
-    xingbiao::claim_scratch(&fixture).expect("the fixture directory is writable");
+    let fixture = xingbiao::scratch_root("tianheng-projection-register-empty");
     std::fs::create_dir_all(fixture.join("docs")).expect("the fixture directory is writable");
     std::fs::write(fixture.join(READERS_ENTRY_POINT), "# AGENTS\n").expect("writable");
     // Joined from components, and the fixture document below is named without a directory, because
@@ -377,7 +372,6 @@ fn an_empty_surface_fails_rather_than_reporting_clean() {
     }
 
     let refused = std::panic::catch_unwind(|| registered(&fixture));
-    let _ = std::fs::remove_dir_all(&fixture);
     let message = refused
         .err()
         .map(|payload| {

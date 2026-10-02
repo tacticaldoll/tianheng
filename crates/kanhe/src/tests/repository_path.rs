@@ -177,10 +177,7 @@ fn a_path_with_no_parent_has_no_directory_rather_than_being_outside_the_root() {
 fn a_pathspec_from_this_owner_means_the_path_and_not_an_instruction() {
     use crate::repository_path::pathspec;
 
-    let root =
-        xingbiao::scratch_base().join(format!("kanhe-pathspec-magic-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    xingbiao::claim_scratch(&root).expect("create the fixture root");
+    let root = xingbiao::scratch_root("kanhe-pathspec-magic");
     for args in [
         &["init", "-q", "."][..],
         &["config", "user.email", "fixture@example.invalid"][..],
@@ -197,7 +194,6 @@ fn a_pathspec_from_this_owner_means_the_path_and_not_an_instruction() {
     let bare = crate::hermetic_git::tracked_paths(&root, &[odd]).expect("git answers");
     let literal =
         crate::hermetic_git::tracked_paths(&root, &[&pathspec(odd)]).expect("git answers");
-    let _ = std::fs::remove_dir_all(&root);
 
     assert!(
         bare.iter().any(|path| path == "elsewhere.txt"),

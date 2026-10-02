@@ -14,6 +14,7 @@ mod record;
 mod release_coherence_gate;
 mod repository_path;
 mod restatement;
+mod scratch_ceiling;
 mod sections;
 mod selection;
 mod shell;

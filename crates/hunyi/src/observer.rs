@@ -38,10 +38,8 @@ mod tests {
     #[test]
     fn empty_boundaries_are_clean_without_reading_a_manifest() {
         let observer = SemanticObserver::new(SemanticBoundaries::default());
-        let absent = xingbiao::scratch_base().join(format!(
-            "tianheng-empty-semantic-observer-{}-does-not-exist/Cargo.toml",
-            std::process::id()
-        ));
+        let root = xingbiao::scratch_root("tianheng-empty-semantic-observer");
+        let absent = root.join("does-not-exist/Cargo.toml");
 
         assert!(matches!(observer.observe(&absent), Outcome::Clean(_)));
     }

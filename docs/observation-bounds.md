@@ -3,7 +3,7 @@
 Every **observation bound** this family declares: a claim that a reaction deliberately stops at a
 named shape, so that shape is governed policy rather than a defect.
 
-**27 of 144 declared bounds have no pinning test.** That figure is the register's
+**27 of 146 declared bounds have no pinning test.** That figure is the register's
 audit backlog and leads the document because a number in a footnote is not read. Each such bound names
 the tracker that owns closing it.
 
@@ -609,6 +609,18 @@ fallback used where no manifest exists, which the register spec describes.
 > nothing reads it. A comment is what a lexer discards and a literal is one token, so neither is a call; setting a child's `TMPDIR` is a method call and not a read of this process's. What the stop leaves unobserved is the temporary files a child process writes for itself — a script's `mktemp`, rustc and cargo — which this check does not govern
 
 - **pinned by**: `naming_temp_dir_in_a_comment_a_string_or_a_child_environment_is_not_read`
+
+### `repository-checks/a-root-composed-without-naming-the-helper-is-not-read-a-stated-bound`
+
+> nothing reads it. The reader asks whether a file names one of two words and not whether a value is a fixture root, which is a question about meaning; `scratch_ceiling` is the instance this tree holds, a layout rule derived from the executable's path under a name the reader happens to know
+
+- **pinned by**: `a_root_composed_without_naming_the_helper_is_not_read`
+
+### `repository-checks/a-second-naming-in-a-declared-file-is-not-separated-from-the-declared-one-a-stated-bound`
+
+> nothing reads it. The answer is one reading per file, so a declaration is a path and every naming in that file stands behind it
+
+- **pinned by**: `a_second_naming_in_a_declared_file_is_not_separated_from_the_first`
 
 ### `repository-checks/a-paragraph-repeated-out-of-line-is-not-read-a-stated-bound`
 

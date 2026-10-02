@@ -469,3 +469,23 @@ fn scratch_root_names_are_unique_per_call() {
     );
     assert_ne!(a.path(), b.path());
 }
+
+/// A second root built from the same label leaves the first root's files where they are.
+///
+/// The race this holds closed was two tests building a fixture from one label in one process: the second
+/// call removed the path the first had just filled. The direction is deterministic and needs no parallel
+/// schedule: it builds both in one thread, in the order that lost the first root's files, and reads the
+/// first root back afterwards.
+#[test]
+fn a_second_root_of_the_same_label_leaves_the_first_roots_files() {
+    let first = scratch_root("xingbiao-same-label");
+    let written = first.path().join("f");
+    std::fs::write(&written, "first").expect("write into the first root");
+    let second = scratch_root("xingbiao-same-label");
+    assert_eq!(
+        std::fs::read_to_string(&written).as_deref().ok(),
+        Some("first"),
+        "building a second root of the same label removed the first root's file"
+    );
+    assert_ne!(first.path(), second.path());
+}

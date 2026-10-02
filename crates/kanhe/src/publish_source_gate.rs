@@ -715,9 +715,9 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
 /// The same split as [`hidden_by_the_checkout_with`], for the same reason: the failing arm is not a state a
 /// fixture can be left in, because the removal it follows would undo it.
 ///
-/// Three harnesses in this repository already claim their scratch roots this way — the two controlled
-/// workflow directions and the reference gate — and it was this one, standing in front of `cargo publish`,
-/// that did not.
+/// Every fixture root the tests of this repository build is claimed this way, through `xingbiao::scratch_root`;
+/// this one stands in front of `cargo publish` and cannot take its root from the helper, because this library's
+/// normal edges do not reach `xingbiao`.
 pub fn claim_scratch(path: &Path) -> Result<(), Refusal> {
     std::fs::create_dir(path).map_err(|err| {
         cannot_judge_at("publish-source-integrity#signature-scratch-unclaimable", format!(

@@ -1036,6 +1036,39 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "naming_temp_dir_in_a_comment_a_string_or_a_child_environment_is_not_read",
         ),
         BoundDecl::pinned(
+            BoundId::new(
+                "repository-checks/a-root-composed-without-naming-the-helper-is-not-read-a-stated-bound",
+            ),
+            "a fixture root composed from the running executable's path, from `CARGO_TARGET_TMPDIR`, or \
+             from any path that does not spell `scratch_base` or `scratch_ceiling`",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the reader asks whether a file names one of two words, and whether a value is a \
+                          fixture root is a question about what the value means. `scratch_ceiling` is the \
+                          instance this tree holds: kanhe derives the same layout from the executable's path \
+                          because its normal edges may not reach the helper, and the reader sees it only \
+                          because it is named. A word added to the question's list is the perturbation of \
+                          this stop, and its mutation record makes it"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "a_root_composed_without_naming_the_helper_is_not_read",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "repository-checks/a-second-naming-in-a-declared-file-is-not-separated-from-the-declared-one-a-stated-bound",
+            ),
+            "a second naming of the helper's base directory in a file the declared set already names",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the reader answers once per file and a declaration is a path, so every naming in a \
+                          declared file stands behind the one its reason gives. No mutation record isolates \
+                          it: separating the namings means returning a count or a site where the reader \
+                          returns a verdict, which is a different reader and not a perturbation of this one"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "a_second_naming_in_a_declared_file_is_not_separated_from_the_first",
+        ),
+        BoundDecl::pinned(
             BoundId::new("repository-checks/a-git-named-in-prose-is-not-read-a-stated-bound"),
             "a `git` construction written inside a comment rather than executed",
             Extent::Reached(Reached::UnderReacts {

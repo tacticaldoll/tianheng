@@ -298,10 +298,7 @@ fn corpus() -> Vec<Shape> {
 
 /// Compile `source` as a crate and hand back rustc's own first line on failure.
 fn compiles(name: &str, source: &str) -> Result<(), String> {
-    let dir =
-        xingbiao::scratch_base().join(format!("tianheng-spelling-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    xingbiao::claim_scratch(&dir).expect("the rustc scratch root is writable");
+    let dir = xingbiao::scratch_root(&format!("tianheng-spelling-{name}"));
     let out = dir.join("out");
     std::fs::create_dir_all(&out).expect("create out dir");
     std::fs::write(
@@ -320,7 +317,7 @@ fn compiles(name: &str, source: &str) -> Result<(), String> {
         .arg(&out)
         .output()
         .map_err(|err| format!("rustc could not be run: {err}"))?;
-    let verdict = if run.status.success() {
+    if run.status.success() {
         Ok(())
     } else {
         Err(String::from_utf8_lossy(&run.stderr)
@@ -328,9 +325,7 @@ fn compiles(name: &str, source: &str) -> Result<(), String> {
             .next()
             .unwrap_or("(no stderr)")
             .to_string())
-    };
-    let _ = std::fs::remove_dir_all(&dir);
-    verdict
+    }
 }
 
 /// The shape with no cross-module reference: the source whose legality is the generator's claim.

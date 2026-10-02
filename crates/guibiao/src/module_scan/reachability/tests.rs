@@ -33,31 +33,20 @@ fn reachable_modules(
 /// plumbing needed to host it. Keep that plumbing here so every case cleans up on panic and a
 /// new case only describes the source shape it is exercising.
 struct TempSrcTree {
-    dir: PathBuf,
+    _root: xingbiao::ScratchRoot,
     src: PathBuf,
 }
 
 impl TempSrcTree {
     fn new(label: &str) -> Self {
-        let dir = xingbiao::scratch_base().join(format!(
-            "guibiao-reachability-{label}-{}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        xingbiao::claim_scratch(&dir).expect("the fixture root is writable");
-        let src = dir.join("src");
+        let root = xingbiao::scratch_root(&format!("guibiao-reachability-{label}"));
+        let src = root.join("src");
         std::fs::create_dir_all(&src).expect("create temp src");
-        Self { dir, src }
+        Self { _root: root, src }
     }
 
     fn src(&self) -> &Path {
         &self.src
-    }
-}
-
-impl Drop for TempSrcTree {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
     }
 }
 
