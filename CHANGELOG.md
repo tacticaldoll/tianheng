@@ -300,8 +300,9 @@ them.
   And calls are **no longer** reported that Rust resolves elsewhere: a function body's own `struct Command`
   shadows a module's `use std::process::Command`; a `type` alias written in a block, or as an associated type,
   binds no bare head outside it; the tail of a qualified path (`<W>::md5x()`, `<T as Trait>::f()`) is left to the
-  receiver-method bound rather than read as an external root, except right after a `}` as the bound below
-  declares; and a `fn` item's own name is its definition, never
+  receiver-method bound rather than read as an external root, except right after a `}` as the stated bound *a
+  qualified path after a closing brace is read as a rooted path* declares; and a `fn` item's own name is its
+  definition, never
   a call, so an associated or nested `fn` named like a single-segment prefix no longer reacts under
   `.strict_external()`. A head no scope binds names no item of the module it stands in, so under a prefix
   covering that module an attribute's name (`cfg`, `any`, `not`, `derive`, `allow`), a prelude name called
@@ -465,7 +466,8 @@ them.
 
   `crate::r#kernel` and `crate::kernel` remain one module and one identity. The inline-call prefix of
   `must_not_call_inline` and `confine_inline_call`, and the crate name of `confine_external_crate`, are not
-  module paths of the crate and are not held to this rule; the prefix is held to its own, in the next entry.
+  module paths of the crate and are not held to this rule; the prefix is held to its own, in the entry *圭表 accepts
+  an inline-call prefix only in its canonical spelling, naming something that exists*.
 
 - **BREAKING** — **圭表 accepts an inline-call prefix only in its canonical spelling, naming something that
   exists.** The prefix of `must_not_call_inline` and `confine_inline_call` was compared with resolved call paths
@@ -485,8 +487,8 @@ them.
     `async` and `r#async` are one prefix and one identity, as 0.7.1 accepted them. A leading `::` is not part of
     the identity either: `::std::time` and `std::time` match the same calls under one identity, so a boundary
     declared `::std::time`, which in 0.7.1 matched no call, reacts as `std::time` does, and its rule key records the
-    prefix without `::`. The `::` still says the prefix means an external crate, which the missing-root check
-    below reads: a bare `clock` beside a local `crate::clock` is refused where `::clock` is not.
+    prefix without `::`. The `::` still says the prefix means an external crate, which the **Existence** check
+    reads: a bare `clock` beside a local `crate::clock` is refused where `::clock` is not.
   - **Existence.** A `crate::` prefix must name a module some compiled root declares, or an item one defines.
   - **Missing root.** A first segment that is not `crate`, a sysroot crate (`std`, `core`, `alloc`,
     `proc_macro`, `test`), a declared dependency under its local name, or the package's own library is
@@ -559,7 +561,8 @@ them.
   report under a strict confinement of them, where only a call, a rooted path or a path of several segments was
   read; an item's name, a field or a parameter being declared, a macro's name and a bare `self` are not. A binding's
   name is a mention left to the resolver, so one named like an item or an import in scope is read as it, the
-  declared over-reaction below. A name read in both namespaces is looked up in each through every scope before the two are joined, so a
+  over-reaction the stated bound *a local binding named like an import is read as the import* declares. A name
+  read in both namespaces is looked up in each through every scope before the two are joined, so a
   block's `struct now {}` no longer ends the lookup of a value `now`. A parameter or `let` binding named like an import or an item in scope is read as it, declared as
   `inline-symbol-path-confinement/a-local-binding-named-like-an-import-is-read-as-the-import-a-stated-bound`, which
   under strict now reaches a binding read as a value too. Address or baseline what it reports.
