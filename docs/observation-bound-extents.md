@@ -1175,7 +1175,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 > an always-`Some` value bound to a name and read as if it could be absent on a later statement
 
-- **because**: the reader joins a chain `rustfmt` broke and decides one logical line, so a consumer reached through a binding is outside what it can see. Following the binding is name resolution, which no reader over text performs. Measured when this was written: no site in the tree binds a `split(..).next()` and consumes it later
+- **because**: the reader joins a chain `rustfmt` broke and decides one logical line, so a consumer reached through a binding is outside what it can see. Following the binding is name resolution, which no reader over text performs
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *the always-Some consumer reached through a binding*
 

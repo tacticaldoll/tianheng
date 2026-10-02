@@ -2534,7 +2534,7 @@ fn own_repository(root: &Path) -> Option<String> {
         .trim_end_matches('/')
         .trim_end_matches(".git");
     let mut segments = url.rsplit('/');
-    let name = segments.next()?;
+    let name = segments.next().expect("`rsplit` yields at least one segment");
     let owner = segments.next()?;
     (!name.is_empty() && !owner.is_empty()).then(|| format!("{owner}/{name}"))
 }
