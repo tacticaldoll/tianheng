@@ -123,7 +123,17 @@ impl RootScan {
             root_relative.as_deref(),
             ScanDepth::Subtree,
         );
-        let unit_scan = UnitScan::read(&sources, &all_files, reading.edition, reading.proc_macro)?;
+        let dependencies = crate::cargo_metadata::dependency_import_names(package)
+            .into_iter()
+            .chain(crate::cargo_metadata::library_import_names(package))
+            .collect();
+        let unit_scan = UnitScan::read(
+            &sources,
+            &all_files,
+            reading.edition,
+            reading.proc_macro,
+            dependencies,
+        )?;
         Ok(RootScan {
             src_dir,
             root_relative,

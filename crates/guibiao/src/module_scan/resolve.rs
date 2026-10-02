@@ -21,6 +21,7 @@
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::rc::Rc;
 
 use super::item_head::Visibility;
 use super::path_vocab::path_within;
@@ -37,6 +38,87 @@ use super::token_tree::Edition;
 /// bounded apart from it, by the memo [`CrateScopes::scope_lookup`] keeps: a scope's answer for a name is read once per
 /// depth rather than once per path, so a lattice of globs is read in time its size bounds rather than its path count.
 const MAX_RESOLUTION_CHAIN: usize = 64;
+
+/// Maximum candidate entries and path text held by one resolution reading. Depth alone does not bound a branching
+/// glob: these limits refuse its width before another pass can multiply it.
+const MAX_RESOLUTION_PATHS: usize = 32_768;
+const MAX_RESOLUTION_BYTES: usize = 8 * 1024 * 1024;
+
+/// The held answers of a whole glob graph have their own aggregate budget: a long chain repeats its intermediate
+/// paths in each scope's answer even though no individual answer is wide.
+const MAX_GLOB_GRAPH_PATHS: usize = 1_048_576;
+const MAX_GLOB_GRAPH_BYTES: usize = 64 * 1024 * 1024;
+
+fn width_refusal() -> String {
+    format!(
+        "cannot judge a resolution holding more than {MAX_RESOLUTION_PATHS} candidate paths or \
+         {MAX_RESOLUTION_BYTES} bytes of path text; reduce the branching imports, globs or re-exports"
+    )
+}
+
+#[derive(Default)]
+pub(super) struct ReadingSize {
+    paths: usize,
+    bytes: usize,
+}
+
+impl ReadingSize {
+    pub(super) fn add(&mut self, path: &str) -> Result<(), String> {
+        self.paths = self.paths.saturating_add(1);
+        self.bytes = self.bytes.saturating_add(path.len());
+        self.check()
+    }
+
+    fn head(&mut self, head: &Head) -> Result<(), String> {
+        match head {
+            Head::Candidates {
+                bound,
+                declared,
+                through,
+                heads,
+                foreign,
+                ..
+            } => {
+                for path in bound
+                    .iter()
+                    .map(|(path, _)| path.as_str())
+                    .chain(declared.iter().map(Declared::path))
+                    .chain(
+                        through
+                            .iter()
+                            .chain(heads)
+                            .chain(foreign)
+                            .map(String::as_str),
+                    )
+                {
+                    self.add(path)?;
+                }
+                Ok(())
+            }
+            Head::Foreign(paths) => paths.iter().try_for_each(|path| self.add(path)),
+            _ => Ok(()),
+        }
+    }
+
+    fn check_graph(&self) -> Result<(), String> {
+        if self.paths > MAX_GLOB_GRAPH_PATHS || self.bytes > MAX_GLOB_GRAPH_BYTES {
+            Err(format!(
+                "cannot judge a glob graph holding more than {MAX_GLOB_GRAPH_PATHS} candidate paths or \
+                         {MAX_GLOB_GRAPH_BYTES} bytes of path text; reduce the branching imports, globs or re-exports"
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn check(&self) -> Result<(), String> {
+        if self.paths > MAX_RESOLUTION_PATHS || self.bytes > MAX_RESOLUTION_BYTES {
+            Err(width_refusal())
+        } else {
+            Ok(())
+        }
+    }
+}
 
 /// The refusal of a chain longer than [`MAX_RESOLUTION_CHAIN`] links, quoting the binding it was measured
 /// from and the module that binding is written in: the one wording every walk that meets the cap uses.
@@ -193,14 +275,22 @@ impl GlobGraph {
     /// one; past it every answer is refused, since a graph whose answers do not settle is one the scanner cannot judge.
     fn settle(&self, head: &str) -> Result<Vec<Head>, String> {
         let order = self.children_first();
-        let mut answers: Vec<Head> = self
-            .reads
-            .iter()
-            .map(|read| match read {
+        let mut total = ReadingSize::default();
+        let mut sizes = Vec::new();
+        let mut answers = Vec::new();
+        for read in &self.reads {
+            let answer = match read {
                 GlobRead::Answered(answer) => answer.clone(),
                 GlobRead::Globs { own, .. } => own.clone().unwrap_or(Head::Unbound),
-            })
-            .collect();
+            };
+            let mut size = ReadingSize::default();
+            size.head(&answer)?;
+            total.paths += size.paths;
+            total.bytes += size.bytes;
+            total.check_graph()?;
+            sizes.push(size);
+            answers.push(answer);
+        }
         for _ in 0..=self.nodes.len() {
             let mut changed = false;
             for &n in &order {
@@ -229,6 +319,12 @@ impl GlobGraph {
                     (Some(own), globbed) => joined([own.clone(), globbed]),
                 };
                 if answer != answers[n] {
+                    let mut size = ReadingSize::default();
+                    size.head(&answer)?;
+                    total.paths = total.paths - sizes[n].paths + size.paths;
+                    total.bytes = total.bytes - sizes[n].bytes + size.bytes;
+                    total.check_graph()?;
+                    sizes[n] = size;
                     answers[n] = answer;
                     changed = true;
                 }
@@ -333,7 +429,13 @@ enum Presence {
 #[derive(Clone, Debug, Default)]
 struct Denoted {
     paths: Vec<String>,
+    /// The paths a glob of a crate whose contents are not read brings a segment as, beside what the segment's module
+    /// binds or declares, or as the only foreign answer: candidates of what the path names, and never a module a
+    /// glob reads names through, since
+    /// what such a glob brings is a name and not a module the unit holds.
+    beside: Vec<String>,
     presence: Presence,
+    terminal_reaches: bool,
 }
 
 /// `path` with each segment of `rest` appended after a `::`.
@@ -427,8 +529,71 @@ type NameKey = (usize, u32, String, PathSite, Namespace);
 /// A memo key for an import's presence: its table, scope, name, written path and namespace.
 type PresenceKey = (usize, u32, String, String, Namespace);
 
-/// A memo key for [`CrateScopes::denote`]: a crate-rooted path, and the namespace its last segment is read in.
-type DenoteKey = (String, Namespace);
+/// A memo key for [`CrateScopes::denote`]: a path, the namespace its last segment is read in, and whether candidates
+/// are requested for findings, or compared with a hazard prefix (and, for glob targets, its ancestors).
+type DenoteKey = (String, Namespace, bool, Option<(String, bool)>);
+
+/// Denotations retained by one unit, with keys and answers charged before insertion.
+struct DenotationMemo {
+    answers: HashMap<DenoteKey, Result<Rc<Denoted>, String>>,
+    paths: usize,
+    bytes: usize,
+    limits: (usize, usize, usize),
+}
+
+impl Default for DenotationMemo {
+    fn default() -> Self {
+        Self {
+            answers: HashMap::new(),
+            paths: 0,
+            bytes: 0,
+            limits: (262_144, 1_048_576, 64 * 1024 * 1024),
+        }
+    }
+}
+
+impl DenotationMemo {
+    fn get(&self, key: &DenoteKey) -> Option<&Result<Rc<Denoted>, String>> {
+        self.answers.get(key)
+    }
+
+    fn insert(
+        &mut self,
+        key: DenoteKey,
+        answer: Result<Rc<Denoted>, String>,
+    ) -> Result<(), String> {
+        let mut paths = self.paths;
+        let mut bytes = self.bytes.saturating_add(key.0.len());
+        if let Some((prefix, _)) = &key.3 {
+            bytes = bytes.saturating_add(prefix.len());
+        }
+        match &answer {
+            Ok(answer) => {
+                for path in answer.paths.iter().chain(&answer.beside) {
+                    paths = paths.saturating_add(1);
+                    bytes = bytes.saturating_add(path.len());
+                }
+            }
+            Err(message) => bytes = bytes.saturating_add(message.len()),
+        }
+        let (entries_limit, paths_limit, bytes_limit) = self.limits;
+        if self.answers.len() >= entries_limit || paths > paths_limit || bytes > bytes_limit {
+            return Err(format!(
+                "cannot judge a denotation memo holding more than {entries_limit} readings, {paths_limit} candidate paths or {bytes_limit} bytes of key and answer text; reduce the branching imports, globs or re-exports"
+            ));
+        }
+        self.answers.insert(key, answer);
+        self.paths = paths;
+        self.bytes = bytes;
+        Ok(())
+    }
+
+    fn clear(&mut self) {
+        self.answers.clear();
+        self.paths = 0;
+        self.bytes = 0;
+    }
+}
 
 /// A glob, by its table, its scope and its position among that scope's globs.
 type GlobKey = (usize, u32, usize);
@@ -451,6 +616,9 @@ pub(super) struct CrateScopes {
     edition: Edition,
     /// Whether the unit is a proc-macro crate, whose extern prelude holds `proc_macro` beside the sysroot crates.
     proc_macro: bool,
+    /// The import names of the package's dependencies and of its own libraries: the crates a build of the unit can
+    /// name besides the sysroot's, so the only ones a head no scope binds may be.
+    dependencies: BTreeSet<String>,
     /// Every module scope of the unit, `(table, scope)`, by module path — a module declared twice
     /// under exclusive cfgs has one scope per declaration.
     pub(super) modules: BTreeMap<String, Vec<(usize, u32)>>,
@@ -465,7 +633,7 @@ pub(super) struct CrateScopes {
     /// every module, whatever else the root declares under it.
     certain_externs: BTreeSet<String>,
     named: RefCell<HashMap<NameKey, Named>>,
-    denoted: RefCell<HashMap<DenoteKey, Result<Vec<String>, String>>>,
+    denoted: RefCell<DenotationMemo>,
     /// What [`CrateScopes::scope_lookup`] answered, by [`LookupKey`], where no cycle was cut while answering.
     looked: RefCell<HashMap<LookupKey, Head>>,
     /// Whether each import names something in a namespace, by the import's table, scope, name, written path and
@@ -501,6 +669,23 @@ impl CrateScopes {
     pub(super) fn in_a_proc_macro_crate(self) -> Self {
         CrateScopes {
             proc_macro: true,
+            ..self
+        }
+    }
+
+    /// The crate `head` followed by `rest`, where no scope binds `head`: a build where no item holds a head reads it from
+    /// the extern prelude, which holds the sysroot crates and the package's dependencies alone, so a head that is
+    /// neither names no crate in any build that compiles. The one reading of what such a head names, for a binding's
+    /// target and a glob's alike.
+    fn crate_named(&self, head: String, rest: &[String]) -> Option<String> {
+        (self.dependencies.contains(&head) || self.extern_prelude_holds(&head))
+            .then(|| with_rest(head, rest))
+    }
+
+    /// These scopes, in a package whose dependencies and libraries are imported as `dependencies`.
+    pub(super) fn depending_on(self, dependencies: BTreeSet<String>) -> Self {
+        CrateScopes {
+            dependencies,
             ..self
         }
     }
@@ -548,6 +733,7 @@ impl CrateScopes {
             tables,
             edition,
             proc_macro: false,
+            dependencies: BTreeSet::new(),
             modules,
             blocks,
             extern_prelude,
@@ -649,10 +835,22 @@ impl CrateScopes {
         ns: Namespace,
     ) -> Result<Option<Vec<String>>, String> {
         let mut denoted = through;
+        let mut size = ReadingSize::default();
+        for path in &denoted {
+            size.add(path)?;
+        }
         let mut past_cap = None;
         for path in paths {
             match self.denote(path, ns) {
-                Ok(found) => denoted.extend(found),
+                Ok(found) => {
+                    for path in found {
+                        if let Err(refusal) = size.add(&path) {
+                            past_cap = least(past_cap, refusal);
+                            break;
+                        }
+                        denoted.push(path);
+                    }
+                }
                 Err(refusal) => past_cap = least(past_cap, refusal),
             }
         }
@@ -669,14 +867,50 @@ impl CrateScopes {
     /// through no such segment names itself. A path rooted anywhere else names itself. Memoized by the path
     /// and the namespace.
     pub(super) fn denote(&self, path: &str, ns: Namespace) -> Result<Vec<String>, String> {
-        let key = (path.to_string(), ns);
+        self.denotation(path, ns, true, None)
+            .map(|denoted| sorted_unique(denoted.paths.iter().chain(&denoted.beside).cloned()))
+    }
+
+    /// The readable-only view used by directions comparing it with the finding and hazard views.
+    #[cfg(test)]
+    fn readable_paths(&self, path: &str, ns: Namespace) -> Result<Vec<String>, String> {
+        self.denotation(path, ns, false, None)
+            .map(|denoted| denoted.paths.clone())
+    }
+
+    /// What a hazard can traverse, together with whether a terminal foreign candidate reaches its prefix. Terminal
+    /// candidates are compared once and never retained as paths or queued for another reading.
+    pub(super) fn hazard_paths(
+        &self,
+        path: &str,
+        ns: Namespace,
+        prefix: &str,
+        ancestors: bool,
+    ) -> Result<(Vec<String>, bool), String> {
+        self.denotation(path, ns, false, Some((prefix, ancestors)))
+            .map(|denoted| (denoted.paths.clone(), denoted.terminal_reaches))
+    }
+
+    fn denotation(
+        &self,
+        path: &str,
+        ns: Namespace,
+        candidates: bool,
+        hazard: Option<(&str, bool)>,
+    ) -> Result<Rc<Denoted>, String> {
+        let key = (
+            path.to_string(),
+            ns,
+            candidates,
+            hazard.map(|(prefix, ancestors)| (prefix.to_string(), ancestors)),
+        );
         if let Some(found) = self.denoted.borrow().get(&key) {
             return found.clone();
         }
         let found = self
-            .denote_in(path, ns, &mut Walk::default())
-            .map(|denoted| denoted.paths);
-        self.denoted.borrow_mut().insert(key, found.clone());
+            .denote_in(path, ns, &mut Walk::default(), candidates, hazard)
+            .map(Rc::new);
+        self.denoted.borrow_mut().insert(key, found.clone())?;
         found
     }
 
@@ -1203,6 +1437,7 @@ impl CrateScopes {
     ) -> GlobRead {
         let entry = &self.tables[t].scopes[id as usize];
         let mut edges = Vec::new();
+        let mut size = ReadingSize::default();
         for (i, glob) in entry.globs.iter().enumerate() {
             if !glob.visibility.visible_from(&entry.module, from) {
                 continue;
@@ -1212,6 +1447,9 @@ impl CrateScopes {
                 Err(refusal) => return GlobRead::Answered(Head::PastCap(refusal)),
             };
             for target in targets {
+                if let Err(refusal) = size.add(&target) {
+                    return GlobRead::Answered(Head::PastCap(refusal));
+                }
                 let scopes = path_within(&target, "crate")
                     .then(|| self.modules.get(&target))
                     .flatten();
@@ -1321,7 +1559,7 @@ impl CrateScopes {
         ) {
             Named::Paths(paths) => paths.iter().try_fold(Presence::Absent, |most, path| {
                 let presence = if path_within(path, "crate") {
-                    self.denote_in(path, ns, walk)
+                    self.denote_in(path, ns, walk, false, None)
                         .map(|denoted| denoted.presence)
                 } else {
                     Ok(Presence::Unknown)
@@ -1373,7 +1611,8 @@ impl CrateScopes {
             Named::Paths(paths) => BindingNames::Paths(paths, through),
             Named::External(path) => BindingNames::Paths(vec![path], through),
             Named::Unbound { head, rest, also } => BindingNames::Paths(
-                std::iter::once(with_rest(head, &rest))
+                self.crate_named(head, &rest)
+                    .into_iter()
                     .chain(also)
                     .collect(),
                 through,
@@ -1488,7 +1727,13 @@ impl CrateScopes {
         self.forget_readings();
         *self.reading_glob.borrow_mut() = Some(key);
         self.read_itself.set(false);
-        let reading = self.read_glob(key.0, key.1, key.2);
+        let reading = self.read_glob(key.0, key.1, key.2).and_then(|paths| {
+            let mut size = ReadingSize::default();
+            for path in &paths {
+                size.add(path)?;
+            }
+            Ok(paths)
+        });
         *self.reading_glob.borrow_mut() = None;
         if self.read_itself.get() {
             self.forget_readings();
@@ -1511,7 +1756,10 @@ impl CrateScopes {
         self.presence.borrow_mut().clear();
     }
 
-    /// One reading of glob `i` of `scope`, each glob its path passes answered from the reading in progress.
+    /// One reading of glob `i` of `scope`, each glob its path passes answered from the reading in progress. A path whose
+    /// head no scope binds names a crate only as [`CrateScopes::crate_named`] reads it, so
+    /// `#[cfg(unix)] mod m1; pub use m1::*;` names `m1` and no crate, and two such globs each read through the other's
+    /// settle rather than naming `m1::m2::m1…` without end.
     fn read_glob(&self, t: usize, scope: u32, i: usize) -> Result<Vec<String>, String> {
         let entry = &self.tables[t].scopes[scope as usize];
         let written = &entry.globs[i].written;
@@ -1532,21 +1780,38 @@ impl CrateScopes {
             false,
         );
         match named {
-            Named::Paths(paths) => paths.iter().try_fold(Vec::new(), |mut found, path| {
-                found.extend(self.denote_in(path, Namespace::Type, &mut walk)?.paths);
-                Ok(found)
-            }),
+            Named::Paths(paths) => self.read_glob_paths(&paths, Vec::new(), &mut walk),
             Named::External(path) => Ok(vec![path]),
-            Named::Unbound { head, rest, also } => {
-                also.iter()
-                    .try_fold(vec![with_rest(head, &rest)], |mut found, path| {
-                        found.extend(self.denote_in(path, Namespace::Type, &mut walk)?.paths);
-                        Ok(found)
-                    })
-            }
+            Named::Unbound { head, rest, also } => self.read_glob_paths(
+                &also,
+                self.crate_named(head, &rest).into_iter().collect(),
+                &mut walk,
+            ),
             Named::Local | Named::Invalid => Ok(Vec::new()),
             Named::PastCap(refusal) => Err(refusal),
         }
+    }
+
+    fn read_glob_paths(
+        &self,
+        paths: &[String],
+        mut found: Vec<String>,
+        walk: &mut Walk,
+    ) -> Result<Vec<String>, String> {
+        let mut size = ReadingSize::default();
+        for path in &found {
+            size.add(path)?;
+        }
+        for path in paths {
+            for path in self
+                .denote_in(path, Namespace::Type, walk, false, None)?
+                .paths
+            {
+                size.add(&path)?;
+                found.push(path);
+            }
+        }
+        Ok(found)
     }
 
     /// [`CrateScopes::denote`] inside a walk. The path is read segment by segment from the crate root, each
@@ -1561,9 +1826,19 @@ impl CrateScopes {
     ///
     /// A file-form module a block declares is its own file's module, named through the block's readable form rather
     /// than a block scope, so a readable block segment is read together with the module name after it.
-    fn denote_in(&self, path: &str, ns: Namespace, walk: &mut Walk) -> Result<Denoted, String> {
-        let mut found = Vec::new();
+    fn denote_in(
+        &self,
+        path: &str,
+        ns: Namespace,
+        walk: &mut Walk,
+        candidates: bool,
+        hazard: Option<(&str, bool)>,
+    ) -> Result<Denoted, String> {
+        ReadingSize::default().add(path)?;
+        let mut found: Vec<String> = Vec::new();
+        let mut beside: Vec<String> = Vec::new();
         let mut presence = Presence::Absent;
+        let mut terminal_reaches = false;
         let mut seen: BTreeSet<(String, Vec<String>)> = BTreeSet::new();
         let mut work: Vec<(String, Vec<String>, Vec<Link>)> = Vec::new();
         match path
@@ -1578,15 +1853,27 @@ impl CrateScopes {
             _ => {
                 return Ok(Denoted {
                     paths: vec![path.to_string()],
+                    beside: Vec::new(),
                     presence: Presence::Unknown,
+                    terminal_reaches: false,
                 });
             }
         }
+        let mut size = ReadingSize::default();
         while let Some((module, rest, chain)) = work.pop() {
+            size.add(&module)?;
+            size.bytes = size
+                .bytes
+                .saturating_add(rest.iter().map(String::len).sum::<usize>());
+            size.check()?;
+            if size.paths.saturating_add(work.len()) > MAX_RESOLUTION_PATHS {
+                return Err(width_refusal());
+            }
             if !seen.insert((module.clone(), rest.clone())) {
                 continue;
             }
             let Some((segment, after)) = rest.split_first() else {
+                size.add(&module)?;
                 found.push(module);
                 presence = presence.max(Presence::Known);
                 continue;
@@ -1616,18 +1903,33 @@ impl CrateScopes {
                     foreign,
                     ..
                 } => {
-                    found.extend(through.into_iter().map(|path| with_rest(path, after)));
+                    for path in through {
+                        let path = with_rest(path, after);
+                        size.add(&path)?;
+                        found.push(path);
+                    }
                     if !foreign.is_empty() {
-                        found.extend(foreign.into_iter().map(|path| with_rest(path, after)));
+                        terminal_candidates(
+                            foreign,
+                            after,
+                            candidates,
+                            hazard,
+                            &mut beside,
+                            &mut terminal_reaches,
+                            &mut size,
+                        )?;
                         presence = presence.max(Presence::Unknown);
                     }
                     for declaration in declared {
                         match declaration {
                             Declared::Module(inner) if !after.is_empty() => {
+                                size.add(&with_rest(inner.clone(), after))?;
                                 work.push((inner, after.to_vec(), chain.clone()));
                             }
                             Declared::Module(path) | Declared::Item(path) => {
-                                found.push(with_rest(path, after));
+                                let path = with_rest(path, after);
+                                size.add(&path)?;
+                                found.push(path);
                                 presence = presence.max(Presence::Known);
                             }
                         }
@@ -1635,7 +1937,9 @@ impl CrateScopes {
                     if bound.is_empty() {
                         continue;
                     }
-                    found.push(with_rest(here.clone(), after));
+                    let path = with_rest(here.clone(), after);
+                    size.add(&path)?;
+                    found.push(path);
                     if chain
                         .iter()
                         .any(|(m, name, _)| *m == module && name == segment)
@@ -1649,10 +1953,9 @@ impl CrateScopes {
                     }
                     for (target, quote) in bound {
                         let link = (module.clone(), segment.clone(), quote);
-                        let target: Vec<String> = with_rest(target, after)
-                            .split("::")
-                            .map(str::to_string)
-                            .collect();
+                        let target = with_rest(target, after);
+                        size.add(&target)?;
+                        let target: Vec<String> = target.split("::").map(str::to_string).collect();
                         match target.split_first() {
                             Some((root, rest)) if root == "crate" => {
                                 let mut chain = chain.clone();
@@ -1660,24 +1963,40 @@ impl CrateScopes {
                                 work.push((root.clone(), rest.to_vec(), chain));
                             }
                             _ => {
-                                found.push(target.join("::"));
+                                let path = target.join("::");
+                                size.add(&path)?;
+                                found.push(path);
                                 presence = presence.max(Presence::Unknown);
                             }
                         }
                     }
                 }
                 Head::Foreign(paths) => {
-                    found.push(with_rest(here, after));
-                    found.extend(paths.into_iter().map(|path| with_rest(path, after)));
+                    let path = with_rest(here, after);
+                    size.add(&path)?;
+                    found.push(path);
+                    terminal_candidates(
+                        paths,
+                        after,
+                        candidates,
+                        hazard,
+                        &mut beside,
+                        &mut terminal_reaches,
+                        &mut size,
+                    )?;
                     presence = presence.max(Presence::Unknown);
                 }
                 Head::PastCap(refusal) => return Err(refusal),
                 Head::Local => {
-                    found.push(with_rest(here, after));
+                    let path = with_rest(here, after);
+                    size.add(&path)?;
+                    found.push(path);
                     presence = presence.max(Presence::Known);
                 }
                 Head::Unbound => {
-                    found.push(with_rest(here, after));
+                    let path = with_rest(here, after);
+                    size.add(&path)?;
+                    found.push(path);
                     if !after.is_empty() || self.may_generate_items(&module) {
                         presence = presence.max(Presence::Unknown);
                     }
@@ -1686,7 +2005,9 @@ impl CrateScopes {
         }
         Ok(Denoted {
             paths: sorted_unique(found),
+            beside: sorted_unique(beside),
             presence,
+            terminal_reaches,
         })
     }
 
@@ -1699,6 +2020,33 @@ impl CrateScopes {
             .flatten()
             .any(|&(t, s)| self.tables[t].scopes[s as usize].macro_items)
     }
+}
+
+/// Project foreign names to the requested consumer: findings keep them; a hazard compares them without reading
+/// through them; a presence reading needs only the caller's Unknown contribution.
+fn terminal_candidates(
+    paths: Vec<String>,
+    after: &[String],
+    candidates: bool,
+    hazard: Option<(&str, bool)>,
+    beside: &mut Vec<String>,
+    reaches: &mut bool,
+    size: &mut ReadingSize,
+) -> Result<(), String> {
+    if !candidates && hazard.is_none() {
+        return Ok(());
+    }
+    for path in paths {
+        let path = with_rest(path, after);
+        size.add(&path)?;
+        if let Some((prefix, ancestors)) = hazard {
+            *reaches |= path_within(&path, prefix) || (ancestors && path_within(prefix, &path));
+        }
+        if candidates {
+            beside.push(path);
+        }
+    }
+    Ok(())
 }
 
 /// How `binding`, binding `name`, is written, for a refusal of a chain through it to quote.
@@ -1727,7 +2075,11 @@ fn joined(heads: impl IntoIterator<Item = Head>) -> Head {
     );
     let mut refused: Option<String> = None;
     let mut open = false;
+    let mut size = ReadingSize::default();
     for head in heads {
+        if let Err(refusal) = size.head(&head) {
+            return Head::PastCap(refusal);
+        }
         match head {
             Head::PastCap(refusal) => refused = least(refused, refusal),
             Head::Candidates {
@@ -1792,6 +2144,198 @@ fn sorted_unique<T: Ord>(paths: impl IntoIterator<Item = T>) -> Vec<T> {
 mod tests {
     use super::super::token_tree::{Edition, TokenTree};
     use super::*;
+
+    #[test]
+    fn mutually_globbed_gated_modules_have_bounded_reading_work() {
+        for (count, dense) in [(8, true), (16, true), (32, false)] {
+            let mut source = String::new();
+            for i in 0..count {
+                source.push_str(&format!("#[cfg(unix)] pub mod m{i} {{\n"));
+                for j in 0..count {
+                    if i != j && (dense || j == (i + 1) % count || j == (i + count - 1) % count) {
+                        source.push_str(&format!("pub use crate::m{j}::*;\n"));
+                    }
+                }
+                if i == 0 {
+                    source.push_str("pub fn f() {}\n");
+                }
+                source.push_str("}\n");
+            }
+            source.push_str("pub use m0::*;\npub fn g() { f(); }\n");
+            let tree = TokenTree::lex(&source, Edition::Rust2021);
+            let token = (0..tree.len())
+                .find(|&i| tree.start(i) >= source.find("f();").unwrap())
+                .unwrap();
+            let scopes = CrateScopes::new(
+                vec![ScopeTable::build(&tree, "crate", 0)],
+                Edition::Rust2021,
+            );
+            let answer = scopes.name(
+                0,
+                scopes.table(0).scope_at(token),
+                "f",
+                PathSite::Expr,
+                Namespace::Value,
+            );
+            assert!(
+                matches!(&answer, Named::Paths(paths) if paths.iter().any(|p| p == "crate::m0::f")),
+                "{answer:?}"
+            );
+            let reads = scopes.scope_reads.get();
+            assert!(
+                reads <= 32 * count * count * count,
+                "{count} modules read {reads} scopes"
+            );
+        }
+    }
+
+    #[test]
+    fn foreign_candidates_beside_local_ones_are_terminal_for_every_reader() {
+        let source = "pub mod a { pub struct V; } pub mod s { #[cfg(any())] pub use crate::a::*; #[cfg(not(any()))] pub use std::process::*; }";
+        let tree = TokenTree::lex(source, Edition::Rust2021);
+        let scopes = CrateScopes::new(
+            vec![ScopeTable::build(&tree, "crate", 0)],
+            Edition::Rust2021,
+        );
+        assert!(
+            scopes
+                .denote("crate::s::V", Namespace::Type)
+                .unwrap()
+                .contains(&"std::process::V".to_string())
+        );
+        assert!(
+            !scopes
+                .readable_paths("crate::s::V", Namespace::Type)
+                .unwrap()
+                .contains(&"std::process::V".to_string())
+        );
+        for ancestors in [false, true] {
+            let (paths, reaches) = scopes
+                .hazard_paths("crate::s::V", Namespace::Type, "std::process", ancestors)
+                .unwrap();
+            assert!(!paths.contains(&"std::process::V".to_string()));
+            assert!(reaches);
+        }
+        assert_eq!(
+            scopes
+                .denote_in(
+                    "crate::s::V",
+                    Namespace::Type,
+                    &mut Walk::default(),
+                    false,
+                    None
+                )
+                .unwrap()
+                .presence,
+            Presence::Known
+        );
+    }
+
+    #[test]
+    fn distinct_denotations_share_a_retention_budget() {
+        for limits in [
+            (2, usize::MAX, usize::MAX),
+            (usize::MAX, 2, usize::MAX),
+            (usize::MAX, usize::MAX, 24),
+        ] {
+            let scopes = CrateScopes::new(Vec::new(), Edition::Rust2021);
+            scopes.denoted.borrow_mut().limits = limits;
+            for path in ["std::a", "std::b"] {
+                assert_eq!(scopes.denote(path, Namespace::Type).unwrap(), vec![path]);
+                assert_eq!(scopes.denote(path, Namespace::Type).unwrap(), vec![path]);
+            }
+            let error = scopes.denote("std::c", Namespace::Type).unwrap_err();
+            assert!(error.contains("cannot judge a denotation memo"), "{error}");
+            assert_eq!(scopes.denoted.borrow().answers.len(), 2);
+            scopes.forget_readings();
+            assert_eq!(
+                scopes.denote("std::c", Namespace::Type).unwrap(),
+                vec!["std::c"]
+            );
+        }
+    }
+
+    #[test]
+    fn denotation_retention_charges_terminal_candidates_and_hazard_keys() {
+        let source = "pub mod a { pub struct V; } pub mod s { #[cfg(any())] pub use crate::a::*; #[cfg(not(any()))] pub use std::process::*; }";
+        let tree = TokenTree::lex(source, Edition::Rust2021);
+        let scopes = CrateScopes::new(
+            vec![ScopeTable::build(&tree, "crate", 0)],
+            Edition::Rust2021,
+        );
+        scopes.denoted.borrow_mut().limits = (usize::MAX, 1, usize::MAX);
+        assert!(
+            scopes
+                .denote("crate::s::V", Namespace::Type)
+                .unwrap_err()
+                .contains("denotation memo")
+        );
+        assert!(scopes.denoted.borrow().answers.is_empty());
+
+        let scopes = CrateScopes::new(Vec::new(), Edition::Rust2021);
+        scopes.denoted.borrow_mut().limits = (usize::MAX, usize::MAX, 12);
+        assert!(
+            scopes
+                .hazard_paths("std::a", Namespace::Type, "std", false)
+                .unwrap_err()
+                .contains("denotation memo")
+        );
+        assert!(scopes.denoted.borrow().answers.is_empty());
+
+        let mut memo = DenotationMemo {
+            limits: (usize::MAX, usize::MAX, 6),
+            ..Default::default()
+        };
+        assert!(
+            memo.insert(
+                ("std::a".to_string(), Namespace::Type, false, None),
+                Err("refusal".to_string())
+            )
+            .is_err()
+        );
+        assert!(memo.answers.is_empty());
+    }
+
+    #[test]
+    fn resolution_width_and_path_bytes_refuse_before_growth() {
+        let paths = (0..=MAX_RESOLUTION_PATHS).map(|i| Head::Foreign(vec![format!("dep::p{i}")]));
+        assert!(matches!(joined(paths), Head::PastCap(message) if message == width_refusal()));
+        let tree = TokenTree::lex("", Edition::Rust2021);
+        let scopes = CrateScopes::new(
+            vec![ScopeTable::build(&tree, "crate", 0)],
+            Edition::Rust2021,
+        );
+        assert_eq!(
+            scopes.denote(&"x".repeat(MAX_RESOLUTION_BYTES + 1), Namespace::Type),
+            Err(width_refusal())
+        );
+        let paths = vec!["std::process".to_string(); MAX_RESOLUTION_PATHS + 1];
+        assert_eq!(
+            scopes.denote_all(Vec::new(), &paths, Namespace::Type),
+            Err(width_refusal())
+        );
+        assert_eq!(
+            scopes.read_glob_paths(&paths, Vec::new(), &mut Walk::default()),
+            Err(width_refusal())
+        );
+        let paths: Vec<String> = (0..MAX_RESOLUTION_PATHS)
+            .map(|i| format!("dep::p{i}"))
+            .collect();
+        let count = MAX_GLOB_GRAPH_PATHS / MAX_RESOLUTION_PATHS + 1;
+        let graph = GlobGraph {
+            nodes: (0..count).map(|i| (i, 0, "crate".to_string())).collect(),
+            index: HashMap::new(),
+            reads: (0..count)
+                .map(|_| GlobRead::Answered(Head::Foreign(paths.clone())))
+                .collect(),
+        };
+        assert!(
+            matches!(graph.settle("f"), Err(message) if message.contains("glob graph holding more than"))
+        );
+        let mut size = ReadingSize::default();
+        assert!(size.add(&"x".repeat(MAX_RESOLUTION_BYTES)).is_ok());
+        assert_eq!(size.add("x"), Err(width_refusal()));
+    }
 
     /// The scopes a cfg-closed re-export ring of `links` links reads to answer `m0::f()`, and whether that answer names
     /// `crate::forbidden::f`.

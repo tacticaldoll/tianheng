@@ -9305,3 +9305,95 @@ fn globs_whose_readings_grow_more_than_once_settle() {
             .contains(&"crate::p::c1::c2::c3::leaf in crate".to_string())
     );
 }
+
+/// Gated child-module heads do not invent extern crates while their sibling globs are resolved. The call in a
+/// child remains observed for two, three and four globs.
+#[test]
+fn gated_sibling_globs_settle_and_observe_calls() {
+    for count in [2, 3, 4] {
+        let mut module = String::new();
+        let mut files = vec![("src/lib.rs".to_string(), "pub mod fs;\n".to_string())];
+        for i in 0..count {
+            module.push_str(&format!("#[cfg(unix)] mod m{i};\npub use m{i}::*;\n"));
+            files.push((
+                format!("src/fs/m{i}.rs"),
+                if i == 0 {
+                    "pub fn f() { let _ = std::process::id(); }\n".to_string()
+                } else {
+                    String::new()
+                },
+            ));
+        }
+        files.push(("src/fs/mod.rs".to_string(), module));
+        let probe = RootProbe::new("gatedsiblings", "", &borrowed(&files));
+        let found = ["std::process::id in crate::fs::m0"];
+        assert_inline_answers(
+            &probe,
+            "gatedsiblings",
+            "crate",
+            "std::process",
+            &found,
+            &found,
+        );
+    }
+}
+
+/// Compiling out a module leaves its name to a real dependency, whose glob still reacts under strict external
+/// confinement. The path through the gated module remains a candidate in either mode.
+#[test]
+fn a_gated_module_glob_keeps_its_dependency_candidate() {
+    let probe = files_probe(
+        "gateddepglob",
+        "2021",
+        &[
+            ("src/lib.rs", "pub mod core;\n"),
+            (
+                "src/core.rs",
+                "#[cfg(any())] mod md5x {}\nuse md5x::*;\npub fn f() { let _ = compute(); }\n",
+            ),
+        ],
+        &["md5x"],
+    );
+    for strict in [false, true] {
+        let found = inline_findings(&probe, "gateddepglob", "crate", "md5x", strict);
+        assert!(
+            found
+                .iter()
+                .any(|p| p == "glob crate::core::md5x in crate::core"),
+            "{found:?}"
+        );
+        if strict {
+            assert!(
+                found.iter().any(|p| p == "glob md5x in crate::core"),
+                "{found:?}"
+            );
+        }
+    }
+}
+
+/// A missing crate-internal glob target can supply candidate names but no contents to read repeatedly. An enum
+/// glob beside it continues to bring its variant, and a direct forbidden call remains observed.
+#[test]
+fn an_internal_non_module_glob_target_keeps_enum_variants_and_calls() {
+    let probe = lib_probe(
+        "internalglobtarget",
+        "#[cfg(any())] pub mod backend {}\n\
+        pub enum E { V(u8) }\npub mod constants {\n\
+        #[cfg(any())] pub use crate::backend::fs::types::*;\n\
+        pub use crate::E::*;\n}\npub fn f() { let _ = crate::constants::V(1); let _ = std::process::id(); }\n",
+    );
+    let found = ["std::process::id in crate"];
+    assert_inline_answers(
+        &probe,
+        "internalglobtarget",
+        "crate",
+        "std::process",
+        &found,
+        &found,
+    );
+    let found = inline_findings(&probe, "internalglobtarget", "crate", "crate::E", false);
+    assert!(
+        found.iter().any(|p| p == "crate::E::V in crate"),
+        "{found:?}"
+    );
+}
