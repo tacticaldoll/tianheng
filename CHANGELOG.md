@@ -671,9 +671,9 @@ them.
   fixture manifest written there does not make `cargo metadata` exit 101. `crates/kanhe/tests/scratch_roots.rs`
   holds every tracked Rust file to the helper, with the loop it shares with `hermetic_invocations`: none asks the
   system for a temporary directory, and none outside `crates/xingbiao` names `scratch_base` or `scratch_ceiling`
-  except the files its declared set names with why. A label that is not one ordinary path component is a refusal
-  naming it: the name is built from the label, so a separator, a leading `..` or a root named a directory the base
-  does not contain — measured, `../escaped` built one at `target/tmp/../escaped-<pid>-<counter>`, which is
+  except the files its declared set names with why. A label that does not leave the name it is built into one
+  ordinary path component is a refusal naming the label: a separator, a leading `..` or a root left a name for a
+  directory the base does not contain — measured, `../escaped` built one at `target/tmp/../escaped-<pid>-<counter>`, which is
   `target/`, and removed it recursively before the claim and again on drop. The removal of a root a previous
   process left behind tells absence from every other error, so a stale root that cannot be removed names itself
   and its cause rather than reaching the claim as a failure to create. `scratch_root` is withheld from the API

@@ -499,9 +499,12 @@ fn a_second_root_of_the_same_label_leaves_the_first_roots_files() {
 /// A label the base would not contain is refused, and the refusal names it.
 ///
 /// Three shapes, each one [`Path::join`] reads: an absolute label replaces the base outright, a leading `..`
-/// names its parent, and an inner separator names a directory beneath one nothing claimed. A bare `.` or `..`
-/// is contained by construction — the name carries the process id and counter after it, so it is one ordinary
-/// component — and is not this question.
+/// names its parent, and an inner separator names a directory beneath one nothing claimed.
+///
+/// **A bare `.` or `..` is accepted, and the direction asserts it rather than leaving it to be inferred.** The
+/// question is asked of the name, which carries the process id and counter after the label, so `..` leaves
+/// `..-<pid>-<counter>` — one ordinary component, under the base. Asking it of the label instead would refuse a
+/// root that is contained, which is the repair this direction exists to refuse.
 #[test]
 fn scratch_root_refuses_a_label_the_base_would_not_contain() {
     for label in ["/escaped", "../escaped", "nested/escaped"] {
@@ -515,6 +518,14 @@ fn scratch_root_refuses_a_label_the_base_would_not_contain() {
         assert!(
             message.contains(label),
             "the refusal names the label it will not build a root from: {message}"
+        );
+    }
+    for label in [".", ".."] {
+        let root = scratch_root(label);
+        assert!(
+            root.path().starts_with(scratch_base()),
+            "a label the name contains is built, not refused: {}",
+            root.path().display()
         );
     }
 }

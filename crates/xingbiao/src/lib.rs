@@ -563,11 +563,13 @@ pub struct ScratchRoot {
 
 /// A fixture root named for `label`, empty and owned by the caller until the returned guard drops.
 ///
-/// **A label that is not one ordinary path component is a refusal naming it, never a root outside the base.**
-/// The name is built from the label, so a label carrying a separator, a `..` segment or a root would name a
-/// directory the base does not contain — and that directory is removed, recursively, before the root is claimed
-/// and again when the guard drops. Holding the label to one component is what makes the containment this
-/// function's own rather than every caller's.
+/// **A label that does not leave the name it is built into one ordinary path component is a refusal naming the
+/// label, never a root outside the base.** The question is asked of the name, which is what [`Path::join`]
+/// reads: a label carrying a separator, a leading `..` or a root leaves a name for a directory the base does
+/// not contain — and that directory is removed, recursively, before the root is claimed and again when the
+/// guard drops. A bare `.` or `..` leaves one ordinary component, the process id and counter standing after it,
+/// and is contained. Asking it of the name is what makes the containment this function's own rather than every
+/// caller's.
 #[doc(hidden)]
 pub fn scratch_root(label: &str) -> ScratchRoot {
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -579,8 +581,8 @@ pub fn scratch_root(label: &str) -> ScratchRoot {
     );
     if !is_one_component(&name) {
         panic!(
-            "scratch_root: label '{label}' is not one ordinary path component, so '{name}' does not name a \
-             directory under '{}'",
+            "scratch_root: '{name}', built from label '{label}', is not one ordinary path component, so it \
+             does not name a directory under '{}'",
             base.display()
         );
     }

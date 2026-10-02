@@ -2714,8 +2714,9 @@ constructing a `bash` SHALL be held to the builder's file alone, in both directi
 Every fixture root a tracked Rust file builds SHALL come from `xingbiao::scratch_root`, which places it under the
 build directory — where the user owns the directory and `cargo clean` reaches it — and names it
 `<label>-<pid>-<counter>`, so two roots built from one label in one process are two directories and no caller
-composes a name; and a label that is not one ordinary path component SHALL be a refusal naming it, so the
-name's root lies under the base by construction rather than by every caller's care; and no tracked Rust file
+composes a name; and a name the label does not leave as one ordinary path component SHALL be a refusal naming
+the label, so the root lies under the base by construction rather than by every caller's care — a bare `.` or
+`..` leaves one, the process id and counter standing after it; and no tracked Rust file
 SHALL ask the system for its temporary directory. A root there is claimable by anyone who can write the
 directory, and a fixture stops running when that directory stops being writable. The helper finds the build
 directory from the running executable's path and not from `TMPDIR`, and an executable outside cargo's test
@@ -2844,7 +2845,8 @@ decides *who constructs a root and who names the base* and never whether a run i
 
 #### Scenario: A label the base would not contain is refused
 
-- **WHEN** a caller passes `scratch_root` a label carrying a separator, a leading `..`, or a root
+- **WHEN** a caller passes `scratch_root` a label that leaves the name it is built into more than one
+  component, or one that is not ordinary — a separator, a leading `..`, a root
 - **THEN** the call refuses, naming the label, rather than building a directory outside the build directory and
   recursively removing it before the claim and again on drop
 - **PINNED-BY** `scratch_root_refuses_a_label_the_base_would_not_contain`
