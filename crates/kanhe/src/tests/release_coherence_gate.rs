@@ -634,12 +634,8 @@ fn a_member_that_is_the_workspace_root_is_not_an_empty_pathspec() {
 fn a_changelog_entry_still_being_written_names_what_it_points_at() {
     use crate::release_coherence_gate::{State, positional_references, section_of};
     let read = |text: &str, state: State| -> Vec<String> {
-        let sections = crate::sections::cut(
-            text.lines()
-                .enumerate()
-                .map(|(index, line)| (index + 1, line)),
-            section_of,
-        );
+        let source = crate::region::Source::of(text);
+        let sections = crate::sections::cut(source.prose().numbered_lines(), section_of);
         positional_references(&sections, "0.9.0", state)
     };
     let unreleased =
@@ -712,6 +708,16 @@ fn a_changelog_entry_still_being_written_names_what_it_points_at() {
         at.first()
             .is_some_and(|line| line.starts_with("  CHANGELOG.md:7 ")),
         "the finding names the line its word stands on, not its paragraph's first: {at:?}"
+    );
+    let fenced = read(
+        &unreleased("- a fence follows:\n  ```\n  x\n  ```\n  and the step below."),
+        State::Development,
+    );
+    assert!(
+        fenced
+            .first()
+            .is_some_and(|line| line.starts_with("  CHANGELOG.md:9 ")),
+        "a word after a fence names its own line, though the prose drops the fence's lines: {fenced:?}"
     );
     for (case, text, state, expected) in rows {
         let found = read(&text, state);

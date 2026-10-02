@@ -826,7 +826,7 @@ every line of the file is still present, and a line-multiset comparison of the r
 The question SHALL be asked of words, so it has one syntactic answer: the words `above` and `below`, and `next`,
 `previous`, `preceding` or `following` immediately before `entry`, `entries`, `section`, `sections`, `bullet`,
 `item`, `step`, `group` or `heading`. A paragraph SHALL be read whole, so a phrase wrapped across lines is one
-phrase, and a list item at any depth SHALL end its paragraph, so two entries are not read as one sentence; the
+phrase, and a `- ` or `* ` list item at any depth SHALL end its paragraph, so two entries are not read as one sentence; the
 list-item rule is the one the section's other readers use. An inline code span SHALL be taken out first, so a
 word quoted as a word is not read. Every heading SHALL be held, `### Self-governance` included, because a
 regroup moves its entries too. The refusal SHALL name the line the word stands on, the heading and the phrase,
@@ -851,7 +851,7 @@ declared ones is not read.
 #### Scenario: What is not a reference by position is not refused
 
 - **WHEN** the word is quoted in an inline code span, a sequence word is followed by a noun outside the item
-  nouns, two list items at any depth would only form the phrase when joined, or the section is record — an older dated
+  nouns, two `- ` or `* ` list items at any depth would only form the phrase when joined, or the section is record — an older dated
   section, or in development the section dated for the workspace version
 - **THEN** the check does not report it
 - **PINNED-BY** `a_changelog_entry_still_being_written_names_what_it_points_at`

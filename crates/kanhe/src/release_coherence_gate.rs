@@ -1978,17 +1978,17 @@ fn require_lock_versions(repo: &Path, members: &[Member], version: &str) -> Resu
 /// `any` over the matching sections rather than the first of them: the caller refuses a changelog with more
 /// than one before reaching here, so the two agree — and reading *the first* would be a choice this function
 /// has no reason to make.
-/// Whether `line` opens a Markdown list item, at any depth: `- ` or `* ` after its indentation.
-fn is_list_item(line: &str) -> bool {
-    let trimmed = line.trim_start();
-    trimmed.starts_with("- ") || trimmed.starts_with("* ")
-}
-
 fn unreleased_has_item(sections: &[Section]) -> bool {
     sections
         .iter()
         .filter(|section| section.name == "## [Unreleased]")
         .any(|section| section.body.iter().any(|(_, line)| is_list_item(line)))
+}
+
+/// Whether `line` opens a Markdown list item, at any depth: `- ` or `* ` after its indentation.
+fn is_list_item(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    trimmed.starts_with("- ") || trimmed.starts_with("* ")
 }
 
 struct Shape {
@@ -2414,11 +2414,10 @@ pub(crate) fn positional_references(
 }
 
 /// The positional phrases in one paragraph, each with the line its first word stands on, read after the inline
-/// code spans are taken out. A span is replaced by the line breaks it held, so every word keeps its line.
+/// code spans are taken out. A span is replaced by the line breaks it held, so a word's offset in the paragraph
+/// is its line's index, and the line is looked up there rather than counted from the first: the prose a
+/// section is cut from drops a fence's lines, so a paragraph's lines need not be consecutive.
 fn positional_phrases(paragraph: &[&(usize, String)]) -> Vec<(usize, String)> {
-    let Some((first, _)) = paragraph.first() else {
-        return Vec::new();
-    };
     let text = paragraph
         .iter()
         .map(|(_, line)| line.as_str())
@@ -2452,7 +2451,7 @@ fn positional_phrases(paragraph: &[&(usize, String)]) -> Vec<(usize, String)> {
         .flat_map(|(offset, line)| {
             line.split(|c: char| !c.is_alphabetic())
                 .filter(|word| !word.is_empty())
-                .map(move |word| (first + offset, word.to_lowercase()))
+                .map(move |word| (paragraph[offset].0, word.to_lowercase()))
         })
         .collect();
     let mut phrases = Vec::new();
