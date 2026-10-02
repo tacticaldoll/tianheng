@@ -116,8 +116,8 @@ fn shell_comments_do_not_restate_the_dependency_allowlist() {
 /// Every tracked governance document, against every declared allowlist.
 ///
 /// Records are excluded because a record is not a claim about current law:
-/// `CHANGELOG.md` describe what happened, and an active `openspec/changes/` plan describes what is being
-/// proposed. Generated documents are excluded because rendering the membership is their whole job.
+/// `CHANGELOG.md` describe what happened, and a plan under `openspec/changes/` describes what is being
+/// proposed; [`common::SourceCorpus`] leaves the latter out. Generated documents are excluded because rendering the membership is their whole job.
 #[test]
 fn no_governance_document_restates_a_declared_allowlist() {
     let Some(root) = workspace_root() else {
@@ -126,9 +126,9 @@ fn no_governance_document_restates_a_declared_allowlist() {
     let listing = kanhe::hermetic_git::tracked_paths(&root, &["*.md"]).unwrap_or_else(|failure| {
         panic!("could not enumerate tracked Markdown ({failure:?}); a failed enumeration is not an empty corpus")
     });
-    let paths: Vec<&str> = listing.iter().map(String::as_str).collect();
+    let corpus = common::SourceCorpus::of(&listing);
     assert!(
-        !paths.is_empty(),
+        !listing.is_empty(),
         "no tracked Markdown was enumerated, so this check would report clean over nothing"
     );
 
@@ -141,8 +141,8 @@ fn no_governance_document_restates_a_declared_allowlist() {
 
     let mut offences = Vec::new();
     let mut read = 0usize;
-    for path in paths {
-        if common::is_active_openspec_change_path(path) || path == "CHANGELOG.md" {
+    for path in corpus.paths() {
+        if path == "CHANGELOG.md" {
             continue;
         }
         let text = std::fs::read_to_string(root.join(path))

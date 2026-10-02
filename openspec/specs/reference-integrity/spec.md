@@ -78,9 +78,12 @@ token is a stated line-comment marker, or as carrying no prose at all. A format 
 declaration does not name SHALL fail, naming that format — not default either way, since a silent *no prose*
 reads a new format as having none and a guessed marker asserts one it may not have. The corpus, and which of a
 file's lines are read, SHALL both derive from that one declaration. Every direction SHALL exclude source paths
-under active OpenSpec change directories, including format classification, reference resolution, and citation
-checks. That exclusion applies to the source corpus; tracked paths remain evidence for resolving references.
-Outside active plans, the gate SHALL inspect every classified format's prose, including Rust rustdoc forms. A Rust
+under `openspec/changes/`, the archive directory included, across format classification, reference resolution, and
+citation checks. A direction reads its source corpus through one type whose only constructor applies that
+exclusion, so a direction cannot read a change directory by omission; because a direction's counts, vacuity guards
+included, are taken over the excluded corpus, a corpus holding only change-directory paths is empty. That exclusion
+applies to the source corpus; tracked paths remain evidence for resolving references. Outside `openspec/changes/`, the gate SHALL inspect every classified format's prose, including Rust rustdoc
+forms. A Rust
 test source SHALL NOT be excluded wholesale; its admitted comment lines are judged through the same region rule
 as other Rust.
 
@@ -110,23 +113,23 @@ source; absence of any prerequisite SHALL fail loudly rather than read as clean.
 - **WHEN** tracked prose names a missing path under an illustrative crate and only an untracked `crates/<name>/Cargo.toml` gives that crate member shape
 - **THEN** the gate leaves the reference outside its existence judgment and retains the verdict produced from tracked evidence alone
 
-#### Scenario: An active OpenSpec plan names future paths
+#### Scenario: A plan under `openspec/changes/` names future paths
 
 - **WHEN** a tracked file under `openspec/changes/` references a path the plan intends to create
 - **THEN** that transient plan is excluded from the inspected corpus and does not produce a stale-reference verdict
 - **PINNED-BY** `an_active_plan_may_name_a_path_it_intends_to_create`
 
-#### Scenario: An active OpenSpec plan's evidence is excluded from every direction
+#### Scenario: Evidence under `openspec/changes/` is excluded from every direction
 
-- **WHEN** a tracked `.log` file and a development-commit citation are inside an active change directory
-- **THEN** neither enters format classification or citation checks, because plan evidence is outside each source
-  corpus
+- **WHEN** a tracked `.log` file and a development-commit citation are under `openspec/changes/`
+- **THEN** neither enters format classification or citation checks, because a change directory's files are outside each
+  source corpus
 - **PINNED-BY** `every_tracked_format_is_classified`
 - **PINNED-BY** `no_live_document_cites_a_moment_a_fresh_clone_cannot_reach`
 
-#### Scenario: The same evidence outside an active OpenSpec plan is judged
+#### Scenario: The same evidence outside `openspec/changes/` is judged
 
-- **WHEN** a tracked `.log` file and a development-commit citation are outside active change directories
+- **WHEN** a tracked `.log` file and a development-commit citation are outside `openspec/changes/`
 - **THEN** format classification refuses the unclassified `.log` file and citation checks refuse the unreachable
   commit object
 - **PINNED-BY** `every_tracked_format_is_classified`
