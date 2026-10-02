@@ -878,46 +878,91 @@ fn dyn_auto_bound_three_segment_invalid_qualifier_exits_2() {
     );
 }
 
+/// The auto traits the requirement names, each with the standard module that defines it, declared here and
+/// not read from the producer: the matrix below is generated from this list, and a list generated from the
+/// parser's own table would only show the parser doing what its table says.
+const DECLARED_AUTO_TRAITS: &[(&str, &str)] = &[
+    ("Send", "marker"),
+    ("Sync", "marker"),
+    ("Unpin", "marker"),
+    ("UnwindSafe", "panic"),
+    ("RefUnwindSafe", "panic"),
+];
+
+/// The declaration and [`crate::resolve::AUTO_TRAIT_MODULES`] name the same set, in both directions.
+///
+/// One direction would let the producer gain a member the matrix never exercises, or lose one the
+/// requirement still names.
+#[test]
+fn declared_auto_traits_and_the_producer_are_the_same_set() {
+    let declared: std::collections::BTreeSet<(&str, &str)> =
+        DECLARED_AUTO_TRAITS.iter().copied().collect();
+    let produced: std::collections::BTreeSet<(&str, &str)> =
+        crate::resolve::AUTO_TRAIT_MODULES.iter().copied().collect();
+    assert_eq!(
+        declared.difference(&produced).collect::<Vec<_>>(),
+        Vec::<&(&str, &str)>::new(),
+        "declared here and absent from the producer"
+    );
+    assert_eq!(
+        produced.difference(&declared).collect::<Vec<_>>(),
+        Vec::<&(&str, &str)>::new(),
+        "produced and absent from the declaration"
+    );
+}
+
+/// Every auto trait, under both roots, in its own module and in the other module: the first is accepted
+/// and reaches the scan (exit 1), the second is a constitution error (exit 2).
+///
+/// The scanned source always spells the **defining** path, since the wrong-module spelling does not
+/// compile; only the boundary operand varies, and a refused operand never reaches the source.
 #[test]
 fn auto_bound_qualified_path_matrix() {
-    let cases = [
-        ("std::panic::UnwindSafe", true),
-        ("core::panic::RefUnwindSafe", true),
-        ("std::marker::Send", true),
-        ("std::marker::UnwindSafe", false),
-        ("std::panic::Send", false),
-    ];
-    for (path, accepted) in cases {
-        for kind in ["impl", "dyn"] {
-            let tree = TempSrcTree::new(&format!("auto-bound-path-{kind}-{path}"));
-            tree.write("lib.rs", "pub mod m;\n");
-            let source = if kind == "impl" {
-                format!(
-                    "pub fn f() -> impl std::future::Future<Output = ()> + {path} {{ todo!() }}\n"
-                )
-            } else {
-                format!(
-                    "pub fn f() -> Box<dyn std::future::Future<Output = ()> + {path}> {{ todo!() }}\n"
-                )
-            };
-            tree.write("m.rs", &source);
-            let exit = if kind == "impl" {
-                let boundary = ImplTraitBoundary::in_crate("x")
-                    .module("crate::m")
-                    .must_not_expose_impl_trait_bounded_by([path])
-                    .because("auto-bound path guard");
-                check_impl_trait(&[boundary], &manifest(&tree)).exit_code()
-            } else {
-                let boundary = DynTraitBoundary::in_crate("x")
-                    .module("crate::m")
-                    .must_not_expose_dyn_bounded_by([path])
-                    .because("auto-bound path guard");
-                check_dyn_trait(&[boundary], &manifest(&tree)).exit_code()
-            };
-            assert_eq!(exit, if accepted { 1 } else { 2 }, "{kind} {path}");
+    let modules: std::collections::BTreeSet<&str> = DECLARED_AUTO_TRAITS
+        .iter()
+        .map(|(_, module)| *module)
+        .collect();
+    assert!(modules.len() > 1, "a wrong module needs a second module");
+    for (name, defining) in DECLARED_AUTO_TRAITS {
+        for root in ["std", "core"] {
+            for module in &modules {
+                let path = format!("{root}::{module}::{name}");
+                let accepted = module == defining;
+                for kind in ["impl", "dyn"] {
+                    let tree =
+                        TempSrcTree::new(&format!("auto-bound-path-{kind}-{root}-{module}-{name}"));
+                    tree.write("lib.rs", "pub mod m;\n");
+                    let written = format!("{root}::{defining}::{name}");
+                    let source = if kind == "impl" {
+                        format!(
+                            "pub fn f() -> impl std::future::Future<Output = ()> + {written} {{ std::future::ready(()) }}\n"
+                        )
+                    } else {
+                        format!(
+                            "pub fn f() -> Box<dyn std::future::Future<Output = ()> + {written}> {{ Box::new(std::future::ready(())) }}\n"
+                        )
+                    };
+                    tree.write("m.rs", &source);
+                    let exit = if kind == "impl" {
+                        let boundary = ImplTraitBoundary::in_crate("x")
+                            .module("crate::m")
+                            .must_not_expose_impl_trait_bounded_by([path.as_str()])
+                            .because("auto-bound path guard");
+                        check_impl_trait(&[boundary], &manifest(&tree)).exit_code()
+                    } else {
+                        let boundary = DynTraitBoundary::in_crate("x")
+                            .module("crate::m")
+                            .must_not_expose_dyn_bounded_by([path.as_str()])
+                            .because("auto-bound path guard");
+                        check_dyn_trait(&[boundary], &manifest(&tree)).exit_code()
+                    };
+                    assert_eq!(exit, if accepted { 1 } else { 2 }, "{kind} {path}");
+                }
+            }
         }
     }
 }
+
 #[test]
 fn auto_bound_wrong_module_recommendation_is_executable() {
     let tree = TempSrcTree::new("auto-bound-wrong-module-recommendation");

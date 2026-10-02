@@ -243,12 +243,13 @@ error (exit 2).
 
 #### Scenario: A qualified dyn auto-trait bound names its defining module
 
-- **WHEN** the forbidden path and public dyn bound use `std::panic::UnwindSafe`,
-  `core::panic::RefUnwindSafe`, or `std::marker::Send`, or use `std::marker::UnwindSafe` or
-  `std::panic::Send`
+- **WHEN** the forbidden path and public dyn bound spell each of `Send`, `Sync` and `Unpin` under `marker`
+  and each of `UnwindSafe` and `RefUnwindSafe` under `panic`, with `std` and with `core` as the root, or spell
+  any of those five under the other module with either root
 - **THEN** a defining-module path produces an enforced finding, while a path under the wrong module
   is a constitution error (exit 2)
 - **PINNED-BY** `auto_bound_qualified_path_matrix`
+- **PINNED-BY** `declared_auto_traits_and_the_producer_are_the_same_set`
 
 #### Scenario: A dyn auto-trait path outside the defining modules is refused
 

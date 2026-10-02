@@ -206,7 +206,7 @@ fn every_tracked_format_is_classified() {
     );
     assert!(
         unclassified_formats(&outside).contains(".log"),
-        "the same unclassified format outside a plan must remain visible"
+        "the same unclassified format outside `openspec/changes/` must remain visible"
     );
     let _ = std::fs::remove_dir_all(fixture);
 }
@@ -2803,7 +2803,7 @@ fn no_live_document_cites_a_moment_a_fresh_clone_cannot_reach() {
     let outside_offences = unanchored_citation_offences_in(&fixture, &outside_corpus);
     assert!(
         !outside_offences.is_empty(),
-        "the same development-commit citation outside a plan must be refused"
+        "the same development-commit citation outside `openspec/changes/` must be refused"
     );
     let _ = std::fs::remove_dir_all(fixture);
 }
