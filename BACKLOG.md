@@ -2817,12 +2817,13 @@ consumer for an undemonstrated deduplication.
   sibling gates have separate roles: `capability_subjects` reads proposals as its input, while
   `law_restatement` and `reference_integrity` take their source corpora through `SourceCorpus`, whose
   constructor excludes `openspec/changes/`. *Current reaction or bound:* none for the class it guarded.
-  **The filing class is defended by review alone**, and it is live rather than hypothetical: `scripts/publish.sh` has two claimants, which is the shape the join was built
-  from. *Risk:* a requirement filed under the wrong capability goes unnoticed until someone reads both
-  specs. Bounded — the mistake is visible in the diff of any PR that makes it. *Why not re-point it:* the
-  join compares a proposal's **declared** capability set against the subjects a diff touches, and where no
-  proposal is present there is no independent declaration to compare against — reading the set from the
-  touched spec paths is near-tautological, since touching a spec is naming its capability. *Promotion
+  **The filing class is defended by review alone**, and it is live rather than hypothetical:
+  `scripts/publish.sh` has two claimants, which is the shape the join was built from. *Risk:* a requirement
+  filed under the wrong capability goes unnoticed until someone reads both specs. Bounded — the mistake is
+  visible in the diff of any PR that makes it. *Why not re-point it:* the join compares a proposal's
+  **declared** capability set against the subjects a diff touches, and where no proposal is present there is
+  no independent declaration to compare against — reading the set from the touched spec paths is
+  near-tautological, since touching a spec is naming its capability. *Promotion
   trigger:* a requirement found filed under the wrong capability. **Not fired** (evaluated 2026-08-31; the filing join
   passes, and the scenarios the `0.6.0` window rewrote stayed under the capabilities that already held them).
   *Version class:* patch; repository-internal, shipping in no crate. *Authority:* `capability-subjects`, and
