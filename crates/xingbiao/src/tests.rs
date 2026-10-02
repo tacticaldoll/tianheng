@@ -233,7 +233,8 @@ fn a_windows_separator_labels_as_the_canonical_one() {
     );
 }
 
-/// No label carries the platform's own separator unless that separator is already `/`.
+/// No label built from ordinary components carries the platform's own separator unless that separator is
+/// already `/`.
 ///
 /// **This assertion is vacuous on unix and load-bearing on Windows**, and is written this way
 /// deliberately rather than left to a platform CI runner that does not exist. On unix
@@ -242,6 +243,11 @@ fn a_windows_separator_labels_as_the_canonical_one() {
 /// Windows behaviour rests on `std::path::Components`' documented separator parsing, not on a
 /// measurement taken in this repository: there is no Windows runner and no wine here, and claiming
 /// otherwise would be the kind of unearned confidence a green unix suite invites.
+///
+/// **`Component::Prefix` is outside this corpus — a coverage limitation, not a bound.** A prefix is emitted
+/// verbatim, as the separator rule says every component is, so a Windows UNC prefix carries `\` within one
+/// component while `/` still means a boundary; a prefix is produced only on Windows, so what is missing here
+/// is a run, not a verdict.
 #[test]
 fn a_label_never_carries_a_platform_separator() {
     for path in ["src/lib.rs", "a/b/c.rs", "/abs/x.rs"] {
@@ -323,21 +329,12 @@ fn crate_roots_tell_no_target_from_no_compiled_target() {
     );
 }
 
-/// A unique, self-cleaning temp directory for a path-identity fixture: replaces the hand-rolled
-/// `temp_dir().join(format!(...))` + manual `remove_dir_all` at both ends the two directions that follow
-/// otherwise each repeat.
-struct TempDir(PathBuf);
+/// A unique, self-cleaning fixture directory for a path-identity fixture, rooted by [`scratch_root`].
+struct TempDir(ScratchRoot);
 
 impl TempDir {
     fn new(label: &str) -> Self {
-        let dir = std::env::temp_dir().join(format!("xingbiao-{label}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        // Claimed the same way this crate's own `claim_scratch` requires of every other caller: a
-        // predictable, PID-based path directly under the world-writable system temp directory is
-        // exactly the shape `claim_scratch` exists to protect, and this crate's own test fixture is
-        // not exempt from the migration it shipped.
-        claim_scratch(&dir).unwrap();
-        Self(dir)
+        Self(scratch_root(&format!("xingbiao-{label}")))
     }
 
     fn write(&self, name: &str, contents: &str) -> PathBuf {
@@ -348,12 +345,6 @@ impl TempDir {
 
     fn path(&self, name: &str) -> PathBuf {
         self.0.join(name)
-    }
-}
-
-impl Drop for TempDir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
     }
 }
 
@@ -431,5 +422,130 @@ fn claim_scratch_refuses_a_pre_existing_symlink_that_create_dir_all_would_adopt(
         claim_scratch(&root).is_err(),
         "a symlink at the path must be refused — mkdir cannot follow it, so adopting it would write through \
          to whatever it points at"
+    );
+}
+
+#[test]
+fn scratch_base_for_places_tmp_beside_the_profile_directory() {
+    for (exe, base) in [
+        ("/w/target/debug/deps/t-1", "/w/target/tmp"),
+        (
+            "/w/target/x86_64-unknown-linux-gnu/release/deps/t-1",
+            "/w/target/x86_64-unknown-linux-gnu/tmp",
+        ),
+    ] {
+        assert_eq!(
+            scratch_base_for(Path::new(exe)),
+            Ok(PathBuf::from(base)),
+            "{exe}"
+        );
+    }
+}
+
+#[test]
+fn scratch_base_for_refuses_a_layout_it_cannot_recognise_naming_the_executable() {
+    for exe in ["/usr/bin/t", "/w/target/debug/t", "/t", "deps/t"] {
+        let why = scratch_base_for(Path::new(exe)).expect_err(exe);
+        assert!(
+            why.contains(exe),
+            "the refusal names the executable's path: {why}"
+        );
+    }
+}
+
+#[test]
+fn scratch_root_lives_under_the_base_and_is_removed_on_drop() {
+    let root = scratch_root("xingbiao-root-probe");
+    let path = root.path().to_path_buf();
+    assert!(path.starts_with(scratch_base()), "{}", path.display());
+    assert!(path.is_dir());
+    std::fs::write(path.join("f"), "x").unwrap();
+    drop(root);
+    assert!(
+        !path.exists(),
+        "the guard removes the root with what is in it"
+    );
+}
+
+#[test]
+fn scratch_root_names_are_unique_per_call() {
+    let (a, b) = (
+        scratch_root("xingbiao-unique"),
+        scratch_root("xingbiao-unique"),
+    );
+    assert_ne!(a.path(), b.path());
+}
+
+/// A second root built from the same label leaves the first root's files where they are.
+///
+/// The race this holds closed was two tests building a fixture from one label in one process: the second
+/// call removed the path the first had just filled. The direction is deterministic and needs no parallel
+/// schedule: it builds both in one thread, in the order that lost the first root's files, and reads the
+/// first root back afterwards.
+#[test]
+fn a_second_root_of_the_same_label_leaves_the_first_roots_files() {
+    let first = scratch_root("xingbiao-same-label");
+    let written = first.path().join("f");
+    std::fs::write(&written, "first").expect("write into the first root");
+    let second = scratch_root("xingbiao-same-label");
+    assert_eq!(
+        std::fs::read_to_string(&written).as_deref().ok(),
+        Some("first"),
+        "building a second root of the same label removed the first root's file"
+    );
+    assert_ne!(first.path(), second.path());
+}
+
+/// A label the base would not contain is refused, and the refusal names it.
+///
+/// Three shapes, each one [`Path::join`] reads: an absolute label replaces the base outright, a leading `..`
+/// names its parent, and an inner separator names a directory beneath one nothing claimed.
+///
+/// **A bare `.` or `..` is accepted, and the direction asserts it rather than leaving it to be inferred.** The
+/// question is asked of the name, which carries the process id and counter after the label, so `..` leaves
+/// `..-<pid>-<counter>` — one ordinary component, under the base. Asking it of the label instead would refuse a
+/// root that is contained, which is the repair this direction exists to refuse.
+#[test]
+fn scratch_root_refuses_a_label_the_base_would_not_contain() {
+    for label in ["/escaped", "../escaped", "nested/escaped"] {
+        let refused = std::panic::catch_unwind(|| scratch_root(label));
+        let why = refused.expect_err(label);
+        let message = why
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| why.downcast_ref::<&str>().copied())
+            .unwrap_or_else(|| panic!("the refusal carries a message: {label}"));
+        assert!(
+            message.contains(label),
+            "the refusal names the label it will not build a root from: {message}"
+        );
+    }
+    for label in [".", ".."] {
+        let root = scratch_root(label);
+        assert!(
+            root.path().starts_with(scratch_base()),
+            "a label the name contains is built, not refused: {}",
+            root.path().display()
+        );
+    }
+}
+
+/// An absent path is removed; a path that is not a directory is an error rather than a silent success.
+///
+/// The distinction is the whole of [`remove_if_present`]: a root left by a previous process under a recycled
+/// id is the expected absence, and every other failure leaves something standing where the caller is about to
+/// claim a directory.
+#[test]
+fn remove_if_present_tells_absence_from_a_failure() {
+    let root = scratch_root("xingbiao-remove-if-present");
+    let absent = root.path().join("never-created");
+    assert!(remove_if_present(&absent).is_ok(), "{}", absent.display());
+    let file = root.path().join("f");
+    std::fs::write(&file, "x").expect("write the file to remove as a directory");
+    let err = remove_if_present(&file).expect_err("a file is not a directory tree to remove");
+    assert_ne!(
+        err.kind(),
+        std::io::ErrorKind::NotFound,
+        "the error a caller must hear is not absence: {err}"
     );
 }

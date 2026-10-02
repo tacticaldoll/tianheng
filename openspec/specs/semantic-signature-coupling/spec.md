@@ -101,9 +101,49 @@ For each semantic boundary, the system SHALL resolve the named governed module a
 - **WHEN** the anchored module `crate::foo` is declared as two mutually-exclusive `#[cfg]` branches — one `#[cfg_attr(<pred>, path = "weird.rs")] mod foo;` and the other a plain `mod foo;` — and only the `cfg_attr` branch's target file exposes a forbidden type
 - **THEN** the system reacts on that exposure — the `cfg_attr` branch's own resolution is never silently dropped merely because the OTHER, mutually-exclusive branch's plain declaration also resolved successfully
 
+### Requirement: A module anchor has one canonical spelling
+
+A governed module anchor SHALL be accepted only as `crate`, or as `crate::` followed by
+`::`-separated identifiers, and SHALL be judged before any source is read. This requirement states
+the spelling for every module-anchored semantic capability and for the
+allowed-location lists of unsafe-confinement and trait-impl-locality. Any other spelling — a leading,
+trailing or doubled `::`, the empty string, a path not rooted at `crate` such as `domain`, a `self::`
+or `super::` path, a segment carrying whitespace — SHALL be a **constitution error** (exit 2) whose
+message quotes the anchor as written and, where the written text determines one, names the canonical
+spelling to write instead. The system MUST NOT rewrite a refused spelling into an accepted one.
+
+Refusal is what keeps one module one identity. The anchor is the violation `target`, so two accepted
+spellings of one module would record one finding under two identities, and a baseline entry recorded
+under either would not suppress the finding declared under the other.
+
+One equivalence is folded, because rustc defines it: `r#x` and `x` are the same identifier, so
+`crate::r#domain` is accepted, and its violations carry the target `crate::domain` and the identities
+a `crate::domain` declaration produces. What counts as an identifier is the lexer's set rather than a
+list kept here. A keyword that can be written raw names the same identifier in both forms: a declaration
+`mod r#type;` is reachable by `crate::type` and `crate::r#type`. Segments that Rust cannot
+write raw (`self`, `super`, `crate`, `Self`, `_`) cannot name a module and are refused.
+
+#### Scenario: Each spelling has one answer
+
+- **WHEN** the anchor spelling rule is applied to `crate`, `crate::domain`, `crate::r#domain`, `crate::domain::`, `domain`, `::crate::domain`, `crate::::domain`, `self::domain`, `super::domain`, `crate:: domain` and the empty string
+- **THEN** the first three are accepted as `crate`, `crate::domain` and `crate::domain`, and every other is refused with a message quoting it
+- **PINNED-BY** `a_module_anchor_is_accepted_only_in_its_canonical_spelling`
+
+#### Scenario: An anchor not rooted at `crate` is a constitution error
+
+- **WHEN** a signature boundary declares `.module("domain")` and the crate declares `crate::domain`
+- **THEN** the system emits a constitution error (exit 2) quoting `domain` and suggesting `crate::domain`, never governing `crate::domain` under the written spelling
+- **PINNED-BY** `every_anchored_capability_refuses_a_non_canonical_spelling`
+
+#### Scenario: A raw-identifier anchor is the identity of its plain spelling
+
+- **WHEN** one signature boundary declares `.module("crate::r#domain")` and an otherwise identical one declares `.module("crate::domain")`
+- **THEN** both report the same violations under the same identities, with the target `crate::domain`
+- **PINNED-BY** `a_raw_identifier_anchor_is_the_same_identity_as_its_plain_spelling`
+
 ### Requirement: Public-signature observation governs exposure
 
-The system SHALL observe the **public** API surface of the governed module anchor and react to forbidden types that appear in *exposed* positions. The exposed surface SHALL comprise: public function parameter and return types; public struct, enum, and union field types; public type-alias targets; public trait method signatures and associated types; public const/static types; a `pub fn`'s signature or a `pub static`'s type declared inside an `extern` block (the FFI declaration is a real item in the enclosing module's own namespace, exactly as public as a same-shaped ordinary `fn`/`static`, and Rust cannot declare both under one name in one module, so there is no identity collision in observing it identically); the generic bounds and `where`-clauses of public items where a bound names a trait by a literal, directly resolvable path; the public method signatures **and public associated `const`/`type` items** of **inherent `impl` blocks** for types defined in the module; and **named public re-exports** (specified in `semantic-reexport-exposure`). Within every observed **bound** position — a public item's generic-parameter bounds and `where`-clauses, a **trait's supertraits**, and a public **associated type's bounds and generic parameters** — a forbidden type appearing as a **generic argument** of the bound (e.g. the `crate::infra::Secret` in `AsRef<crate::infra::Secret>`) SHALL be observed with the same full-recursion coverage as any other type position, not only the bound's head trait path; comparing only the head would silently drop a resolvable forbidden type (the forbidden false negative). A public **associated type's default target** (`type Bar = crate::infra::Secret;`) is likewise an observed type position. Each exposed position SHALL be **seam-qualified injectively** so two distinct seams exposing the same forbidden type never collapse to one `(target, rule_key, fact)` baseline entry and mask a new leak — and this injectivity SHALL hold at **enum-variant field** granularity: each field of a tuple or struct variant carries a per-member seam (`variant {module}::{Enum}::{Variant}::{index|name}`, the same `::`-delimited member form struct/union fields use), mirroring struct/union fields. Trait `impl` blocks remain out of scope for a bare `must_not_expose` (governable via the opt-in `.including_trait_impls()` depth). A forbidden type used only in a non-public position SHALL NOT be a violation.
+The system SHALL observe the **public** API surface of the governed module anchor and react to forbidden types that appear in *exposed* positions. The exposed surface SHALL comprise: public function parameter and return types; public struct, enum, and union field types; public type-alias targets; public trait method signatures and associated types; public const/static types; a `pub fn`'s signature or a `pub static`'s type declared inside an `extern` block (the FFI declaration is a real item in the enclosing module's own namespace, exactly as public as a same-shaped ordinary `fn`/`static`, and Rust cannot declare both under one name in one module, so there is no identity collision in observing it identically — and a foreign `fn` or `static` carrying a `safe` or `unsafe` qualifier, legal inside an `unsafe extern` block in every edition, exposes exactly what its unqualified form does, at the same seam, the qualifier entering neither the finding nor its identity); the generic bounds and `where`-clauses of public items where a bound names a trait by a literal, directly resolvable path; the public method signatures **and public associated `const`/`type` items** of **inherent `impl` blocks** for types defined in the module; and **named public re-exports** (specified in `semantic-reexport-exposure`). Within every observed **bound** position — a public item's generic-parameter bounds and `where`-clauses, a **trait's supertraits**, and a public **associated type's bounds and generic parameters** — a forbidden type appearing as a **generic argument** of the bound (e.g. the `crate::infra::Secret` in `AsRef<crate::infra::Secret>`) SHALL be observed with the same full-recursion coverage as any other type position, not only the bound's head trait path; comparing only the head would silently drop a resolvable forbidden type (the forbidden false negative). A public **associated type's default target** (`type Bar = crate::infra::Secret;`) is likewise an observed type position. Each exposed position SHALL be **seam-qualified injectively** so two distinct seams exposing the same forbidden type never collapse to one `(target, rule_key, fact)` baseline entry and mask a new leak — and this injectivity SHALL hold at **enum-variant field** granularity: each field of a tuple or struct variant carries a per-member seam (`variant {module}::{Enum}::{Variant}::{index|name}`, the same `::`-delimited member form struct/union fields use), mirroring struct/union fields. Trait `impl` blocks remain out of scope for a bare `must_not_expose` (governable via the opt-in `.including_trait_impls()` depth). A foreign item that does not parse as a `fn`, `static`, `type` or macro invocation with any leading `safe` or `unsafe` qualifier removed SHALL be a scan error (exit 2) naming the module, the tokens seen and the file holding them, never skipped: what it declares cannot be told, so whether it exposes a forbidden type cannot be judged. rustc accepts such an item only while a `#[cfg]` removes it or an attribute macro rewrites it, so the refusal SHALL name deleting it if disabled by cfg or writing the expanded declaration directly if produced by an attribute macro. A forbidden type used only in a non-public position SHALL NOT be a violation.
 
 #### Scenario: A forbidden type in a public return is a violation
 
@@ -164,6 +204,26 @@ The system SHALL observe the **public** API surface of the governed module ancho
 
 - **WHEN** the governed module declares `extern "C" { fn handle() -> crate::infra::Secret; static S: crate::infra::Secret; }` (both without `pub`) under `must_not_expose("crate::infra")`
 - **THEN** the system reports no violation, because only `pub` items inside an `extern` block are exposed
+
+#### Scenario: A forbidden type in a safe- or unsafe-qualified foreign item is a violation
+
+- **WHEN** the governed module declares `unsafe extern "C" { pub safe static S: crate::infra::Secret; pub safe fn take(h: crate::infra::Secret); pub unsafe static U: crate::infra::Secret; }` under `must_not_expose("crate::infra")`
+- **THEN** the system emits `crate::infra::Secret exposed by static crate::api::S`, `… by fn crate::api::take` and `… by static crate::api::U`, each with the finding and identity its unqualified form would carry
+- **PINNED-BY** `qualified_foreign_items_expose_their_signature_types`
+- **PINNED-BY** `a_qualified_foreign_item_has_the_identity_of_its_unqualified_form`
+
+#### Scenario: A non-public qualified foreign item is not exposed
+
+- **WHEN** the governed module declares `unsafe extern "C" { safe static S: crate::infra::Secret; }` under `must_not_expose("crate::infra")`
+- **THEN** the system reports no violation, because a qualifier does not make a foreign item public
+- **PINNED-BY** `qualified_foreign_items_at_or_below_the_ceiling_are_clean`
+
+#### Scenario: An undecodable foreign item is a scan error
+
+- **WHEN** the governed module `crate::kernel` declares `unsafe extern "C" { #[cfg(any())] pub fn with_body() {} }`, or `unsafe extern "C" { #[cfg(any())] pub type Defined = u8; }` — each compiles because the item is removed before it is rejected, and `syn` reads each as a foreign-item token stream that does not parse as a foreign `fn`, `static` or `type` with any qualifier removed
+- **THEN** the system emits a scan error (exit 2) naming `crate::kernel`, the tokens seen and the file, saying it cannot tell what the item declares without claiming its visibility unread, and naming deleting it if disabled by cfg or writing the expanded declaration directly if produced by an attribute macro as the repair — never exit 0
+- **PINNED-BY** `an_undecodable_foreign_item_is_a_constitution_error`
+- **PINNED-BY** `the_decoder_refuses_a_verbatim_that_stays_verbatim`
 
 ### Requirement: Forbidden-type matching by path and prefix
 
@@ -260,7 +320,7 @@ A type whose resolution would require capabilities beyond the local AST — a gl
 
 ### Requirement: CI reaction
 
-The system SHALL fold semantic-boundary findings into the same exit-code contract as the static dimension: **exit 0** when no enforce-severity boundary is violated; **exit 1** when one or more enforce-severity boundaries are violated; **exit 2** for a constitution or scan error (e.g. an unresolvable anchor or an unreadable source file). A run that evaluates both static and semantic boundaries SHALL aggregate their findings into one report and one outcome, and a constitution error on any boundary SHALL supersede any violation in the same run.
+The system SHALL fold semantic-boundary findings into the same exit-code contract as the static dimension: **exit 0** when no enforce-severity boundary is violated; **exit 1** when one or more enforce-severity boundaries are violated; **exit 2** for a constitution or scan error (e.g. an unresolvable anchor, an unreadable source file, or a foreign item that cannot be decoded). A run that evaluates both static and semantic boundaries SHALL aggregate their findings into one report and one outcome, and a constitution error on any boundary SHALL supersede any violation in the same run.
 
 #### Scenario: A clean semantic boundary passes
 

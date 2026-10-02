@@ -18,7 +18,7 @@
 use std::path::Path;
 
 use guibiao::{Constitution as GnomonConstitution, ModuleBoundary, Outcome as GnomonOutcome};
-use louke::{RuntimeBoundary, audit_probe_coverage};
+use louke::{Outcome as LoukeOutcome, RuntimeBoundary, audit_probe_coverage};
 
 #[path = "support/mod.rs"]
 mod support;
@@ -34,25 +34,42 @@ fn guibiao_forbids_forbidden(package: &str, manifest: &Path) -> GnomonOutcome {
     guibiao::check(&constitution, manifest)
 }
 
-/// `audit_probe_coverage` reacts on TWO independent axes, so declaring `"conformance-seam"`
-/// distinguishes "no real probe found" from "a real probe found" unambiguously: a probe hidden
-/// inside inert text leaves the declared seam unprobed (exit 1, `unprobed_seam`); a real probe
-/// (declared or not) satisfies it (exit 0) — never the reverse, so the exit code alone pins which
-/// case fired without needing a second, differently-configured check.
-fn louke_sees_a_real_probe(root: &Path) -> bool {
+/// What 漏刻 read the fixture's probe as: a declared seam's probe it saw, or none, so the seam is unprobed.
+#[derive(Debug, PartialEq, Eq)]
+enum LoukeReading {
+    Real,
+    Inert,
+}
+
+/// `audit_probe_coverage` over a declared `"conformance-seam"`: clean where a real probe satisfies it, and exactly the
+/// declared seam's unprobed violation where none does. Any other outcome — a scan or constitution error above all, or
+/// a violation of another rule — is neither reading, so it panics carrying the whole outcome rather than counting as
+/// "no probe".
+fn louke_reading(root: &Path) -> LoukeReading {
     let boundary = RuntimeBoundary::at("conformance-seam")
         .only_origins(["o"])
         .because("conformance: a real probe must satisfy this declared seam");
-    // Exit-code-only assertion, so the anchor just needs to contain the scanned root the way a real
-    // caller's workspace root contains its members.
+    // The anchor just needs to contain the scanned root the way a real caller's workspace root contains its members.
     let anchor = root.parent().unwrap_or(root);
-    audit_probe_coverage(&[boundary], &[root.to_path_buf()], anchor).exit_code() == 0
+    match audit_probe_coverage(&[boundary], &[root.to_path_buf()], anchor) {
+        LoukeOutcome::Clean(_) => LoukeReading::Real,
+        LoukeOutcome::Violations(report)
+            if report.violations.len() == 1
+                && report.violations[0].rule == "every declared runtime seam must be probed" =>
+        {
+            LoukeReading::Inert
+        }
+        other => panic!("漏刻 neither saw the probe nor reported the seam unprobed: {other:?}"),
+    }
 }
 
 fn assert_both_agree(name: &str, body: &str, expect_real: bool) {
-    let fixture = TempFixture::new(name, body);
+    // 圭表 refuses a forbidden module the crate does not declare, so every fixture declares it,
+    // empty and ahead of the case's own lexical shape.
+    let body = format!("pub mod forbidden {{}}\n{body}");
+    let fixture = TempFixture::new(name, &body);
     let guibiao_outcome = guibiao_forbids_forbidden(name, fixture.manifest());
-    let louke_sees_real = louke_sees_a_real_probe(fixture.lib());
+    let louke_sees_real = louke_reading(fixture.lib()) == LoukeReading::Real;
 
     assert_eq!(
         guibiao_outcome.exit_code() == 1,
@@ -118,5 +135,46 @@ fn both_dimensions_treat_a_raw_string_as_inert_text() {
         "raw-string",
         "pub fn f() -> &'static str {\n    r#\"use crate::forbidden::Thing; assert_boundary!(\"conformance-seam\", o);\"#\n}\n",
         false,
+    );
+}
+
+#[test]
+fn both_dimensions_separate_tokens_at_every_pattern_white_space_character() {
+    // A vertical tab and a left-to-right mark are whitespace to rustc (`Pattern_White_Space`), so a
+    // `use` and a probe they stand inside are real code; an ASCII-only reading glues the mark into a name
+    // or reads the tab as punctuation.
+    assert_both_agree(
+        "pattern-white-space",
+        "use crate::forbidden::\u{200E}Thing;\npub fn f(o: u8) {\u{b}assert_boundary!(\"conformance-seam\", o); }\n",
+        true,
+    );
+}
+
+/// The one measured divergence this ledger declares rather than closes. C string literals arrive in edition 2021: in
+/// 2018 `cr#"x"` is `cr`, `#` and a string, so the `use` and the probe before a later `"#` are real code, and 圭表,
+/// which reads each target in its edition, sees the `use`. 漏刻 reads a probe from source roots alone, with no edition
+/// to read them in, and takes the `r#"` after `c` for a raw string in every edition, so the probe is not seen — the
+/// declared bound
+/// `runtime-origin-assertion/a-raw-string-after-an-identifier-character-is-read-as-one-in-every-edition-a-stated-bound`.
+/// rustc 1.96.0 builds the shape in edition 2018 and refuses it in 2021.
+#[test]
+fn louke_reads_a_raw_string_after_an_identifier_character_in_every_edition() {
+    let body = "pub mod forbidden {}\nmacro_rules! m { ($($t:tt)*) => {}; }\nm!(cr#\"x\");\nuse crate::forbidden::Thing;\n\
+                pub fn f(o: u8) { assert_boundary!(\"conformance-seam\", o); }\nm!(\"#\");\n";
+    let fixture = TempFixture::new("c-string-2018", body);
+    fixture.write(
+        "Cargo.toml",
+        "[package]\nname = \"c-string-2018\"\nversion = \"0.0.0\"\nedition = \"2018\"\n",
+    );
+    let guibiao_outcome = guibiao_forbids_forbidden("c-string-2018", fixture.manifest());
+    assert_eq!(
+        guibiao_outcome.exit_code(),
+        1,
+        "圭表 reads the `use` as real code: {guibiao_outcome:?}"
+    );
+    assert_eq!(
+        louke_reading(fixture.lib()),
+        LoukeReading::Inert,
+        "漏刻 now sees the probe: the declared bound no longer holds and should be retired"
     );
 }

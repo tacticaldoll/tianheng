@@ -19,10 +19,11 @@ documented adoption path remains usable and semantically honest across the 0.2 l
 `tianheng::prelude::*` SHALL expose the existing declaration and execution surface: `Constitution`,
 `CrateBoundary`, `ModuleBoundary`, `SignatureBoundary`, `TraitImplBoundary`, `VisibilityBoundary`,
 `ForbiddenMarkerBoundary`, `DynTraitBoundary`, `ImplTraitBoundary`, `AsyncExposureBoundary`,
-`UnsafeBoundary`, `RuntimeBoundary`, `SansIoPure`, `NoExistentialLeak`, `GovernanceTest`,
+`UnsafeBoundary`, `StaticBoundary`, `ReexportOnlyBoundary`, `RuntimeBoundary`, `SansIoPure`, `NoExistentialLeak`, `GovernanceTest`,
 `ScanDepth`, `DependencyKind`, `SourceKind`, `VisibilityCeiling`, `Severity`, and `run`. An
 external consumer SHALL be able to compose boundaries from all three instruments through one
-`Constitution` without importing dimension crates.
+`Constitution` without importing dimension crates. This named surface is specified here;
+`prelude_promise` checks the prelude against the external compilation contract, not this prose list.
 
 #### Scenario: A consumer declares the composed law from one import
 
@@ -33,6 +34,27 @@ external consumer SHALL be able to compose boundaries from all three instruments
 
 - **WHEN** a declaration uses dependency kind, source kind, visibility ceiling, or severity selectors
 - **THEN** their existing prelude names compile as part of the fluent declaration
+
+### Requirement: Semantic boundary bundles remain open for field additions
+
+An external crate SHALL construct `SemanticBoundaries` with `Default::default()` and MAY assign
+or push into its public fields. The type SHALL be non-exhaustive, so a struct literal, including
+functional record update, is rejected outside `hunyi` while field inspection remains available.
+The `compile_fail` doctest on `SemanticBoundaries` checks the rejection: removing the attribute
+makes that snippet compile. Its compiling sibling uses the same import and `Default` path, ruling
+out an unrelated missing-name or missing-`Default` error. Doctests cannot be cited by `PINNED-BY`.
+
+Stable rustdoc checks whether a `compile_fail` snippet fails, not which error code it emits.
+Measured under rustc 1.96.0 with `cargo test -p hunyi --doc`: replacing the failing line with
+`let _: u8 = "not a u8";` (E0308) while retaining a temporary `compile_fail,E0639` fence
+still passes.
+
+#### Scenario: External construction and inspection
+
+- **WHEN** an external crate imports `tianheng::prelude::*` and `tianheng::SemanticBoundaries`
+  to construct a semantic boundary bundle
+- **THEN** it can use `default()`, push a boundary into a public field, and inspect that field
+- **PINNED-BY** `semantic_boundaries_are_constructible_and_inspectable_from_tianheng`
 
 ### Requirement: The prelude supports reaction inspection
 

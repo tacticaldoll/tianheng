@@ -241,14 +241,12 @@ fn every_declared_mutation_s_name_resolves_to_a_real_bound_id() {
 struct Scratch {
     root: PathBuf,
     tree: PathBuf,
-    work: PathBuf,
+    _work: xingbiao::ScratchRoot,
 }
 
 impl Scratch {
     fn new(root: &Path) -> Self {
-        let work = std::env::temp_dir().join(format!("tianheng-pin-bites-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&work);
-        xingbiao::claim_scratch(&work).expect("the scratch root is writable");
+        let work = xingbiao::scratch_root("tianheng-pin-bites");
         std::fs::create_dir_all(work.join("no-hooks")).expect("the scratch root is writable");
         let tree = work.join("tree");
         must(
@@ -269,7 +267,7 @@ impl Scratch {
         Self {
             root: root.to_path_buf(),
             tree,
-            work,
+            _work: work,
         }
     }
 }
@@ -281,7 +279,6 @@ impl Drop for Scratch {
             .arg(&self.tree)
             .current_dir(&self.root)
             .output();
-        let _ = std::fs::remove_dir_all(&self.work);
     }
 }
 

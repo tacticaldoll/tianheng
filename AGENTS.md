@@ -427,14 +427,14 @@ earns it a place, and the compiler enumerates them. Sweep for *that* shape and n
 that, with the command that produced it** — one line, re-runnable, no ellipsis and no *neighbours*:
 
 ```
-git grep -nE '\b(one|two|three|four|five|six|seven)[- ](state|kind|variant|answer|form|case)s?\b' v0.5.0 -- '*.rs' '*.md' | wc -l
+git grep -nE '\b(one|two|three|four|five|six|seven)[- ](state|kind|variant|answer|form|case)s?\b' v0.6.0 -- '*.rs' '*.md' | wc -l
 ```
 
-**137**, and naming the **tag** inside the command is what keeps that answer checkable after the tree moves
+**130**, and naming the **tag** inside the command is what keeps that answer checkable after the tree moves
 on. It named a development commit until this sweep, which the row below refuses for the reason it gives:
 `main` carries one commit per release, so a development object resolves in no fresh clone and the command
-anchored to it could not be re-run by the reader it was written for. Re-measured at `v0.5.0`, the answer is
-the same. It is
+anchored to it could not be re-run by the reader it was written for. The tag is `v0.6.0` because it is the
+oldest one a fresh clone holds: this repository was re-founded at that snapshot. It is
 line-oriented, so a phrase wrapped across two lines is not counted — an under-count, which is the safe
 direction for a bound whose claim is *the shape is common and nearly all of it is legitimate*. Nearly all of
 those hits were reasoning — *two forms cannot bind a value*, *three answers, because
@@ -1028,15 +1028,18 @@ TIANHENG_PIN_BITES=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test pin_b
                                            # would be the worse half of that trade
 TIANHENG_SPELLING_DIFFERENTIAL=1 cargo test -p tianheng --test attribute_spelling_differential   # the same trade, for
                                            # the same reason: it compiles one crate per generated spelling
-TIANHENG_WORKSPACE_TESTS=1 cargo +1.85 test --workspace --all-features   # the same trade again, for the MSRV. The
-                                           # name is the pinned toolchain: `ci.yml`'s `msrv` job pins it as its own
-                                           # `MSRV` and refuses if the declared `rust-version` has moved from that pin,
-                                           # and `dod_coherence` holds this line to the job's run lines, so the number
-                                           # lives in one place per side and this line is what a contributor runs with
-                                           # that toolchain installed. Env-shaped like its neighbours rather than gated
-                                           # by one; added because the same `if … && let …` compiled on the default
-                                           # toolchain, passed every line above, and failed CI's MSRV job, twice
 ```
+
+**The MSRV build is CI-only, and the merge is what holds it.** `ci.yml`'s `msrv` job runs the workspace suite on
+the pinned toolchain, pins that toolchain as its own `MSRV`, and refuses if the declared `rust-version` has moved
+from the pin; this list does not repeat it, because a second toolchain is a second full build beside the one
+`pin_bites` already makes, and on a workstation that is the difference between finishing and filling the disk.
+The cost is stated rather than hidden: what compiles on the default toolchain and not on the pinned one — an
+`if … && let …` is the shape that has been met — passes every line above and is red only in CI. So the local
+list never decides a merge on its own: `scripts/merge-pr.sh` reads the pull request's CI checks and stops on any
+that did not succeed, the MSRV job among them, and `dod_coherence` holds every line above to a CI step, so the
+local list stays a subset of what CI runs. A report of this list says the MSRV build was left to CI; *Definition
+of Done all green* claims this list, and the MSRV half is claimed by reading the job's conclusion.
 
 The self-governance dogfood gate (`crates/shengmo/tests/self_governance.rs`, which runs the product reaction under `cargo test`) and its projection
 (`self_law_projection_is_fresh`) must stay green — never weaken the law to pass it. So must
@@ -1046,6 +1049,32 @@ above because it runs under that same `cargo test`. And so must `observer_protoc
 trait-driven fold and the built-in composition path to one verdict — two paths that could disagree silently
 are the drift a seam is supposed to end.
 
+
+## Test fixtures stay inside the build directory
+
+**The reaction.** A fixture root is made by `xingbiao::scratch_root(label)`, a guard removed on drop that names the
+root `<label>-<pid>-<counter>` under `tmp/` beside the running test binary's profile directory. The counter makes two
+roots distinct whatever labels their callers chose, so a caller composes no name, and
+`crates/kanhe/tests/scratch_roots.rs` holds every tracked Rust file to that with two questions a parse tree answers:
+none asks the system for its temporary directory or reads `TMPDIR`, and none outside
+`crates/xingbiao` names `scratch_base` or `scratch_ceiling`, except the files its second declared set names with why.
+`kanhe`'s normal edges may not reach `xingbiao`, so `scratch_ceiling` restates the layout rule for git's ceiling and
+for the publish gate's signature scratch, and a direction holds the restatement equal to the helper's; those files are
+that set. The helper is `#[doc(hidden)]`; its layout inference is cargo's test layout, which this family does not
+promise. An executable outside that layout is a refusal naming its path, never a fallback.
+`kanhe::hermetic_git::hermetic` stops git's discovery at the same directory, so a fixture that runs `git` without its
+own `git init` is not answered by the outer repository, and the workspace `exclude` entry for `target` keeps a fixture
+manifest written there from being absorbed into this workspace.
+
+**The reason.** A fixture lives where the user owns the directory and `cargo clean` reaches it, so it cannot be
+claimed first by another user of the machine and does not depend on a directory the system may stop making
+writable.
+
+**What the check does not read**, each carried by a declared bound in `openspec/specs/repository-checks`: a root
+built from a path another function passes in, a root composed from a path that spells neither word (the executable's
+path, `CARGO_TARGET_TMPDIR`), a second naming in a file the second declared set already names, `temp_dir` named in a
+comment or a string, and `TMPDIR` set on a child's environment. The temporary files a child process writes for
+itself are outside it and are filed in `BACKLOG.md`.
 
 ## Versioning — SemVer honesty (the modou lesson)
 

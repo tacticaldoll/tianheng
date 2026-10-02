@@ -197,32 +197,7 @@ fn no_test_target_spawns_a_process_unnamed() {
     for path in &paths {
         let text = std::fs::read_to_string(root.join(path))
             .unwrap_or_else(|err| panic!("cannot read {path}: {err}"));
-        // Executed text, so a doc comment naming a call is not read as one — and by position rather than by
-        // the bare marker, because this direction's own source is in the corpus it reads and holds both
-        // markers as literals. A call has a boundary before it where the literal has a quote, which is the
-        // argument `refusal_register` makes for `::expect(` against its own panic messages.
-        let source = Source::of(&text);
-        let executed = source.rust();
-        // **The whole module, not each spawning function it exports** — the fourth round of the defect the
-        // doc above predicts. `hermetic_git::fixture` is itself a call site's spelling, and a
-        // target whose only spawn were that would have gone undetected while `Command::new(` and
-        // `hermetic(` both passed over it. Naming the module closes every entry point it has and every one
-        // it gains. Two of its items — `failed` and `program_and_args` — spawn nothing, so a target reaching
-        // only those would be over-declared; over-declaring is the safe direction here, and no target does
-        // (measured: every file reaching this module also runs something through it).
-        //
-        // `hermetic(` stays beside it because an imported `hermetic` is spelled bare, with no module
-        // qualifier to match. `bash::` is the same case as `hermetic_git::`: the one `bash` the checks run is
-        // built in `support::bash`, and a target reaches it as `support::bash::…` or, having imported the
-        // module, as `bash::…` — both carry the module's name before `::`, which is what is matched. A rename
-        // of the module on import, `use support::bash as sh`, is not read here: no target writes one, and the
-        // builder is what constructs a `bash`, held by `hermetic_invocations`' reader, which binds renames.
-        if executed.lines().any(|line| {
-            opens(line, "Command::new(")
-                || opens(line, "hermetic_git::")
-                || opens(line, "hermetic(")
-                || opens(line, "bash::")
-        }) {
+        if spawns(&text) {
             reaching.insert(path.clone());
         }
     }
@@ -234,11 +209,37 @@ fn no_test_target_spawns_a_process_unnamed() {
     );
 }
 
-/// Every tracked Rust file under `crates`, enumerated **once** for the two directions that read it.
-///
-/// One enumeration because two would be two corpora that must agree, and a file the second forgot would be
-/// judged by one direction and not the other — the granularity defect this file's own directions exist to
-/// close, reintroduced one level up.
+/// Whether a test target's `text` spawns a process: any of the spawn markers opening a call on a line of its
+/// executed Rust, as [`no_test_target_spawns_a_process_unnamed`] asks of every test target.
+fn spawns(text: &str) -> bool {
+    // Executed text, so a doc comment naming a call is not read as one — and by position rather than by
+    // the bare marker, because the direction's own source is in the corpus it reads and holds both
+    // markers as literals. A call has a boundary before it where the literal has a quote, which is the
+    // argument `refusal_register` makes for `::expect(` against its own panic messages.
+    let source = Source::of(text);
+    let executed = source.rust();
+    // **The whole module, not each spawning function it exports** — the fourth round of the defect
+    // [`TARGETS_SPAWNING_A_PROCESS`]'s doc predicts. `hermetic_git::fixture` is itself a call
+    // site's spelling, and a target whose only spawn were that would have gone undetected while `Command::new(` and
+    // `hermetic(` both passed over it. Naming the module closes every entry point it has and every one
+    // it gains. Two of its items — `failed` and `program_and_args` — spawn nothing, so a target reaching
+    // only those would be over-declared; over-declaring is the safe direction here, and no target does
+    // (measured: every file reaching this module also runs something through it).
+    //
+    // `hermetic(` stays beside it because an imported `hermetic` is spelled bare, with no module
+    // qualifier to match. `bash::` is the same case as `hermetic_git::`: the one `bash` the checks run is
+    // built in `support::bash`, and a target reaches it as `support::bash::…` or, having imported the
+    // module, as `bash::…` — both carry the module's name before `::`, which is what is matched. A rename
+    // of the module on import, `use support::bash as sh`, is not read here: no target writes one, and the
+    // builder is what constructs a `bash`, held by `hermetic_invocations`' reader, which binds renames.
+    executed.lines().any(|line| {
+        opens(line, "Command::new(")
+            || opens(line, "hermetic_git::")
+            || opens(line, "hermetic(")
+            || opens(line, "bash::")
+    })
+}
+
 /// Whether `line` opens a call to `marker`, rather than merely containing its text.
 ///
 /// Not preceded by a quote, so a direction using this does not match its own marker literals — and not
@@ -258,6 +259,23 @@ fn opens(line: &str, marker: &str) -> bool {
     })
 }
 
+/// A string literal's contents are executed Rust text, since the Rust region cuts only at a `//` comment, and the
+/// position rule excludes a marker only where a quote or an identifier character precedes it. So through the
+/// detector itself, a source line `let s = "a Command::new(x)";` reads as a spawn, while `"Command::new(x)"`, the
+/// marker the literal opens with, and a `// a Command::new(x)` comment do not. A fixture holding such source text
+/// is therefore declared as spawning, or spelled otherwise.
+#[test]
+fn a_spawn_marker_inside_a_string_literal_is_read_as_a_spawn() {
+    assert!(spawns("let s = \"a Command::new(x)\";\n"));
+    assert!(!spawns("let s = \"Command::new(x)\";\n"));
+    assert!(!spawns("let s = 1; // a Command::new(x)\n"));
+}
+
+/// Every tracked Rust file under `crates`, enumerated **once** for the two directions that read it.
+///
+/// One enumeration because two would be two corpora that must agree, and a file the second forgot would be
+/// judged by one direction and not the other — the granularity defect this file's own directions exist to
+/// close, reintroduced one level up.
 fn tracked_rust(root: &Path) -> Vec<String> {
     let listing = kanhe::hermetic_git::tracked_paths(root, &["crates"]).unwrap_or_else(|failure| {
         panic!(
@@ -347,9 +365,112 @@ const CHANNEL_CONTROL: &str = "crates/kanhe/src/tests/hermetic_git.rs";
 /// that file still ran an ignore-sensitive read through a `Command` of its own — and a *different* test in
 /// the same file spawns bare for a different property, so the guard went on passing with the ignore control
 /// converted away. A protection can outlive its instance while looking green; what the exception is *for* is
-/// this one direction, so this one direction is what is held.
+/// this one direction, so this one direction is what is held, by its own body: [`runs_the_read_bare`].
 const CHANNEL_CONTROL_PINS: &str =
-    "fn an_ignore_file_outside_the_repository_cannot_reach_a_hermetic_command(";
+    "an_ignore_file_outside_the_repository_cannot_reach_a_hermetic_command";
+
+/// What a token stream writes: an ignore-sensitive subcommand marker, a `Command::new`, and a literal naming the
+/// setting — one reading, used for the control's body and for every other file's executed text.
+///
+/// **The setting is a literal whose value begins with it** — `core.excludesFile` as a key or
+/// `core.excludesFile=…` as a value — so a sentence mentioning the setting in a message is not read as naming
+/// it. Every attribute, outer or inner, is skipped, so doc prose is not read at all.
+#[derive(Default)]
+struct TokenReads {
+    marker: bool,
+    spawn: bool,
+    neutralised: bool,
+}
+
+fn token_reads(stream: proc_macro2::TokenStream, found: &mut TokenReads) {
+    use proc_macro2::{Delimiter, TokenTree};
+
+    let tokens: Vec<TokenTree> = stream.into_iter().collect();
+    let mut at = 0;
+    while at < tokens.len() {
+        match &tokens[at] {
+            TokenTree::Punct(hash) if hash.as_char() == '#' => {
+                let bang =
+                    matches!(tokens.get(at + 1), Some(TokenTree::Punct(p)) if p.as_char() == '!');
+                let group = at + 1 + usize::from(bang);
+                if matches!(tokens.get(group), Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Bracket)
+                {
+                    at = group + 1;
+                    continue;
+                }
+            }
+            TokenTree::Group(group) => token_reads(group.stream(), found),
+            TokenTree::Literal(literal) => {
+                if let Ok(text) = syn::parse_str::<syn::LitStr>(&literal.to_string()) {
+                    let value = text.value();
+                    if AMBIENT_IGNORE_READS
+                        .iter()
+                        .any(|marker| marker.trim_matches('"') == value)
+                    {
+                        found.marker = true;
+                    }
+                    if value.trim_start().starts_with(NEUTRALISER) {
+                        found.neutralised = true;
+                    }
+                }
+            }
+            TokenTree::Ident(word) if word == "Command" => {
+                if matches!(
+                    (tokens.get(at + 1), tokens.get(at + 2), tokens.get(at + 3)),
+                    (Some(TokenTree::Punct(a)), Some(TokenTree::Punct(b)), Some(TokenTree::Ident(new)))
+                        if a.as_char() == ':' && b.as_char() == ':' && new == "new"
+                ) {
+                    found.spawn = true;
+                }
+            }
+            _ => {}
+        }
+        at += 1;
+    }
+}
+
+/// Whether the body of the function `name` in `text` runs an ignore-sensitive read through a `Command` it
+/// builds itself without naming [`NEUTRALISER`]: `None` when no function of that name is found.
+///
+/// **The control's body, not its file.** The file holds other directions, and one of them naming the setting
+/// for a reason of its own is no evidence about the control. The marker and the bare `Command::new` must both
+/// be written in that body: a read moved into a helper is outside it, and the pin then names the helper. The
+/// body is read by [`token_reads`].
+fn runs_the_read_bare(text: &str, name: &str) -> Option<bool> {
+    use proc_macro2::{Delimiter, TokenStream, TokenTree};
+
+    fn body_of(stream: TokenStream, name: &str) -> Option<TokenStream> {
+        let tokens: Vec<TokenTree> = stream.into_iter().collect();
+        for (at, token) in tokens.iter().enumerate() {
+            match token {
+                TokenTree::Ident(word)
+                    if word == "fn"
+                        && matches!(tokens.get(at + 1), Some(TokenTree::Ident(n)) if n == name) =>
+                {
+                    return tokens[at + 2..].iter().find_map(|after| match after {
+                        TokenTree::Group(group) if group.delimiter() == Delimiter::Brace => {
+                            Some(group.stream())
+                        }
+                        _ => None,
+                    });
+                }
+                TokenTree::Group(group) => {
+                    if let Some(found) = body_of(group.stream(), name) {
+                        return Some(found);
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
+    let stream: TokenStream = text.parse().ok()?;
+    let body = body_of(stream, name)?;
+    let mut found = TokenReads::default();
+    token_reads(body, &mut found);
+    Some(found.marker && found.spawn && !found.neutralised)
+}
 
 /// No judgement runs a subcommand an ambient ignore file answers differently with that channel left open.
 ///
@@ -376,9 +497,15 @@ const CHANNEL_CONTROL_PINS: &str =
 ///
 /// **This does not reach**, each limit measured rather than supposed:
 ///
-/// - **File granularity.** A file that names the setting once and spawns a bare `Command` for something else
-///   passes. Per-call would refuse `publish_source_gate`, where one wrapper closes the channel for every
-///   judgement in the file, so the tighter rule would be wrong on the site that was already right.
+/// - **File granularity, for every file but the control.** A file that names the setting once and spawns a
+///   bare `Command` for something else passes. Per-call would refuse `publish_source_gate`, where one wrapper
+///   closes the channel for every judgement in the file, so the tighter rule would be wrong on the site that
+///   was already right. Per-function was measured on 2026-10-03 and is wrong the same way: besides the control,
+///   the functions holding both a subcommand marker and a `Command::new` without the setting were directions
+///   whose bare spawn re-executes the test binary or reads a different channel, while their marker goes
+///   through the builder. Tying a marker to the construction it reaches is a data-flow question — the
+///   control itself applies its marker through a closure to a command built on another line. The control's
+///   exception is the one place the unit is a function, because what it holds is one direction's body.
 /// - **A literal argument.** A subcommand composed at run time — `format!`, a variable, a `const` — is not
 ///   seen. Every call site in this workspace spells it as a literal (measured).
 /// - **`.git/info/exclude`.** Inside the repository, so no config setting reaches it.
@@ -392,34 +519,14 @@ fn no_judgement_reads_an_ambient_ignore_file() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let mut reading = 0usize;
-    let mut control_seen = false;
-    let mut open = Vec::new();
-    for path in tracked_rust(&root) {
+    let Ambient {
+        reading,
+        control,
+        open,
+    } = ambient_reads(tracked_rust(&root).into_iter().map(|path| {
         let text = read(&root, &path);
-        // Executed text, so the two doc comments naming the subcommand are not read as calls.
-        let source = Source::of(&text);
-        let executed = source.rust();
-        let lines: Vec<&str> = executed.lines().collect();
-        if !AMBIENT_IGNORE_READS
-            .iter()
-            .any(|marker| lines.iter().any(|line| line.contains(marker)))
-        {
-            continue;
-        }
-        reading += 1;
-        if lines.iter().any(|line| line.contains(NEUTRALISER)) {
-            continue;
-        }
-        if !lines.iter().any(|line| opens(line, "Command::new(")) {
-            continue;
-        }
-        if path == CHANNEL_CONTROL {
-            control_seen = true;
-            continue;
-        }
-        open.push(path);
-    }
+        (path, text)
+    }));
     // Without this the direction reports clean the moment a rename or a rewrite takes the last call site out
     // of its reach — which is the vacuity every enumeration in this file guards against.
     assert!(
@@ -429,18 +536,26 @@ fn no_judgement_reads_an_ambient_ignore_file() {
     );
     // The exception is held against its own instance, both halves: that it is still being used, and that the
     // direction it exists for is still there. Either alone passes for the wrong reason.
-    assert!(
-        control_seen,
-        "`{CHANNEL_CONTROL}` is named as the one file that must leave this channel open, and it no longer \
-         runs an ignore-sensitive read through a `Command` of its own — so the exception excuses nothing and \
-         should say so by being removed"
-    );
-    assert!(
-        opens(&read(&root, CHANNEL_CONTROL), CHANNEL_CONTROL_PINS),
-        "`{CHANNEL_CONTROL}` is excused because `{CHANNEL_CONTROL_PINS}` pins the channel by difference, and \
-         that direction is no longer there under that name. Either it moved, in which case name where, or \
-         the exception is now excusing a file with nothing to pin"
-    );
+    let Some(control) = control else {
+        panic!(
+            "`{CHANNEL_CONTROL}` is named as the one file that must leave this channel open, and it no longer \
+             names any subcommand an ambient ignore file answers — so the exception excuses nothing and should \
+             say so by being removed"
+        )
+    };
+    match control {
+        None => panic!(
+            "`{CHANNEL_CONTROL}` is excused because `{CHANNEL_CONTROL_PINS}` pins the channel by difference, and \
+             that direction is no longer there under that name. Either it moved, in which case name where, or \
+             the exception is now excusing a file with nothing to pin"
+        ),
+        Some(false) => panic!(
+            "`{CHANNEL_CONTROL_PINS}` in `{CHANNEL_CONTROL}` no longer runs an ignore-sensitive read through a \
+             `Command` written in its own body with `{NEUTRALISER}` unnamed, so it no longer pins the channel by \
+             difference. If the read moved into a helper, the pin names that helper"
+        ),
+        Some(true) => {}
+    }
     assert!(
         open.is_empty(),
         "a judgement runs a subcommand an ambient ignore file answers differently through a `Command` it \
@@ -448,6 +563,121 @@ fn no_judgement_reads_an_ambient_ignore_file() {
          ignore query the ambient answer is the one that excuses an offence:\n{}",
         open.join("\n")
     );
+}
+
+/// What [`ambient_reads`] found over a corpus.
+struct Ambient {
+    /// Files naming any subcommand an ambient ignore file answers.
+    reading: usize,
+    /// `None` when [`CHANNEL_CONTROL`] names no such subcommand; otherwise [`runs_the_read_bare`]'s answer for
+    /// its pinned direction.
+    control: Option<Option<bool>>,
+    /// Files running such a subcommand through a `Command` of their own with the channel open.
+    open: Vec<String>,
+}
+
+/// The ambient-ignore judgement over `(path, text)` pairs, one implementation for the tree and for the table
+/// that pins its decisions.
+///
+/// [`CHANNEL_CONTROL`] is set aside before the file-wide check for [`NEUTRALISER`], and its exception is
+/// answered by its pinned direction's body alone. Every other file is judged at file granularity: its markers and
+/// spawns over its executed text, so the doc comments naming a subcommand are not read as calls, and the setting
+/// by [`token_reads`], the one reading of it the control's body is judged by too.
+fn ambient_reads(files: impl IntoIterator<Item = (String, String)>) -> Ambient {
+    let mut found = Ambient {
+        reading: 0,
+        control: None,
+        open: Vec::new(),
+    };
+    for (path, text) in files {
+        let source = Source::of(&text);
+        let executed = source.rust();
+        let lines: Vec<&str> = executed.lines().collect();
+        if !AMBIENT_IGNORE_READS
+            .iter()
+            .any(|marker| lines.iter().any(|line| line.contains(marker)))
+        {
+            continue;
+        }
+        found.reading += 1;
+        if path == CHANNEL_CONTROL {
+            found.control = Some(runs_the_read_bare(&text, CHANNEL_CONTROL_PINS));
+            continue;
+        }
+        let mut written = TokenReads::default();
+        token_reads(
+            text.parse().unwrap_or_else(|err| {
+                panic!(
+                    "cannot lex {path}, so whether it names `{NEUTRALISER}` was never read: {err}"
+                )
+            }),
+            &mut written,
+        );
+        if written.neutralised {
+            continue;
+        }
+        if !lines.iter().any(|line| opens(line, "Command::new(")) {
+            continue;
+        }
+        found.open.push(path);
+    }
+    found
+}
+
+/// The decisions [`ambient_reads`] makes about the control file, one row each — the two scenarios that judge
+/// the control by its own body, and the absences either side of them.
+#[test]
+fn the_ambient_ignore_control_is_judged_by_its_own_body() {
+    let control = |body: &str, elsewhere: &str| {
+        format!(
+            "fn {CHANNEL_CONTROL_PINS}() {{\n{body}\n}}\nfn another_direction() {{\n{elsewhere}\n}}\n"
+        )
+    };
+    let bare = "let ignored = |c: &mut Command| c.args([\"check-ignore\", \"-q\"]);\n\
+                let mut command = Command::new(\"git\");\nignored(&mut command);";
+    let rows: [(&str, String, Option<Option<bool>>); 6] = [
+        (
+            "the setting named in another direction does not hide the control",
+            control(bare, "let _ = [\"-c\", \"core.excludesFile=/dev/null\"];"),
+            Some(Some(true)),
+        ),
+        (
+            "the control naming the setting itself no longer pins the channel",
+            control(&format!("{bare}\nlet _ = \"core.excludesFile\";"), ""),
+            Some(Some(false)),
+        ),
+        (
+            "the control building no Command of its own no longer pins the channel",
+            control("let _ = hermetic(\"git\").args([\"check-ignore\"]);", ""),
+            Some(Some(false)),
+        ),
+        (
+            "a message mentioning the setting is not the setting",
+            control(
+                &format!("{bare}\nassert!(true, \"despite `core.excludesFile`\");"),
+                "",
+            ),
+            Some(Some(true)),
+        ),
+        (
+            "a renamed control is not found",
+            format!("fn moved() {{\n{bare}\n}}\n"),
+            Some(None),
+        ),
+        (
+            "a control file naming no subcommand is not reading",
+            "fn f() {}\n".to_string(),
+            None,
+        ),
+    ];
+    for (case, text, expected) in rows {
+        let found = ambient_reads([(CHANNEL_CONTROL.to_string(), text)]);
+        assert_eq!(found.control, expected, "{case}");
+        assert!(
+            found.open.is_empty(),
+            "{case}: the control file is never reported as open"
+        );
+    }
 }
 
 fn read(root: &Path, path: &str) -> String {
@@ -947,7 +1177,7 @@ fn value_as_bash_holds_it(root: &Path, library: &str, name: &str) -> Option<Stri
 /// the name, and that is what refuses it — including where the library itself prints what the probe would.
 #[test]
 fn a_word_spelled_as_a_declaration_is_one_only_where_bash_reads_it() {
-    let scratch = support::fixture::Scratch::claim("tianheng-declared-value");
+    let scratch = xingbiao::scratch_root("tianheng-declared-value");
     for (text, expected) in [
         ("X=1\n", Ok("1".to_string())),
         (
@@ -995,7 +1225,7 @@ fn no_closed_stream_moves_the_library_s_classes() {
         return;
     };
     let library = root.join(kanhe::gate_identity::WRAPPERS_SHARED_LIBRARY);
-    let scratch_root = support::fixture::Scratch::claim("tianheng-closed-stream");
+    let scratch_root = xingbiao::scratch_root("tianheng-closed-stream");
     let scratch = scratch_root.path();
     // Every stop here comes before the act, so `gh` and `cargo` are never this run's to reach. Each is a stub that
     // leaves a mark, found first on `PATH`: a stop that did reach one runs no host tool, and says so below.
@@ -1166,7 +1396,7 @@ fn a_wrapper_without_its_library_is_the_unjudged_class() {
         ("scripts/merge-pr.sh", vec!["42", "--body-file", "body.md"]),
         ("scripts/publish.sh", vec!["--dry-run"]),
     ] {
-        let claimed = support::fixture::Scratch::claim("tianheng-missing-library");
+        let claimed = xingbiao::scratch_root("tianheng-missing-library");
         let scratch = claimed.path();
         std::fs::create_dir_all(scratch.join("scripts"))
             .expect("create the fixture's scripts directory");
@@ -1990,7 +2220,7 @@ fn a_site_after_an_ansi_c_escaped_newline_reports_its_own_line() {
 /// exist; passed as a positional parameter it is one word, whatever it holds.
 #[test]
 fn a_library_path_holding_a_space_is_one_argument() {
-    let scratch = support::fixture::Scratch::claim("tianheng-bash-body");
+    let scratch = xingbiao::scratch_root("tianheng-bash-body");
     let dir = scratch.path().join("a b");
     std::fs::create_dir(&dir).expect("create a directory whose name holds a space");
     std::fs::write(dir.join("lib.sh"), "stop() {\n    exit 7\n}\n").expect("write the library");
@@ -2004,7 +2234,7 @@ fn a_library_path_holding_a_space_is_one_argument() {
 /// A scratch root that cannot be removed fails the run that dropped it, rather than being left behind unsaid.
 #[test]
 fn a_scratch_root_that_cannot_be_removed_is_a_failure() {
-    let scratch = support::fixture::Scratch::claim("tianheng-unremovable");
+    let scratch = xingbiao::scratch_root("tianheng-unremovable");
     let held = scratch.path().join("held");
     std::fs::create_dir(&held).expect("create a directory inside the scratch root");
     std::fs::write(held.join("file"), "x").expect("write a file the removal must reach");
@@ -2021,7 +2251,7 @@ fn a_scratch_root_that_cannot_be_removed_is_a_failure() {
         .map(|message| *message)
         .unwrap_or_default();
     assert!(
-        message.starts_with("Scratch: removing"),
+        message.starts_with("ScratchRoot: removing"),
         "the failure names what it could not remove: {message}"
     );
 }
@@ -2032,7 +2262,7 @@ fn a_scratch_root_that_cannot_be_removed_is_a_failure() {
 /// reads the host's executable instead.
 #[test]
 fn a_library_named_without_a_slash_is_the_fixture_s_file() {
-    let scratch = support::fixture::Scratch::claim("tianheng-slashless-library");
+    let scratch = xingbiao::scratch_root("tianheng-slashless-library");
     std::fs::write(scratch.path().join("bash"), "X=1\n").expect("write the library");
     assert_eq!(
         value_as_bash_holds_it(scratch.path(), "bash", "X"),
@@ -2056,7 +2286,7 @@ fn a_declared_name_assigned_again_is_the_unjudged_class() {
     let unjudged = i32::from(verdict_channel::wrapper_exit(Kind::CannotJudge));
     // The gate's channel carries a violation, so the refusal after the assignment exits by the declared values:
     // a moved one is seen in the status rather than hidden behind a channel that carries nothing.
-    let scratch = support::fixture::Scratch::claim("tianheng-reassigned-name");
+    let scratch = xingbiao::scratch_root("tianheng-reassigned-name");
     let verdict = scratch.path().join("verdict");
     std::fs::write(&verdict, verdict_channel::rendered(Kind::Violation))
         .expect("write the gate's verdict");

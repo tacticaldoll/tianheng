@@ -332,9 +332,7 @@ fn files_no_capability_claims_are_reported_rather_than_implied_judged() {
 /// `origin/main` is exactly the shape, and it is one `git init` away.
 #[test]
 fn a_branch_with_no_resolvable_base_cannot_be_judged() {
-    let scratch = std::env::temp_dir().join(format!("kanhe-no-base-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&scratch);
-    xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
+    let scratch = xingbiao::scratch_root("kanhe-no-base");
     for args in [
         vec!["init", "-q", "."],
         vec![
@@ -358,7 +356,6 @@ fn a_branch_with_no_resolvable_base_cannot_be_judged() {
 
     let refusal =
         base(&scratch).expect_err("a repository with no upstream and no origin refs has no base");
-    let _ = std::fs::remove_dir_all(&scratch);
     assert_eq!(refusal.kind, Kind::CannotJudge);
     assert!(
         refusal.message.contains("cannot be resolved"),
@@ -421,9 +418,7 @@ fn the_parked_misfiling_is_refused_against_the_declared_subjects() {
 /// direction failed.
 #[test]
 fn a_subject_the_claimed_set_cannot_read_is_refused_rather_than_shrunk() {
-    let root = std::env::temp_dir().join(format!("kanhe-claimed-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    xingbiao::claim_scratch(&root).expect("create");
+    let root = xingbiao::scratch_root("kanhe-claimed");
 
     for (name, spec, needle) in [
         (
@@ -454,5 +449,4 @@ fn a_subject_the_claimed_set_cannot_read_is_refused_rather_than_shrunk() {
             refusal.message
         );
     }
-    let _ = std::fs::remove_dir_all(&root);
 }

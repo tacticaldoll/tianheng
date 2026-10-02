@@ -23,8 +23,8 @@
 //! one notch finer than the last, on the same
 //! question of what the tree holds.
 //!
-//! **Fixture infrastructure.** This widening is test-only: [`claim_scratch`] and `Unreadable`.
-//! Both are `#[doc(hidden)]` items that exist because integration and unit test trees across member
+//! **Fixture infrastructure.** This widening is test-only: the hidden scratch-root helpers ([`claim_scratch`], [`scratch_base`], [`scratch_root`]) and `Unreadable`.
+//! All of these are `#[doc(hidden)]` items that exist because integration and unit test trees across member
 //! crates cannot share a `cfg(test)` helper, yet must enforce identical policies (atomic temporary
 //! root reservation without adopting pre-existing symlinks, and permission-removal verification that
 //! restores on drop and asserts under `TIANHENG_WORKSPACE_TESTS`). They ship hidden in the published
@@ -482,13 +482,13 @@ pub fn is_directory(path: &Path) -> Result<bool, String> {
 /// link returns `Ok(())` and every subsequent write lands in the link's *target*, while `create_dir` cannot
 /// follow a symlink and returns `AlreadyExists` — the narrow call is what makes the refusal possible at all.
 ///
-/// A fixture scratch root is typically built from `temp_dir()` and a predictable name (a process id, a
-/// counter), so it is guessable by anyone on the machine. The ordinary `remove_dir_all` then `create_dir_all`
-/// idiom leaves a window between the two calls in which a planted symlink is silently adopted, and everything
-/// the fixture writes afterward lands wherever that link points. `create_dir` closes the window rather than
-/// narrowing it: the root is claimed only if this call is the one that created it, and `remove_dir_all`
-/// itself removes a symlink at the path rather than following it, so an attacker must win a race rather than
-/// leave something lying around in advance.
+/// A fixture scratch root has a predictable name (a process id, a counter), so it is guessable by anyone who
+/// can write the directory it sits in. [`scratch_root`] places it where only the user can, and the ordinary
+/// `remove_dir_all` then `create_dir_all` idiom would still leave a window between the two calls in which a
+/// planted symlink is silently adopted, with everything the fixture writes afterward landing wherever that link
+/// points. `create_dir` closes the window rather than narrowing it: the root is claimed only if this call is
+/// the one that created it, and `remove_dir_all` itself removes a symlink at the path rather than following
+/// it, so an attacker must win a race rather than leave something lying around in advance.
 ///
 /// **This is about the root only.** Every directory beneath a root this call already claimed is safe to build
 /// with the ordinary `create_dir_all`, because nothing outside the fixture's own control could have planted
@@ -496,6 +496,162 @@ pub fn is_directory(path: &Path) -> Result<bool, String> {
 #[doc(hidden)]
 pub fn claim_scratch(path: &Path) -> std::io::Result<()> {
     std::fs::create_dir(path)
+}
+
+/// The directory every fixture root lives under: `tmp/` beside the profile directory of the running test
+/// binary, created if absent.
+///
+/// **Fixture infrastructure, withheld from the API contract** for the reason [`claim_scratch`] gives, and for a
+/// second one: the layout it reads is cargo's test layout, which this family has no business promising.
+///
+/// A test binary sits at `<target>/[<triple>/]<profile>/deps/<bin>`; the base is the `tmp` directory next to
+/// that profile directory. It is found at **run time** from [`std::env::current_exe`] and never from a
+/// compile-time path, which a worktree sharing one target directory would bake in. It does not read `TMPDIR`:
+/// a root under a target directory the user owns is not claimable by anyone else, survives a system temporary
+/// directory that is unwritable, and is removed by `cargo clean`.
+///
+/// The path is canonical, because a consumer comparing it with a working directory's real path (git's ceiling
+/// directories do) would otherwise miss when the target directory is reached through a symlink.
+///
+/// **A layout it cannot recognise panics, naming the executable's path.** It never falls back to the system
+/// temporary directory, because a fallback is a second behaviour that depends on the environment.
+///
+/// **Fixture code takes a root from [`scratch_root`] and does not name a path under this.** A name composed
+/// from a label alone is unique only while no two callers choose one label; [`scratch_root`] appends a
+/// per-process counter. A repository check holds every file outside this crate to that, apart from a declared
+/// set that says why.
+#[doc(hidden)]
+pub fn scratch_base() -> PathBuf {
+    let exe = std::env::current_exe().unwrap_or_else(|err| {
+        panic!("scratch_base: cannot read the running executable's path: {err}")
+    });
+    let base = scratch_base_for(&exe).unwrap_or_else(|why| panic!("{why}"));
+    std::fs::create_dir_all(&base)
+        .unwrap_or_else(|err| panic!("scratch_base: cannot create '{}': {err}", base.display()));
+    base.canonicalize()
+        .unwrap_or_else(|err| panic!("scratch_base: cannot resolve '{}': {err}", base.display()))
+}
+
+/// The base for the executable at `exe`, or why its path is not a cargo test layout.
+fn scratch_base_for(exe: &Path) -> Result<PathBuf, String> {
+    let deps = exe
+        .parent()
+        .filter(|dir| dir.file_name().is_some_and(|name| name == "deps"));
+    deps.and_then(Path::parent)
+        .and_then(Path::parent)
+        .map(|above_profile| above_profile.join("tmp"))
+        .ok_or_else(|| {
+            format!(
+                "scratch_base: '{}' is not at <target>/[<triple>/]<profile>/deps/<bin>, so there is no build \
+                 directory to place a fixture root in",
+                exe.display()
+            )
+        })
+}
+
+/// A fixture root under [`scratch_base`], removed on drop.
+///
+/// **Fixture infrastructure, withheld from the API contract** for the reason [`scratch_base`] gives. The root is
+/// `<label>-<pid>-<counter>`, unique per call within a process, claimed with [`claim_scratch`] so this call is
+/// the one that created it. A root a previous process left behind under a recycled process id is removed first,
+/// and the removal is of the path itself rather than anything a symlink there points at.
+#[doc(hidden)]
+#[derive(Debug)]
+pub struct ScratchRoot {
+    path: PathBuf,
+}
+
+/// A fixture root named for `label`, empty and owned by the caller until the returned guard drops.
+///
+/// **A label that does not leave the name it is built into one ordinary path component is a refusal naming the
+/// label, never a root outside the base.** The question is asked of the name, which is what [`Path::join`]
+/// reads: a label carrying a separator, a leading `..` or a root leaves a name for a directory the base does
+/// not contain — and that directory is removed, recursively, before the root is claimed and again when the
+/// guard drops. A bare `.` or `..` leaves one ordinary component, the process id and counter standing after it,
+/// and is contained. Asking it of the name is what makes the containment this function's own rather than every
+/// caller's.
+#[doc(hidden)]
+pub fn scratch_root(label: &str) -> ScratchRoot {
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let base = scratch_base();
+    let name = format!(
+        "{label}-{}-{}",
+        std::process::id(),
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    );
+    if !is_one_component(&name) {
+        panic!(
+            "scratch_root: '{name}', built from label '{label}', is not one ordinary path component, so it \
+             does not name a directory under '{}'",
+            base.display()
+        );
+    }
+    let path = base.join(name);
+    settle_cleanup(
+        "scratch_root: removing the root a previous process left at",
+        &path,
+        remove_if_present(&path),
+    );
+    claim_scratch(&path)
+        .unwrap_or_else(|err| panic!("scratch_root: cannot claim '{}': {err}", path.display()));
+    ScratchRoot { path }
+}
+
+/// Whether `name` is one ordinary path component, which is what makes [`Path::join`] append it rather than
+/// name anything above the directory joined to.
+///
+/// **Read through [`std::path::Components`], not by searching for separators**: which bytes separate is the
+/// platform's answer, and a `.`, a `..` and a root are component kinds rather than characters. The equality is
+/// what makes it total — a name yielding one `Normal` that spells less than the whole of it carried something
+/// `join` would read.
+fn is_one_component(name: &str) -> bool {
+    let mut components = Path::new(name).components();
+    matches!(
+        (components.next(), components.next()),
+        (Some(std::path::Component::Normal(only)), None) if only == std::ffi::OsStr::new(name)
+    )
+}
+
+/// Remove `path` and everything under it, taking an already-absent `path` as removed.
+///
+/// **One answer for both removals a fixture root makes** — the one before it is claimed, which clears what a
+/// previous process left under a recycled process id, and the one in `Drop`. Every error but absence names a
+/// directory still standing where the caller is about to claim one, which is the thing it has to hear.
+fn remove_if_present(path: &Path) -> std::io::Result<()> {
+    match std::fs::remove_dir_all(path) {
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        other => other,
+    }
+}
+
+impl ScratchRoot {
+    /// The root's path.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl std::ops::Deref for ScratchRoot {
+    type Target = Path;
+    fn deref(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl AsRef<Path> for ScratchRoot {
+    fn as_ref(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for ScratchRoot {
+    fn drop(&mut self) {
+        settle_cleanup(
+            "ScratchRoot: removing",
+            &self.path,
+            remove_if_present(&self.path),
+        );
+    }
 }
 
 /// A fixture's cleanup, settled inside a `Drop`: said on stderr while a failure is already unwinding, so the first

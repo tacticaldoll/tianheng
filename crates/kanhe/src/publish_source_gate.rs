@@ -697,7 +697,7 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
 /// Take `path` as a directory this process created, or refuse.
 ///
 /// **Why `create_dir` and not `create_dir_all` is stated once, in `xingbiao::claim_scratch`** — the symlink
-/// adoption, the guessable `temp_dir()`-relative root, the window between `remove_dir_all` and this call,
+/// adoption, the guessable predictable-name root, the window between `remove_dir_all` and this call,
 /// and the measurements behind each. That statement was written here too, near-verbatim, which is one rule
 /// with two owners and free to drift; the implementations stay separate (this one returns a `Refusal`,
 /// `xingbiao` is only a dev-dependency here) but the rule does not. Named rather than linked: `xingbiao` is
@@ -715,9 +715,9 @@ pub fn judge(repo: &Path, remote: &str) -> Result<String, Refusal> {
 /// The same split as [`hidden_by_the_checkout_with`], for the same reason: the failing arm is not a state a
 /// fixture can be left in, because the removal it follows would undo it.
 ///
-/// Three harnesses in this repository already claim their scratch roots this way — the two controlled
-/// workflow directions and the reference gate — and it was this one, standing in front of `cargo publish`,
-/// that did not.
+/// Every fixture root the tests of this repository build is claimed this way, through `xingbiao::scratch_root`;
+/// this one stands in front of `cargo publish` and cannot take its root from the helper, because this library's
+/// normal edges do not reach `xingbiao`.
 pub fn claim_scratch(path: &Path) -> Result<(), Refusal> {
     std::fs::create_dir(path).map_err(|err| {
         cannot_judge_at("publish-source-integrity#signature-scratch-unclaimable", format!(
@@ -743,8 +743,11 @@ fn verify_tag_signature(repo: &Path, tag: &str, tag_object: &str) -> Result<(), 
     // Unique per CALL, not per (process, tag). Every fixture in the failure matrix tags `v9.9.9`, and the
     // matrix runs in parallel, so a key built from the tag had each test's `Drop` deleting another's scratch
     // mid-verification — a test that passed alone and failed beside its siblings.
+    //
+    // Under the build directory the running test binary sits in, beside every fixture root, and not in the
+    // repository being judged.
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-    let scratch = std::env::temp_dir().join(format!(
+    let scratch = crate::hermetic_git::scratch_ceiling().join(format!(
         "tianheng-publish-source-sig-{}-{}",
         std::process::id(),
         NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)

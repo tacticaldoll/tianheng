@@ -43,9 +43,141 @@ For each boundary, the system SHALL resolve the named governed module to a real 
 - **WHEN** a boundary anchors to `crate::foo`, declared only as `#[cfg_attr(windows, path = "win.rs")] mod foo;` with no conventional `foo.rs` present, and `win.rs` exists and declares a bare-`pub` item above the boundary's ceiling
 - **THEN** the system reads `win.rs` and reacts on the item, rather than reporting a constitution error — the `cfg_attr` target is now followed even with no sibling declaration to keep the branch count non-empty
 
+### Requirement: A visibility or re-export-only anchor has one canonical spelling
+
+The visibility or re-export-only boundary's module anchor SHALL be held to the spelling `semantic-signature-coupling`
+states for every module-anchored semantic capability: `crate`, or `crate::` followed by
+`::`-separated identifiers. Any other spelling SHALL be a constitution error (exit 2) quoting what was
+written and naming the canonical spelling where the text determines one, and a raw identifier SHALL
+be accepted as its plain form in the violation target and identity. The anchor is this boundary's
+violation `target`, so the spelling is what decides which baseline entry a finding matches. The re-export-only boundary takes its anchor through the same `.module(...)` and is held to the same spelling.
+
+#### Scenario: A visibility or re-export-only anchor not rooted at `crate` is a constitution error
+
+- **WHEN** a developer writes `VisibilityBoundary::in_crate("app").module("internal")` and the crate declares `crate::internal`
+- **THEN** the system emits a constitution error (exit 2) quoting `internal` and suggesting `crate::internal`, rather than reacting under a target spelled `internal`
+- **PINNED-BY** `every_anchored_capability_refuses_a_non_canonical_spelling`
+
+#### Scenario: A raw-identifier visibility or re-export-only anchor keeps the plain identity
+
+- **WHEN** a visibility or re-export-only boundary anchors to `crate::r#internal`
+- **THEN** its violations carry the target `crate::internal` and the identities a `crate::internal` anchor produces
+- **PINNED-BY** `a_raw_identifier_anchor_is_the_same_identity_as_its_plain_spelling`
+
+### Requirement: Re-export-only module boundary
+
+A `ReexportOnlyBoundary` SHALL govern a resolved module whose direct items are `use` declarations, regardless of their visibility or use-tree form. At `Shallow` depth, every other direct item, including a child `mod`, SHALL produce one `declared-item-kind` finding under `tianheng.rule/hunyi/reexport-only-module`. At `Subtree` depth, child `mod` declarations are containers and every descended module is judged by the same direct-item rule. The depth SHALL be `Shallow` unless the declaration calls `.including_submodules()` or `.depth(ScanDepth::Subtree)`, the two builders every depth-carrying 渾儀 module boundary offers, and it SHALL be projected in the vocabulary those boundaries share: a `Subtree` boundary's `list` JSON entry carries `including_submodules: true` and `scan_depth: "subtree"` and its text rule line ends in ` (including submodules)`, while a `Shallow` one carries neither field and no suffix. A direct item is one the module declares at item position, after a transparent `cfg_if!` invocation is replaced by its arms; an item inside a function body belongs to that function and is not a direct item of the module. An item-position macro invocation is itself a direct item and reacts, while items produced only by its expansion remain outside this observer's AST reach (bound: `semantic-visibility-boundary/a-macro-generated-item-is-a-documented-bound`). Each finding SHALL use `DenyBreach`, SHALL name the source file that declares the offending item, and SHALL carry a structured identity of item kind, module-qualified item name, compilation unit, and governing package. Direct items of one module whose kind and rendered name coincide share one identity; scan position is never part of it. An unrenderable item SHALL still react. An unresolved module anchor SHALL be a constitution error. Existing visibility-ceiling and `must_not_declare_pub` rules and identities SHALL remain unchanged, and the re-export-only rule key and fact shape SHALL be distinct from them.
+
+#### Scenario: A re-export-only depth is declared and projected as every semantic depth is
+
+- **WHEN** re-export-only, async-exposure and impl-trait boundaries are each declared at `Shallow` and at `Subtree`, and a re-export-only boundary is declared with `.including_submodules()`
+- **THEN** `.including_submodules()` builds the boundary `.depth(ScanDepth::Subtree)` does, and for every kind the JSON entry carries `including_submodules: true` and `scan_depth: "subtree"` exactly at `Subtree`, and the text rule line ends in ` (including submodules)` exactly at `Subtree`, never `(scan_depth: …)`
+- **PINNED-BY** `including_submodules_is_subtree_depth`
+- **PINNED-BY** `every_semantic_depth_projects_in_one_vocabulary_read_from_the_boundary`
+
+#### Scenario: A helper beside a re-export reacts
+
+- **WHEN** a governed module declares `pub use contract::*; pub fn helper() {}`
+- **THEN** the boundary exits 1 with one finding `fn helper`
+- **PINNED-BY** `v1_helper_in_reexport_module_fails`
+
+#### Scenario: An impl and item macro react
+
+- **WHEN** a governed module declares an `impl Trait for Foo {}` or an item-position `some_macro!{}`
+- **THEN** each item reacts as `impl Trait for Foo` or `macro some_macro!`
+- **PINNED-BY** `v2_impl_is_rendered_as_a_finding`
+- **PINNED-BY** `v3_item_macro_is_rendered_as_a_finding`
+
+#### Scenario: Every other direct item kind reacts
+
+- **WHEN** the module declares a function, nominal type, alias, constant, static, trait, trait alias, child module, extern crate or block, or macro definition
+- **THEN** each is one finding, including a verbatim or unrenderable item
+- **PINNED-BY** `kind_fn`
+- **PINNED-BY** `kind_struct`
+- **PINNED-BY** `kind_enum`
+- **PINNED-BY** `kind_union`
+- **PINNED-BY** `kind_type`
+- **PINNED-BY** `kind_const`
+- **PINNED-BY** `kind_static`
+- **PINNED-BY** `kind_trait`
+- **PINNED-BY** `kind_trait_alias`
+- **PINNED-BY** `kind_mod`
+- **PINNED-BY** `kind_extern_crate`
+- **PINNED-BY** `kind_extern_block`
+- **PINNED-BY** `kind_macro_rules`
+- **PINNED-BY** `kind_inherent_impl`
+- **PINNED-BY** `unrenderable_item_is_a_finding`
+
+#### Scenario: Every use form and a documented facade are clean
+
+- **WHEN** the module holds a glob, selective, private, or `pub(crate)` use, or `//!` documentation followed by `pub use contract::*;`
+- **THEN** the boundary is clean
+- **PINNED-BY** `clean_glob`
+- **PINNED-BY** `clean_selective`
+- **PINNED-BY** `clean_private`
+- **PINNED-BY** `clean_crate_use`
+- **PINNED-BY** `clean_real_facade`
+
+#### Scenario: Subtree permits a prelude container and judges its child
+
+- **WHEN** the root declares `pub mod prelude { pub use crate::contract::A; }` at `Subtree` depth
+- **THEN** it is clean, but a function directly in `prelude` reacts
+- **PINNED-BY** `subtree_permits_containers_and_governs_children`
+
+#### Scenario: Same-named child items have distinct identities
+
+- **WHEN** two descendant modules each declare `fn helper() {}` under a `Subtree` boundary
+- **THEN** two structured findings carry different module-qualified `item_name` values
+- **PINNED-BY** `same_named_child_items_keep_distinct_identities`
+
+#### Scenario: A transparent cfg_if arm is observed
+
+- **WHEN** a `cfg_if!` arm declares a function
+- **THEN** the function reacts
+- **PINNED-BY** `cfg_if_arm_item_is_observed`
+
+#### Scenario: An unresolved anchor is a constitution error
+
+- **WHEN** the declared module cannot be resolved
+- **THEN** evaluation returns exit 2, never a clean outcome or a violation
+- **PINNED-BY** `unresolved_anchor_is_constitution_error`
+
+#### Scenario: cfg-gated items are observed as written — a stated bound
+
+- **WHEN** a directly declared function bears `#[cfg(windows)]` on a different host
+- **THEN** it still reacts, because this AST observation does not evaluate cfg predicates
+- **PINNED-BY** `cfg_is_observed_as_written`
+
+#### Scenario: A function-body impl is not a direct item
+
+- **WHEN** a governed module declares `fn outer() { impl Foo {} }`
+- **THEN** only `fn outer` reacts; the nested `impl` is part of the function
+- **PINNED-BY** `function_body_impl_is_not_a_direct_item`
+
+#### Scenario: A finding names the file that declares the item
+
+- **WHEN** a `Subtree` boundary governs a root whose child module `child.rs` declares `pub fn helper() {}`
+- **THEN** the one finding `fn helper` names `child.rs` as its file
+- **PINNED-BY** `finding_names_the_offending_source_file`
+
+#### Scenario: The rule key and fact shape are distinct from visibility
+
+- **WHEN** one module declaring `pub fn helper() {}` is governed by both a `ReexportOnlyBoundary` and a `must_not_declare_pub` `VisibilityBoundary`
+- **THEN** the re-export-only finding carries `tianheng.rule/hunyi/reexport-only-module`, fact shape `declared-item-kind` and `DenyBreach`, while the visibility finding keeps `tianheng.rule/hunyi/visibility-ceiling` and `declared-item-visibility`
+- **PINNED-BY** `rule_key_and_fact_are_distinct_from_visibility`
+
+#### Scenario: Direct items that render alike share one identity — a stated bound
+
+- **WHEN** one module declares two item-position invocations of the same macro path, two `impl Foo` blocks, an `extern "C"` and an `extern "system"` block, or two unrenderable items such as `pub macro a() {}` and `pub macro b() {}`
+- **THEN** each pair produces one structured finding, because identity is item kind, module and rendered name rather than scan position, and an extern block renders no name
+- **PINNED-BY** `repeated_macro_path_shares_one_identity`
+- **PINNED-BY** `repeated_inherent_impl_shares_one_identity`
+- **PINNED-BY** `repeated_extern_block_shares_one_identity`
+- **PINNED-BY** `repeated_unrenderable_items_share_one_identity`
+
 ### Requirement: Bare-pub item observation
 
-The system SHALL observe the governed module's **direct** items and react to each whose **declared** visibility rank is **strictly above** the boundary's ceiling. Visibility ranks, most to least visible, are: `pub` (Public) > `pub(crate)` (Crate) > `pub(super)` (Super) > inherited-private / `pub(self)` (Module). A `pub(in P)` form SHALL rank by its path matched **whole and single-segment**: exactly `crate` → Crate, exactly `super` → Super, exactly `self` → Module. Any **multi-segment or otherwise-unrecognized** `pub(in P)` path SHALL rank as **Crate, a conservative upper bound** — notably `pub(in super::super)`, which is legal Rust reaching the grandparent's whole subtree (broader than `pub(super)`) and therefore MUST NOT be ranked `Super`. A `pub(in P)` path is always an ancestor module within the crate, so such an item is at most crate-visible; ranking every unrecognized restricted form Crate never under-reacts (no false negative). The observed item kinds SHALL be exactly those of the prior rule — `fn`, `struct`/`enum`/`union`, `type`, `const`/`static`, `trait` (incl. alias), `extern crate`, **`mod`** (a submodule declaration), and **`use`** re-exports incl. a `use …::*` glob observed as a raw `Item::Use` node — **plus a `pub fn`, `pub static`, or `pub type` declared inside an `extern` block**: the FFI declaration is a real item in the enclosing module's own namespace, exactly as visible as a same-shaped ordinary `fn`/`static`/`type` item, and Rust cannot declare both an ordinary item and a foreign one under the same name in one module, so there is no identity collision in observing it identically (reusing the `fn`/`static`/`type` kinds verbatim rather than a distinct label). A foreign `macro` invocation and any unparsed foreign-item token stream carry no readable visibility keyword and stay out of scope, the same nature as this requirement's existing attribute-derived/opaque-token bounds below. An item at or below the ceiling SHALL NOT react.
+The system SHALL observe the governed module's **direct** items and react to each whose **declared** visibility rank is **strictly above** the boundary's ceiling. Visibility ranks, most to least visible, are: `pub` (Public) > `pub(crate)` (Crate) > `pub(super)` (Super) > inherited-private / `pub(self)` (Module). A `pub(in P)` form SHALL rank by its path matched **whole and single-segment**: exactly `crate` → Crate, exactly `super` → Super, exactly `self` → Module. Any **multi-segment or otherwise-unrecognized** `pub(in P)` path SHALL rank as **Crate, a conservative upper bound** — notably `pub(in super::super)`, which is legal Rust reaching the grandparent's whole subtree (broader than `pub(super)`) and therefore MUST NOT be ranked `Super`. A `pub(in P)` path is always an ancestor module within the crate, so such an item is at most crate-visible; ranking every unrecognized restricted form Crate never under-reacts (no false negative). The observed item kinds SHALL be exactly those of the prior rule — `fn`, `struct`/`enum`/`union`, `type`, `const`/`static`, `trait` (incl. alias), `extern crate`, **`mod`** (a submodule declaration), and **`use`** re-exports incl. a `use …::*` glob observed as a raw `Item::Use` node — **plus a `pub fn`, `pub static`, or `pub type` declared inside an `extern` block**: the FFI declaration is a real item in the enclosing module's own namespace, exactly as visible as a same-shaped ordinary `fn`/`static`/`type` item, and Rust cannot declare both an ordinary item and a foreign one under the same name in one module, so there is no identity collision in observing it identically (reusing the `fn`/`static`/`type` kinds verbatim rather than a distinct label). A foreign item carrying a `safe` or `unsafe` qualifier — legal inside an `unsafe extern` block in every edition, so not edition-gated — SHALL be observed exactly as its unqualified form: the qualifier enters neither the finding nor its identity, so `pub safe static X` and `pub static X` produce the same finding. A foreign `macro` invocation carries no readable visibility keyword and stays out of scope, the same nature as this requirement's existing attribute-derived/opaque-token bounds below. A foreign item that does not parse as a `fn`, `static`, `type` or macro invocation with any leading `safe` or `unsafe` qualifier removed SHALL be a scan error (exit 2) naming the module, the tokens seen and the file holding them, never skipped: what it declares cannot be told, so the ceiling cannot be judged against it. rustc accepts such an item only while a `#[cfg]` removes it or an attribute macro rewrites it, so the refusal SHALL name deleting it if disabled by cfg or writing the expanded declaration directly if produced by an attribute macro. An item at or below the ceiling SHALL NOT react.
 
 The unit of judgment is the **item's own declared visibility**, not its members' visibility nor its effective crate-reachability. This rule is therefore syntactic, with intentional consequences: an item reacts on its declared keyword even inside a non-`pub` module (the rule is "do not declare above the ceiling here", not "is it crate-reachable"); and the system governs the module's *direct* items only — descendants of a submodule are out of scope (a reacting `mod` submodule may carry its own boundary).
 
@@ -109,12 +241,33 @@ The unit of judgment is the **item's own declared visibility**, not its members'
 - **WHEN** the governed module has ceiling `Crate` and declares `unsafe extern "C" { fn hidden() -> u8; static S: u8; type T; }` (no `pub` on any foreign item)
 - **THEN** the system reports no violation, because none of the foreign items is declared above the ceiling
 
+#### Scenario: A safe- or unsafe-qualified foreign item above the ceiling is a violation
+
+- **WHEN** the governed module has ceiling `Module` or `Crate` and declares `unsafe extern "C" { pub safe static S: i32; pub safe fn f(); pub unsafe static U: i32; pub unsafe fn g(); }`
+- **THEN** the system emits `pub static S`, `pub fn f`, `pub static U` and `pub fn g`, each with the finding and identity its unqualified form would carry
+- **PINNED-BY** `qualified_foreign_items_react_under_a_module_ceiling`
+- **PINNED-BY** `qualified_foreign_items_react_under_must_not_declare_pub`
+- **PINNED-BY** `a_qualified_foreign_item_has_the_identity_of_its_unqualified_form`
+
+#### Scenario: A qualified foreign item at or below the ceiling is clean
+
+- **WHEN** a module with ceiling `Module` declares `unsafe extern "C" { safe static S: i32; safe fn f(); }`, and a module with ceiling `Crate` declares `unsafe extern "C" { pub(crate) safe fn g(); }`
+- **THEN** the system reports no violation, because each qualified item is ranked by its declared visibility alone
+- **PINNED-BY** `qualified_foreign_items_at_or_below_the_ceiling_are_clean`
+
+#### Scenario: An undecodable foreign item is a scan error
+
+- **WHEN** the governed module `crate::kernel` declares `unsafe extern "C" { #[cfg(any())] pub fn with_body() {} }`, or `unsafe extern "C" { #[cfg(any())] pub type Defined = u8; }` — each compiles because the item is removed before it is rejected, and `syn` reads each as a foreign-item token stream that does not parse as a foreign `fn`, `static` or `type` with any qualifier removed
+- **THEN** the system emits a scan error (exit 2) naming `crate::kernel`, the tokens seen and the file, saying it cannot tell what the item declares without claiming its visibility unread, and naming deleting it if disabled by cfg or writing the expanded declaration directly if produced by an attribute macro as the repair — never exit 0
+- **PINNED-BY** `an_undecodable_foreign_item_is_a_constitution_error`
+- **PINNED-BY** `the_decoder_refuses_a_verbatim_that_stays_verbatim`
+
 ### Requirement: Observation bounds and scope
 
 The rule SHALL govern only the **declared** visibility keyword on the module's own direct items; the prior bounds hold verbatim, plus one added conservative bound:
 
 - **Incidental observation bounds** (stated, never a silent claim): an item produced by a macro expansion, or a `pub macro` (declarative macros 2.0, which parses as an opaque token item with no readable visibility) is not observed; `#[cfg]`-gated code is observed **as written** (cfg-agnostic). A module reached through a `cfg_attr`-wrapped `#[path]` remap IS observed (its conventional file and its `cfg_attr` target both read when they exist on disk), exactly like an **unconditional** `#[path = "…"]` module already is.
-- **Out of declared scope (not this capability):** public surface that carries no visibility keyword *in this module* — a `#[macro_export] macro_rules!` (crate-public via attribute), a `#[no_mangle]`/`pub extern` symbol, an item re-exported *from another module*, or a foreign-item shape with no visibility syntax to observe (a macro invocation inside an `extern` block, or an unparsed foreign-item token stream). Governing attribute-derived public surface is the deferred attribute capability's domain; the static import dimension governs cross-module reachability. This capability makes no claim about them.
+- **Out of declared scope (not this capability):** public surface that carries no visibility keyword *in this module* — a `#[macro_export] macro_rules!` (crate-public via attribute), a `#[no_mangle]`/`pub extern` symbol, an item re-exported *from another module*, or a foreign-item shape with no visibility syntax to observe (a macro invocation inside an `extern` block). Governing attribute-derived public surface is the deferred attribute capability's domain; the static import dimension governs cross-module reachability. This capability makes no claim about them.
 - **Conservative `pub(in P)` upper bound** (stated, false-negative-safe): a `pub(in <non-canonical in-crate path>)` item ranks as `Crate`. Under a `Super` or `Module` ceiling this MAY over-react when the real path is narrow (effectively private), a loud over-reaction chosen over a silent pass. It never under-reacts.
 
 Within the observed scope there SHALL be no false negative: an item whose declared-visibility rank *is* observed to exceed the ceiling MUST react.
@@ -148,7 +301,7 @@ Within the observed scope there SHALL be no false negative: an item whose declar
 
 ### Requirement: CI reaction
 
-The system SHALL fold visibility findings into the same exit-code contract as the other dimensions: **exit 0** when no enforce-severity boundary is violated; **exit 1** when one or more enforce-severity boundaries are violated; **exit 2** for a constitution or scan error (an unresolvable anchor, or an unreadable/unparseable source file). A run that evaluates static and any semantic boundaries SHALL aggregate their findings into one report and one outcome, and a constitution error on any boundary SHALL supersede any violation in the same run.
+The system SHALL fold visibility findings into the same exit-code contract as the other dimensions: **exit 0** when no enforce-severity boundary is violated; **exit 1** when one or more enforce-severity boundaries are violated; **exit 2** for a constitution or scan error (an unresolvable anchor, an unreadable/unparseable source file, or a foreign item that cannot be decoded). A run that evaluates static and any semantic boundaries SHALL aggregate their findings into one report and one outcome, and a constitution error on any boundary SHALL supersede any violation in the same run.
 
 #### Scenario: A clean boundary passes
 

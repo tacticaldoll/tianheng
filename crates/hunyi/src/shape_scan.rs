@@ -13,7 +13,7 @@ use crate::crate_scope::{extern_resolution, file_extern_scope, resolve_principal
 use crate::finding::{ExposureKind, SemanticFact, shape_finding, sort_faceted_facts};
 use crate::module_resolve::resolve_module_items_with_files;
 use crate::resolve::{
-    ShapeExposure, UseMap, canonical_path_str, collect_uses, validate_path_operands,
+    ShapeExposure, UseMap, canonical_path_str, collect_uses, validate_exposed_trait_operands,
 };
 
 /// A `use`-map per BRANCH, not one shared map over the flattened cross-branch union: two
@@ -128,7 +128,7 @@ pub(crate) fn operand_module_findings(
         impl Fn(&syn::Item, &str, &UseMap, usize, &mut Vec<ShapeExposure>),
     ),
 ) -> Result<Vec<(SemanticFact, PathBuf)>, String> {
-    validate_path_operands(forbidden)?;
+    validate_exposed_trait_operands(forbidden, fact_kind.auto_trait_boundary_kind())?;
     let items_with_files =
         resolve_module_items_with_files(src_dir, root_file, module, crate_package)?;
     let uses_by_branch = uses_by_branch(&items_with_files);
@@ -162,4 +162,40 @@ pub(crate) fn operand_module_findings(
         .collect();
     sort_faceted_facts(&mut findings)?;
     Ok(findings)
+}
+
+/// The auto-trait bound-scoped heart shared by the dyn / impl-trait boundaries: like
+/// [`shape_module_findings`] over [`ShapeExposure`], but keeps only the shapes whose own
+/// auto-trait bounds include any of the declared `bounds`.
+pub(crate) fn auto_bound_module_findings(
+    src_dir: &Path,
+    root_file: &Path,
+    module: &str,
+    bounds: &[String],
+    crate_package: &str,
+    (fact_kind, collect): (
+        ExposureKind,
+        impl Fn(&syn::Item, &str, &UseMap, usize, &mut Vec<ShapeExposure>),
+    ),
+) -> Result<Vec<(SemanticFact, PathBuf)>, String> {
+    let boundary_kind = fact_kind.auto_trait_boundary_kind();
+    let forbidden_leaves = crate::resolve::auto_bound_leaves(bounds, boundary_kind)?;
+
+    shape_module_findings(
+        src_dir,
+        root_file,
+        module,
+        crate_package,
+        |item, module, uses, ordinal, buf| {
+            let mut inner_buf = Vec::new();
+            collect(item, module, uses, ordinal, &mut inner_buf);
+            for exposure in inner_buf {
+                if crate::resolve::exposure_matches_auto_bounds(&exposure, &forbidden_leaves) {
+                    buf.push(exposure);
+                }
+            }
+            Ok(())
+        },
+        |exposure| shape_finding(exposure, fact_kind),
+    )
 }

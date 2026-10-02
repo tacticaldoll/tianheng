@@ -295,7 +295,7 @@ pub(super) fn impl_trait_operand_matches_a_reexported_trait_by_its_defining_path
 }
 
 #[test]
-pub(super) fn impl_trait_operand_ignores_auto_trait_markers() {
+pub(super) fn impl_trait_operand_filters_auto_trait_markers_and_refuses_them_as_operands() {
     assert_eq!(
         impl_trait_operand_mod(
             "marker-port",
@@ -305,16 +305,13 @@ pub(super) fn impl_trait_operand_ignores_auto_trait_markers() {
         .unwrap(),
         ["impl crate::ports::Port + Send exposed by fn crate::m::make"],
     );
-    assert!(
-        impl_trait_operand_mod(
-            "marker-send",
-            "pub fn make() -> impl crate::ports::Port + Send { todo!() }\n",
-            &["Send"],
-        )
-        .unwrap()
-        .is_empty(),
-        "the trailing Send marker is not the operand",
-    );
+    let err = impl_trait_operand_mod(
+        "marker-send",
+        "pub fn make() -> impl crate::ports::Port + Send { todo!() }\n",
+        &["Send"],
+    )
+    .unwrap_err();
+    assert!(err.contains("Send") && err.contains("remove"), "{err}");
 }
 
 #[test]

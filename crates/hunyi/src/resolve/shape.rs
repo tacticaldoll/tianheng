@@ -98,6 +98,7 @@ impl<'ast> Visit<'ast> for PathCollector {
 pub(crate) struct ShapeExposure {
     pub(crate) shape: String,
     pub(crate) principals: Vec<syn::Path>,
+    pub(crate) auto_traits: Vec<String>,
     /// The public **seam** (the owning item / sub-element) this shape is exposed at, e.g.
     /// `fn crate::api::make` or `field crate::api::Cfg::sink`. `None` as pushed by the visitor
     /// (which sees only the shape node, not its owner); the `collect_item_*` walker stamps it
@@ -134,15 +135,54 @@ pub(crate) struct DynCollector {
     pub(crate) exposures: Vec<ShapeExposure>,
 }
 
+fn auto_trait_leaves(
+    bounds: &syn::punctuated::Punctuated<syn::TypeParamBound, syn::token::Plus>,
+) -> Vec<String> {
+    bounds
+        .iter()
+        .filter_map(|bound| match bound {
+            syn::TypeParamBound::Trait(trait_bound) => {
+                let leaf = strip_raw(&trait_bound.path.segments.last()?.ident.to_string());
+                is_auto_trait_leaf(&leaf).then_some(leaf)
+            }
+            _ => None,
+        })
+        .collect()
+}
+
 impl<'ast> Visit<'ast> for DynCollector {
     fn visit_type_trait_object(&mut self, node: &'ast syn::TypeTraitObject) {
         self.exposures.push(ShapeExposure {
             shape: trait_object_to_string(node),
             principals: principal_trait_paths(&node.bounds),
+            auto_traits: auto_trait_leaves(&node.bounds),
             seam: None,
         });
         syn::visit::visit_type_trait_object(self, node);
     }
+}
+
+/// The standard module that defines each supported auto trait. This table is shared by
+/// principal-operand rejection and qualified auto-bound validation.
+pub(crate) const AUTO_TRAIT_MODULES: &[(&str, &str)] = &[
+    ("Send", "marker"),
+    ("Sync", "marker"),
+    ("Unpin", "marker"),
+    ("UnwindSafe", "panic"),
+    ("RefUnwindSafe", "panic"),
+];
+
+pub(crate) fn auto_trait_module(leaf: &str) -> Option<&'static str> {
+    let leaf = strip_raw(leaf);
+    AUTO_TRAIT_MODULES
+        .iter()
+        .find_map(|(name, module)| (*name == leaf).then_some(*module))
+}
+
+/// The leaf-name test used both when collecting principal traits and when validating a
+/// dyn/impl-trait forbidden operand. Raw identifiers compare by their unprefixed leaf.
+pub(crate) fn is_auto_trait_leaf(leaf: &str) -> bool {
+    auto_trait_module(leaf).is_some()
 }
 
 /// The **non-auto trait** paths among a shape node's bounds — the operands an operand-scoped rule
@@ -153,7 +193,8 @@ impl<'ast> Visit<'ast> for DynCollector {
 /// principal** (`dyn Send + crate::Port`, `impl Send + Foo`; both valid Rust, only lifetimes are
 /// order-constrained), so taking the first trait bound would resolve `Send` and silently pass a
 /// forbidden operand (a false negative). Empty when the bounds carry no non-auto trait
-/// (`dyn Send`, or lifetimes only) — correctly matching no operand.
+/// (`dyn Send`, or lifetimes only) — matching no principal. A forbidden operand naming one
+/// of these auto-trait leaves is rejected before resolution.
 ///
 /// Stated bound: auto traits are recognized by their std leaf name
 /// (`Send`/`Sync`/`Unpin`/`UnwindSafe`/`RefUnwindSafe`); a user-defined `auto trait` (unstable) or a
@@ -164,13 +205,12 @@ impl<'ast> Visit<'ast> for DynCollector {
 fn principal_trait_paths(
     bounds: &syn::punctuated::Punctuated<syn::TypeParamBound, syn::token::Plus>,
 ) -> Vec<syn::Path> {
-    const AUTO_TRAITS: [&str; 5] = ["Send", "Sync", "Unpin", "UnwindSafe", "RefUnwindSafe"];
     bounds
         .iter()
         .filter_map(|bound| match bound {
             syn::TypeParamBound::Trait(trait_bound) => {
-                let leaf = strip_raw(&trait_bound.path.segments.last()?.ident.to_string());
-                (!AUTO_TRAITS.contains(&leaf.as_str())).then(|| trait_bound.path.clone())
+                let leaf = trait_bound.path.segments.last()?.ident.to_string();
+                (!is_auto_trait_leaf(&leaf)).then(|| trait_bound.path.clone())
             }
             _ => None,
         })
@@ -223,6 +263,7 @@ impl<'ast> Visit<'ast> for ImplTraitCollector {
         self.exposures.push(ShapeExposure {
             shape: impl_trait_to_string(node),
             principals: principal_trait_paths(&node.bounds),
+            auto_traits: auto_trait_leaves(&node.bounds),
             seam: None,
         });
         syn::visit::visit_type_impl_trait(self, node);

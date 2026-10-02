@@ -8,7 +8,6 @@ mod support;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::ExitStatus;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use support::fixture::{read_if_present, write_executable};
 
@@ -472,18 +471,12 @@ fn a_pull_request_from_another_worktree_is_refused_before_any_evidence_is_read()
     let Some(root) = workspace_root() else {
         return;
     };
-    let elsewhere = std::env::temp_dir().join(format!(
-        "tianheng-merge-workflow-elsewhere-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&elsewhere);
-    xingbiao::claim_scratch(&elsewhere).expect("create an unrelated worktree");
+    let elsewhere = xingbiao::scratch_root("tianheng-merge-workflow-elsewhere");
     // Through the builder, like every other fixture here: `hermetic_git::fixture` exists for exactly this,
     // and a fixture built under an ambient `GIT_DIR` is not the worktree this direction believes it made.
     kanhe::hermetic_git::fixture(&elsewhere, "git", &["init", "-q", "-b", "main"]);
 
-    let run = run_wrapper_in(&root, "subjects", &[], Some(&elsewhere));
-    let _ = std::fs::remove_dir_all(&elsewhere);
+    let run = run_wrapper_in(&root, "subjects", &[], Some(elsewhere.path()));
 
     assert_eq!(
         run.status.code(),
@@ -546,12 +539,7 @@ fn an_ambient_repository_selector_does_not_make_two_worktrees_one() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let scratch = std::env::temp_dir().join(format!(
-        "tianheng-merge-workflow-ambient-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&scratch);
-    xingbiao::claim_scratch(&scratch).expect("create the fixture root");
+    let scratch = xingbiao::scratch_root("tianheng-merge-workflow-ambient");
     let elsewhere = scratch.join("elsewhere");
     let decoy = scratch.join("decoy");
     for tree in [&elsewhere, &decoy] {
@@ -567,7 +555,6 @@ fn an_ambient_repository_selector_does_not_make_two_worktrees_one() {
         Some(&elsewhere),
         &[("GIT_DIR", &decoy.join(".git")), ("GIT_WORK_TREE", &decoy)],
     );
-    let _ = std::fs::remove_dir_all(&scratch);
 
     assert_eq!(
         run.status.code(),
@@ -1269,18 +1256,11 @@ fn an_unreadable_body_file_is_unjudgeable_rather_than_an_empty_body() {
 /// coverage, it refuses. A probe that cannot be written refuses too, rather than reading as a mode that does not
 /// bite.
 fn mode_is_enforced() -> bool {
-    let probe = std::env::temp_dir().join(format!(
-        "tianheng-mode-probe-{}-{}",
-        std::process::id(),
-        MODE_PROBE.fetch_add(1, Ordering::Relaxed)
-    ));
+    let root = xingbiao::scratch_root("tianheng-mode-probe");
+    let probe = root.path().join("probe");
     std::fs::write(&probe, b"probe").expect("write this direction's own mode probe");
-    let enforced = xingbiao::Unreadable::try_new(&probe).is_some();
-    let _ = std::fs::remove_file(&probe);
-    enforced
+    xingbiao::Unreadable::try_new(&probe).is_some()
 }
-
-static MODE_PROBE: AtomicUsize = AtomicUsize::new(0);
 
 /// The wrapper leaves no temporary file behind, on the path that completes the act as well as on the paths that
 /// do not.

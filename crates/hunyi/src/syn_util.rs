@@ -5,6 +5,8 @@
 
 use std::collections::{HashMap, HashSet};
 
+use syn::parse::Parser;
+
 use crate::resolve::strip_raw;
 
 /// Whether `path` is the single-segment built-in `name`, **in either spelling** — an attribute's own name,
@@ -89,6 +91,18 @@ fn is_transparent_macro(item: &syn::ItemMacro) -> bool {
             .segments
             .last()
             .is_some_and(|seg| strip_raw(&seg.ident.to_string()) == "cfg_if")
+}
+
+/// Whether a macro invocation's path names `thread_local!`, judged by its name alone.
+///
+/// The last segment with a raw prefix stripped is `thread_local`, so `std::thread_local!`,
+/// `::std::thread_local!` and `r#thread_local!` all match — the name gate [`is_transparent_macro`]
+/// applies to `cfg_if!`, for the reason it gives: reading a macro's body is sound only for a macro
+/// known by name. A local `macro_rules! thread_local` matches too, and a rename does not.
+pub(crate) fn is_thread_local_macro(path: &syn::Path) -> bool {
+    path.segments
+        .last()
+        .is_some_and(|seg| strip_raw(&seg.ident.to_string()) == "thread_local")
 }
 
 /// The items of every arm of a transparent macro invocation, in source order, kept **separate
@@ -202,9 +216,9 @@ impl FlatItem {
 }
 
 /// `items` with every transparent-macro invocation replaced by its arms' items, recursively (a
-/// nested `cfg_if!` inside an arm is flattened too). The invocation itself is dropped: no
-/// capability observes `syn::Item::Macro`, so keeping it would only be a duplicate the arms
-/// already cover. Idempotent — a flattened list holds no transparent invocation left to expand.
+/// nested `cfg_if!` inside an arm is flattened too). A transparent invocation is replaced by its
+/// arms' items, which carry everything it declares; a non-transparent invocation is kept as an
+/// item. Idempotent — a flattened list holds no transparent invocation left to expand.
 ///
 /// Flattening is **shallow** with respect to module bodies: an inline `mod x { … }` inside an arm
 /// is returned as one item, and the arm tag does not propagate into its body (that body is
@@ -599,7 +613,10 @@ pub(crate) fn visibility_rank(vis: &syn::Visibility) -> u8 {
         syn::Visibility::Public(_) => 3,
         syn::Visibility::Restricted(r) => {
             let single = if r.path.leading_colon.is_none() && r.path.segments.len() == 1 {
-                r.path.segments.first().map(|s| s.ident.to_string())
+                r.path
+                    .segments
+                    .first()
+                    .map(|s| strip_raw(&s.ident.to_string()))
             } else {
                 None
             };
@@ -648,8 +665,8 @@ fn vis_prefix(vis: &syn::Visibility) -> String {
 /// `VisibleItemKind::Fn`/`Static`/`Type` verbatim rather than a new kind (see
 /// [`item_observation_parts`]'s `Item::ForeignMod` arm) — the identical reasoning
 /// `collect_item_exposures`'s own `ForeignMod` arm applies for exposure.
-pub(crate) struct VisibleItem<'a> {
-    pub(crate) visibility: &'a syn::Visibility,
+pub(crate) struct VisibleItem {
+    pub(crate) visibility: syn::Visibility,
     pub(crate) kind: VisibleItemKind,
     pub(crate) name: String,
 }
@@ -691,59 +708,174 @@ impl VisibleItemKind {
     }
 }
 
+/// One foreign item — an item inside an `extern` block — as this dimension observes it.
+///
+/// The capabilities that read a foreign item's visibility or signature — the visibility ceiling
+/// and signature-coupling — match on this rather than on `syn::ForeignItem`, so a qualifier `syn`
+/// leaves unparsed is decoded once and read alike by both. A `safe` or `unsafe` qualifier is not carried: `pub safe static X` and `pub static X`
+/// declare the same item in the module's namespace at the same visibility.
+pub(crate) enum ForeignDecl {
+    Fn {
+        vis: syn::Visibility,
+        sig: Box<syn::Signature>,
+    },
+    Static {
+        vis: syn::Visibility,
+        ident: syn::Ident,
+        ty: Box<syn::Type>,
+        /// `static mut` or `static`: the static-item boundary records it, the visibility and
+        /// signature readers do not.
+        mutability: syn::StaticMutability,
+    },
+    Type {
+        vis: syn::Visibility,
+        ident: syn::Ident,
+    },
+    /// A macro invocation in item position: it carries no visibility keyword, and what it expands
+    /// to is outside this dimension's AST reach.
+    Macro,
+}
+
+/// A foreign item [`decode_foreign_item`] cannot read as a `fn`, `static`, `type` or macro, carried
+/// as what was seen — its rendered tokens where `syn` kept them — so the refusal can name it.
+pub(crate) struct UndecodableForeignItem {
+    pub(crate) seen: String,
+}
+
+/// Decode one foreign item, or refuse it.
+///
+/// A `safe` or `unsafe` qualifier on an item of an `unsafe extern` block is not edition-gated.
+/// Measured under rustc 1.96.1 and 1.85.1: `unsafe extern "C" { pub safe fn h(); pub unsafe static
+/// S: u8; }` compiles with `--edition` 2015, 2021 and 2024 alike, and edition 2024 adds only that
+/// an `extern` block must itself be written `unsafe`.
+///
+/// `syn` 2 leaves a `safe` or `unsafe` qualifier on a foreign `static`, and `safe` on a foreign
+/// `fn`, as `ForeignItem::Verbatim`. Measured under `syn` 2.0.118 and 2.0.119:
+/// `pub safe static`, `pub safe fn` and `pub unsafe static` parse as `Verbatim`, while
+/// `pub unsafe fn` parses as `ForeignItem::Fn`. The qualifier standing after the attributes and
+/// visibility is removed and the rest is parsed again as a `ForeignItem`, so which shapes are
+/// declarations stays `syn`'s decision rather than a grammar kept here.
+///
+/// A `Verbatim` that still does not parse as a `fn` or `static` is refused, never skipped: an
+/// item whose visibility cannot be read cannot be judged against a boundary.
+pub(crate) fn decode_foreign_item(
+    item: &syn::ForeignItem,
+) -> Result<ForeignDecl, UndecodableForeignItem> {
+    match item {
+        syn::ForeignItem::Fn(f) => Ok(ForeignDecl::Fn {
+            vis: f.vis.clone(),
+            sig: Box::new(f.sig.clone()),
+        }),
+        syn::ForeignItem::Static(s) => Ok(ForeignDecl::Static {
+            vis: s.vis.clone(),
+            ident: s.ident.clone(),
+            ty: s.ty.clone(),
+            mutability: s.mutability.clone(),
+        }),
+        syn::ForeignItem::Type(t) => Ok(ForeignDecl::Type {
+            vis: t.vis.clone(),
+            ident: t.ident.clone(),
+        }),
+        syn::ForeignItem::Macro(_) => Ok(ForeignDecl::Macro),
+        syn::ForeignItem::Verbatim(tokens) => {
+            let undecodable = || UndecodableForeignItem {
+                seen: format!("`{tokens}`"),
+            };
+            let trees: Vec<_> = tokens.clone().into_iter().collect();
+            let Some(after_qualifier) = trees_after_safety_qualifier
+                .parse2(tokens.clone())
+                .ok()
+                .flatten()
+            else {
+                return Err(undecodable());
+            };
+            let qualifier = trees.len() - after_qualifier - 1;
+            let unqualified = trees
+                .into_iter()
+                .enumerate()
+                .filter(|(index, _)| *index != qualifier)
+                .map(|(_, tree)| tree)
+                .collect();
+            match syn::parse2::<syn::ForeignItem>(unqualified) {
+                Ok(syn::ForeignItem::Fn(f)) => Ok(ForeignDecl::Fn {
+                    vis: f.vis,
+                    sig: Box::new(f.sig),
+                }),
+                Ok(syn::ForeignItem::Static(s)) => Ok(ForeignDecl::Static {
+                    vis: s.vis,
+                    ident: s.ident,
+                    ty: s.ty,
+                    mutability: s.mutability,
+                }),
+                _ => Err(undecodable()),
+            }
+        }
+        _ => Err(UndecodableForeignItem {
+            seen: "a foreign item kind this dimension does not read".to_string(),
+        }),
+    }
+}
+
+/// How many top-level token trees follow a `safe` or `unsafe` qualifier standing directly after a
+/// foreign item's outer attributes and visibility, or `None` when no qualifier stands there.
+///
+/// The attributes and visibility are parsed by `syn`, so the qualifier is found by its position
+/// rather than by searching the stream for the word. The caller reads the qualifier's index back
+/// from the count, which keeps this from naming a `proc_macro2` type, for the reason
+/// [`skip_token`] gives.
+fn trees_after_safety_qualifier(input: syn::parse::ParseStream) -> syn::Result<Option<usize>> {
+    input.call(syn::Attribute::parse_outer)?;
+    input.parse::<syn::Visibility>()?;
+    let qualified = input.peek(syn::Token![unsafe])
+        || input
+            .cursor()
+            .ident()
+            .is_some_and(|(ident, _)| ident == "safe");
+    if !qualified {
+        return Ok(None);
+    }
+    skip_token(input)?;
+    let mut after = 0;
+    while !input.is_empty() {
+        skip_token(input)?;
+        after += 1;
+    }
+    Ok(Some(after))
+}
+
 /// Direct items carry at most one governed visibility (`item_observation_parts`'s non-`ForeignMod`
 /// arms), but an `extern` block is one `syn::Item` holding an arbitrary number of foreign items,
 /// each with its own independent visibility — so the per-source-item result is a `Vec`, not an
 /// `Option`, even though every arm but `ForeignMod` produces at most one entry.
-fn item_observation_parts(item: &syn::Item) -> Vec<VisibleItem<'_>> {
-    let observed = |visibility, kind, name| VisibleItem {
-        visibility,
+///
+/// A foreign item is read through [`decode_foreign_item`], so a `safe`- or `unsafe`-qualified one
+/// is observed exactly as its unqualified form, and one it cannot decode is refused.
+fn item_observation_parts(item: &syn::Item) -> Result<Vec<VisibleItem>, UndecodableForeignItem> {
+    let observed = |visibility: &syn::Visibility, kind, name| VisibleItem {
+        visibility: visibility.clone(),
         kind,
         name,
     };
-    match item {
-        syn::Item::Fn(i) => vec![observed(
-            &i.vis,
-            VisibleItemKind::Fn,
-            i.sig.ident.to_string(),
-        )],
-        syn::Item::Struct(i) => vec![observed(
-            &i.vis,
-            VisibleItemKind::Struct,
-            i.ident.to_string(),
-        )],
-        syn::Item::Enum(i) => vec![observed(&i.vis, VisibleItemKind::Enum, i.ident.to_string())],
-        syn::Item::Union(i) => vec![observed(
-            &i.vis,
-            VisibleItemKind::Union,
-            i.ident.to_string(),
-        )],
-        syn::Item::Type(i) => vec![observed(&i.vis, VisibleItemKind::Type, i.ident.to_string())],
-        syn::Item::Const(i) => vec![observed(
-            &i.vis,
-            VisibleItemKind::Const,
-            i.ident.to_string(),
-        )],
-        syn::Item::Static(i) => vec![observed(
-            &i.vis,
-            VisibleItemKind::Static,
-            i.ident.to_string(),
-        )],
-        syn::Item::Trait(i) => vec![observed(
-            &i.vis,
-            VisibleItemKind::Trait,
-            i.ident.to_string(),
-        )],
+    let strip = |ident: &syn::Ident| crate::resolve::strip_raw(&ident.to_string());
+    Ok(match item {
+        syn::Item::Fn(i) => vec![observed(&i.vis, VisibleItemKind::Fn, strip(&i.sig.ident))],
+        syn::Item::Struct(i) => vec![observed(&i.vis, VisibleItemKind::Struct, strip(&i.ident))],
+        syn::Item::Enum(i) => vec![observed(&i.vis, VisibleItemKind::Enum, strip(&i.ident))],
+        syn::Item::Union(i) => vec![observed(&i.vis, VisibleItemKind::Union, strip(&i.ident))],
+        syn::Item::Type(i) => vec![observed(&i.vis, VisibleItemKind::Type, strip(&i.ident))],
+        syn::Item::Const(i) => vec![observed(&i.vis, VisibleItemKind::Const, strip(&i.ident))],
+        syn::Item::Static(i) => vec![observed(&i.vis, VisibleItemKind::Static, strip(&i.ident))],
+        syn::Item::Trait(i) => vec![observed(&i.vis, VisibleItemKind::Trait, strip(&i.ident))],
         syn::Item::TraitAlias(i) => vec![observed(
             &i.vis,
             VisibleItemKind::TraitAlias,
-            i.ident.to_string(),
+            strip(&i.ident),
         )],
-        syn::Item::Mod(i) => vec![observed(&i.vis, VisibleItemKind::Mod, i.ident.to_string())],
+        syn::Item::Mod(i) => vec![observed(&i.vis, VisibleItemKind::Mod, strip(&i.ident))],
         syn::Item::ExternCrate(i) => vec![observed(
             &i.vis,
             VisibleItemKind::ExternCrate,
-            i.ident.to_string(),
+            strip(&i.ident),
         )],
         syn::Item::Use(i) => vec![observed(
             &i.vis,
@@ -754,33 +886,32 @@ fn item_observation_parts(item: &syn::Item) -> Vec<VisibleItem<'_>> {
                 use_tree_desc(&i.tree)
             ),
         )],
-        syn::Item::ForeignMod(item) => item
-            .items
-            .iter()
-            .filter_map(|foreign_item| match foreign_item {
-                syn::ForeignItem::Fn(f) => Some(observed(
-                    &f.vis,
-                    VisibleItemKind::Fn,
-                    f.sig.ident.to_string(),
-                )),
-                syn::ForeignItem::Static(s) => Some(observed(
-                    &s.vis,
-                    VisibleItemKind::Static,
-                    s.ident.to_string(),
-                )),
-                syn::ForeignItem::Type(t) => {
-                    Some(observed(&t.vis, VisibleItemKind::Type, t.ident.to_string()))
+        syn::Item::ForeignMod(item) => {
+            let mut foreign = Vec::new();
+            for foreign_item in &item.items {
+                match decode_foreign_item(foreign_item)? {
+                    ForeignDecl::Fn { vis, sig } => {
+                        foreign.push(observed(&vis, VisibleItemKind::Fn, strip(&sig.ident)));
+                    }
+                    ForeignDecl::Static { vis, ident, .. } => {
+                        foreign.push(observed(&vis, VisibleItemKind::Static, strip(&ident)));
+                    }
+                    ForeignDecl::Type { vis, ident } => {
+                        foreign.push(observed(&vis, VisibleItemKind::Type, strip(&ident)));
+                    }
+                    ForeignDecl::Macro => {}
                 }
-                _ => None,
-            })
-            .collect(),
+            }
+            foreign
+        }
         _ => vec![],
-    }
+    })
 }
 
 /// Describe every direct observation of `item` whose declared-visibility rank is **strictly
 /// above** `ceiling_rank` (the boundary's ceiling), each rendered `{visibility} {kind} {name}`.
-/// Empty when the item has no governed visibility or none of its observations exceed the ceiling.
+/// Empty when the item has no governed visibility or none of its observations exceed the ceiling,
+/// and a refusal when a foreign item in it cannot be decoded.
 /// Under the Crate ceiling (rank 2) only bare `pub` (rank 3) reacts and renders `pub {kind}
 /// {name}`, byte-identical to the prior rule for every item kind but `ForeignMod`, which the prior
 /// rule did not observe at all (an `extern` block can hold more than one independently-visible
@@ -788,18 +919,18 @@ fn item_observation_parts(item: &syn::Item) -> Vec<VisibleItem<'_>> {
 pub(crate) fn item_observation(
     item: &syn::Item,
     ceiling_rank: u8,
-) -> Vec<(String, VisibleItemKind, String)> {
-    item_observation_parts(item)
+) -> Result<Vec<(String, VisibleItemKind, String)>, UndecodableForeignItem> {
+    Ok(item_observation_parts(item)?
         .into_iter()
-        .filter(|observed| visibility_rank(observed.visibility) > ceiling_rank)
+        .filter(|observed| visibility_rank(&observed.visibility) > ceiling_rank)
         .map(|observed| {
             (
-                vis_prefix(observed.visibility),
+                vis_prefix(&observed.visibility),
                 observed.kind,
                 observed.name,
             )
         })
-        .collect()
+        .collect())
 }
 
 /// Render a `use` tree to a stable description for a finding (`crate::db::Handle`,

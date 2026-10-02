@@ -15,21 +15,13 @@ use guibiao::{Constitution, ModuleBoundary, Outcome, check};
 /// A minimal, single-crate probe workspace, decoupled from Tianheng's own workspace via its own
 /// `[workspace]` table (the same convention `crates/guibiao/tests/*` already uses).
 struct ProbeWorkspace {
-    dir: PathBuf,
+    dir: xingbiao::ScratchRoot,
     manifest: PathBuf,
 }
 
 impl ProbeWorkspace {
     fn new(name: &str, lib_rs: &str, extra_files: &[(&str, &str)]) -> Self {
-        use std::sync::atomic::{AtomicU32, Ordering};
-        static COUNTER: AtomicU32 = AtomicU32::new(0);
-        let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!(
-            "guibiao-cfg-attr-path-only-{name}-{}-{unique}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        xingbiao::claim_scratch(&dir).expect("the fixture root is writable");
+        let dir = xingbiao::scratch_root(&format!("guibiao-cfg-attr-path-only-{name}"));
         std::fs::create_dir_all(dir.join("src")).expect("create temp src dir");
         let manifest = dir.join("Cargo.toml");
         std::fs::write(
@@ -52,12 +44,6 @@ impl ProbeWorkspace {
 
     fn manifest(&self) -> &Path {
         &self.manifest
-    }
-}
-
-impl Drop for ProbeWorkspace {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
     }
 }
 
@@ -195,10 +181,12 @@ pub mod imp;
     );
 }
 
-/// Control (b): a direct unconditional `#[path]` plus a `cfg_attr` fallback must keep working,
-/// ensuring both candidates remain observed.
+/// Control (b): a `cfg_attr` path written after a direct unconditional `#[path]` is no fallback. rustc
+/// compiles the first path attribute written and reports every later one unused — measured against rustc
+/// 1.96.0, edition 2021, where `#[path = "a.rs"] #[cfg_attr(unix, path = "b.rs")] mod m;` builds `a.rs` with no
+/// `b.rs` on disk — so `other_imp.rs` is never compiled and is not governed, while `unix_imp.rs` is.
 #[test]
-fn direct_path_plus_cfg_attr_fallback_still_works() {
+fn a_cfg_attr_path_after_a_direct_one_is_no_fallback() {
     let lib_rs = r#"
 pub mod forbidden {
     pub struct Thing;
@@ -225,14 +213,23 @@ pub mod imp;
         ModuleBoundary::in_crate("directpluscond")
             .module("crate")
             .must_not_import("crate::forbidden")
-            .because("audit-seam repro control: direct path + cfg_attr fallback"),
+            .because(
+                "audit-seam repro control: direct path, then a cfg_attr path that is no fallback",
+            ),
     );
 
     let outcome = check(&constitution, probe.manifest());
-    assert_violation_in(
-        &outcome,
-        "direct #[path] + cfg_attr fallback",
-        "other_imp.rs",
+    assert_violation_in(&outcome, "direct #[path] + later cfg_attr", "unix_imp.rs");
+    let Outcome::Violations(report) = &outcome else {
+        unreachable!("assert_violation_in accepted only violations");
+    };
+    assert!(
+        !report.violations.iter().any(|v| v
+            .file
+            .as_deref()
+            .is_some_and(|f| f.ends_with("other_imp.rs"))),
+        "a cfg_attr path after the direct one is never compiled, so is not governed: {:?}",
+        report.violations
     );
 }
 

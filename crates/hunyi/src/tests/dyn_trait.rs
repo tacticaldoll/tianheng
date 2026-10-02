@@ -270,10 +270,9 @@ pub(super) fn a_cfg_split_module_with_two_inline_siblings_child_module_does_not_
 }
 
 #[test]
-pub(super) fn dyn_operand_ignores_auto_trait_markers() {
-    // `dyn Port + Send`: the sole non-auto trait is Port. Forbidding Port flags it; forbidding
-    // only the Send marker flags nothing (Send is an auto trait, never an operand, and a bare Send
-    // does not resolve).
+pub(super) fn dyn_operand_filters_auto_trait_markers_and_refuses_them_as_operands() {
+    // `dyn Port + Send`: the sole non-auto trait is Port. Forbidding Port flags it;
+    // naming Send as a forbidden operand is a constitution error.
     assert_eq!(
         dyn_operand_mod(
             "marker-port",
@@ -283,16 +282,13 @@ pub(super) fn dyn_operand_ignores_auto_trait_markers() {
         .unwrap(),
         ["dyn crate::ports::Port + Send exposed by fn crate::m::c"],
     );
-    assert!(
-        dyn_operand_mod(
-            "marker-send",
-            "pub fn c() -> Box<dyn crate::ports::Port + Send> { todo!() }\n",
-            &["Send"],
-        )
-        .unwrap()
-        .is_empty(),
-        "the trailing Send marker is not the operand",
-    );
+    let err = dyn_operand_mod(
+        "marker-send",
+        "pub fn c() -> Box<dyn crate::ports::Port + Send> { todo!() }\n",
+        &["Send"],
+    )
+    .unwrap_err();
+    assert!(err.contains("Send") && err.contains("remove"), "{err}");
 }
 
 #[test]

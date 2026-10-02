@@ -51,6 +51,18 @@ fn audit_bounds() -> Vec<BoundDecl> {
     vec![
         BoundDecl::pinned(
             BoundId::new(
+                "runtime-origin-assertion/a-raw-string-after-an-identifier-character-is-read-as-one-in-every-edition-a-stated-bound",
+            ),
+            "a probe written after `cr#\"` in an edition-2015 or 2018 crate, before a later `\"#`",
+            Extent::OutOfReach {
+                because: "the audit reads source roots with no edition, and takes an `r#\"` for a raw string whatever \
+                          precedes it, so before edition 2021, where `cr` is an identifier, the code up to the next \
+                          `\"#` is read as the string's contents".into(),
+            },
+            "louke_reads_a_raw_string_after_an_identifier_character_in_every_edition",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
                 "runtime-origin-assertion/source-outside-a-member-s-library-or-binary-target-subtree-is-out-of-scope-a-stated-bound",
             ),
             "a probe or seam mention in `tests/`, `examples/`, or `build.rs`",

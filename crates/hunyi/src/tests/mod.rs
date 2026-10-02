@@ -1,22 +1,25 @@
 mod async_exposure;
+mod auto_trait_operand;
 mod dyn_trait;
 mod finding_source_file;
 mod forbidden_marker;
+mod foreign_item;
 mod helpers;
 mod impl_trait;
 mod macro_and_body_nested;
+mod module_anchor;
+mod reexport_only;
 mod resolver_fidelity;
 mod signature;
+mod static_item;
 mod trait_impl;
 mod unsafe_confinement;
 mod visibility;
 
 #[test]
 fn empty_composition_is_clean_without_reading_a_manifest() {
-    let absent = std::env::temp_dir().join(format!(
-        "tianheng-empty-semantic-composition-{}-does-not-exist/Cargo.toml",
-        std::process::id()
-    ));
+    let root = xingbiao::scratch_root("tianheng-empty-semantic-composition");
+    let absent = root.join("does-not-exist/Cargo.toml");
 
     assert!(matches!(
         crate::check_all(&crate::SemanticBoundaries::default(), &absent),

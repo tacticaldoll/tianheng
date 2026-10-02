@@ -17,6 +17,7 @@
 
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
+#![deny(clippy::missing_docs_in_private_items)]
 
 use std::path::{Path, PathBuf};
 
@@ -29,18 +30,23 @@ mod observer;
 pub use observer::StaticObserver;
 
 mod module_scan;
+use module_scan::EvaluationScans;
 mod projection;
 pub use projection::{
     StalePolicy, constitution_json, constitution_text, report_json, report_json_with_stale_policy,
     stale_policy,
 };
+/// Reading `cargo metadata`: workspace membership, dependency edges, and how each crate root is read.
 mod cargo_metadata;
 pub(crate) use cargo_metadata::*;
+/// Checking one crate boundary against the dependency graph `cargo metadata` reports.
 mod crate_check;
 use crate_check::check_crate_boundary;
+/// Which workspace members no boundary targets — an observation that never changes the exit code.
 mod coverage;
 pub use coverage::Coverage;
 use coverage::coverage_from;
+/// Messages for the constitution and scan refusals shared across the checks.
 mod errors;
 mod finding;
 use errors::unreadable_workspace_error;
@@ -51,6 +57,7 @@ use errors::{
     must_not_be_imported_by_on_crate_error, must_only_be_imported_by_on_crate_error,
     restrict_imports_to_on_crate_error, unknown_module_error,
 };
+/// Checking one module boundary against the source of the crate it governs.
 mod module_check;
 use module_check::check_module_boundary;
 mod model;
@@ -85,6 +92,18 @@ pub fn check(constitution: &Constitution, manifest_path: &Path) -> Outcome {
 /// `Enforce` dominates `Warn`. A clean verdict states a [`Subject`] of declared boundaries
 /// and reached workspace members.
 fn evaluate(constitution: &Constitution, metadata: &Value) -> Outcome {
+    evaluate_with_scans(constitution, metadata, &EvaluationScans::shared())
+}
+
+/// The whole of [`evaluate`] against caller-held scans. Evaluation itself always builds the shared
+/// form — one scan per compiled root, shared by every module boundary judged over it; a direction
+/// holds the scans itself to read the work they did, or to run the independent form the shared one
+/// is held equal to.
+fn evaluate_with_scans(
+    constitution: &Constitution,
+    metadata: &Value,
+    scans: &EvaluationScans,
+) -> Outcome {
     let workspace = match workspace_member_names(metadata) {
         Members::Read(names) => names,
         Members::Unreadable(why) => return Outcome::ConstitutionError(why),
@@ -101,7 +120,7 @@ fn evaluate(constitution: &Constitution, metadata: &Value) -> Outcome {
             }
             Boundary::Module(module_boundary) => {
                 if let Err(error) =
-                    check_module_boundary(metadata, module_boundary, &mut violations)
+                    check_module_boundary(metadata, scans, module_boundary, &mut violations)
                 {
                     return Outcome::ConstitutionError(error);
                 }

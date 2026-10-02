@@ -3,7 +3,63 @@
 //! anchor, an unreadable workspace, an unreadable/unparseable source file), so no capability
 //! or sibling module drifts a copy.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ResolveError {
+    UnresolvableModule(String, String),
+    MissingModuleFile(String, String),
+    DualBackedModule(String, String, String, PathBuf, PathBuf),
+    UnreadableSource(PathBuf, String),
+    UnparseableSource(PathBuf, String),
+    UnknownTrait(String, String),
+    AmbiguousTraitAnchor(String, String, Vec<String>),
+    Other(String),
+}
+
+impl std::fmt::Display for ResolveError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnresolvableModule(module, crate_package) => {
+                f.write_str(&unknown_module_error(module, crate_package))
+            }
+            Self::MissingModuleFile(module, crate_package) => {
+                f.write_str(&missing_module_file_error(module, crate_package))
+            }
+            Self::DualBackedModule(module, declaration, crate_package, flat, nested) => f
+                .write_str(&dual_backed_module_error(
+                    module,
+                    declaration,
+                    crate_package,
+                    flat,
+                    nested,
+                )),
+            Self::UnreadableSource(file, err) => f.write_str(&unreadable_source_error(file, err)),
+            Self::UnparseableSource(file, err) => f.write_str(&unparseable_source_error(file, err)),
+            Self::UnknownTrait(trait_path, crate_package) => {
+                f.write_str(&unknown_trait_error(trait_path, crate_package))
+            }
+            Self::AmbiguousTraitAnchor(trait_path, crate_package, anchors) => f.write_str(
+                &ambiguous_trait_anchor_error(trait_path, crate_package, anchors),
+            ),
+            Self::Other(msg) => f.write_str(msg),
+        }
+    }
+}
+
+impl std::error::Error for ResolveError {}
+
+impl From<ResolveError> for String {
+    fn from(err: ResolveError) -> Self {
+        err.to_string()
+    }
+}
+
+impl From<String> for ResolveError {
+    fn from(msg: String) -> Self {
+        Self::Other(msg)
+    }
+}
 
 pub(crate) fn unreadable_workspace_error(manifest_path: &Path, err: &str) -> String {
     format!(
@@ -46,6 +102,35 @@ pub(crate) fn unknown_module_error(module: &str, crate_package: &str) -> String 
     format!(
         "a boundary must anchor to a real module or it silently never reacts: module '{module}' is \
          not found among the modules of crate '{crate_package}' (declared via `mod`) — check the path"
+    )
+}
+
+/// A module anchor or allowed location written in a spelling other than the canonical one.
+///
+/// `suggestion` is the canonical spelling the written one most plausibly meant, when there is one.
+pub(crate) fn non_canonical_module_anchor_error(
+    written: &str,
+    crate_package: &str,
+    suggestion: Option<&str>,
+) -> String {
+    let repair = match suggestion {
+        Some("crate") => "write `crate` for the crate root".to_string(),
+        Some(spelling) => format!("write `{spelling}`"),
+        None => "write the module's path from the crate root, starting `crate::`".to_string(),
+    };
+    format!(
+        "a module is named by one spelling or it becomes two identities: '{written}' in crate \
+         '{crate_package}' is not `crate` or `crate::` followed by `::`-separated identifiers — \
+         {repair}"
+    )
+}
+
+/// An allowed location naming a module that no compilation unit of the crate declares.
+pub(crate) fn unknown_location_error(location: &str, crate_package: &str) -> String {
+    format!(
+        "an allowed location must name a real module or it can never match: location \
+         '{location}' is not found among the modules of crate '{crate_package}' (declared via \
+         `mod`) — check the path"
     )
 }
 
@@ -116,6 +201,61 @@ pub(crate) fn malformed_path_operand_error(operand: &str) -> String {
     )
 }
 
+/// A dyn/impl-trait operand whose leaf is an auto trait can never match: those observers
+/// remove auto-trait bounds before principal-trait resolution.
+pub(crate) fn auto_trait_operand_error(
+    operand: &str,
+    boundary_kind: crate::resolve::AutoTraitBoundaryKind,
+) -> String {
+    let builder = boundary_kind.bound_builder();
+    let leaf = operand.rsplit_once("::").map_or(operand, |(_, leaf)| leaf);
+    format!(
+        "{} forbidden operand '{operand}' can never react: this operand set matches \
+         principal traits, and auto-trait bounds are removed before resolution; to govern \
+         auto-trait bounds, use {builder}([\"{leaf}\"]) instead, or remove this entry",
+        boundary_kind.display_name(),
+    )
+}
+
+pub(crate) fn empty_auto_bound_error(
+    boundary_kind: crate::resolve::AutoTraitBoundaryKind,
+) -> String {
+    format!(
+        "{} forbidden auto-trait bound set cannot be empty: to forbid all {} exposures, use {}() instead",
+        boundary_kind.display_name(),
+        boundary_kind.display_name(),
+        boundary_kind.shape_builder()
+    )
+}
+
+pub(crate) fn unrecognized_auto_trait_error(
+    operand: &str,
+    boundary_kind: crate::resolve::AutoTraitBoundaryKind,
+) -> String {
+    let of_builder = boundary_kind.operand_builder();
+    format!(
+        "{} forbidden auto-trait bound '{operand}' is not a recognized std auto trait: \
+         auto-trait bounds accept only Send, Sync, Unpin, UnwindSafe, RefUnwindSafe (bare or qualified); \
+         for principal trait operands, use {of_builder} instead",
+        boundary_kind.display_name()
+    )
+}
+
+pub(crate) fn wrong_auto_trait_module_error(
+    operand: &str,
+    leaf: &str,
+    module: &str,
+    root: &str,
+    standard_path: String,
+    boundary_kind: crate::resolve::AutoTraitBoundaryKind,
+) -> String {
+    format!(
+        "{} forbidden auto-trait bound '{operand}' names auto trait '{leaf}', but {leaf} is defined in \
+         {root}::{module}; use {standard_path} or bare {leaf} instead",
+        boundary_kind.display_name()
+    )
+}
+
 pub(crate) fn missing_module_file_error(module: &str, crate_package: &str) -> String {
     format!(
         "module '{module}' of crate '{crate_package}' is declared (`mod …;`) but its source file \
@@ -163,5 +303,58 @@ pub(crate) fn out_of_package_root_error(crate_package: &str, root: &std::path::P
          is not under the package's manifest directory; move the target's source under the package \
          directory, or declare the boundary against the package that owns it",
         root.display()
+    )
+}
+
+/// A foreign item of `module`, read from `file`, that `crate::syn_util::decode_foreign_item` cannot
+/// read as a `fn`, `static`, `type` or macro, with any `safe` or `unsafe` qualifier removed.
+///
+/// What it declares is unknown, so no boundary over the module can be judged against it, and passing
+/// it would be a silent pass over a declaration. rustc refuses such an item wherever its `#[cfg]` holds
+/// (`incorrect function inside \`extern\` block`, `incorrect \`type\` inside \`extern\` block`,
+/// measured under rustc 1.96.1 and 1.85.1), so it compiles only where cfg removes it or an attribute
+/// macro rewrites it: delete it if disabled by cfg, or write the expanded declaration directly if
+/// produced by an attribute macro.
+pub(crate) fn undecodable_foreign_item_error(module: &str, file: &Path, seen: &str) -> String {
+    format!(
+        "cannot judge a foreign item in module '{module}' ({}): {seen} inside an `extern` block does \
+         not parse as a `fn`, `static`, `type` or macro invocation with any leading `safe` or `unsafe` \
+         qualifier removed, so this dimension cannot tell what it declares and a boundary over this \
+         module would pass it unobserved; rustc accepts such an item only while a `#[cfg]` removes it \
+         or an attribute macro rewrites it — delete it if disabled by cfg, or write the expanded \
+         declaration directly if produced by an attribute macro",
+        file.display()
+    )
+}
+
+/// A crate governed by a static-item boundary renames `thread_local!` (`use std::thread_local as
+/// tls;`), so an invocation under the new name escapes the name `thread_local!` is recognized by.
+pub(crate) fn thread_local_rename_error(
+    renamed_to: &str,
+    module: &str,
+    crate_package: &str,
+) -> String {
+    format!(
+        "cannot judge static-item boundaries over crate '{crate_package}': module '{module}' renames \
+         `thread_local` to `{renamed_to}`, and a `thread_local!` is recognized by its name, so a static \
+         declared through `{renamed_to}!` would not be seen — write `thread_local!` (or \
+         `std::thread_local!`) directly instead of renaming it"
+    )
+}
+
+/// A `thread_local!` invocation whose body is not a sequence of `static` declarations.
+pub(crate) fn thread_local_body_error(module: &str, file: &Path, why: &str) -> String {
+    format!(
+        "cannot judge a `thread_local!` in module '{module}' ({}): its body does not read as `static` \
+         declarations ({why}), so the statics it declares cannot be named",
+        file.display()
+    )
+}
+
+/// A static whose enclosing owner cannot be named without inventing a positional label.
+pub(crate) fn static_owner_unnameable_error(name: &str, module: &str, cause: &str) -> String {
+    format!(
+        "cannot identify static {name} in {module} — its enclosing {cause}; no positional fallback is \
+         invented for it, because a label that names a traversal position is not an identity"
     )
 }

@@ -8,12 +8,12 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 use xuanji::{Outcome, Polarity, Violation};
 
+use crate::anchor::canonical_module_anchor;
 use crate::containment::{leaf_of, path_leaf, resolve_self_type, under_subtree};
 use crate::driver::run_boundaries;
 use crate::dsl::ForbiddenMarkerBoundary;
 use crate::emit::{MultiModuleViolationContext, push_multi_module_violations};
-use crate::errors::unknown_module_error;
-use crate::file_scope::{over_each_unit, resolve_crate_units};
+use crate::file_scope::{UnitAnchor, over_each_unit, resolve_crate_units};
 use crate::finding::{SemanticFact, sort_attributed_facts};
 use crate::resolve::{
     BareFallback, UseMap, canonical_path_str, canonical_self_owner, path_to_string,
@@ -53,37 +53,38 @@ pub(crate) fn check_forbidden_marker_boundary(
     boundary: &ForbiddenMarkerBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
+    let module = canonical_module_anchor(&boundary.module, &boundary.crate_package)?;
     let (_package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
-    over_each_unit(
-        &units,
-        &unknown_module_error(&boundary.module, &boundary.crate_package),
-        |root_file, src_dir, unit| {
-            let findings = forbidden_marker_findings(
-                src_dir,
-                root_file,
-                &boundary.module,
-                &boundary.forbidden,
-                &boundary.crate_package,
-            )?;
+    let anchor = UnitAnchor::Module {
+        module: &module,
+        crate_package: &boundary.crate_package,
+    };
+    over_each_unit(&units, anchor, |root_file, src_dir, unit| {
+        let findings = forbidden_marker_findings(
+            src_dir,
+            root_file,
+            &module,
+            &boundary.forbidden,
+            &boundary.crate_package,
+        )?;
 
-            push_multi_module_violations(
-                violations,
-                MultiModuleViolationContext {
-                    target: &boundary.module,
-                    rule: FORBIDDEN_MARKER_RULE,
-                    rule_key: boundary.rule_key(),
-                    reason: &boundary.reason,
-                    severity: boundary.severity,
-                    anchor: boundary.anchor(),
-                    polarity: Polarity::DenyBreach,
-                    crate_package: &boundary.crate_package,
-                    unit,
-                },
-                findings,
-            );
-            Ok(())
-        },
-    )
+        push_multi_module_violations(
+            violations,
+            MultiModuleViolationContext {
+                target: &module,
+                rule: FORBIDDEN_MARKER_RULE,
+                rule_key: boundary.rule_key(),
+                reason: &boundary.reason,
+                severity: boundary.severity,
+                anchor: boundary.anchor(),
+                polarity: Polarity::DenyBreach,
+                crate_package: &boundary.crate_package,
+                unit,
+            },
+            findings,
+        );
+        Ok(())
+    })
 }
 
 /// The pure heart: scan the crate, then for each forbidden trait emit findings two ways — a
@@ -92,16 +93,18 @@ pub(crate) fn check_forbidden_marker_boundary(
 /// the trait path both match; never a silent miss). Sorted, deduplicated.
 ///
 /// Forbidden operands are validated with `validate_path_operands` to reject empty path segments.
+/// Precondition: `subtree` exists in this unit's module graph (verified by [`over_each_unit`]).
 pub(crate) fn forbidden_marker_findings(
     src_dir: &Path,
     root_file: &Path,
     subtree: &str,
     forbidden: &[String],
     crate_package: &str,
-) -> Result<Vec<(SemanticFact, String, PathBuf)>, String> {
-    validate_path_operands(forbidden)?;
-    let scan = scan_crate(src_dir, root_file, crate_package, &HashSet::new())?;
+) -> Result<Vec<(SemanticFact, String, PathBuf)>, crate::errors::ResolveError> {
+    validate_path_operands(forbidden).map_err(crate::errors::ResolveError::Other)?;
     let subtree = canonical_path_str(subtree);
+    let scan = scan_crate(src_dir, root_file, crate_package, &HashSet::new())
+        .map_err(crate::errors::ResolveError::Other)?;
     let defined: HashSet<&str> = scan
         .type_defs
         .iter()

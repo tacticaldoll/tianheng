@@ -21,10 +21,11 @@
 //! reference for the author who created it and nobody else, which is the direction this repository's gates are
 //! held to generally.
 
+mod common;
+
 use std::collections::{BTreeSet, HashSet};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// The top-level directories a bare reference may name, and the extensions a bare basename may carry.
 const PATH_PREFIXES: [&str; 6] = [
@@ -58,20 +59,8 @@ fn workspace_root() -> Option<PathBuf> {
     )
 }
 
-fn scratch(label: &str) -> PathBuf {
-    static NEXT: AtomicUsize = AtomicUsize::new(0);
-    loop {
-        let candidate = std::env::temp_dir().join(format!(
-            "tianheng-reference-integrity-{label}-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        match xingbiao::claim_scratch(&candidate) {
-            Ok(()) => return candidate,
-            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(err) => panic!("cannot acquire reference-integrity fixture root: {err}"),
-        }
-    }
+fn scratch(label: &str) -> xingbiao::ScratchRoot {
+    xingbiao::scratch_root(&format!("tianheng-reference-integrity-{label}"))
 }
 
 /// How a tracked format carries prose.
@@ -185,7 +174,31 @@ fn every_tracked_format_is_classified() {
     );
     // Keyed by FORMAT, not by file, so one unclassified type reads as one entry rather than as every file
     // carrying it — the diagnostic says `format(s)` and must show formats.
-    let unclassified: BTreeSet<String> = all
+    let unclassified = unclassified_formats(&common::SourceCorpus::of(&all));
+    assert!(
+        unclassified.is_empty(),
+        "this repository tracks {} format(s) `FORMATS` does not classify: {}\nAdd each with the marker its \
+         comments use, or `Prose::None` if it carries no prose — an unclassified format is read by nothing \
+         while every sweep here still reports clean",
+        unclassified.len(),
+        unclassified.into_iter().collect::<Vec<_>>().join(", ")
+    );
+
+    let inside = common::SourceCorpus::of(&["openspec/changes/zzz-reference-probe/evidence.log"]);
+    let outside = common::SourceCorpus::of(&["measurements/evidence.log"]);
+    assert!(
+        unclassified_formats(&inside).is_empty(),
+        "an unclassified format under `openspec/changes/` entered the corpus"
+    );
+    assert!(
+        unclassified_formats(&outside).contains(".log"),
+        "the same unclassified format outside `openspec/changes/` must remain visible"
+    );
+}
+
+fn unclassified_formats(corpus: &common::SourceCorpus) -> BTreeSet<String> {
+    corpus
+        .paths()
         .iter()
         .filter(|path| prose_of(path).is_none())
         .filter_map(|path| {
@@ -195,15 +208,7 @@ fn every_tracked_format_is_classified() {
                 None => name.to_string(),
             })
         })
-        .collect();
-    assert!(
-        unclassified.is_empty(),
-        "this repository tracks {} format(s) `FORMATS` does not classify: {}\nAdd each with the marker its \
-         comments use, or `Prose::None` if it carries no prose — an unclassified format is read by nothing \
-         while every sweep here still reports clean",
-        unclassified.len(),
-        unclassified.into_iter().collect::<Vec<_>>().join(", ")
-    );
+        .collect()
 }
 
 /// The direction the classification lacked: every declared entry is **exercised** by some tracked file.
@@ -227,7 +232,9 @@ fn every_declared_format_is_exercised_by_a_tracked_file() {
         !all.is_empty(),
         "no tracked path was enumerated, so this direction would hold over nothing"
     );
-    let names: Vec<&str> = all
+    let source = common::SourceCorpus::of(&all);
+    let names: Vec<&str> = source
+        .paths()
         .iter()
         .filter_map(|path| Path::new(path).file_name()?.to_str())
         .collect();
@@ -262,7 +269,7 @@ fn no_tracked_file_is_claimed_by_two_declared_formats() {
         "no tracked path was enumerated, so this direction would hold over nothing"
     );
     let mut contested = Vec::new();
-    for path in &all {
+    for path in common::SourceCorpus::of(&all).paths() {
         let Some(name) = Path::new(path).file_name().and_then(|n| n.to_str()) else {
             continue;
         };
@@ -450,7 +457,6 @@ fn a_directory_only_ignore_pattern_reacts_whether_or_not_the_directory_exists() 
     std::fs::write(repo.join(".gitignore"), "/build/\n").expect("write the fixture .gitignore");
 
     let seen = ignored(&repo, "build");
-    let _ = std::fs::remove_dir_all(&repo);
     assert!(
         seen,
         "a directory-only ignore pattern must match its candidate even before the directory is ever \
@@ -477,7 +483,6 @@ fn a_real_file_sharing_a_directory_only_pattern_s_name_is_not_ignored() {
     std::fs::write(repo.join("build"), "not a directory").expect("write the fixture file");
 
     let seen = ignored(&repo, "build");
-    let _ = std::fs::remove_dir_all(&repo);
     assert!(
         !seen,
         "`build` exists on disk as an ordinary file, not a directory, so a directory-only `/build/` \
@@ -511,7 +516,7 @@ fn in_repository_references_resolve() {
         return;
     };
     let all = tracked(&root);
-    let offences = offences_in(&root, &root, &all, &all);
+    let offences = offences_in(&root, &root, &all, &common::SourceCorpus::of(&all));
     assert!(
         offences.is_empty(),
         "{} stale in-repository reference(s) — point each at the file that now holds the referenced item, \
@@ -668,7 +673,7 @@ fn offences_in(
     root: &Path,
     corpus_root: &Path,
     tracked_paths: &[String],
-    corpus: &[String],
+    corpus: &common::SourceCorpus,
 ) -> BTreeSet<String> {
     let all = tracked_paths;
     let files: HashSet<String> = all.iter().cloned().collect();
@@ -728,7 +733,7 @@ fn offences_in(
         );
         String::from_utf8_lossy(&out.stdout)
             .lines()
-            .filter(|p| !p.is_empty() && !p.starts_with("openspec/changes/"))
+            .filter(|p| !p.is_empty() && !common::is_openspec_change_path(p))
             .map(|p| p.rsplit_once('/').map_or(p, |(_, base)| base))
             .filter(|base| {
                 !all.iter()
@@ -741,22 +746,13 @@ fn offences_in(
     let mut offences: BTreeSet<String> = BTreeSet::new();
     let mut inspected = 0usize;
 
-    for rel_path in corpus {
+    for rel_path in corpus.paths() {
         if !is_inspected_source(rel_path) {
             continue;
         }
-        // Counted before the exclusion below, because the guard downstream asks whether the **enumeration**
-        // produced anything — a file deliberately left unjudged is still evidence that it did, while zero
-        // files of either extension means the corpus never arrived.
         inspected += 1;
-        // An active plan names what it intends to create, so judging it for existence refuses a proposal for
-        // describing its own deliverable. The requirement states this exclusion and carries a scenario for it;
-        // nothing held either until a plan first named a path that did not exist yet, and the check then
-        // reported five offences against the change proposing them. Filtered here rather than at the caller,
-        // so the fixture below exercises the same judgement the check runs.
-        if rel_path.starts_with("openspec/changes/") {
-            continue;
-        }
+        // `corpus` excludes `openspec/changes/` by construction, so a plan naming the path it intends to
+        // create is never judged for existence, and `inspected` counts the excluded corpus.
         let Ok(content) = std::fs::read_to_string(corpus_root.join(rel_path)) else {
             panic!(
                 "cannot read tracked file '{rel_path}' — a file this check claims to have inspected must \
@@ -857,7 +853,7 @@ fn offences_in(
 ///
 /// A consequence worth stating: re-adding or removing any real file can no longer repoint these probes. The
 /// premise is owned here rather than by what this repository happens to have deleted.
-fn a_repository_recording_a_deletion(label: &str) -> (PathBuf, String, String) {
+fn a_repository_recording_a_deletion(label: &str) -> (xingbiao::ScratchRoot, String, String) {
     let repo = scratch(label);
     let gone_rust = "zzz_probe_removed.rs";
     let gone_shell = "zzz_probe_removed.sh";
@@ -909,12 +905,7 @@ fn every_extraction_form_is_seen_when_it_names_something_absent() {
     };
     let tracked_paths = tracked(&root);
 
-    let scratch = std::env::temp_dir().join(format!(
-        "tianheng-reference-integrity-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&scratch);
-    xingbiao::claim_scratch(&scratch).expect("scratch is writable");
+    let scratch = xingbiao::scratch_root("tianheng-reference-integrity");
     std::fs::create_dir_all(scratch.join("crates/tianheng")).expect("scratch is writable");
 
     // The corpus is judged against THIS repository's tracked paths, so "absent" means absent here.
@@ -978,19 +969,27 @@ fn every_extraction_form_is_seen_when_it_names_something_absent() {
 
     let mut unseen = Vec::new();
     for (form, path, _) in &planted {
-        let offences = offences_in(&root, &scratch, &tracked_paths, &[path.to_string()]);
+        let offences = offences_in(
+            &root,
+            &scratch,
+            &tracked_paths,
+            &common::SourceCorpus::of(&[path]),
+        );
         if offences.is_empty() {
             unseen.push(format!("  {form} — planted in {path} and seen by nothing"));
         }
     }
     for (form, path, _) in &planted_by_history {
-        let offences = offences_in(&history, &scratch, &history_tracked, &[path.to_string()]);
+        let offences = offences_in(
+            &history,
+            &scratch,
+            &history_tracked,
+            &common::SourceCorpus::of(&[path]),
+        );
         if offences.is_empty() {
             unseen.push(format!("  {form} — planted in {path} and seen by nothing"));
         }
     }
-    let _ = std::fs::remove_dir_all(&scratch);
-    let _ = std::fs::remove_dir_all(&history);
     assert!(
         unseen.is_empty(),
         "an extraction form names something absent and the check says nothing:\n{}",
@@ -1034,7 +1033,7 @@ fn a_dated_changelog_section_keeps_its_paths_and_an_undated_one_does_not() {
             &root,
             &scratch,
             &tracked_paths,
-            &["CHANGELOG.md".to_string()],
+            &common::SourceCorpus::of(&["CHANGELOG.md"]),
         );
         let named = offences.iter().any(|o| o.contains(stale));
         match name {
@@ -1050,7 +1049,6 @@ fn a_dated_changelog_section_keeps_its_paths_and_an_undated_one_does_not() {
             ),
         }
     }
-    let _ = std::fs::remove_dir_all(&scratch);
 }
 
 /// The bare Rust form reacts for a name a repository DELETED, and stays silent for one it never tracked.
@@ -1090,10 +1088,18 @@ fn a_bare_rust_basename_reacts_only_for_a_name_this_repository_deleted() {
     )
     .expect("write the never-tracked probe");
 
-    let seen_deleted = offences_in(&history, &scratch, &history_tracked, &[deleted.to_string()]);
-    let seen_never = offences_in(&history, &scratch, &history_tracked, &[never.to_string()]);
-    let _ = std::fs::remove_dir_all(&scratch);
-    let _ = std::fs::remove_dir_all(&history);
+    let seen_deleted = offences_in(
+        &history,
+        &scratch,
+        &history_tracked,
+        &common::SourceCorpus::of(&[deleted]),
+    );
+    let seen_never = offences_in(
+        &history,
+        &scratch,
+        &history_tracked,
+        &common::SourceCorpus::of(&[never]),
+    );
 
     assert!(
         !seen_deleted.is_empty(),
@@ -1161,13 +1167,12 @@ fn comment_bearing_sources_and_live_test_claims_are_inspected() {
                 &root,
                 &fixture,
                 &tracked_paths,
-                &["anchor.md".to_string(), path.to_string()],
+                &common::SourceCorpus::of(&["anchor.md", path]),
             )
             .is_empty()
             .then_some(*direction)
         })
         .collect();
-    let _ = std::fs::remove_dir_all(&fixture);
 
     assert!(
         unseen.is_empty(),
@@ -1176,7 +1181,7 @@ fn comment_bearing_sources_and_live_test_claims_are_inspected() {
     );
 }
 
-/// `reference-integrity`'s scenario *An active OpenSpec plan names future paths*, held.
+/// `reference-integrity`'s scenario *A plan under `openspec/changes/` names future paths*, held.
 ///
 /// One body, two locations. Outside a plan it must be refused; inside one it must not — so the exclusion
 /// cannot pass by the reference being unrecognizable, which is what asserting only the second half would
@@ -1187,35 +1192,44 @@ fn an_active_plan_may_name_a_path_it_intends_to_create() {
         return;
     };
     let tracked_paths = tracked(&root);
-    let scratch = std::env::temp_dir().join(format!(
-        "tianheng-reference-integrity-plan-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&scratch);
-    xingbiao::claim_scratch(&scratch).expect("scratch is writable");
+    let scratch = xingbiao::scratch_root("tianheng-reference-integrity-plan");
 
     // Under a **tracked** member: an untracked crate directory is unenforceable by design, so a probe there
     // would be unrefused for a reason that has nothing to do with the exclusion being tested.
     let body = "The member will hold `crates/tianheng/src/zzz_absent_planned_dir/`.\n";
     let outside = "probe-outside-a-plan.md";
     let inside = "openspec/changes/zzz-probe-plan/proposal.md";
-    for path in [outside, inside] {
+    let control = "probe-control.md";
+    for (path, body) in [
+        (outside, body),
+        (inside, body),
+        (control, "The source corpus has an ordinary document.\n"),
+    ] {
         let full = scratch.join(path);
         std::fs::create_dir_all(full.parent().expect("a parent")).expect("scratch subdir");
         std::fs::write(full, body).expect("write the probe");
     }
 
-    let seen_outside = offences_in(&root, &scratch, &tracked_paths, &[outside.to_string()]);
-    let seen_inside = offences_in(&root, &scratch, &tracked_paths, &[inside.to_string()]);
-    let _ = std::fs::remove_dir_all(&scratch);
+    let seen_outside = offences_in(
+        &root,
+        &scratch,
+        &tracked_paths,
+        &common::SourceCorpus::of(&[outside, control]),
+    );
+    let seen_inside = offences_in(
+        &root,
+        &scratch,
+        &tracked_paths,
+        &common::SourceCorpus::of(&[inside, control]),
+    );
 
     assert!(
         !seen_outside.is_empty(),
-        "the same reference outside a plan must be refused, or the exclusion below proves nothing"
+        "the same reference outside `openspec/changes/` must be refused, or the exclusion below proves nothing"
     );
     assert!(
         seen_inside.is_empty(),
-        "an active plan naming a path it intends to create must not be a stale reference, but got:\n{}",
+        "a plan under `openspec/changes/` naming a path it intends to create must not be a stale reference, but got:\n{}",
         seen_inside.iter().cloned().collect::<Vec<_>>().join("\n")
     );
 }
@@ -1526,10 +1540,13 @@ const RELATIVE_ANCHORS: [&str; 4] = [
 /// window`, which matches nothing either.
 ///
 /// Split from the check so a negative fixture can call it, exactly as the sibling positional sweep is.
-fn relative_anchor_offences_in(corpus_root: &Path, corpus: &[String]) -> BTreeSet<String> {
+fn relative_anchor_offences_in(
+    corpus_root: &Path,
+    corpus: &common::SourceCorpus,
+) -> BTreeSet<String> {
     let mut offences = BTreeSet::new();
     let mut read = 0usize;
-    for path in corpus.iter() {
+    for path in corpus.paths() {
         let Some(Prose::LineComment(marker)) = prose_of(path) else {
             continue;
         };
@@ -1624,9 +1641,7 @@ fn relative_anchor_offences_in(corpus_root: &Path, corpus: &[String]) -> BTreeSe
 /// specimens on this page as the corpus.
 #[test]
 fn a_wrapped_anchor_reacts_in_every_marker_shape() {
-    let fixture = std::env::temp_dir().join(format!("kanhe-anchor-wrap-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&fixture);
-    xingbiao::claim_scratch(&fixture).expect("create the fixture root");
+    let fixture = xingbiao::scratch_root("kanhe-anchor-wrap");
 
     let shell = "wrapped.sh";
     let doc = "wrapped_doc.rs";
@@ -1660,14 +1675,8 @@ fn a_wrapped_anchor_reacts_in_every_marker_shape() {
     }
     let offences = relative_anchor_offences_in(
         &fixture,
-        &[
-            shell.to_string(),
-            doc.to_string(),
-            inner.to_string(),
-            executed.to_string(),
-        ],
+        &common::SourceCorpus::of(&[shell, doc, inner, executed]),
     );
-    let _ = std::fs::remove_dir_all(&fixture);
 
     let listed = offences.iter().cloned().collect::<Vec<_>>().join("\n");
     assert_eq!(
@@ -1693,7 +1702,7 @@ fn no_tracked_source_names_a_relative_anchor() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let offences = relative_anchor_offences_in(&root, &tracked(&root));
+    let offences = relative_anchor_offences_in(&root, &common::SourceCorpus::of(&tracked(&root)));
     assert!(
         offences.is_empty(),
         "{} relative anchor(s) in tracked source:\n{}",
@@ -1782,10 +1791,13 @@ fn marked_quotation(marked: Option<&Vec<Range<usize>>>, at: usize, end: usize) -
 /// **Paragraph-joined, for the reason the comment sweep is line-joined.** A phrase wrapped across two lines
 /// of Markdown is one phrase, and a per-line reader sees neither half. A blank line ends a paragraph, so a
 /// phrase does not cross one — the same boundary the sibling draws at a non-comment line.
-fn markdown_anchor_offences_in(corpus_root: &Path, corpus: &[String]) -> BTreeSet<String> {
+fn markdown_anchor_offences_in(
+    corpus_root: &Path,
+    corpus: &common::SourceCorpus,
+) -> BTreeSet<String> {
     let mut offences = BTreeSet::new();
     let mut read = 0usize;
-    for path in corpus.iter() {
+    for path in corpus.paths() {
         if !matches!(prose_of(path), Some(Prose::Whole)) || !path.ends_with(".md") {
             continue;
         }
@@ -1890,7 +1902,7 @@ fn no_markdown_prose_names_a_relative_anchor() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let offences = markdown_anchor_offences_in(&root, &tracked(&root));
+    let offences = markdown_anchor_offences_in(&root, &common::SourceCorpus::of(&tracked(&root)));
     assert!(
         offences.is_empty(),
         "{} relative anchor(s) in Markdown prose:\n{}",
@@ -1906,10 +1918,11 @@ fn no_markdown_prose_names_a_relative_anchor() {
 ///
 /// The corpus is every format [`FORMATS`] classifies as carrying line comments — not a second extension list.
 /// `Prose::Whole` is excluded by not being `LineComment`, which is how Markdown stays out by construction.
-fn positional_offences_in(corpus_root: &Path, corpus: &[String]) -> BTreeSet<String> {
+fn positional_offences_in(corpus_root: &Path, corpus: &common::SourceCorpus) -> BTreeSet<String> {
     let mut offences = BTreeSet::new();
     let mut read = 0usize;
     for path in corpus
+        .paths()
         .iter()
         .filter(|p| matches!(prose_of(p), Some(Prose::LineComment(_))))
     {
@@ -1952,7 +1965,7 @@ fn no_tracked_source_names_a_position_instead_of_a_thing() {
         return;
     };
     let all = tracked(&root);
-    let offences = positional_offences_in(&root, &all);
+    let offences = positional_offences_in(&root, &common::SourceCorpus::of(&all));
     assert!(
         offences.is_empty(),
         "{} positional reference(s) in tracked source:\n{}",
@@ -2068,13 +2081,8 @@ fn a_positional_reference_reacts_only_from_a_comment() {
     }
     let offences = positional_offences_in(
         &fixture,
-        &[
-            commented.to_string(),
-            executed.to_string(),
-            manifest.to_string(),
-        ],
+        &common::SourceCorpus::of(&[commented, executed, manifest]),
     );
-    let _ = std::fs::remove_dir_all(&fixture);
 
     let listed = offences.iter().cloned().collect::<Vec<_>>().join("\n");
     assert_eq!(
@@ -2124,7 +2132,7 @@ fn no_reference_names_a_line_number() {
 
     let mut coordinates = Vec::new();
     let mut read = 0usize;
-    for path in &paths {
+    for path in common::SourceCorpus::of(&paths).paths() {
         // A file this direction claims to have inspected must have been read. Skipping an unreadable one is
         // the vacuity this file already refuses elsewhere for exactly the same reason: with every tracked file
         // unreadable the verdict would be clean over nothing examined, and clean-over-nothing is
@@ -2218,11 +2226,14 @@ fn no_reference_names_a_line_number() {
 /// **visible prose, line-preserving** — every line that carries prose keeps its content at its own line
 /// number and every other line is empty — so the shared pairing reader answers with the document's own line
 /// numbers and a run of prose is one paragraph.
-fn unanchored_citation_offences_in(corpus_root: &Path, corpus: &[String]) -> BTreeSet<String> {
+fn unanchored_citation_offences_in(
+    corpus_root: &Path,
+    corpus: &common::SourceCorpus,
+) -> BTreeSet<String> {
     let own = own_repository(corpus_root);
     let mut offences = BTreeSet::new();
     let mut read = 0usize;
-    for path in corpus.iter() {
+    for path in corpus.paths() {
         let Some(kind) = prose_of(path) else {
             continue;
         };
@@ -2357,9 +2368,7 @@ fn live_prose(kind: Prose, text: &str, records: &kanhe::record::Records) -> Stri
 /// reports 0 of 3.
 #[test]
 fn a_citation_glued_to_punctuation_is_read() {
-    let root = std::env::temp_dir().join(format!("kanhe-citation-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    xingbiao::claim_scratch(&root).expect("the fixture root is writable");
+    let root = xingbiao::scratch_root("kanhe-citation");
 
     // Assembled from pieces no piece of which is itself object-shaped, because this file is inside the
     // corpus the live direction sweeps: a literal abbreviated object written here would be an offence of
@@ -2370,7 +2379,7 @@ fn a_citation_glued_to_punctuation_is_read() {
     );
     std::fs::write(root.join("GUIDE.md"), document).expect("the fixture document is writable");
 
-    let offences = unanchored_citation_offences_in(&root, &["GUIDE.md".to_string()]);
+    let offences = unanchored_citation_offences_in(&root, &common::SourceCorpus::of(&["GUIDE.md"]));
     assert_eq!(
         offences.len(),
         3,
@@ -2382,8 +2391,6 @@ fn a_citation_glued_to_punctuation_is_read() {
             "an offence must name the object it found: {offence}"
         );
     }
-
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A third party's pin is not this repository's object, and everything narrower than that still is.
@@ -2401,9 +2408,7 @@ fn a_citation_glued_to_punctuation_is_read() {
 /// is a way to spell the prohibited form behind the sanctioned one's prefix, so each is a row here.
 #[test]
 fn a_third_partys_action_pin_is_not_read_as_this_repositorys_object() {
-    let root = std::env::temp_dir().join(format!("kanhe-action-pin-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    xingbiao::claim_scratch(&root).expect("the fixture root is writable");
+    let root = xingbiao::scratch_root("kanhe-action-pin");
 
     // The manifest, because the exclusion is a fact about the repository being read rather than a constant:
     // `own_repository` takes it from the field the workspace already declares.
@@ -2440,8 +2445,7 @@ fn a_third_partys_action_pin_is_not_read_as_this_repositorys_object() {
     );
     std::fs::write(root.join("GUIDE.md"), document).expect("the fixture document is writable");
 
-    let offences = unanchored_citation_offences_in(&root, &["GUIDE.md".to_string()]);
-    let _ = std::fs::remove_dir_all(&root);
+    let offences = unanchored_citation_offences_in(&root, &common::SourceCorpus::of(&["GUIDE.md"]));
 
     assert_eq!(
         offences.len(),
@@ -2533,7 +2537,9 @@ fn own_repository(root: &Path) -> Option<String> {
         .trim_end_matches('/')
         .trim_end_matches(".git");
     let mut segments = url.rsplit('/');
-    let name = segments.next()?;
+    let name = segments
+        .next()
+        .expect("`rsplit` yields at least one segment");
     let owner = segments.next()?;
     (!name.is_empty() && !owner.is_empty()).then(|| format!("{owner}/{name}"))
 }
@@ -2643,6 +2649,68 @@ fn is_abbreviated_object(span: &str) -> bool {
         && span.chars().any(|c| c.is_ascii_alphabetic())
 }
 
+fn change_path_fixture(label: &str) -> (xingbiao::ScratchRoot, String) {
+    let root = scratch(label);
+    std::fs::create_dir_all(&root).expect("create fixture root");
+    std::fs::write(
+        root.join("Cargo.toml"),
+        "[workspace]\n[workspace.package]\nrepository = \"https://example.invalid/probe/reference-integrity\"\n",
+    )
+    .expect("write fixture manifest");
+
+    let git = |args: &[&str]| kanhe::hermetic_git::fixture(&root, "git", args);
+    git(&["init", "-q", "-b", "main"]);
+    git(&["config", "user.name", "Reference Integrity Test"]);
+    git(&[
+        "config",
+        "user.email",
+        "reference-integrity@example.invalid",
+    ]);
+    git(&["add", "-A"]);
+    git(&[
+        "commit",
+        "-q",
+        "-m",
+        "chore(probe): create the fixture base",
+    ]);
+
+    let output = kanhe::hermetic_git::hermetic("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(&root)
+        .output()
+        .expect("read fixture commit");
+    assert!(output.status.success(), "git rev-parse HEAD failed");
+    let development_commit = String::from_utf8(output.stdout)
+        .expect("git hash is UTF-8")
+        .trim()
+        .to_string();
+    let citation = format!("This measurement cites `{development_commit}`.\n");
+    for (path, body) in [
+        (
+            "openspec/changes/zzz-reference-probe/measurement.md",
+            citation.as_str(),
+        ),
+        ("measurements/measurement.md", citation.as_str()),
+        (
+            "openspec/specs/control.md",
+            "The corpus has a tracked control document.\n",
+        ),
+    ] {
+        let full = root.join(path);
+        std::fs::create_dir_all(full.parent().expect("fixture parent"))
+            .expect("create fixture directory");
+        std::fs::write(full, body).expect("write fixture evidence");
+    }
+    git(&["add", "-A"]);
+    git(&[
+        "commit",
+        "-q",
+        "-m",
+        "test(probe): add active change and outside evidence",
+    ]);
+    (root, development_commit)
+}
+
 /// No live governance document cites a moment a reader of a fresh clone cannot reach.
 ///
 /// **The class five review rounds swept past.** Those rounds looked for typed counts, live line counts,
@@ -2658,11 +2726,33 @@ fn no_live_document_cites_a_moment_a_fresh_clone_cannot_reach() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let offences = unanchored_citation_offences_in(&root, &tracked(&root));
+    let offences =
+        unanchored_citation_offences_in(&root, &common::SourceCorpus::of(&tracked(&root)));
     assert!(
         offences.is_empty(),
         "{} unreachable citation(s) in live governance text:\n{}",
         offences.len(),
         offences.iter().cloned().collect::<Vec<_>>().join("\n")
     );
+
+    let (fixture, development_commit) = change_path_fixture("citation-exclusion");
+    let inside = "openspec/changes/zzz-reference-probe/measurement.md";
+    let outside = "measurements/measurement.md";
+    let control = "openspec/specs/control.md";
+    assert_eq!(
+        std::fs::read_to_string(fixture.join(inside)).expect("read active-plan citation"),
+        std::fs::read_to_string(fixture.join(outside)).expect("read outside citation")
+    );
+    let inside_corpus = common::SourceCorpus::of(&[inside, control]);
+    let outside_corpus = common::SourceCorpus::of(&[outside, control]);
+    assert!(
+        unanchored_citation_offences_in(&fixture, &inside_corpus).is_empty(),
+        "a development-commit citation under `openspec/changes/` entered the live corpus: {development_commit}"
+    );
+    let outside_offences = unanchored_citation_offences_in(&fixture, &outside_corpus);
+    assert!(
+        !outside_offences.is_empty(),
+        "the same development-commit citation outside `openspec/changes/` must be refused"
+    );
+    let _ = std::fs::remove_dir_all(fixture);
 }

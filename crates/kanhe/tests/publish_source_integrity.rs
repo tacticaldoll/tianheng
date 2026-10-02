@@ -37,12 +37,7 @@ fn a_valid_signature_from_an_unauthorized_key_is_accepted() {
     let Some(_) = workspace_root() else {
         return;
     };
-    let root = std::env::temp_dir().join(format!(
-        "tianheng-publish-source-integrity-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&root);
-    xingbiao::claim_scratch(&root).expect("the fixture root is writable");
+    let root = xingbiao::scratch_root("tianheng-publish-source-integrity");
 
     let fixture = fixture::build(&root, "unauthorized", "9.9.9");
 
@@ -56,7 +51,6 @@ fn a_valid_signature_from_an_unauthorized_key_is_accepted() {
     // scratch root holds no allowed-signers file asserts what the two preceding assertions already guarantee.
 
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
-    let _ = std::fs::remove_dir_all(&root);
 
     assert!(
         verdict.is_ok(),

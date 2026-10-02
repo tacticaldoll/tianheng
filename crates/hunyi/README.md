@@ -29,26 +29,31 @@ Built capabilities (each passing Tianheng's capability-admission test — declar
   belong to the trait definition, which signature-coupling already governs.
 - **Trait-impl locality** — a trait may only be implemented in declared locations.
 - **Visibility** — a module must not declare bare `pub` items.
+- **Re-export-only** — a facade module declares only `use` items; opt into subtree depth to permit and govern child modules.
 - **Forbidden-marker** — a module's types must not acquire a forbidden trait/derive.
 - **Dyn-trait** — a module's public API must not *expose* trait-object (`dyn`) syntax (the
   type-shape complement of signature-coupling: internal `dyn` is fine; leaking dynamic
-  dispatch across the declared seam is the violation). Two depths: `must_not_expose_dyn()` is
+  dispatch across the declared seam is the violation). Three modes: `must_not_expose_dyn()` is
   **shape-only** (any exposed `dyn` reacts), and `must_not_expose_dyn_of([...])` is
   **operand-scoped** (only a `dyn` whose principal trait resolves into the named set reacts —
   e.g. forbid `dyn crate::Port` while allowing `dyn std::error::Error`). An empty operand set
   degenerates to shape-only (any `dyn`), never a no-op; auto-trait markers (`Send`) are never
   operands; a principal trait outside the resolver's coverage (a bare std trait, macro/glob
   re-export) is the stated bound, never a silent pass of a resolvable operand.
+  `must_not_expose_dyn_bounded_by(["Send"])` is the third mode, forbidding selected auto-trait
+  bounds by their normalized leaf names; accepted qualified spellings name the defining `marker`
+  or `panic` module under `std` or `core`.
 - **Impl-trait** — a module's public API must not *return* a written `impl Trait` (RPIT), the
   **existential** complement of dyn-trait's dynamic dispatch: an RPIT at a seam leaks an
   unnameable type the caller cannot name or store, and silently commits to its auto-traits.
-  Two depths: `must_not_expose_impl_trait()` is **shape-only** (any returned `impl Trait` reacts),
+  Three modes: `must_not_expose_impl_trait()` is **shape-only** (any returned `impl Trait` reacts),
   and `must_not_expose_impl_trait_of([...])` is **operand-scoped** (only a returned `impl Trait`
   whose principal trait resolves into the named set reacts — e.g. allow `impl Iterator` but forbid
   `impl crate::Port`), an empty set degenerating to shape-only. Governs **return positions only**:
   argument-position `impl Trait` (APIT) is universal, not a leak, and `async fn`'s implicit
   `impl Future` is a distinct, out-of-scope existential form — both stated bounds, never silent
-  misses; auto-trait markers are never operands.
+  misses; auto-trait markers are never operands. `must_not_expose_impl_trait_bounded_by(["Send"])`
+  is the third mode, forbidding selected auto-trait bounds by their normalized leaf names.
 - **Async-exposure** — a module's public API must not declare an `async fn`, the **implicit**
   existential complement of impl-trait: an `async fn` leaks a compiler-inserted `impl Future` and
   commits the seam to async. `must_not_expose_async_fn()` is shape-only (any public `async fn` at
@@ -57,11 +62,21 @@ Built capabilities (each passing Tianheng's capability-admission test — declar
   is impl-trait's domain. The finding is an **owner-qualified item identity** (`async fn <Ty>::name(…)`)
   so two same-named async fns never collide under the baseline. Declarative = "this seam is
   synchronous" by anchor scoping (a sync-core/async-edges layering), not a blanket "no async".
+- **Static-item** — a module's whole subtree declares no `static` item, foreign `static` or
+  `thread_local!` (`StaticBoundary::…::must_not_declare_static()`). Unlike the exposure families it
+  always governs every module at or beneath its anchor, and a static in a function, method, closure or
+  initializer body reacts as one at module level does. Each finding names its kind (`static`,
+  `static_mut`, `foreign_static`, `foreign_static_mut`, `thread_local`), declaring module, name and the
+  named value item enclosing it. `thread_local!` is recognized by name, and a crate renaming it is
+  refused. It governs *declarations*: a call with process-global effects, such as
+  `std::env::set_var`, is `must_not_call_inline`'s, so its reason says what it observes —
+  *declares no `static` item or `thread_local!`* — never *has no global state*. A static produced by a
+  macro other than `thread_local!` is not observed, and a `#[cfg]`-gated static is observed as written.
 
 ```rust
 use hunyi::{
-    SignatureBoundary, TraitImplBoundary, VisibilityBoundary, ForbiddenMarkerBoundary,
-    DynTraitBoundary, ImplTraitBoundary, AsyncExposureBoundary,
+    SignatureBoundary, TraitImplBoundary, VisibilityBoundary, ReexportOnlyBoundary, ForbiddenMarkerBoundary,
+    DynTraitBoundary, ImplTraitBoundary, AsyncExposureBoundary, StaticBoundary,
 };
 
 // exposure: my-app's public API must not leak crate::infra::DbPool
@@ -81,6 +96,12 @@ let visibility = VisibilityBoundary::in_crate("my-app")
     .module("crate::internal")
     .must_not_declare_pub()
     .because("internal is crate-private by contract");
+
+// re-export-only: a facade declares only use items
+let facade = ReexportOnlyBoundary::in_crate("my-app")
+    .module("crate::facade")
+    .must_declare_only_reexports()
+    .because("the facade carries only re-exports");
 
 // forbidden marker: domain types must not derive Serialize
 let marker = ForbiddenMarkerBoundary::in_crate("my-app")
@@ -117,6 +138,12 @@ let async_boundary = AsyncExposureBoundary::in_crate("my-app")
     .module("crate::core")
     .must_not_expose_async_fn()
     .because("the core seam is synchronous; async lives at the adapter edges");
+
+// static-item: nothing under crate::core declares a static or a thread_local!
+let static_boundary = StaticBoundary::in_crate("my-app")
+    .module("crate::core")
+    .must_not_declare_static()
+    .because("the core declares no `static` item or `thread_local!`");
 ```
 
 **Stated bounds** (never silently passed): local `pub use` re-export chains — including

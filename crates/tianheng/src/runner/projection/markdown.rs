@@ -17,6 +17,7 @@ pub(in crate::runner) fn list_markdown(document: &Value) -> String {
         ),
         ("trait_impl_boundaries", "Trait-impl-locality boundaries"),
         ("visibility_boundaries", "Visibility boundaries"),
+        ("reexport_only_boundaries", "Re-export-only boundaries"),
         ("forbidden_marker_boundaries", "Forbidden-marker boundaries"),
         ("dyn_trait_boundaries", "Dyn-trait boundaries"),
         ("impl_trait_boundaries", "Impl-trait boundaries"),
@@ -25,6 +26,7 @@ pub(in crate::runner) fn list_markdown(document: &Value) -> String {
             "unsafe_confinement_boundaries",
             "Unsafe-confinement boundaries",
         ),
+        ("static_item_boundaries", "Static-item boundaries"),
         ("runtime_boundaries", "Runtime boundaries"),
     ] {
         let Some(Value::Array(items)) = document.get(key) else {

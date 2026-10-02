@@ -9,7 +9,8 @@ branch when you pick it up. Every future reaction obeys the drift law:
 Nothing here is "designed" yet — reaction *phases* with their observation sources named,
 not APIs. A new observation dimension is **a crate, born when it is built** (never a
 pre-created empty stub); the heavy dependency it needs is quarantined to that crate so the
-`guibiao` core keeps `serde_json` as its only **external** dependency.
+`guibiao` core keeps only the **external** dependencies its self-law allowlist names (`AGENTS.self-law.md`), with
+no heavy one among them.
 
 ## Backlog governance — evidence before promotion
 
@@ -136,6 +137,12 @@ consumer for an undemonstrated deduplication.
   run lines. So it is a declared value held to its producer, the second branch of `AGENTS.md`'s *Bind a claim
   to its measurement*, and not the third pin the trigger above counts.
 
+  **The second way it was held is gone, and the verdict stands on the first, read 2026-10-02.** *fix(guibiao)!:
+  resolve inline path heads from one scope table over one token tree* removed the MSRV line from `AGENTS.md`'s
+  Definition of Done (*The MSRV build is CI-only*), so `AGENTS.md` names no toolchain and `dod_coherence` has no
+  line to hold against the job. The literal is now held one way, by the job's derivation step. It still tracks no
+  upstream, so it is still not a pin by the criterion above.
+
   *Compatibility class:* patch; CI configuration ships in no crate. *Authority:* this entry, and the workflow
   comment's refresh recipe — `repos/<owner>/<repo>/commits/<tag>`, which dereferences an annotated tag to its
   commit where `git/ref/tags` returns the tag object.
@@ -196,29 +203,6 @@ consumer for an undemonstrated deduplication.
   ACCEPTED DEBT rather than becoming a gap with a design. Whether a falsified risk sentence alone should
   re-open the class is a steward's call, recorded here rather than taken.
 
-- **`examples/observer-participant`'s own test fixture was not migrated to `xingbiao::claim_scratch`,
-  unlike every other scratch-root claim in the workspace.** *Class:* ACCEPTED DEBT. *Observed pressure:*
-  an adversarial review of the whole `0.5.0` window found `examples/observer-participant/tests/
-  reaction.rs`'s `Fixture::new` still does `remove_dir_all` then `create_dir_all(root.join("src"))` on a
-  predictable `temp_dir().join(format!("house-rules-{name}-{pid}"))` path — the exact symlink-adoption
-  race the `claim_scratch` migration closed at every other one of the ~40 call sites it touched.
-  *Observation source:* read directly; confirmed every other workspace fixture with this shape now calls
-  `claim_scratch` and this one does not. *Current reaction or bound:* none. *Risk:* low and unchanged from
-  before the migration — developer-machine-only, requires a local attacker able to plant a symlink at a
-  PID-guessable path before this one test runs, in an example crate that ships in no package. *Why debt,
-  not a gap someone forgot:* `examples/observer-participant/Cargo.toml` states its design goal explicitly —
-  "One dependency, and deliberately nothing else... an example that needed a new export would be proving
-  the opposite of what it exists to prove" — and `claim_scratch` is not re-exported through `tianheng`'s
-  public prelude. Migrating this fixture would require either adding a new export to `tianheng` just for
-  an example's own test helper, or adding `xingbiao` as a second dependency, either of which contradicts
-  the example's stated purpose. *Promotion trigger:* `xingbiao::claim_scratch` (or an equivalent) becoming
-  reachable through `tianheng::prelude` for an unrelated reason — **not fired, measured 2026-09-06: the
-  wildcard prelude re-exports no scratch-directory helper, so the fixture still could not reach one** — at
-  which point migrating this one fixture
-  would cost nothing further. *Version class:* patch; an example, shipping in no package. *Authority:*
-  `examples/observer-participant/Cargo.toml`'s own header comment, the one place this constraint is
-  declared.
-
 - **The shell's semantic delegation, held by construction.** **Still open**, and one attempt at it is recorded
   here because the attempt's own reasoning was wrong. The shell's semantic arm now invokes `SemanticObserver`
   rather than calling 渾儀's composed entry point beside it, which was this entry's named shape — and review
@@ -260,6 +244,13 @@ consumer for an undemonstrated deduplication.
   never had one. **The failed attempt's measurement is carried in the code itself**, in the arm's comment: *a
   guard deciding emptiness above this line still compiles and passes every gate*. Nothing has drifted, and
   the shape is unchanged: a design step, not a call-site swap.
+
+  **The two arm comments quoted above are gone, read 2026-10-02.** `git grep -nE 'still compiles|never had one' --
+  crates/tianheng/src` answers nothing, and `git log -S'still compiles and passes every gate'` names
+  `chore(release): 0.6.1` as the snapshot that removed the sentence, so the measurement is carried by this entry
+  alone and not by the code. The premises the reopening reads still hold: `semantic_boundaries()` is used in
+  `COOKBOOK.md`, `crates/tianheng/tests/adopter_surface.rs` and `examples/sans-io-pure`, and the semantic arm of
+  `evaluate_constitution` still calls `SemanticObserver::new(..).observe(..)`.
 
   Worth noting beside the entry above about a shape's unrecorded status: of the entries taken to the tree,
   this is the one that wrote down its own failed attempt, and it is the one whose premises survived
@@ -435,6 +426,14 @@ consumer for an undemonstrated deduplication.
   change actually needed** — the last being the case where the information is absent rather than merely
   unannounced, which is the failure the price would be worth paying for.
 
+  **The third half fired once, read 2026-10-02, and the class is not reopened.** *fix(guibiao)!: settle
+  gated-glob resolution and bound what it retains* made a reading or memo past its budget exit 2, and
+  `[Unreleased]`'s `### Migration` carries no step for it, while the 64-link chain cap beside it has one. The
+  repair, *ask for fewer branching imports, globs or re-exports*, is stated in that change's marked `### Changed`
+  entry, so the information is unannounced in Migration rather than absent from the notes, which is the
+  distinction this condition draws. The squash *docs: give the budget refusal a migration step and state set
+  claims by their owner* adds the step. No second unmarked breaking entry appeared: every `!` squash in the window maps to a marked entry.
+
 - **A claim about this tree, written as prose, is held only where its author declared it.** *Class:*
   ACCEPTED DEBT — **reclassified from READY-PATCH on 2026-09-25**, on the measured reason at the end of this
   entry. *Observed pressure:* two claims were found false in the 0.5.0 window by the same shape — a
@@ -525,7 +524,443 @@ consumer for an undemonstrated deduplication.
   *Reopening:* a decidable form that tells a claim about an enumerable set from a sentence about a mechanism, or
   a false set-membership claim found in a released artifact that the sweep's vocabulary would not have reached.
 
+- **Most pinning citations have never been seen to fail.** *Class:* ACCEPTED DEBT — **reclassified from
+  READY-PATCH on 2026-10-03, because no patch closes it.** Its own decision of 2026-09-03 makes coverage an
+  obligation on each citation rather than a campaign over the standing set, and `pin_bites` prints the uncovered
+  part on every clean run, so the bound is the obligation and the printed figure, chosen as sufficient; what an
+  entry under READY-PATCH promises, a change someone may make now that ends it, does not exist. *Reopening:*
+  biting coverage becoming the rule, or a derivation that ties a citation to the behaviour it pins, either of
+  which changes what a citation is held to. *Observed pressure:* the register decides a citation names a test that
+  RUNS and cannot decide that it BITES; gutting a cited pin's body in a worktree left the suite green and the
+  register clean. `crates/kanhe/tests/pin_bites.rs` closes that for the citations that declare a mutation, and it
+  prints how many do not on every clean run — the figure is produced there, not
+  typed here. *Observation source:* that gutting, and the anchor-counting rule in `observer_protocol.rs` losing
+  its only assertions during the composition-body retirement, found by a reviewer reading the diff.
+  *Current reaction or bound:* `crates/kanhe/tests/pin_bites.rs` over the declared mutations; nothing over the rest.
+  *Risk:* a defence that has stopped defending is indistinguishable from one that has not, which is the failure
+  the register was built to end one level down. *Promotion trigger:* fired — the gate exists; what remains is
+  coverage. **Decided 2026-09-03: coverage grows as an obligation on citing, not as a campaign.** Grinding the
+  standing set was costed and declined on its rate — `pin_bites` reports the uncovered part on every clean
+  run, and the citation set grows faster than mutations can be authored, so chasing the numerator loses to
+  stopping the denominator. `AGENTS.md` now requires a citation to arrive with its mutation or with the reason
+  it has none, in the same change. The debt this entry already carries from the `0.6.0` window is answered
+  collectively rather than per-citation, above: six requirements gained citations, none declared a mutation,
+  and the reason is recorded where the economics are. What remains is
+  coverage, which grows one considered record at a time. That last claim was false while the tree under test
+  was an export of tracked content: a pin reading the repository through git failed its own control run, so no
+  record could ever exercise it — `units_outside_the_gate_pairing_are_outside_the_surface` was one. The tree is
+  a detached worktree now and the claim holds. One citation is still outside it for a different reason:
+  `a_cfg_gated_module_with_no_file_is_skipped_not_errored` is defined in two files under `crates/`, so the
+  target to run it in cannot be derived from a set and any record naming it refuses. Both episodes are kept
+  because the entry's economics rest on the claim. **This entry's residue grew by the citations added on 2026-09-02, and the growth is recorded here rather
+  than left in the change that caused it.** Six requirements in `repository-checks` gained citations, and
+  **none of them declares a mutation**, so every one landed in the part of the citation set this check
+  reports as uncovered on each clean run. The figure is produced there and not typed here; what is written
+  down is the direction it moved and why — a citation is cheap to add and its mutation is not, so any work
+  that cites more pins enlarges this entry unless it authors the mutations too. That is the economics this
+  entry rests on, observed on itself.
+
+  **Two more additions in the window rooted at the `v0.6.0` snapshot, and the second one changes this
+  entry's arithmetic.** Three `PINNED-BY` citations landed with the line-comment requirement and declared no
+  mutation. Unlike the six above, the reason is structural rather than economic and the change stated it:
+  `every_declared_mutation_s_name_resolves_to_a_real_bound_id` refuses a record whose name resolves to no
+  bound id, so an ordinary scenario's citation **cannot** carry one. What that exposes is the second
+  addition. The figure `pin_bites` printed counted every distinct `PINNED-BY` name under `openspec/specs`,
+  while a mutation may only name a test that a **pinned bound** cites. Measured 2026-09-20, by extracting
+  the `PINNED-BY` names across `openspec/specs` and the `pinned by` names from the two bound projections and
+  comparing the distinct sets: **258 cited, 79 eligible**. Most of the remainder that gate reported was
+  therefore not coverage anyone can author — it was a denominator the numerator cannot reach by construction.
+  The gate now reads coverage against the tests a declared bound cites and prints the ordinary-only citations
+  as a separate figure, so *coverage grows one considered record at a time* is measured against the set a
+  record can reach; its eligible figure, taken from its own output on 2026-09-24, agreed with the extraction
+  above.
+
+  **Not fired, measured 2026-09-08.** The obligation this entry settled on is that citing carries the
+  mutation, so the sweep is what the window cited. Measured over the delta: `+.*PINNED-BY` in
+  `openspec/**` answers **zero**, and new rows in `pin_mutations.tsv` answer **zero** — a window that added
+  no citation created no debt for the obligation to be owed on. One spec scenario was added and deliberately
+  carries no citation, being an ordinary scenario rather than a declared bound.
+
+  *What closing it costs, measured while seeding:* a
+  mutation must genuinely perturb the pinned point, and authoring one is per-bound expert work. One attempt
+  during this change did not — masking a brace inside a block comment left the exact one-statement comparison
+  refusing the body anyway, so the pin held and the record reported a biting pin as a dead one. That direction
+  is safe, and it is why coverage cannot be swept. (Two further failures that looked the same were gate defects,
+  not authoring cost: a lib test registering under its module path, and the cargo target derived from the
+  mutated file rather than from the test's definition. Both are fixed and neither recurs.) *Version class:* not release-affecting; a
+  repository gate over this repository's own governance tests. *Authority:* `observation-bound-register`, whose
+  added requirement states the obligation and the arrangements that make it observable.
+
 ### WATCH
+
+- **Child processes' own temporary writes and the user-level tool caches are outside the fixture-root rule.**
+  *Class:* WATCH. *Observed pressure:* none beyond the steward's scoping of the build-directory change, 2026-10-02.
+  *Observation source:* `crates/kanhe/tests/support/bash.rs`'s `INHERITED` hands the parent's `TMPDIR` to every
+  `bash` a check runs, so a script's `mktemp` lands wherever the host says; rustc and cargo write to `TMPDIR`
+  while compiling; a fixture `cargo` run reads and writes `~/.cargo`; the Definition of Done's `npm ci` writes
+  `~/.npm`. *Current reaction or bound:* `scratch_roots` reads who constructs a root in Rust and declares the rest
+  unobserved (`repository-checks/a-system-temporary-directory-named-in-prose-a-string-or-a-child-environment-is-not-read-a-stated-bound`).
+  *Risk:* a host whose system temporary directory is unwritable still fails those children, and the failure names
+  the child rather than the fixture. *Promotion trigger:* a run with `TMPDIR` set to an unwritable directory,
+  exported to the test binaries and not to the compile, shows a test failing for a child's write; each such write
+  needs its own observation source. *Version class:* patch. *Authority:* the steward's scoping of the change that
+  introduced `xingbiao::scratch_root`.
+
+- **圭表's libc check retains a latency regression after gated-glob resolution settles.** *Class:* WATCH.
+  *Observed pressure:* measured on a registry crate, with no adopter latency requirement. *Observation source:*
+  measured 2026-10-02 using a release probe calling `guibiao::check` on libc 0.2.189 with one
+  `ModuleBoundary::in_crate("libc").module("crate").must_not_call_inline("core::mem")` boundary, under
+  `ulimit -v 4000000` and `timeout 120`: at `v0.7.1`, the same probe takes 0.62 s and 20,864 KiB peak RSS
+  in two runs; the repaired resolver's isolated run takes 7.64 s and 201,744 KiB peak RSS, returning violations.
+  The timings come from
+  `/usr/bin/time`, rather than the probe's process status, which is zero even when its product outcome is
+  violations. The release tag anchors the baseline to a tree any clone can reproduce.
+  An isolated instrumented copy counts 68,835 denotations, 8,062 graph readings, 122,225 hazard queries and
+  684,002 target queries; 111,929 hazard queries have distinct `(glob, prefix, viewer)` keys. Its denotation memo
+  retains 131,393 readable paths and 136,536 report candidates across 66,569 keys. Nested timer sums overlap and
+  cannot establish which reader dominates elapsed time. *Current reaction or bound:* per-reading, glob-graph
+  and denotation-memo budgets in `crates/guibiao/src/module_scan/resolve.rs` refuse excess retention, and
+  `foreign_candidates_beside_local_ones_are_terminal_for_every_reader` excludes terminal foreign paths from
+  hazard work; these protect retention and verdicts, not a libc latency target. *Risk:* about twelvefold slower
+  checking against the recorded baseline; caching every hazard tuple would save few queries and could increase
+  retention. Viewer-dependent visibility and terminal-candidate handling must survive an optimization.
+  *Promotion trigger:* an adopter's reproducible check exceeds its stated latency budget, or a same-toolchain
+  comparison with non-overlapping profiling identifies avoidable repeated work on libc and demonstrates a
+  reduction without moving corpus verdicts or exceeding the retained-data budgets; either makes a bounded
+  performance repair READY-PATCH. *Version class:* patch for an optimization preserving verdicts, refusal
+  limits and public interfaces. *Authority:* the steward's request to track this measured regression, and
+  `inline-symbol-path-confinement`'s requirement that a large source is read in time its size bounds.
+
+- **圭表 lexes a source twice for each root that compiles it: once in the walk and once in the unit scan.**
+  *Class:* WATCH. *Observed pressure:* none from an adopter; the steward named sharing the token tree as the step
+  after the per-root scan, 2026-10-01. *Observation source:* `collect_children` in
+  `crates/guibiao/src/module_scan/reachability/walk.rs` lexes each file it reads into a `TokenTree` the walk keeps,
+  and `FileScan::read` in `crates/guibiao/src/module_scan/symbol_scan.rs` lexes the same text again for the root's
+  unit scan; both take the text from the evaluation's one `SourceTexts` reading. *Current reaction or bound:* none;
+  the directions in `crates/guibiao/src/tests/evaluation_scans.rs` count reads, root scans, classifications and
+  scope tables, not lexes. *Risk:* no false negative; lexing time on a large crate, paid twice per root. *Promotion
+  trigger:* a steward decision, or a check whose time is dominated by lexing, measured by timing the walk against
+  the unit scan, which makes one token tree per source and edition, shared by the walk and the unit scan, a
+  READY-PATCH; the walk's trees borrow from its own text map, so the share moves that borrow. *Version class:*
+  patch. *Authority:* `module-boundary`'s requirement *One evaluation reads each source once and scans each
+  compilation unit once*, and `inline-symbol-path-confinement`'s requirement that a large source is read in time
+  its size bounds.
+
+- **The glob hazard reads a chain of globs once per glob that starts it.** *Class:* WATCH. *Observed pressure:*
+  none from an adopter. *Observation source:* `glob_reaches_prefix` in `crates/guibiao/src/module_scan/glob_hazard.rs`
+  chases a glob's chain of `pub` globs to its end for each glob it is asked about, and keeps no answer, so a chain
+  of *n* modules each globbing the next is read *n* times over. Measured 2026-09-30 in a debug build, with the crate root globbing the first of such a chain and a prefix naming the last module, the inline
+  check took 0.27 s at 250 links, 0.93 s at 500 and 3.5 s at 1000; the lookup through the chain itself is linear.
+  *Current reaction or bound:* `a_long_chain_of_globs_resolves` bounds a chain of three hundred. *Risk:* no false
+  negative; time on a source whose glob chains run to hundreds of links, which no crate measured has. *Promotion
+  trigger:* a crate that builds under rustc whose check time is dominated by this reading, which makes keeping each
+  module's answer for a prefix, independent of the viewer where no private glob is read, a READY-PATCH. *Version
+  class:* patch. *Authority:* `inline-symbol-path-confinement`'s requirement that a large source is read in time
+  its size bounds.
+
+- **Inline-confinement directions are hand-written per WHEN form, and nothing ties a scenario's forms to its
+  test's rows.** *Class:* WATCH. *Observed pressure:* seven review claims in the review record of the scope-table resolver's pull request, each a WHEN form
+  a pinned test had no row for, all closed by adding the row. *Observation source:* those scenarios in
+  `openspec/specs/inline-symbol-path-confinement/spec.md` against their `PINNED-BY` tests in
+  `crates/guibiao/tests/per_target_corpus.rs`. *Current reaction or bound:* none; a reader matching WHEN prose
+  to rows is the prose instrument *Do not add a detector over prose* declines. *Risk:* a scenario claiming a form
+  its pin never runs. *Promotion trigger:* a later review finds another WHEN form with no row. *Version class:*
+  patch. *Authority:* AGENTS.md's *every new or materially changed scenario carries its observation evidence*.
+
+  **Read 2026-09-30 by a gate-ordered static review's contract track.** The clauses it traced to code showed no WHEN
+  form without a row; every scenario it did not trace is unobserved rather than passed.
+
+- **`check_one_root` and `CrateScopes::name_raw` take many arguments, and the both-modes loop is written
+  several times.** *Class:* WATCH. *Observed pressure:* review structural causes, no defect. *Observation
+  source:* `#[allow(clippy::too_many_arguments)]` on `name_raw` and on `check_one_root`'s callers in
+  `crates/guibiao/src/module_check.rs`, whose resolver half has one cause: a scope is passed as two positions,
+  its table `t` and its id, through every lookup method, with a `u32::try_from(..).expect("scope table exceeds u32")`
+  at each place a scope's index is minted; the loops over `[false, true]` for `.strict_external()` in
+  `crates/guibiao/tests/per_target_corpus.rs`, whose size is its own cost to every reader of it. *Current
+  reaction or bound:* none. *Risk:* a new argument or mode added at one site and not another. *Promotion
+  trigger:* the next change that edits `check_one_root`'s signature or adds a both-modes helper, which gathers
+  the arguments into one value and the loop into one helper in that change, or the next lookup method added to
+  `CrateScopes`, which makes the scope one value minted in one place. *Version class:* patch.
+  *Authority:* AGENTS.md's *one rule gets one implementation*.
+
+  **The `check_one_root` half fired and is repaired as written; the other two halves did not fire, read
+  2026-10-02.** *perf(guibiao): read each source once and scan each root once per evaluation* gave
+  `check_one_root` a ninth parameter, the evaluation's scan set, and the next change to touch the function
+  did not gather anything. Now the caller obtains the root's `RootScan`, and the function returns what
+  the root contributes as one `RootJudgement` (its outcome, declared modules, items and violations), which the
+  caller merges. It takes four parameters and its `too_many_arguments` allow is gone. The `name_raw` half
+  was read against every method *fix(guibiao)!: settle gated-glob resolution and bound what it retains* added to
+  `CrateScopes`: `hazard_paths`, `denotation`, `readable_paths`, `crate_named`, `read_glob_paths` and
+  `depending_on` each take a path or a name, and none takes a scope as `(t, id)`, so no lookup method was added
+  and that half stays open as written. No change in the window added a both-modes helper to
+  `crates/guibiao/tests/per_target_corpus.rs`, so its loop half stays open too.
+
+- **圭表 holds one rule in several places.** *Class:* WATCH. *Observed pressure:* none from an adopter; a static
+  review read each 2026-09-30. *Observation source:* `DeclaredModule::direct_path` is an `Option<Option<String>>`
+  whose unreadable value the walk passes over without refusing — every spelling this reader cannot read, `concat!`,
+  `b"…"` and an embedded NUL, rustc refuses (`malformed path attribute input`), measured against rustc 1.96.0, so no
+  compilable instance exists; the resolver builds a binding's quote in `binding_quote` and again in
+  `binding_names`, and assembles its `LookupKey` by hand at each memo; a macro invocation is detected in
+  `item_head::macro_name_of`, `TokenTree::node_before` and `node_at`; `use_scan` passes two bools by
+  position. *Current reaction or bound:*
+  none. *Risk:* a fix to one copy and not the other, no current defect. *Promotion trigger:* a change editing one
+  copy, which converges that set in the same change, or a defect one copy has and another lacks, which makes it
+  READY-PATCH. *Version class:* patch. *Authority:* AGENTS.md's *One rule gets one implementation returning a typed
+  result*.
+
+  **Not fired, and two clauses were not true of the tree, read 2026-10-02.** The corpus was each copy's lines,
+  read with `git log -L` from the change that wrote this entry to the window's tip. *fix(guibiao)!: settle
+  gated-glob resolution and bound what it retains* edited `glob_edges` and `binding_names` elsewhere in their
+  bodies, a width charge and a `crate_named` call, and left the duplicated lines as they were, so no copy was
+  edited; this reading takes the trigger as an edit to a copy's own lines, as the scanner-length entry takes its
+  trigger as a change to a function's branches. Two clauses were removed rather than watched. `module_check` declares
+  no `Declared`, at the tip or in the change that wrote this entry (`git grep -nw Declared --
+  crates/guibiao/src/module_check.rs` answers nothing; `resolve::Declared` is the only one). `glob_edges` reads a
+  glob target's scopes from `self.modules` alone and `self.blocks` only in `lookup_in_module`, so the
+  scope-selection pair is not one rule held twice.
+
+- **圭表's scanner holds functions longer and deeper than a reading follows.** *Class:* WATCH. *Observed pressure:*
+  a static review, no defect. *Observation source:* `token_tree`'s `lex` runs three passes in one body and
+  `decode_str_escapes` nests five deep; `occurrence`'s member-access branch nests five deep; `scope_tree`'s
+  `record_items` and `glob_hazard`'s `read_scope` nest four deep; `resolve` carries the glob fixed point
+  (`glob_targets`, `read_in_pass`, `forget_readings`) beside name resolution, and `denote_in` is long; angle pairing
+  means what `item_head` says while its cache type lives in `token_tree`. Measured 2026-09-30 by
+  `cargo clippy -p guibiao --lib -- -W clippy::too_many_lines`: `denote_in`, `check_one_root`, `lex`, and
+  `bounds.rs`'s table, which is data; `collect_children` was on that list and was split into named steps by the change
+  that next edited it. A static review read 2026-10-01 adds `CrateScopes::new` and `scope_tree::build`, each nesting
+  five to six deep. *Current reaction or bound:* none. *Risk:* a reader, human or
+  model, repairing one branch of a function it cannot hold whole. *Promotion trigger:* the next change to one of
+  them, which splits it in that change; `check_one_root` and `name_raw` keep the entry above. *Version class:*
+  patch. *Authority:* AGENTS.md's *A repair loop is a diagnosis, not a schedule*.
+
+  **Fired on four functions, read 2026-10-02. Two are repaired as written and two are left with the reason.** The
+  corpus was every function this entry names, each read with `git log -L` over its body's current line range,
+  from the change that wrote this entry to the window's tip. *fix(guibiao)!: settle gated-glob resolution and
+  bound what it retains* rewrote `denote_in`, adding two parameters and a width charge at every push. It is now
+  the crate-rooted split and the worklist loop. `read_branch` reads one branch with one arm per
+  `lookup_in_module` answer, and the `Candidates` arm's bound-following is `Reading::follow_bound`. The worklist
+  is one `Reading` value, which charges the per-reading width budget when a branch is taken up, a path is
+  found, a branch is pushed and a foreign candidate is projected, so a step does not charge it itself. The same
+  change rewrote `glob_hazard`'s `read_scope` to read through `hazard_paths` and to charge each queued glob
+  target. It is now its three reads: re-exports, `extern crate`s, and queued globs. The same change gave
+  `CrateScopes::new` one field initialiser, and *perf(guibiao): read each source once and scan each root once
+  per evaluation* gave `scope_tree::build` a `#[cfg(test)]` build counter. Neither edit reads or changes a
+  branch of its function, so neither was split: the trigger exists so that someone reading a function splits
+  it, and these edits did not read the functions. They stay watched, and this reading takes the trigger as a
+  change to a function's branches. `lex`, `decode_str_escapes`, `record_items` and `occurrence`'s
+  member-access reader were not edited.
+
+  **`check_one_root` did not leave this list, read again 2026-10-02 at the window's tip.** The sentence that
+  stood here said it had, by the arguments entry, and that entry repaired its arity alone. The same clippy run
+  answers `check_one_root` at 114 of 100 lines, beside `lex` at 114 and `bounds.rs`'s declaration table, and
+  `denote_in` is no longer reported. *refactor(guibiao): gather check_one_root's arguments and split denote_in and
+  read_scope, as their triggers ask* changed its branches, returning one `RootJudgement`, without splitting it, so
+  by this reading's own interpretation the trigger fired on it. Splitting it is a code change, so it is left to
+  a change of its own rather than made in the reading, and the function stays on this list until that change.
+
+  **The `check_one_root` length trigger is closed.** It now calls `collect_root_facts`, `decide_root_outcome`,
+  and `dispatch_root_rule_family` in order; the many-arguments entry above remains open for `name_raw` and the
+  both-modes loop. Measured 2026-10-02 by `cargo clippy -p guibiao --lib -- -W clippy::too_many_lines`,
+  `check_one_root` and its three steps are not reported.
+
+- **The glob fixed point's pass bound is argued by nothing.** *Class:* WATCH. *Observed pressure:* a static review,
+  no instance. *Observation source:* the glob graph's `settle` allows one sweep more than its node count and then
+  refuses; the answers are monotone and finite, so they settle, but a derivation can need more sweeps than that
+  where adding a path waits on a candidate carried in by another. *Current reaction or bound:* the refusal, which is
+  fail-closed. *Risk:* a refusal (exit 2) of a crate rustc builds, never a silent pass. *Promotion trigger:* a crate
+  rustc builds that 圭表 refuses because its globs do not settle, which makes a worklist bounded by the lattice's
+  height a READY-PATCH with that crate as its pin. *Version class:* patch. *Authority:*
+  `inline-symbol-path-confinement`'s fixed-point requirement.
+
+  **Fired twice in the window rooted at the `v0.7.1` snapshot, and neither firing was this entry's mechanism.
+  Read 2026-10-02; stays WATCH.** The corpus was every *globs do not settle* refusal the window met: the
+  `per_target_corpus.rs` directions whose doc names one, by `git grep -n 'do not settle' -- crates`, and
+  the pull requests that added them. First, `a_glob_read_later_in_a_pass_is_not_read_through_itself`: a glob
+  read from an answer remembered earlier in its pass read through itself and grew every pass. That was met
+  inside *fix(guibiao)!: resolve inline path heads from one scope table over one token tree*, the change that
+  introduced the fixed point, and was repaired before it merged by reading each glob with no answer
+  remembered. Second, on the release branch, `gated_sibling_globs_settle_and_observe_calls`: two cfg-gated sibling globs,
+  which rustc 1.96.0 builds, were refused with *globs do not settle on what they name within 64 passes*,
+  because a gated module's bare head was read as an unread crate and each pass lengthened the foreign path.
+  *fix(guibiao)!: settle gated-glob resolution and bound what it retains* repaired that at the head's reading.
+  In both cases the answers grew without limit, so a fixed point never existed. That is the fail-closed refusal
+  doing its job, and a worklist bounded by the lattice's height would have refused both just the same. The
+  mechanism this entry names, a monotone and finite derivation that needs more sweeps than its bound allows,
+  has no instance, and `globs_whose_readings_grow_more_than_once_settle` is the control: a chain that grows
+  several times settles inside the bound. So the worklist does not earn READY-PATCH. A trigger reading should
+  also know that two bounds refuse here: the glob graph's `settle` this entry names, and `glob_targets`' pass
+  count, `MAX_RESOLUTION_CHAIN` or twice the glob count plus two, whichever is larger. Both firings were the
+  second.
+
+- **Suspicions the static reviews of 2026-09-30 raised and did not demonstrate.** *Class:* WATCH. *Observed
+  pressure:* none from an adopter. *Observation source:* `Visibility::visible_from` answers visible-everywhere for a
+  `pub(in …)` it cannot resolve, reached only by a `super` past the crate root, which rustc refuses; an edition-2015
+  `pub(in a::b)` may be read as the region `a::b` rather than `crate::a::b`, neither measured nor reviewed; a
+  `Self::f()` head may read as unbound; and nested `#[cfg_attr(any(), path = ".")]` candidates grow exponentially,
+  in a fixture no maintainer writes. *Current reaction or bound:* none. *Risk:* each, where real, a wrong answer on
+  the shape it names. *Promotion trigger:* a crate rustc builds on which 圭表 answers one wrongly, which makes that one
+  READY-PATCH with the crate as its pin. *Version class:* by the repair. *Authority:* AGENTS.md's *A violation is a
+  rule, and a rule needs a reachable instance*.
+
+- **Mechanisms that would make a long session's drift visible, measured and not adopted.** *Class:* WATCH.
+  *Observed pressure:* a static review of 圭表's typed-resolver work, 2026-09-30, found, past the linear review rounds its pull request
+  records, fallbacks nothing reaches, docs describing code that had moved, and one rule in several places.
+  *Observation source:* measured 2026-09-30 over `crates/guibiao --lib`: `clippy::option_option` flags exactly the
+  `Option<Option<String>>` field above and `PathAttributes::direct`, which carries it, and nothing else,
+  `clippy::allow_attributes_without_reason` flags six suppressions in guibiao and one in `xuanji`, which the
+  command lints beside it, and `clippy::too_many_lines` flags the functions the entry above names, twenty-two across the
+  workspace; a self-law boundary confining `std::fs::read_to_string` to one source-text module would hold what the
+  per-root scan above makes true, and has three read sites to converge first (`collect_children`, `UnitScan::read`,
+  `governed_module_value_items`); and a step before the cut, beside the trigger reading, that re-reads whole each
+  module a release branch rewrote against the review gates, which is how these were found. *Current reaction or bound:*
+  none. *Risk:* the same classes reappearing in a release window that rewrites a module whole. *Promotion trigger:* a steward decision to
+  adopt one, the pre-cut step first, since it asks nothing of the code. *Version class:* none; each is repository
+  governance. *Authority:* AGENTS.md's *A repair loop is a diagnosis, not a schedule*. The read confinement is
+  built, 2026-10-01: `collect_children` and `UnitScan::read` take a source's text from `module_scan::source_texts`,
+  `governed_module_value_items` reads no text, its names coming from the unit scan's tables, and the self-law
+  boundary `guibiao::crate::module_scan::source_texts` confines guibiao's `std::fs` read and open calls to that
+  module.
+
+- **渾儀 and 漏刻 may read an inline module's children from its direct `#[path]` base alone.** *Class:* WATCH.
+  *Observed pressure:* none from an adopter. *Observation source:* rustc compiles the first path attribute
+  written, so `#[cfg_attr(unix, path = "c")] #[path = "d"] mod m { pub mod k; }` reads `c/k.rs` on unix —
+  measured against rustc 1.96.0, edition 2021, where a call to an item only `c/k.rs` defines compiles. 圭表 read
+  `d/` alone there and left `c/k.rs` ungoverned; it now reads each base by its position
+  (`a_path_attribute_is_read_by_its_position`). 渾儀's
+  `module_resolve` selects `vec![relocated]` whenever `direct_path_value` answers, which is the shape 圭表 had,
+  **read from the code and not yet demonstrated** by a failing fixture; 漏刻's audit walk is unread for it.
+  *Current reaction or bound:* none in either dimension. *Risk:* a false negative in each dimension where it
+  holds, reachable only by a `cfg_attr` path written before a direct one on an inline module. *Promotion
+  trigger:* a fixture in 渾儀 or 漏刻 that governs `d/k.rs` and not `c/k.rs` for that declaration, which makes it
+  READY-PATCH for that dimension with the fixture as its pin. *Version class:* minor for each dimension it
+  closes, since closing a false negative earns one. *Authority:* `module-boundary` for 圭表's requirement, which
+  the semantic and runtime specs say they match on `#[path]` relocation.
+
+- **漏刻 may compile the last of several direct `#[path]` attributes where rustc compiles the first.**
+  *Class:* WATCH. *Observed pressure:* none from an adopter. *Observation source:* rustc 1.96.0 compiles the
+  first path attribute written on a declaration and reports each later one unused, so `#[path = "a.rs"]
+  #[path = "b.rs"] mod m;` compiles `a.rs`; 漏刻's attribute reader keeps the last (`audit/scan/lexer.rs`, the
+  `b"path"` arm overwriting `attrs.path`) — read from the code, not yet run. *Current reaction or bound:* none.
+  *Risk:* a false negative in 漏刻 over `a.rs`, and a judgement of `b.rs`, which the build does not contain,
+  reachable only by a declaration writing two direct path attributes. *Promotion trigger:* a 漏刻 fixture
+  `#[path = "a.rs"] #[path = "b.rs"] mod m;` with a violation only in `a.rs` that 漏刻 reports clean, which
+  makes it READY-PATCH with that fixture as its pin. *Version class:* minor, since closing a false negative
+  earns one. *Authority:* `module-boundary`'s path-attribute requirement, which the runtime spec says it
+  matches on `#[path]` relocation.
+
+- **渾儀 and 漏刻 tolerate an absent module file only under the declaration's own `cfg` or a `cfg_if!` arm.**
+  *Class:* WATCH. *Observed pressure:* none from an adopter. *Observation source:* rustc loads nothing beneath what
+  a `cfg` removes, so `#[cfg(any())] mod o { mod i; }` and `#[cfg(any())] mod o;` over an `o.rs` declaring `mod i;`
+  build with no `i.rs` — measured against rustc 1.96.0, edition 2021, and held for 圭表 by
+  `an_absent_module_file_beneath_what_a_cfg_removes_is_tolerated`. 漏刻's `absence_is_tolerated` answers from the
+  declaration's own attributes and its arm, and `collect_scope_modules` descends an inline body with the arm flag
+  cleared; 渾儀's `cfg_conditional` in `scan/items.rs` is its arm or `has_cfg_attr` on the item, and
+  `module_resolve.rs` reads the same question a second time. Both **read from the
+  code and not yet run**. *Current reaction or bound:* none in either dimension. *Risk:* a refusal (exit 2) of a
+  crate rustc builds, never a silent pass, reachable by a `mod` with no file beneath a compiled-out item or file.
+  *Promotion trigger:* a fixture in 渾儀 or 漏刻 reproducing one row of that test with exit 2, which makes it
+  READY-PATCH for that dimension with the fixture as its pin. *Version class:* patch, since lifting a refusal asks
+  nothing of an adopter. *Authority:* `module-boundary`'s plain-declaration requirement, which states the runtime
+  dimension's walker as the one exception to that rule.
+
+- **圭表 reads an enclosing `cfg` from outer attributes only, not from an inner `#![cfg]` on a module body or at a
+  file's top.** *Class:* WATCH. *Observed pressure:* none from an adopter. *Observation source:* rustc removes a
+  module whose body or file opens with `#![cfg(pred)]` where `pred` is false, so `mod o { #![cfg(any())] mod i; }`
+  and an `o.rs` opening `#![cfg(any())]` over `mod i;` load no `i.rs` — the same removal the outer form makes, which
+  `an_absent_module_file_beneath_what_a_cfg_removes_is_tolerated` holds. 圭表 refuses both (exit 2), as
+  `module-boundary`'s *An inner attribute is no attribute of the mod after it* pins for a crate root's `#![cfg(unix)]`
+  and for `mod tests { #![cfg(test)] mod c; }`. Measured 2026-09-30 by `git grep -lE '^\s*#!\[cfg\(' -- 'crates/*/src/**.rs'`:
+  this workspace's own sources write no inner `cfg`, so the self-governance gate reaches neither answer. *Current
+  reaction or bound:* the pinned scenario's refusal. *Risk:* a refusal (exit 2) of a crate rustc builds, never a
+  silent pass, reachable only where the file of a `mod` is absent beneath a module an inner `cfg` removes.
+  *Promotion trigger:* a crate that builds under rustc and that 圭表 refuses for that shape, which makes reading an
+  inner `cfg` into `may_be_compiled_out` and the file's lineage a READY-PATCH, amending that scenario's two `cfg`
+  rows in the same change; 漏刻 and 渾儀 read no enclosing `cfg` at all, per the entry above. *Version class:* patch,
+  since lifting a refusal asks nothing of an adopter. *Authority:* `module-boundary`'s plain-declaration
+  requirement.
+
+- **A path in a pattern position is read as a call.** *Class:* WATCH. *Observed pressure:* none from an
+  adopter. *Observation source:* a path's role is read from the tokens beside it, so `let P(x) = p`, a match arm
+  `E::A(x) =>`, a parameter `P(x): P`, `matches!(e, E::A(_))` and a destructuring assignment `P(x) = p` each
+  report under a prefix naming `P` or `E`; telling a pattern from a call needs an expression and pattern reader,
+  which is the shape whose own defects hid real calls, silently. *Current reaction or bound:*
+  `inline-symbol-path-confinement/a-path-in-a-pattern-position-is-read-as-a-call-a-stated-bound`, pinned by
+  `a_path_in_a_pattern_position_is_read_as_a_call`. *Risk:* a false positive only, under a prefix naming the
+  type a pattern destructures; `Some(..)`, `Ok(..)` and `Err(..)` name nothing, since the prelude is not read.
+  *Promotion trigger:* an adopter reporting the over-reaction, or a reader of patterns that can be shown never to
+  hide a call. *Version class:* patch — it removes findings. *Authority:* `inline-symbol-path-confinement`.
+
+- **An answer read past a cut cycle is not remembered, and a cfg-closed re-export ring doubles per link.** *Class:*
+  WATCH. *Observed pressure:* measured 2026-10-01 on a debug build, no adopter: `pub mod m{i} { #[cfg(unix)] pub use
+  crate::m{i+1}::f; #[cfg(not(unix))] pub use crate::forbidden::f; }` for `i` below `n`, closed by an `m{n}` whose
+  `cfg(not(unix))` leaf is `pub use crate::m0::f;`, called as `m0::f()` under a prefix `crate::forbidden`, takes 0.2 s
+  at `n = 8`, 2.3 s at 12 and 48 s at 16, and passes 120 s at 20; rustc 1.96.0, edition 2021, builds it at 12 with an
+  isolated target directory. *Observation source:* `CrateScopes`'s lookup and presence memos in
+  `crates/guibiao/src/module_scan/resolve.rs` store an answer only when the walk that produced it cut no cycle, since
+  an answer read past a cut depends on the walk it was entered from, so every link of the ring is re-read once per
+  path to it. A memo per walk keyed by the frame an answer was read under was tried and did not bound the ring,
+  because the re-reads stand under different frames; keying a frame by its chain of bindings rather than by its
+  instance is the untried repair. *Current reaction or bound:* declared as
+  `inline-symbol-path-confinement/a-cfg-closed-re-export-ring-is-read-in-time-exponential-in-its-length-a-stated-bound`,
+  pinned by eight- and eleven-link rings whose scope reads the pin, a resolver unit test counting reads rather than
+  timing a check, holds to at least a fourfold ratio, so a repair that bounds the reading fails the pin and retires
+  the bound; the chain cap of 64 bounds the depth, not the time. *Risk:* a scan that does not finish on such a ring, never a wrong verdict. *Promotion trigger:* a crate an
+  adopter builds whose scan time is dominated by these re-reads, or a repair keyed by the chain that bounds the ring
+  above with no verdict moving in the corpus. *Version class:* patch — performance. *Authority:*
+  `inline-symbol-path-confinement`'s time-bound requirement.
+
+- **A shared syn-free lexical layer.** *Class:* WATCH. *Observed pressure:* none from an adopter.
+  *Observation source:* hand-written Rust lexers stand in these crates — `crates/guibiao/src/module_scan/token_tree.rs`,
+  the only reader of source bytes in `guibiao`, `crates/louke/src/audit/scan/lexer.rs` and
+  `crates/kanhe/src/comment_scan.rs`. The keyword table `token_tree.rs` holds and the one
+  `louke`'s `is_rust_keyword` matches name the same words; measured by comparing the two word lists as sets,
+  neither holds a word the other lacks. *Current reaction or bound:* inside `guibiao`, the token tree imports no
+  other `guibiao` module, held by the self-law boundary on `crate::module_scan::token_tree`; across the two
+  dimensions, `crates/tianheng/tests/lexical_conformance.rs` feeds one input to `guibiao` and `louke` per row and
+  asserts they agree, and `kanhe`'s finder reads only this repository's own sources. The trigger fired when
+  `guibiao` was taught `Pattern_White_Space` and the edition-2021 C string prefix: on the ledger the two agree on
+  the first, and disagree on the second because `louke` reads source roots with no edition, a disagreement
+  declared as `runtime-origin-assertion/a-raw-string-after-an-identifier-character-is-read-as-one-in-every-edition-a-stated-bound`
+  and pinned on the ledger, rather than closed by a shared layer that would carry the same missing input.
+  *Risk:* a defect repaired in one lexer stays in the others. *Promotion trigger:* a ledger row on which the two
+  disagree for a reason other than an input one of them lacks. *Version class:* internal; a new crate is a law amendment that
+  widens `guibiao`'s and `louke`'s dependency allowlists. *Authority:* `PROJECT.md`'s `xingbiao` criterion —
+  what the tokens in a file mean belongs to the dimension asking, and a widening that cannot be argued across it is
+  a new crate's job — with 三儀 ⊥ 三儀 for `louke`.
+
+- **A prelude name called bare is not read as its standard-library path.** *Class:* WATCH. *Observed
+  pressure:* none from an adopter. *Observation source:* `drop(x)`, `Some(..)` and `Box::new(..)`
+  resolve through the std prelude, which `guibiao` does not read, so `must_not_call_inline("std::mem")` does
+  not see `drop(x)` — nor did 0.7.1, which read it as `{module}::drop`. The producer of the set is the
+  toolchain's own prelude source, `library/std/src/prelude/` under `rustc --print sysroot`'s
+  `lib/rustlib/src/rust/`: measured present, holding `mod.rs` and `v1.rs`, on rustc 1.96.0 stable with
+  rust-src installed. A copied name list would be a second list to hold against it. *Current reaction or
+  bound:* `inline-symbol-path-confinement/a-prelude-name-called-bare-is-not-read-as-its-std-path-a-stated-bound`,
+  pinned by `a_prelude_name_called_bare_is_not_read_as_its_std_path`. *Risk:* a boundary on a std module an
+  item of which the prelude re-exports passes a bare call of it. *Promotion trigger:* an adopter confining a
+  std module whose items the prelude re-exports (`std::mem`, `std::boxed`, `std::option`), or a second
+  reader needing the prelude's contents. *Version class:* minor — new observation depth that reacts by
+  default. *Authority:* `inline-symbol-path-confinement`.
+
+- **The dyn-trait collector does not read an `extern` block's foreign items.**
+  *Class:* WATCH. *Observed pressure:* none — the shape compiles and nothing governs it, but no adopter has
+  needed it governed. *Observation source:* in `crates/hunyi/src/collect/`, `collect_item_dyn_exposures` has
+  no `Item::ForeignMod` arm, so a foreign `fn`'s signature is not read by it with or without a `safe` or
+  `unsafe` qualifier, where `collect_item_exposures` reads it through the shared foreign-item decoder.
+  Measured on rustc 1.96 and 1.85, edition 2024:
+
+  ```text
+  pub trait T {} unsafe extern "C" { pub fn a(x: &dyn T); }   → compiles
+  pub trait T {} unsafe extern "C" { pub fn b() -> impl T; }  → error[E0562]: `impl Trait` is not allowed in `extern fn` return types
+  unsafe extern "C" { pub async fn c(); }                     → error: functions in `extern` blocks cannot have `async` qualifier
+  ```
+
+  `collect_item_return_impl_traits` and `collect_item_async_exposures` have no `ForeignMod` arm either, and
+  there that is no gap: rustc does not allow either shape in an `extern` block, so there is nothing to observe.
+  *Current reaction or bound:* none for `dyn`. *Risk:* a `dyn` exposed only in an FFI signature passes a
+  dyn-trait boundary unobserved. *Promotion trigger:* an adopter exposing a `dyn` in an FFI signature who
+  needs it governed. *Version class:* minor, since it closes a false negative an adopter's baseline would have
+  to absorb. *Authority:* `semantic-dyn-trait-boundary`.
 
 - **Two fixture shapes in the test infrastructure are written more than once, and the shared form is new
   published surface.** *Class:* WATCH. *Observed pressure:* a static review of the window rooted at the
@@ -547,6 +982,33 @@ consumer for an undemonstrated deduplication.
   this entry still watches, together with the `Drop` guards across the crates' tests that still discard their
   cleanup's result: `git grep -n -A6 'impl Drop for' -- crates | grep 'let _ ='` lists them, fourteen when this
   was written. Each is a caller `settle_cleanup` would take; the trigger stays a new one being written.
+
+  **The shared scratch form now exists, and the narrowed half is unchanged, read 2026-10-02.** *test: keep every
+  fixture root inside the build directory* built the shared form in `xingbiao`: `scratch_base`, the build
+  directory's `tmp/` beside the running test binary's profile, and `scratch_root`, which returns a
+  `ScratchRoot` guard removed on drop through `settle_cleanup`. `crates/kanhe/tests/scratch_roots.rs` holds
+  every fixture root to one of the two. So the deferral above, *each is a new `#[doc(hidden)]` item in a
+  published crate for a single caller*, no longer describes the shared form, which is built and paid for. What this entry still watches is the half that
+  change left on purpose: scratch fixtures in other test binaries keep their own names and cleanup over
+  `scratch_base()` rather than taking `ScratchRoot`, and the `Drop` guards that discard their cleanup's
+  result. The same grep, re-run on 2026-10-02 at the tip of the window rooted at the `v0.7.1` snapshot,
+  lists thirteen.
+
+  **The scratch half fired and is converged; the `Drop` half is narrowed, read 2026-10-03.** What fired it was the
+  first reachable instance of the half the previous reading left on purpose: two guibiao tests building a fixture
+  from one label, through the corpus builders in `evaluation_scans`, removed each other's files, because a name
+  composed from a label and the process id is unique only while no two callers choose one label. Every fixture root
+  now comes from `xingbiao::scratch_root`, whose per-process counter makes two roots distinct whatever their labels,
+  and `scratch_roots` holds every tracked Rust file outside `crates/xingbiao` to not naming `scratch_base` or
+  `scratch_ceiling` except in a declared set of files, each with why (`repository-checks`, the requirement on
+  fixture roots). kanhe's `support::fixture::Scratch`, a second implementation of the root's claim and cleanup, is
+  gone, and the two readings above that say scratch fixtures keep their own names and cleanup no longer describe
+  the tree. What stays declared is kanhe's restatement of the layout rule, `scratch_ceiling`: its normal edges may
+  not reach `xingbiao`, so it neither takes a root from the helper nor calls `settle_cleanup`. The grep for `Drop`
+  guards that discard a cleanup's result, re-run 2026-10-03 at the tip of this change, lists three, none a test
+  fixture's root: the publish gate's own signature scratch, which is production code under that restatement,
+  `pin_bites`' removal of its git worktree, and the runner's atomic-write temp file. The entry stays WATCH for
+  those; the trigger is a new `Drop` guard that discards a removal's result.
 
 - **A mutation record is held to killing its pin, not to perturbing the behaviour its bound names.** *Class:*
   WATCH. *Observed pressure:* the non-word assignment bound's record perturbed the `+=` row beside the bound's
@@ -708,7 +1170,27 @@ consumer for an undemonstrated deduplication.
   carrier`. The 2026-09-27 reading covered `v0.7.0` through the squash `feat(guibiao): permit an inline call
   only within one module`: no entry changed state, and the never-released-version sweep was re-run once the
   workspace version moved; the per-entry record is in the squash that moved the workspace version and dated
-  the release section.
+  the release section. The 2026-10-02 reading covered `v0.7.1` through the squash `refactor(guibiao): gather
+  check_one_root's arguments and split denote_in and read_scope, as their triggers ask`, reading every entry
+  whole: the positional-changelog-reference entry fired and was promoted; the BREAKING-marking, the
+  Definition-of-Done-converse, the promotion-trigger, the always-Some-binding and the scanner-length entries
+  fired and were recorded without promotion; the observer-participant fixture entry was closed; and premises the
+  tree had moved past were repaired in the pin, semantic-delegation, one-rule, prose-claim-class, run-time-value,
+  `cfg_attr`, refusal-by-broken-tool, reference-gate, release-date and static-item entries and in sub-items of
+  the composite lists, and an empty WATCH heading was removed. An action falling behind an advisory, the
+  capability lifecycle's use in the window, and the never-released-version sweep until the workspace version
+  moves were unobserved. No earlier *not fired* was found reversed, so this entry's trigger did not fire; whether
+  a site the always-Some sweep of 2026-09-01 did not report stood when it ran is not reachable from a history that
+  begins at `v0.6.0`. The per-entry record is in the squash that carries this sentence.
+
+  The 2026-10-03 reading covered `v0.7.1` through the squash *fix: refuse a fixture label the base would not
+  contain, and narrow two over-wide claims*, reading every live entry whole: no entry changed state. The
+  set-membership sweep it carries found one false claim — `PROJECT.md`'s acceptance of the 繩墨/勘合 dependency
+  boundaries restated 勘合's allowlist without `toml_edit`, and now names the law as its owner instead of
+  restating it. An action falling behind an advisory, the validator's payload, a `TMPDIR` run for a child's
+  write, and a clause-by-clause audit of the window's new `SHALL`s were unobserved. The never-released-version
+  sweep is owed once the workspace version moves, so it is re-run in the squash that moves it rather than
+  here. The per-entry record is in the squash that carries this sentence.
 
 - **A codename index for a defect lives in the half of the corpus `doc_provenance` declares out of scope,
   and the token that would find it is shared with a measurement that must stay.** *Class:* WATCH — the
@@ -908,96 +1390,100 @@ consumer for an undemonstrated deduplication.
   design step past the repair that surfaced the twin. *Version class:* patch; `kanhe` is `publish = false`.
   *Authority:* `AGENTS.md`'s *An extraction's corpus is the pair of modules*.
 
+- **A facade crate's public surface equal to its contract crate's, leaf for leaf, has no observation source.**
+  *Class:* WATCH, deferred because it cannot be observed. *Observed pressure:* several family facade crates
+  declare their surface as glob re-exports of a contract crate, measured on `v0.7.0` by the family capability
+  sweep; none has asked for the equality to be governed. *Observation source:* none that reaches the leaves.
+  A facade written as `pub use contract::*;` re-exports every public item of `contract` by construction, so
+  rustc already holds the equality for a single-glob facade, and a `ReexportOnlyBoundary` already refuses a
+  direct item standing beside the glob. What is left is a set comparison between the facade's leaves
+  and the contract's, and 渾儀 does not enumerate a glob's leaves. *Current reaction or bound:* the two
+  declared bounds `semantic-reexport-exposure/a-sibling-root-glob-is-a-documented-bound` and
+  `semantic-reexport-exposure/a-non-forbidden-root-external-glob-is-a-documented-bound`, each stating that a
+  glob's leaves are not observed rather than claimed clean. *Risk:* a facade assembled from several globs, or
+  from globs and explicit lists, can drop or add a leaf without any reaction; the single-glob facade cannot.
+  *Promotion trigger:* an observation source that enumerates a glob's leaves — the same one either bound
+  above would retire on. *Version class:* patch, as an opt-in rule. *Authority:*
+  `semantic-reexport-exposure`, `semantic-visibility-boundary`.
+
+- **A re-export-only facade restricted by shape to a single `pub use c::*` has not been shown feasible.**
+  *Class:* WATCH, deferred because its feasibility is unconfirmed. *Observed pressure:* the same sweep, which
+  evaluated a modifier on `ReexportOnlyBoundary` requiring every direct item to be one glob re-export of a
+  named crate; no adopter has found `ReexportOnlyBoundary` insufficient. *Observation source:* the governed
+  module's direct `use` items, which `ReexportOnlyBoundary` already reads regardless of visibility or use-tree
+  form. What is unconfirmed is whether the named crate can be matched from the written path alone: a crate-root
+  `extern crate` rename, a leading `::`, and a grouped `pub use c::{*}` each spell the same glob differently.
+  *Current reaction or bound:* `ReexportOnlyBoundary` refuses every non-`use` direct item and reads nothing
+  inside a `use`. *Risk:* a facade meant to be one glob can gain an explicit or renamed re-export with no
+  reaction. *Promotion trigger:* an adopter needing its facade restricted to a single glob re-export, and
+  `ReexportOnlyBoundary` failing to express it. *Version class:* patch, as an opt-in modifier. *Authority:*
+  `semantic-visibility-boundary`'s re-export-only requirement.
+
+- **A generic or `where` bound pairing a `Future` principal with an auto trait is outside the auto-trait
+  bound rules.** *Class:* WATCH. *Observed pressure:* a family adopter's async registry, in pacta (an external
+  repository), carries the shape `F: Future<Output = ()> + Send`, measured on `v0.7.0` by the family
+  capability sweep; nobody has asked for it governed. *Observation source:* the generic parameters and `where`
+  clauses of a public item, which the shape-only dyn-trait boundary already reads for `dyn` nodes. *Current
+  reaction or bound:* the requirements behind `must_not_expose_impl_trait_bounded_by` and
+  `must_not_expose_dyn_bounded_by` each state that generic type parameters and `where` clauses are outside
+  the claim, so the shape is excluded by declaration rather than missed. *Risk:* a module forbidden to expose a
+  `Send` future through a returned `impl Future` can still require one through a bound on a caller's type,
+  which is the same commitment spelled as a constraint. *Promotion trigger:* an adopter asking for that bound
+  governed. *Version class:* minor if the existing rules widen, since new depth that reacts by default leaves
+  a baseline behind; patch as a separate opt-in rule. *Authority:* `semantic-impl-trait-operand-boundary`,
+  `semantic-dyn-trait-operand-boundary`.
+
+- **A module declared under `#[cfg(test)]` is not observed as gated.** *Class:* WATCH, low value.
+  *Observed pressure:* the family capability sweep on `v0.7.0` evaluated a rule that test scaffolding is
+  never public API. It found the main case already held by rustc: an item inside a private
+  `#[cfg(test)] mod tests` is private whatever it declares, and nothing under `#[cfg(test)]` is compiled into
+  the build an adopter consumes. *Observation source:* the module declaration's own attributes, which 渾儀
+  reads as written. *Current reaction or bound:* `semantic-visibility-boundary/cfg-gated-items-are-observed-as-written-a-stated-bound`
+  — a visibility boundary reacts to a gated item as if it were compiled, so a `pub` scaffold under
+  `#[cfg(test)]` over-reports rather than passes. *Risk:* over-inclusion only: an adopter cannot tell a gated
+  `pub` scaffold from an ungated one, and an ungated `pub` scaffold is already refused by a visibility ceiling
+  on its module. *Why WATCH rather than DECLINED:* the distinction is real and not refuted, only unpressured,
+  and the reaction it would add is not one an existing rule already enforces. *Promotion trigger:* an adopter
+  baselining a gated scaffold's finding because the ceiling cannot say that gated is fine. *Version class:*
+  patch, as an opt-in rule. *Authority:* `semantic-visibility-boundary`.
+
+- **Whether a `pub` item is public API — its effective visibility — is not observed.** *Class:* WATCH,
+  deferred because its feasibility is unconfirmed. *Observed pressure:* the same `v0.7.0` sweep, as the
+  general form of the scaffolding rule above; no adopter has asked for it. *Observation source:* none yet.
+  An item is reachable by a consumer only through a chain of public modules from the crate root or through a
+  re-export, so the reaction needs the crate's whole module reachability and the closure of its re-exports,
+  globs included — and a glob's leaves are the bound the facade-equality entry above already records.
+  *Current reaction or bound:* visibility boundaries judge the written `pub`, cfg included as written.
+  *Risk:* a `pub` item that no consumer can reach reacts as if exposed, and one re-exported from a private
+  module is judged at its declaration rather than where it surfaces. *Promotion trigger:* an observation
+  source for the re-export closure, and an adopter whose boundary the written visibility cannot express.
+  *Version class:* minor if an existing visibility rule changes what it reacts to, since its baselines stop
+  describing the tree; patch as a new rule. *Authority:* `semantic-visibility-boundary`,
+  `semantic-reexport-exposure`.
+
+- **The `list` projection prints an operand as written, while a finding carries its canonical target.**
+  *Class:* WATCH. *Observed pressure:* an anchor written `crate::r#kernel` is projected by `list` as
+  `crate::r#kernel`, while the findings it produces carry the target `crate::kernel`; a misspelled anchor
+  lists normally, exit 0, and is refused only by `check`, exit 2. Both halves were observed when the
+  canonical-anchor rule landed, in the squash "fix(hunyi)!: anchor module boundaries to one canonical,
+  existing module", and the guibiao module-path squash "fix(guibiao)!: accept a module path only in its
+  canonical spelling, naming a module that exists" behaves the same. Before the hunyi squash a 渾儀 finding's
+  target was the anchor as written, so `list` and `check` agreed there; a 圭表 module target already folded
+  `r#`, so for 圭表 the disagreement already held at `v0.7.1`. Re-measured 2026-09-28 through `tianheng::prelude`,
+  with a `StaticBoundary` over a crate whose `kernel` module declares one `static`: `list --format json`
+  printed `"target": "crate::r#kernel"`, `check --format json` printed `"target": "crate::kernel"`, and the
+  anchor `crate::kernle` listed with exit 0 and checked with exit 2. No adopter or agent has misread a
+  boundary because of it. *Observation source:* the `list` projection and a `check` finding for the same
+  boundary. *Current reaction or bound:* `list` observes nothing and reads no
+  workspace by requirement, so whether an operand names something that exists is undecidable there by
+  construction; the canonical spelling, which is textual, is not. *Risk:* an agent reading the law from
+  `list` keys on a spelling that no finding carries, and can take an operand `check` will refuse as accepted
+  law. *Promotion trigger:* an adopter or agent misreading a boundary because its `list` spelling and its
+  finding target disagree. *Version class:* minor if the JSON projection's target string changes, since that
+  is an emitted document; patch if the canonical form is added beside the written one. *Authority:*
+  `constitution-projection`.
+
 ### READY-PATCH
-
-- **The ambient-ignore guard reads files where its property belongs to call sites, and says something false
-  when one file holds both kinds.** *Class:* READY-PATCH — measured, and the correction touches no published
-  surface. *Observed pressure:* `no_judgement_reads_an_ambient_ignore_file` decides per **file**: a file
-  carrying an `AMBIENT_IGNORE_READS` marker is skipped the moment any line in it spells `NEUTRALISER`, and
-  `CHANNEL_CONTROL` must reach the branch past that skip for its exception to be held as still needed. Adding
-  an unrelated direction that spells the setting to the control file therefore short-circuits the whole file,
-  and the guard refuses with *it no longer runs an ignore-sensitive read through a `Command` of its own* —
-  which is **false**: `an_ignore_file_outside_the_repository_cannot_reach_a_hermetic_command` is still there
-  and still runs one. *Observation source:* met while converging the publish gate's decode policy, where a
-  new direction in that file passed `-c core.excludesFile=/dev/null` for fidelity with the caller it mirrors.
-
-  *Current reaction or bound:* none, and the call site was moved rather than the reader — the new direction
-  passes no flag, because the builder already names the setting and the fixture's exclusion is a `.gitignore`
-  that no excludes setting reaches. The reason is recorded in the direction so the next author does not
-  rediscover it by the same refusal. *Risk:* it fails **closed** rather than open, so this is noise and not a
-  false negative — but the repair its own message names is *remove the exception*, and removing it would take
-  out a live control. A guard whose diagnosis inverts the fix is worse than a silent one.
-
-  *Promotion trigger:* a second file needing both a neutralised and a non-neutralised ignore-sensitive read,
-  or any further direction in the control file that has cause to spell the setting. *Version class:* patch;
-  `crates/kanhe` is `publish = false`. *Authority:* `repository-checks`.
-
-  **Shape.** The unit that pairs is the call site and the unit iterated is the file. The reader already has a
-  line-level view — it collects `lines` and asks `opens(line, "Command::new(")` per line — so the skip is the
-  only step that leaves it: decide neutralisation for the read rather than for the file, by asking whether
-  the setting is spelled within the construction whose marker matched, and the control's two commands become
-  two answers instead of one.
-
-- **Most pinning citations have never been seen to fail.** *Class:* READY-PATCH. *Observed pressure:* the
-  register decides a citation names a test that RUNS and cannot decide that it BITES; gutting a cited pin's body
-  in a worktree left the suite green and the register clean. `crates/kanhe/tests/pin_bites.rs` closes that for the citations
-  that declare a mutation, and it prints how many do not on every clean run — the figure is produced there, not
-  typed here. *Observation source:* that gutting, and the anchor-counting rule in `observer_protocol.rs` losing
-  its only assertions during the composition-body retirement, found by a reviewer reading the diff.
-  *Current reaction or bound:* `crates/kanhe/tests/pin_bites.rs` over the declared mutations; nothing over the rest.
-  *Risk:* a defence that has stopped defending is indistinguishable from one that has not, which is the failure
-  the register was built to end one level down. *Promotion trigger:* fired — the gate exists; what remains is
-  coverage. **Decided 2026-09-03: coverage grows as an obligation on citing, not as a campaign.** Grinding the
-  standing set was costed and declined on its rate — `pin_bites` reports the uncovered part on every clean
-  run, and the citation set grows faster than mutations can be authored, so chasing the numerator loses to
-  stopping the denominator. `AGENTS.md` now requires a citation to arrive with its mutation or with the reason
-  it has none, in the same change. The debt this entry already carries from the `0.6.0` window is answered
-  collectively rather than per-citation, above: six requirements gained citations, none declared a mutation,
-  and the reason is recorded where the economics are. What remains is
-  coverage, which grows one considered record at a time. That last claim was false while the tree under test
-  was an export of tracked content: a pin reading the repository through git failed its own control run, so no
-  record could ever exercise it — `units_outside_the_gate_pairing_are_outside_the_surface` was one. The tree is
-  a detached worktree now and the claim holds. One citation is still outside it for a different reason:
-  `a_cfg_gated_module_with_no_file_is_skipped_not_errored` is defined in two files under `crates/`, so the
-  target to run it in cannot be derived from a set and any record naming it refuses. Both episodes are kept
-  because the entry's economics rest on the claim. **This entry's residue grew by the citations added on 2026-09-02, and the growth is recorded here rather
-  than left in the change that caused it.** Six requirements in `repository-checks` gained citations, and
-  **none of them declares a mutation**, so every one landed in the part of the citation set this check
-  reports as uncovered on each clean run. The figure is produced there and not typed here; what is written
-  down is the direction it moved and why — a citation is cheap to add and its mutation is not, so any work
-  that cites more pins enlarges this entry unless it authors the mutations too. That is the economics this
-  entry rests on, observed on itself.
-
-  **Two more additions in the window rooted at the `v0.6.0` snapshot, and the second one changes this
-  entry's arithmetic.** Three `PINNED-BY` citations landed with the line-comment requirement and declared no
-  mutation. Unlike the six above, the reason is structural rather than economic and the change stated it:
-  `every_declared_mutation_s_name_resolves_to_a_real_bound_id` refuses a record whose name resolves to no
-  bound id, so an ordinary scenario's citation **cannot** carry one. What that exposes is the second
-  addition. The figure `pin_bites` printed counted every distinct `PINNED-BY` name under `openspec/specs`,
-  while a mutation may only name a test that a **pinned bound** cites. Measured 2026-09-20, by extracting
-  the `PINNED-BY` names across `openspec/specs` and the `pinned by` names from the two bound projections and
-  comparing the distinct sets: **258 cited, 79 eligible**. Most of the remainder that gate reported was
-  therefore not coverage anyone can author — it was a denominator the numerator cannot reach by construction.
-  The gate now reads coverage against the tests a declared bound cites and prints the ordinary-only citations
-  as a separate figure, so *coverage grows one considered record at a time* is measured against the set a
-  record can reach; its eligible figure, taken from its own output on 2026-09-24, agreed with the extraction
-  above.
-
-  **Not fired, measured 2026-09-08.** The obligation this entry settled on is that citing carries the
-  mutation, so the sweep is what the window cited. Measured over the delta: `+.*PINNED-BY` in
-  `openspec/**` answers **zero**, and new rows in `pin_mutations.tsv` answer **zero** — a window that added
-  no citation created no debt for the obligation to be owed on. One spec scenario was added and deliberately
-  carries no citation, being an ordinary scenario rather than a declared bound.
-
-  *What closing it costs, measured while seeding:* a
-  mutation must genuinely perturb the pinned point, and authoring one is per-bound expert work. One attempt
-  during this change did not — masking a brace inside a block comment left the exact one-statement comparison
-  refusing the body anyway, so the pin held and the record reported a biting pin as a dead one. That direction
-  is safe, and it is why coverage cannot be swept. (Two further failures that looked the same were gate defects,
-  not authoring cost: a lib test registering under its module path, and the cargo target derived from the
-  mutated file rather than from the test's definition. Both are fixed and neither recurs.) *Version class:* not release-affecting; a
-  repository gate over this repository's own governance tests. *Authority:* `observation-bound-register`, whose
-  added requirement states the obligation and the arrangements that make it observable.
 
 - **Every normative SHALL either has a reaction or is a declared bound.** *Class:* READY-PATCH — by the
   definition above, which classifies evidence and compatibility rather than remaining design effort: the
@@ -1115,12 +1601,12 @@ consumer for an undemonstrated deduplication.
   turns them red, so they cannot rot silently. The claim being declined is that the road ends somewhere good,
   not that the steps taken were wrong.
 
-  *Nothing is added to the specs by this decision, deliberately.* The biting limits are already declared —
-  three unpinned bounds in `crates/kanhe/src/bounds.rs`, each tracking to the sibling entry — so stating them
-  again here would be the *saying it twice held it nowhere* failure this file records for its own governance
-  section. What is **not** declared anywhere is the higher fact above, that the requirement-to-test pairing is
-  intent rather than shape; it stays prose with its reason, under the bar the `0.6.0` window set — a cannot-judge
-  not a rule and needs no instance.
+  *Nothing is added to the specs by this decision, deliberately.* The biting limits are already declared — the
+  unpinned bounds in `crates/kanhe/src/bounds.rs` that track to *Most pinning citations have never been seen to
+  fail* — so stating them again here would be the *saying it twice held it nowhere* failure this file records
+  for its own governance section. What is **not** declared anywhere is the higher fact above, that the
+  requirement-to-test pairing is intent rather than shape; it stays prose with its reason, under the bar the
+  `0.6.0` window set — a cannot-judge not a rule and needs no instance.
 
   *Reopening:* the derived binding of part two, or biting coverage becoming the rule rather than the
   exception, either of which changes what a citation is held to rather than how many there are.
@@ -1508,6 +1994,15 @@ consumer for an undemonstrated deduplication.
   costs a review round, which only whoever pays that round can report. The `READY-PATCH` it waits behind has
   not landed, so the count cannot have advanced either way.
 
+  **The precondition cannot occur as written, read 2026-10-02.** The entry it names, *A claim about this tree,
+  written as prose, is held only where its author declared it*, did not land: it was reclassified from
+  `READY-PATCH` to `ACCEPTED DEBT` on 2026-09-25, so *after the `READY-PATCH` above lands* describes an event that
+  will not happen. The trigger is re-anchored to that reclassification: count the windows after 2026-09-25 in
+  which the class costs a review round. One is witnessed from the record: in the window rooted at the `v0.7.1`
+  snapshot, *docs(governance): align specs, recipes and migration notes with the code they describe* dropped a
+  hand-written list of module-anchored capabilities that had already missed one, and the pre-cut set-membership
+  sweep found further false or inexact set claims in live prose. Earlier windows are not counted by this reading.
+
 - **WATCH: The Definition of Done and CI mirror each other in one direction only.** *Class:* WATCH.
   *Observed pressure:* `dod_coherence` asserts that every command in `AGENTS.md`'s list appears in CI, and
   nothing asserts the converse. *Observation source:* a review measured it, and a record in the `0.5.0` window had
@@ -1530,6 +2025,17 @@ consumer for an undemonstrated deduplication.
   — every named CI step running a suite is either in the list or covered by a listed command — which needs a
   reader that can say which suites a listed command covers, and that is the half not built.
 
+  **Fired on both halves, read 2026-10-02, by a decision rather than by drift.** *fix(guibiao)!: resolve inline
+  path heads from one scope table over one token tree* removed the MSRV line from the Definition of Done, so
+  `ci.yml`'s *build and test on the declared minimum supported Rust version* is a CI step the list does not name
+  and the listed workspace run, on the default toolchain, does not cover. *test: keep every fixture root inside
+  the build directory* then met the second half: a `let` chain in `crates/kanhe/tests/scratch_roots.rs` passed
+  locally and failed that job. Neither promotion nor repair follows. `AGENTS.md`'s *The MSRV build is CI-only*
+  owns the omission and the trade it makes, and the merge wrapper's CI-conclusion read is what stops that job's
+  red from reaching a release branch, which is the holder this entry found missing. The *Shape* above would
+  now refuse that decided omission, so a converse built later carries the `msrv` job as an exception that
+  paragraph declares. Stays WATCH, for a step the list does not name and no decision owns.
+
 - **WATCH: The Definition of Done join expands declared values, not run-time ones.** *Class:* WATCH.
   *Observed pressure:* `dod_coherence` tokenizes a CI step in the environment the workflow file declares for
   it — the workflow's, its job's and the step's own `env:` — and does not determine what a variable holds when
@@ -1549,6 +2055,13 @@ consumer for an undemonstrated deduplication.
   patch; repository checks only. *Authority:* `repository-checks`. *Shape:* decline expansion in a witness step
   preceded by anything that can export a value, which today would decline the `msrv` witness — so the trigger
   is also the moment to decide whether that step's pin is read another way.
+
+  **Not fired, and the entry has no live subject, read 2026-10-02.** `ci.yml`'s checkout step and the steps
+  before the `msrv` job's build-and-test are unchanged in the window, and nothing writes `$GITHUB_ENV`. But that
+  step is no longer a witness: *fix(guibiao)!: resolve inline path heads from one scope table over one token tree*
+  removed the Definition of Done line it witnessed, so at the window's tip no witness step expands a variable, and
+  the 2026-09-24 sentence naming `msrv` as the one that does is a record of that moment. The trigger's *a second
+  witness step that expands a variable* now reads as *any witness step that expands one*.
 
 - **WATCH: The two irreversible-act wrappers are one lifecycle written twice.** *Class:* WATCH. *Observed
   pressure:* `scripts/merge-pr.sh` and `scripts/publish.sh` share a whole shape — resolve the repository root,
@@ -1694,7 +2207,7 @@ consumer for an undemonstrated deduplication.
 
 - **ACCEPTED DEBT: A release date is only held at the snapshot, and an earlier check would be noise.**
   *Class:* ACCEPTED DEBT. *Observed pressure:* the dated CHANGELOG section for the version under preparation
-  carries a date nothing compares until the `release: X.Y.Z` commit exists. Measured on this repository: the
+  carries a date nothing compares until the `chore(release): X.Y.Z` commit exists. Measured on this repository: the
   `0.5.0` section stood at `2026-08-16` while the branch tip was six days later, and one earlier release was
   prepared four days behind its cut. *Observation source:* `release_coherence_gate`'s own comment records the
   four-day instance, and the six-day one was found by an adversarial review of the `0.5.0` window.
@@ -1774,6 +2287,14 @@ consumer for an undemonstrated deduplication.
   local list rather than arriving red in CI after a green one. What it does not close is a contributor who
   lacks the toolchain and skips the line, which is the same trade the two env-gated lines beside it already
   take, stated in theirs and taken here.
+
+  **The local line was withdrawn, and one more instance was measured, read 2026-10-02.** The Definition of Done
+  no longer carries the MSRV suite. AGENTS.md's *The MSRV build is CI-only* owns that decision and the trade
+  it makes, and `require_ci_green` is again what stops a red `msrv` job reaching a release branch. In the window
+  rooted at the `v0.7.1` snapshot, a `let` chain in `crates/kanhe/tests/scratch_roots.rs` passed locally and
+  failed CI's `msrv` job on *test: keep every fixture root inside the build directory*. It was fixed before
+  that pull request merged, so the CI-only arrangement cost one CI round as stated. This is one more measured
+  instance of the same construct. It changes no decision.
 
 - **WATCH: A constant's literal copies outside its reach are unheld.** *Class:* WATCH. *Observed pressure:*
   `shengmo::workspace::MARKER` owns `TIANHENG_WORKSPACE_TESTS`, and seven sites in `tianheng`, `louke` and
@@ -1896,7 +2417,7 @@ consumer for an undemonstrated deduplication.
 
 - **WATCH: A `cfg_attr` whose applied attributes this reader cannot parse drops its `#[path]` candidate
   silently.** *Class:* WATCH. *Observed pressure:* a review of the 0.5.0 window read
-  `hunyi::syn_util::cfg_attr_path_values` and `meta_path_value`, both of which take `.ok()` on
+  `hunyi::syn_util::cfg_attr_path_values` and `meta_path_values`, both of which take `.ok()` on
   `parse_args_with(cfg_attr_metas)`. The direction is unsafe: the values are module `#[path]` remaps and the
   reader's own doc says every one is a candidate a cfg-blind walker must union, so a dropped candidate means
   some platform's source file is never scanned and any violation in it is a silent false negative. The sibling
@@ -2033,6 +2554,13 @@ consumer for an undemonstrated deduplication.
   by whoever next reads it, which is the same shape as a requirement whose clause has no reaction, and it is
   the way this class of entry fails. It was caught by a review arriving at it sideways from an unrelated
   finding.
+
+  **Read 2026-10-03: another private instance, and guibiao now holds the lint.** While writing the CHANGELOG
+  positional-reference reaction, `is_list_item` was inserted between `unreleased_has_item`'s doc and its `fn` in
+  `crates/kanhe/src/release_coherence_gate.rs`; an independent review found it, no check would have, and it was
+  moved. `guibiao` now denies `clippy::missing_docs_in_private_items`, which closes its own READY-PATCH entry. The
+  decision for `kanhe` is unchanged: the instance is evidence on the trigger, and the cost this entry measures is
+  what it is weighed against.
 
 - **WATCH: A reader's corpus can be narrower than the requirement it serves, and this repository's own dimensions
   cannot see the shape.** *Class:* WATCH. *Observed pressure:* the dominant class of the 0.5.0 window. Live
@@ -2245,17 +2773,17 @@ consumer for an undemonstrated deduplication.
   returns early when that is empty. `PROJECT.md` records this project using OpenSpec's `specs` half and not
   its `changes` half, so the corpus is empty by declaration and the early return is always taken.
   *Observation source:* `git ls-files openspec/changes` returns one path, `archive/.gitkeep`; the join was
-  built in the same window the mode was declared, four commits apart, and neither noticed the other. Three
-  sibling `openspec/changes/` carve-outs are in the same position — `law_restatement.rs`'s projection filter
-  and two in `reference_integrity.rs` — though one of those is exercised by a fixture that plants a
-  synthetic change path, so it is a branch with no live subject rather than dead code. *Current reaction or
-  bound:* none for the class it guarded. **The filing class is defended by review alone**, and it is live
-  rather than hypothetical: `scripts/publish.sh` has two claimants, which is the shape the join was built
-  from. *Risk:* a requirement filed under the wrong capability goes unnoticed until someone reads both
-  specs. Bounded — the mistake is visible in the diff of any PR that makes it. *Why not re-point it:* the
-  join compares a proposal's **declared** capability set against the subjects a diff touches, and where no
-  proposal is present there is no independent declaration to compare against — reading the set from the
-  touched spec paths is near-tautological, since touching a spec is naming its capability. *Promotion
+  built in the same window the mode was declared, four commits apart, and neither noticed the other. The
+  sibling gates have separate roles: `capability_subjects` reads proposals as its input, while
+  `law_restatement` and `reference_integrity` take their source corpora through `SourceCorpus`, whose
+  constructor excludes `openspec/changes/`. *Current reaction or bound:* none for the class it guarded.
+  **The filing class is defended by review alone**, and it is live rather than hypothetical:
+  `scripts/publish.sh` has two claimants, which is the shape the join was built from. *Risk:* a requirement
+  filed under the wrong capability goes unnoticed until someone reads both specs. Bounded — the mistake is
+  visible in the diff of any PR that makes it. *Why not re-point it:* the join compares a proposal's
+  **declared** capability set against the subjects a diff touches, and where no proposal is present there is
+  no independent declaration to compare against — reading the set from the touched spec paths is
+  near-tautological, since touching a spec is naming its capability. *Promotion
   trigger:* a requirement found filed under the wrong capability. **Not fired** (evaluated 2026-08-31; the filing join
   passes, and the scenarios the `0.6.0` window rewrote stayed under the capabilities that already held them).
   *Version class:* patch; repository-internal, shipping in no crate. *Authority:* `capability-subjects`, and
@@ -2307,8 +2835,9 @@ consumer for an undemonstrated deduplication.
   `release-coherence` which version is unreleased, so a reference verdict would begin to depend on the
   release spine and a shallow checkout would move it — trading a bounded blind spot for a verdict that
   varies with checkout depth. *Promotion trigger:* a stale reference found inside the section of a version
-  **not yet released** — the 41 above are the control and cannot stand as evidence for themselves. **Not
-  fired.** *Version class:* patch; repository-internal, shipping in no crate. *Authority:*
+  **not yet released** — the ones above are the control and cannot stand as evidence for themselves. **Not
+  fired** (evaluated 2026-10-02: `[Unreleased]` was the only section without a tag, and it is undated).
+  *Version class:* patch; repository-internal, shipping in no crate. *Authority:*
   `openspec/specs/reference-integrity/spec.md`.
 
 - **WATCH: `PROJECT.md` restates facts a generated projection already holds, and states others nothing
@@ -2472,7 +3001,6 @@ consumer for an undemonstrated deduplication.
   buries the one unclosable false negative — and make strength **derived** from structural facts rather than
   authored, the way `Extent::demonstrates` is, so it cannot be self-assessed.
 
-- **WATCH:**
 - **WATCH: a pin may defend a direction its bound does not declare.** *Observed pressure:* one live instance,
   found by review rather than by any reaction — and the trigger has since fired once. A second instance was
   produced in the 0.5.0 window and removed in the round after it landed:
@@ -2666,6 +3194,20 @@ consumer for an undemonstrated deduplication.
   universally and was not**: a mechanical replacement matched only the capitalised form, so one annotation
   spelled `**not fired.**` survived a claim that every annotation carried a date. *Authority:* engine. *Compatibility:* patch; this document ships in no crate.
 
+  **Fired, read 2026-10-02, and re-decided rather than promoted.** In the window rooted at the `v0.7.1` snapshot,
+  *perf(guibiao): read each source once and scan each root once per evaluation* and *fix(guibiao)!: settle
+  gated-glob resolution and bound what it retains* each tripped a trigger asking for a repair in the change that
+  trips it, and neither change made it; *refactor(guibiao): gather check_one_root's arguments and split denote_in
+  and read_scope, as their triggers ask* found both later. That is a second trigger fired unnoticed by the change
+  that fired it. The answer this entry named, a reaction over this document, was since declined by `AGENTS.md`'s
+  *`BACKLOG.md`'s promotion triggers are read against the window before the cut*, which makes the reading an
+  occasion and says why nothing evaluates it, and both firings were found inside the window, before its cut,
+  which is the miss that occasion exists to bound. So this stays WATCH, and it would reopen on a trigger found
+  fired after a cut whose reading had recorded it otherwise. The universal claim above was a second time not
+  true of its corpus: one undated `**Not fired.**`, wrapped across two lines in the reference-gate entry, survived
+  until this reading dated it, found by a line-joined search (`tr '\n' ' ' < BACKLOG.md | grep -oiE '\*\*not
+  fired\.?\*\*.{0,30}'`).
+
 - **WATCH: a tracked declaration nothing reads.** *Observed pressure:*
   `crates/kanhe/tests/fixtures/refusal_scan/` was tracked on 2026-08-10 and referenced by nothing until
   2026-08-18 — a case corpus naming exactly what a refusal-construction reader must handle, three of whose
@@ -2682,13 +3224,13 @@ consumer for an undemonstrated deduplication.
   `pin_mutations.tsv`, which `pin_bites` reads on every run). *Authority:* engine.
   *Compatibility:* patch.
 
-- **WATCH: a refusal reachable only by a broken tool is not observed.** *Observed pressure:* fifteen refusal
-  sites are declared unheld in `crates/kanhe/src/refusal_bounds.rs` — every one of them a cannot-judge
+- **WATCH: a refusal reachable only by a broken tool is not observed.** *Observed pressure:* the refusal
+  sites declared unheld in `crates/kanhe/src/refusal_bounds.rs` are each a cannot-judge
   reachable only when a tool this repository invokes fails mid-run. *Observation source:* the refusal
   register, which measured which sites a direction observes by running rather than by reading their
   messages; five textual predicates asked the same question first and answered differently every time.
-  *Risk:* one of those fifteen refuses with the wrong sentence, or the wrong exit class, and nothing says
-  so. Bounded by all fifteen being cannot-judge: the class reserved for *this could not be read*, so the
+  *Risk:* one of those refuses with the wrong sentence, or the wrong exit class, and nothing says
+  so. Bounded by every one being cannot-judge: the class reserved for *this could not be read*, so the
   worst case is an unhelpful sentence rather than a defect reaching a release. *Next trigger:* a harness
   that can supply a failing tool without the fixture becoming a test of that harness — a recorded process
   boundary rather than a fake binary on the path. *Authority:* engine. *Compatibility:* patch; the checks
@@ -2697,6 +3239,13 @@ consumer for an undemonstrated deduplication.
   **Witness-only, sorted 2026-09-01.** No sweep decides this: the trigger is a harness that can supply a
   failing tool without the fixture becoming a test of that harness — a thing someone would have to design,
   not a state of the tree. Until one exists there is nothing to look for.
+
+  **Unobserved, read 2026-10-02, and the figure is gone.** No such harness was built in the window rooted at the
+  `v0.7.1` snapshot. *fix(kanhe): hold every released CHANGELOG section to its tag* added
+  `release-coherence#release-tags-unreadable`, so the count this entry typed had already moved; it is not retyped,
+  since the register enumerates the set. That site is not a tool failing mid-run but git answering an unreadable
+  `refs/tags` with an empty listing and exit `0`, so the entry's *reachable only when a tool fails* is read here as
+  *reachable only through a tool's failure or silence*.
 
 - **WATCH: the window the publish wrapper can only narrow.** *Observed pressure:* the publish wrapper runs
   the source gate, then `cd`s and runs `cargo publish`. Between those the repository can be altered — a
@@ -2867,8 +3416,14 @@ consumer for an undemonstrated deduplication.
   what it does to the `Option` — thirteen suffixes and three enclosing constructs — on one logical line.
   *Observation source:* the round that added the reaction listed four suffixes and two constructs, and a
   review then found two live sites using a fifth and a sixth, one of them in a published crate. Widening the
-  vocabulary closed those; what stays open is reach, not vocabulary. Measured when this was written: no site
-  in the tree binds a `split(…).next()` and consumes it on a later statement. *Current reaction or bound:*
+  vocabulary closed those; what stays open is reach, not vocabulary. Measured 2026-10-02, at the squash
+  `refactor: read a split's first segment as always present`, by
+  `git grep -nE 'let (mut )?[a-z_]+ = .*\.r?split\([^)]*\)\s*;' -- 'crates/*.rs'`: five sites bind a split, and
+  none reaches a branch only an absent first item could take. Two take the first `next()` with `.expect`; three
+  compare it to a value — `== Some("crate")` in `guibiao` and `hunyi`, a tuple pattern in `hermetic_invocations`
+  — so their `false` and their `else` are reached by a different first segment. The reader refuses `== Some(` on
+  one logical line, so those three are what it would refuse were the binding inlined; read through the binding
+  they keep no dead branch, which is why that repair left them. *Current reaction or bound:*
   `repository-checks/the-consumer-stands-on-a-later-statement-a-stated-bound`. *Risk:* a dead default written
   through a binding passes, and it reads to a later maintainer as though the empty case happens. Bounded by
   the reader joining chains `rustfmt` broke, which is where the shape usually lands. *Next trigger:* a site
@@ -2879,6 +3434,19 @@ consumer for an undemonstrated deduplication.
   **Not fired, swept 2026-09-01.** No site binds a `split(…).next()` and consumes it on a later statement.
   The one candidate consumes the `Option` on the same statement it is produced, which the reader already
   sees; the other matches are a doc comment and a fixture string.
+
+  **Fired, read 2026-10-02.** `git grep -nE 'let mut [a-z_]+ = [a-z_.]+\.r?split\(' -- 'crates/*.rs'` lists the
+  bindings, and two of them treat the first `next()` as fallible on a later statement.
+  `crates/guibiao/src/module_scan/path_vocab.rs`, in a published crate and new in the window rooted at the `v0.7.1`
+  snapshot, binds `raw.split("::")` and answers `false` from a `let … else` on the first `next()`, which nothing
+  reaches. `crates/kanhe/tests/reference_integrity.rs` binds `url.rsplit('/')` and puts a `?` on its first
+  `next()`, dead in the same way; it stands at `v0.6.0`, and whether it stood when the sweep above was run is not
+  reachable from a history that begins there. Both passed
+  `no_branch_reads_an_always_some_value_as_if_it_could_be_absent`, as the bound declares. The bound is kept,
+  because following the binding is the name resolution this entry says a reader over text is the wrong instrument
+  for, and two sites a grep finds do not make that instrument right. Both are repaired by the squash
+  `refactor: read a split's first segment as always present`, and the measurement in this entry's head is the
+  re-run after it.
 
 - **WATCH: the early-exit consumers the pipeline reader names.** *Observed pressure:* adopting
   `defaults.run.shell: bash -euo pipefail {0}` made a consumer that stops before its producer finishes fail
@@ -3193,27 +3761,9 @@ consumer for an undemonstrated deduplication.
     references rather than a compiler lint. *Version class:* tests only; no published surface. *Authority:* that
     module's own header, which states the allow and its reason, and `gate-shape-contract`, whose two-way
     correspondence between a gate and its twin is the shape any answer here would generalize.
-  - **A changelog entry that refers to another by position breaks when the entries are regrouped.**
-    *Observed pressure:* six positional cross-references in one `[Unreleased]` section; **three were broken** when
-    found. Two had been wrong before anything moved — "the previous entry's own repair" pointed at
-    `assert_projection_matches`, which has nothing to do with the repair it describes, and "a regression the
-    previous entry introduced" attributed the shared exit-contract backstop to the entry beside it rather than to
-    the backstop. The third was broken by merging the section's duplicate group headings: an entry saying "the
-    entry below" pointed into `Documentation`, which the merge moved from last to first. *Observation source:* the
-    closing review of the 0.5.0 window, sweeping `[Unreleased]` for positional references after the group merge;
-    each antecedent was resolved by reading it rather than assumed. *Current reaction or bound:* none. The group
-    merge's own verification compared the **multiset of lines** before and after, which is correct for "no entry
-    text was lost" and structurally blind to "an entry still points at what it meant". *Risk:* an adopter follows
-    a reference to the wrong entry, or to none — and a changelog is the one document written for people outside
-    this repository. *Promotion trigger:* a positional reference appearing again after this sweep. Not a count:
-    the sweep is the control, exactly as the un-reacted-SHALL entry above sets it up. *Why not simply forbidden:*
-    three of the six resolve soundly and one of them is load-bearing — an entry citing the bullet immediately
-    after it, within one group, which any regroup preserves. And references *into* `Documentation` are now
-    structurally safe, since it is the first group and everything else is below it. A rule refusing "above" and
-    "below" outright would refuse those three, so the rule has to distinguish a reference within a group from one
-    across groups, which is a design decision rather than a grep. *Version class:* documentation only; no
-    published surface. *Authority:* `release-coherence`, which owns what `CHANGELOG.md` must be true of, and the
-    duplicate-group-heading merge whose line-multiset verification is the measured gap.
+    *Note, 2026-10-02: `gate-shape-contract` is retired and `repository-checks` replaces it; the shared module is
+    also compiled into `attribute_spelling_differential.rs` and `module_path_spelling_parity.rs`, not only the
+    `*_conformance.rs` binaries. Not fired: every `pub` item of `tests/support/mod.rs` is used by some binary.*
   - **Whether a gate's chosen exit code is the semantically right one.** *Observed pressure:* the class occurred
     once, in the 0.5.0 window, and produced **both** directions of `gate-shape-contract`'s `1-versus-2` bound in one
     gate — every refusal was `1`, so a shallow clone reported *"the release surfaces disagree"* (a
@@ -3229,6 +3779,8 @@ consumer for an undemonstrated deduplication.
     could not have drawn, which is why this entry exists rather than the old wording standing as evidence for
     itself. *Version class:* patch. *Authority:* `gate-shape-contract`'s *Observation bounds* requirement, whose
     own rule that a bound is narrowed rather than restated is what this correction followed.
+    *Note, 2026-10-02: `gate-shape-contract` is retired and `repository-checks` replaces it, so that
+    requirement's rule is read from `repository-checks` now.*
   - **A capability whose reactions are shell gates cannot pin a bound of its own.** `PINNED-BY` resolves a
     Rust test under `crates/`, while every defence of `observation-bound-register`,
     `self-law-projection`, and the gate surface of `violation-baseline` is a shell fixture — so such a
@@ -3246,6 +3798,9 @@ consumer for an undemonstrated deduplication.
     could not have pinned its own declared bounds — and the answer was to write the reaction in Rust, not to declare
     a residual. An entry recording that shell gates cannot pin bounds is not evidence for itself every time
     a capability chooses Rust because of it.
+    *Note, 2026-10-02: the premise no longer holds. `scripts/` tracks the two wrappers and the library they
+    source, and `observation-bound-register`, `self-law-projection` and `violation-baseline` are defended by Rust
+    tests, so no capability's reactions are shell gates and this item has no member.*
   - **`BoundaryKind` has no value a third-party participant owns.** *Observed pressure:* an outside
     `Observer` must label every violation it emits with one of 三儀's four kinds — `Crate`, `Module`,
     `Semantic`, `Runtime` — even when it governs nothing any dimension would call by those names.
@@ -3284,7 +3839,9 @@ consumer for an undemonstrated deduplication.
     because a construction-held property is stated in requirement prose rather than declared as one. `BoundId::new`
     accepts any `Into<Cow<'static, str>>` precisely so a computed id is expressible. The recurrence this review
     was opened to look for is therefore not there, and that is the finding.
-  - Token/Lexer extraction (requires cross-scanner false negative or 3rd scanner).
+  - Token/Lexer extraction (requires cross-scanner false negative or 3rd scanner). **Note, 2026-10-02:** 圭表's
+    own two readers now share one token tree, which is extraction inside one dimension; across dimensions it is
+    watched as *A shared syn-free lexical layer*, and `path_meta_values`' entry records that none of three was built.
   - `qianyi` generator & LSP/editor integration.
   - ~~A `#[cfg_attr(pred, path=…)]` remap on an **inline** `mod name { … }`~~ **CLOSED** in the 0.4.0
     window. Reproduced against the real entry point, as this entry's own trigger required, with the
@@ -3365,6 +3922,9 @@ consumer for an undemonstrated deduplication.
     guarantee (the file flush) is not in this bound: it is covered by the `baseline_cli`
     suite.
 - **DECLINED:**
+  - A public fixture-root helper for adopters (`xingbiao::scratch_root` as a documented capability). It is outside
+    Tianheng's purpose, and its layout inference depends on cargo's test layout, so promising it would be a SemVer
+    hazard. The alternative is a separate dev-dependency test-support crate. Reopen if an adopter asks for it.
   - Wall-clock auto-decay / auto-expiration (breaks determinism).
   - Trait method set freezing (API contract, not architectural shape).
   - Pre-creating empty crates/modules.
@@ -3416,6 +3976,17 @@ consumer for an undemonstrated deduplication.
     un-auditable probes into one finding" (0.4.0 sweep, `crates/louke/src/audit/scan/lexer.rs`).
     Mechanics reproduce at the byte-scanner level, but the trigger is not reachable from
     compilable adopter input — refuted on the reproduction lens.
+  - A reaction requiring a type to implement named traits — *Retainer derives `Eq` and `Hash`* — evaluated
+    on `v0.7.0` by the family capability sweep. *Observed pressure:* one adopter-stated requirement.
+    *Observation source:* the type's derive list, read by `hunyi`'s `extract_derives`. *Current reaction or
+    bound:* rustc, through a `const` assertion calling a function bounded by the traits on the type, which
+    holds the requirement exactly. *Risk of building it:* a strictly weaker copy of that assertion.
+    `extract_derives` reads a `cfg_attr` derive without evaluating its predicate, so a derive gated off would
+    be reported present, and a blanket impl, a macro-generated impl or a hand-written impl elsewhere is not
+    a derive, so a trait the type does implement would be reported missing. *Reopening:* a requirement over
+    a set of types the adopter cannot enumerate in a `const` assertion, such as every public type a module
+    declares. *Version class:* patch, as an opt-in rule. *Authority:* `AGENTS.md`'s *Drift law &
+    minimalism*.
 - **Three wrapper readers still join lines by `gate_identity::logical_lines`, which reads no quotes.**
   *Class:* BUILT / HISTORY. *Observed pressure:* the acquisition sweep and the gate-call reader in
   `gate_exit_classes` search joined statements for tokens; `kanhe::gate_identity::citations` also reads each
@@ -3440,6 +4011,43 @@ consumer for an undemonstrated deduplication.
   acquisition sweep reads a `|| {` block past its opener: the block's first command must stop or assign the
   acquired name, so `x=$(tool) || { true; }` is refused. The twin the extraction surfaced — the region's
   token-start comment rule beside the lexer's exact one — is filed under WATCH above.
+
+- **A module can be declared to hold no `static` item or `thread_local!`, and nothing observed one.**
+  *Class:* BUILT / HISTORY. *Observed pressure:* one authority, zero current violations — the family adopter
+  kengen states in its own `AGENTS.md`, in the brick-contract axiom (an external repository, not reachable from this checkout), that its
+  brick contract crates hold "no filesystem, network, clock, or global state", and the global-state half is
+  held only by its review checklist; its contract crates declare no `static`. This converts a
+  review-only axiom into a machine check; it is **not** evidence that many modules need it. *Observation
+  source:* `syn::ItemStatic` (with `StaticMutability`), `syn::ForeignItemStatic`, `syn::ForeignItem::Verbatim`
+  for `safe`/`unsafe`-qualified foreign statics, and item- and statement-position macro invocations whose leaf
+  is `thread_local`; measured on rustc 1.96.0 and 1.85.1 over a probe carrying module, fn-body,
+  `thread_local!`, `extern`, `OnceLock` and edition-2024 `safe static` shapes. *Current reaction or bound:*
+  before it was built, none — `max_visibility(Module)`, `UnsafeBoundary::only_under`, `sans_io_pure` and
+  `must_not_call_inline("std::thread")` each exited 0 or reacted on something other than the declaration over
+  four private statics. *Risk:* bounded to adopters who declare it; the over-reactions it carries
+  (host-inactive `cfg`, a local macro named `thread_local`) are loud, and the silent classes are the two
+  out-of-reach bounds: macro expansion, the dimension's inherited bound, and a `thread_local!` invoked under a name
+  another crate re-exported it as. *Promotion trigger:* a maintainer decision to build it.
+  *Version class:* patch — `SemanticBoundaries` is `#[non_exhaustive]`, the rule key
+  `tianheng.rule/hunyi/static-item` is new, and no composed profile gains it. *Authority:* kengen's
+  `AGENTS.md` brick-contract axiom (external); the semantic capability-admission test in `PROJECT.md`;
+  `semantic-static-item-boundary`.
+
+  **Built 2026-09-28.** `StaticBoundary::in_crate(p).module(m).must_not_declare_static()` governs the whole
+  anchored subtree. A crate that renames `thread_local` is refused rather than followed through an alias
+  set, so the name gate stays one name. **Not built, with its trigger:** `.including_macros([...])` for
+  `lazy_static!`- or `once_cell`-shaped declarations; reopen when an adopter measures such a declaration it
+  must govern. The capability joins no composed profile, `sans_io_pure` included.
+
+  **Re-measured 2026-10-02 with rustc 1.96.0.** A foreign static was written with each of `safe`, `unsafe`
+  and no qualifier, in an `extern "C"` block and in an `unsafe extern "C"` block, under editions 2015, 2018,
+  2021 and 2024. In an `unsafe extern` block all three build in every edition. In a plain `extern` block,
+  `safe static X: u8;` and `unsafe static X: u8;` fail in every edition. In 2015, 2018 and 2021 the
+  refusal is the qualifier (*items in `extern` blocks without an `unsafe` qualifier cannot have safety
+  qualifiers*) and the unqualified item builds. In 2024 the unqualified item fails too, because that edition
+  requires every extern block to be `unsafe` (*extern blocks must be unsafe*); the qualified items there
+  carry both errors. A foreign-item `safe` or `unsafe` qualifier therefore needs an `unsafe extern` block in
+  every edition, and in 2024 the block needs it with or without a qualifier.
 
 - **BUILT / HISTORY:**
   - Opt-in gate flag `--disallow-stale` enforcing zero stale baseline entries in CI gate mode.
@@ -3466,8 +4074,25 @@ consumer for an undemonstrated deduplication.
     `trait_impl_findings`/`unsafe_findings` before fixing, confirming the failure direction the
     debt entry named (a malformed allowed entry made every real site look disallowed, a spurious
     violation rather than a silent pass) — both named call sites are now fixed, not merely one
-    (`hunyi-shared-path-operand-validation`).
+    (`hunyi-shared-path-operand-validation`). **Note, 2026-10-02:** both now validate through
+    `anchor::canonical_module_locations` and `require_locations_exist`, which also refuse a non-canonical or absent
+    entry; neither calls `resolve::validate_path_operands` since *fix(hunyi)!: anchor module boundaries to one
+    canonical, existing module*.
   - Detailed shipped capability ledgers for 0.1.x through 0.3.0 are not carried here; this repository's history begins at the `0.6.0` snapshot.
+
+- **A path dependency reaching a workspace member through a symlink alias.** *Class:* DECLINED, 2026-10-03.
+  *Observed pressure:* a review reading `release_coherence_gate::normalized_directory` as a lexical comparison
+  that would call `crates/tianheng-link` a different directory from the member it links to, and so refuse a pin
+  cargo accepts. *What was measured, and what it refutes:* cargo 1.96.0, two variants of that shape. With both the
+  member directory and its symlink reachable, cargo refuses the workspace outright — `error: two packages named
+  core-pkg in this workspace`, naming both manifests — so nothing builds and the reader's reading agrees with
+  cargo's. With only the symlink reachable, cargo does not canonicalize: `cargo metadata` reports the member's
+  `manifest_path` through the symlink as given, so both sides of the comparison spell the alias and are equal.
+  There is no divergence to repair and none to declare as a bound. *Reopening condition, as a property:* cargo
+  resolves a path dependency to a member's directory the manifest does not spell — whether by accepting two
+  manifests of one package name in one workspace, or by canonicalizing a dependency path before naming the member.
+  *Authority:* review finding, refuted by measurement; the reader stays lexical and touches no filesystem, which
+  is what `Unresolvable::Traversal` already states.
 
 ## Version horizons
 
@@ -3504,6 +4129,158 @@ Two properties from those windows do not expire with a version, so they stay:
 A closed item leaves the live class it was filed under; it does not stay there struck through. Its
 reproduction record moves here, where closed reproduction records belong, so a live class heading
 cannot read as a queue holding work that is already done.
+
+- ~~**An item inserted between another item's `///` and its `fn` takes that item's doc.**~~ *Class:* READY-PATCH —
+  closed on 2026-10-03 by *docs(guibiao): document every private item and deny the lint that holds it*, the patch
+  the trigger named. Every private item in `guibiao` carries a doc stating its contract, each read against the
+  code it sits on by an independent pass that corrected the ones saying more than the code does, and the crate
+  denies `clippy::missing_docs_in_private_items` beside `missing_docs`, so an item an insertion strips of its doc
+  is a clippy failure in CI. The workspace-wide class stays with *A private item's doc comment can be stolen by an
+  item inserted above it*. The record as filed: *Observed pressure:* four instances across two reviews of one pull
+  request, each a new test or helper placed just above an existing `fn` and so under its doc block, leaving the
+  existing item undocumented and the new one described as something else. *Observation source:* `cargo clippy -p
+  guibiao --lib -- -W clippy::missing_docs_in_private_items`, which names every private item with no doc, an item
+  whose doc a new one took among them. *Current reaction or bound:* none. That lint is the decidable instrument;
+  measured 2026-10-01 by that command, it names 381 items, so adopting it means documenting those first. A text
+  reader deciding that a doc describes a different item than the one it sits on is a judgement over prose, which
+  *Do not add a detector over prose* declines. *Risk:* no false negative; a reader of the doc is misled about
+  which item it describes. *Promotion trigger:* a later review finds the shape again, which makes documenting
+  guibiao's private items and turning the lint on a READY-PATCH. *Version class:* patch. *Authority:* AGENTS.md's
+  doc-comment rules.
+
+  **The trigger fired on 2026-10-01, and the entry is READY-PATCH.** A static review of the fixes after the
+  scope-table change found three more — `is_ident_byte`'s doc on `white_space_len`, `CrateScopes::new`'s on
+  `in_a_proc_macro_crate`, `read_tree`'s fused with `Unread`'s — each an item inserted by an edit anchored on the
+  item's line rather than its doc block, and each repaired by moving the doc back. The patch the trigger names is
+  not taken in the typed-resolver change of 2026-10-01, which carries contract repairs alone and files maintenance here; the next change
+  documenting guibiao's private items takes it. The same class across the workspace is the entry *A private
+  item's doc comment can be stolen by an item inserted above it*, whose public half `deny(missing_docs)` holds.
+
+- ~~**A changelog entry that refers to another by position breaks when the entries are regrouped.**~~ *Class:*
+  READY-PATCH — closed on 2026-10-03 by *fix(kanhe): refuse a CHANGELOG entry that points at another by position*,
+  which takes the route this record declined. The record held that a rule refusing *above* and *below* outright
+  would refuse the sound references too, so the rule had to tell a reference within a group from one across
+  groups. That is a judgement over what a sentence points at, and the reaction asks a question with one syntactic
+  answer instead: in every section still being written, the declared position words are refused, the sound
+  within-group reference and a preposition use included, and the repair is to name the entry meant.
+  `release-coherence` states what it refuses beyond the property. The record as filed: *Observed pressure:* six
+  positional cross-references in one `[Unreleased]` section; **three were broken** when found. Two had been wrong
+  before anything moved — "the previous entry's own repair" pointed at `assert_projection_matches`, which has
+  nothing to do with the repair it describes, and "a regression the previous entry introduced" attributed the
+  shared exit-contract backstop to the entry beside it rather than to the backstop. The third was broken by
+  merging the section's duplicate group headings: an entry saying "the entry below" pointed into `Documentation`,
+  which the merge moved from last to first. *Observation source:* the closing review of the 0.5.0 window, sweeping
+  `[Unreleased]` for positional references after the group merge; each antecedent was resolved by reading it
+  rather than assumed. *Current reaction or bound:* none. The group merge's own verification compared the
+  **multiset of lines** before and after, which is correct for "no entry text was lost" and structurally blind to
+  "an entry still points at what it meant". *Risk:* an adopter follows a reference to the wrong entry, or to none
+  — and a changelog is the one document written for people outside this repository. *Promotion trigger:* a
+  positional reference appearing again after this sweep. Not a count: the sweep is the control, exactly as *Every
+  normative SHALL either has a reaction or is a declared bound* sets it up. *Why not simply forbidden:* three of
+  the six resolve soundly and one of them is load-bearing — an entry citing the bullet immediately after it,
+  within one group, which any regroup preserves. And references *into* `Documentation` are now structurally safe,
+  since it is the first group and everything else is below it. A rule refusing "above" and "below" outright would
+  refuse those three, so the rule has to distinguish a reference within a group from one across groups, which is a
+  design decision rather than a grep. *Version class:* documentation only; no published surface. *Authority:*
+  `release-coherence`, which owns what `CHANGELOG.md` must be true of, and the duplicate-group-heading merge whose
+  line-multiset verification is the measured gap.
+
+  **Fired, read 2026-10-02.** A line-joined read of `[Unreleased]` for *above*, *below*, *previous* and *next*
+  finds two references across groups: an entry under `### Semantic` *requires the construction migration
+  below*, and another names the *`SemanticBoundaries` construction step below*, both pointing into
+  `### Migration`, the shape this entry calls fragile; a third, *in the next entry*, stays within one group and
+  is the sound kind. `git show v0.7.1:CHANGELOG.md | grep -c 'migration below\|construction step below'`
+  answers `0`, so they are new. The squash *docs: give the budget refusal a migration step and state set claims
+  by their owner* repairs both by naming the step they point at, which closes the instances and not this entry:
+  the reaction it would need, one that tells a reference within a group from one across groups, is the design
+  decision that keeps it open here.
+
+- ~~**The ambient-ignore guard reads files where its property belongs to call sites, and says something false when
+  one file holds both kinds.**~~ *Class:* READY-PATCH — closed on 2026-10-03 by *test(kanhe): judge the
+  ambient-ignore control by its own body*. The false refusal came from the control file's exception being decided
+  after the file-wide skip for the setting, so a second direction naming the setting hid the control. The
+  exception is now held by the pinned direction's own body — a subcommand marker, a `Command` it builds, the
+  setting unnamed — and is decided before that skip, so the setting named elsewhere in the file no longer reaches
+  it. Every other file stays at file granularity, a bound the guard's doc records with its measurement:
+  per-function refuses directions whose bare spawn re-executes the test binary or reads another channel, and
+  per-construction is a data-flow question the control itself answers through a closure. The record's *Shape*
+  asked for the read rather than the file, and what was built is narrower: per-function, for the control alone,
+  with a table holding each decision about it. The trigger's other half, a second file needing both a
+  neutralised and a non-neutralised ignore-sensitive read, is held by that declared bound rather than closed. The
+  record as filed: *Observed pressure:* `no_judgement_reads_an_ambient_ignore_file` decides per **file**: a file
+  carrying an `AMBIENT_IGNORE_READS` marker is skipped the moment any line in it spells `NEUTRALISER`, and
+  `CHANNEL_CONTROL` must reach the branch past that skip for its exception to be held as still needed. Adding an
+  unrelated direction that spells the setting to the control file therefore short-circuits the whole file, and the
+  guard refuses with *it no longer runs an ignore-sensitive read through a `Command` of its own* — which is
+  **false**: `an_ignore_file_outside_the_repository_cannot_reach_a_hermetic_command` is still there and still runs
+  one. *Observation source:* met while converging the publish gate's decode policy, where a new direction in that
+  file passed `-c core.excludesFile=/dev/null` for fidelity with the caller it mirrors.
+
+  *Current reaction or bound:* none, and the call site was moved rather than the reader — the new direction
+  passes no flag, because the builder already names the setting and the fixture's exclusion is a `.gitignore`
+  that no excludes setting reaches. The reason is recorded in the direction so the next author does not
+  rediscover it by the same refusal. *Risk:* it fails **closed** rather than open, so this is noise and not a
+  false negative — but the repair its own message names is *remove the exception*, and removing it would take
+  out a live control. A guard whose diagnosis inverts the fix is worse than a silent one.
+
+  *Promotion trigger:* a second file needing both a neutralised and a non-neutralised ignore-sensitive read,
+  or any further direction in the control file that has cause to spell the setting. *Version class:* patch;
+  `crates/kanhe` is `publish = false`. *Authority:* `repository-checks`.
+
+  **Shape.** The unit that pairs is the call site and the unit iterated is the file. The reader already has a
+  line-level view — it collects `lines` and asks `opens(line, "Command::new(")` per line — so the skip is the
+  only step that leaves it: decide neutralisation for the read rather than for the file, by asking whether
+  the setting is spelled within the construction whose marker matched, and the control's two commands become
+  two answers instead of one.
+
+- ~~**`examples/observer-participant`'s own test fixture was not migrated to `xingbiao::claim_scratch`,
+  unlike every other scratch-root claim in the workspace.**~~ *Class:* ACCEPTED DEBT — closed on 2026-10-02 by
+  the pre-cut reading of the window rooted at the `v0.7.1` snapshot: the risk it priced no longer exists. *test:
+  keep every fixture root inside the build directory* moved `Fixture::new`'s root from `temp_dir()` to
+  `env!("CARGO_TARGET_TMPDIR")`, a directory cargo creates inside the target directory the user owns, as
+  `xingbiao::scratch_base`'s is, so no other user of the machine can plant a symlink there first.
+  The `remove_dir_all` then `create_dir_all` sequence remains, and without another user able to reach the
+  directory it is not the race below. The record as filed: *Observed pressure:*
+  an adversarial review of the whole `0.5.0` window found `examples/observer-participant/tests/
+  reaction.rs`'s `Fixture::new` still does `remove_dir_all` then `create_dir_all(root.join("src"))` on a
+  predictable `temp_dir().join(format!("house-rules-{name}-{pid}"))` path — the exact symlink-adoption
+  race the `claim_scratch` migration closed at every other one of the ~40 call sites it touched.
+  *Observation source:* read directly; confirmed every other workspace fixture with this shape now calls
+  `claim_scratch` and this one does not. *Current reaction or bound:* none. *Risk:* low and unchanged from
+  before the migration — developer-machine-only, requires a local attacker able to plant a symlink at a
+  PID-guessable path before this one test runs, in an example crate that ships in no package. *Why debt,
+  not a gap someone forgot:* `examples/observer-participant/Cargo.toml` states its design goal explicitly —
+  "One dependency, and deliberately nothing else... an example that needed a new export would be proving
+  the opposite of what it exists to prove" — and `claim_scratch` is not re-exported through `tianheng`'s
+  public prelude. Migrating this fixture would require either adding a new export to `tianheng` just for
+  an example's own test helper, or adding `xingbiao` as a second dependency, either of which contradicts
+  the example's stated purpose. *Promotion trigger:* `xingbiao::claim_scratch` (or an equivalent) becoming
+  reachable through `tianheng::prelude` for an unrelated reason — **not fired, measured 2026-09-06: the
+  wildcard prelude re-exports no scratch-directory helper, so the fixture still could not reach one** — at
+  which point migrating this one fixture
+  would cost nothing further. *Version class:* patch; an example, shipping in no package. *Authority:*
+  `examples/observer-participant/Cargo.toml`'s own header comment, the one place this constraint is
+  declared.
+
+- ~~**圭表 reads a compilation unit once per boundary rather than once per root.**~~ *Class:* WATCH — closed on a
+  steward decision on 2026-10-01; the promotion trigger did not fire, and the check's time was not measured against
+  it. *Observed pressure:* none from an adopter. *Observation source:* `check_one_root` in
+  `crates/guibiao/src/module_check.rs` called `UnitScan::read` for each boundary it judged, so a constitution of
+  *n* boundaries over one root lexed, tabled and resolved that root *n* times, each with empty memos; measured
+  2026-09-30 in a debug build, one inline boundary over libc 0.2.189 took 5.0 s and over rustix 1.1.4 1.0 s.
+  *Closed by:*
+  `crates/guibiao/src/module_scan/evaluation.rs`'s `EvaluationScans`, which builds each root's `RootScan` — its
+  file list, reachability and unit scan — once per evaluation, on demand, shared by every module boundary judged
+  over that root; one `SourceTexts` per evaluation, which reads each source path once, on demand, by the path it
+  was opened at; each file's `use` classification kept on demand in its `FileScan`, with both import projections
+  read from it; and the governed value inventory read from the unit scan's tables. The `module-boundary`
+  requirement *One evaluation reads each source once and scans each compilation unit once* states it, and the
+  directions in `crates/guibiao/src/tests/evaluation_scans.rs` hold it by counting the work where it is done —
+  root scans, source reads, classifications and scope tables — beside
+  `shared_and_independent_scans_yield_one_outcome`, which judges a corpus through a shared scan and a scan per
+  boundary in both orders. *Authority:* steward decision on 2026-10-01. *Residue:* the walk and the unit scan each
+  lex a source, a WATCH of its own; and *The glob hazard reads a chain of globs once per glob that starts it* is
+  not touched by this change and stays WATCH.
 
 - ~~**The bounds-method reader anchors on a whole-line occurrence that is not the definition.**~~ *Class:*
   READY-PATCH — closed by taking the body only from an `impl` whose trait path ends in `Observer`, the residue a

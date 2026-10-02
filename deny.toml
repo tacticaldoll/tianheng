@@ -44,7 +44,7 @@ exceptions = [{ allow = ["Zlib"], crate = "foldhash" }]
 
 [bans]
 # New external dependencies are already governed by Tianheng's own reaction (the 圭表
-# core is serde_json-only; see crates/shengmo/src/law.rs); here we only flag accidental
+# core's dependencies are a closed allowlist; see crates/shengmo/src/law.rs); here we only flag accidental
 # duplicate versions so the tiny tree stays tidy.
 multiple-versions = "warn"
 

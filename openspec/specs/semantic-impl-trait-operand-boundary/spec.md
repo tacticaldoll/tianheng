@@ -71,10 +71,33 @@ declare and that is no extern head (a prelude trait, a glob-imported trait, or a
 mentions), a macro-generated trait, or a glob/foreign-module re-export — is dropped, the stated
 resolver-coverage bound, never a silent pass of a *resolvable* operand; the drop holds against
 **every** operand spelling, including the module-qualified one a bare name would produce if it were
-declared. Auto-trait and lifetime bounds are never operands.
+declared. Auto-trait and lifetime bounds are never principal operands. A forbidden operand
+whose final path segment is recognized as an auto trait by the same std leaf-name test that
+removes auto-trait bounds from the principal list (e.g. `Send`, including qualified and
+raw-identifier spellings) SHALL be rejected as a constitution error before resolution, even in a
+mixed set: the observer removes those bounds before principal resolution, so the entry can never
+react. This applies equally with `including_submodules()`.
 The finding is the **seam-qualified** rendered `impl …` shape (`{shape}
 exposed by {seam}`), and the return-position scoping is inherited unchanged (argument-position `impl
 Trait` and `async fn` are not governed). A mutually-exclusive `#[cfg]` collision on the `use`-map name a principal trait resolves through — the identical discipline signature-coupling's own resolver ladder states — SHALL treat every candidate target as a possible principal and react if any is forbidden, never silently keeping only the declaration written last. The crate-wide re-export closure this resolver walks includes a `pub use` declared in a module reached only through a `cfg_attr`-wrapped `#[path]` remap — the identical crate-wide collection signature-coupling's own closure gets, never a silent gap specific to this operand-scoped resolver. A forbidden operand shaped with an empty `::`-segment (leading, trailing, or doubled `::`, or the empty string) is rejected as a constitution error, inheriting signature-coupling's own requirement for the identical reason: this resolver ladder never produces a canonicalized principal with an empty segment, so such an operand could never react. This holds identically for the subtree-scoped (`including_submodules()`) path, which canonicalizes its own copy of the forbidden set through the same rejection.
+
+#### Scenario: Auto-trait markers are not principal operands
+
+- **WHEN** a module returns `impl crate::ports::Port + Send` and the boundary forbids `["crate::ports::Port"]`
+- **THEN** the system emits a violation on the named principal trait; the trailing `Send` marker is removed before principal resolution
+- **PINNED-BY** `impl_trait_operand_filters_auto_trait_markers_and_refuses_them_as_operands`
+- **PINNED-BY** `named_principal_and_forbidden_marker_send_remain_observable`
+
+#### Scenario: An auto-trait operand is a constitution error
+
+- **WHEN** an impl-trait operand boundary forbids `["Send"]`, `["std::marker::Sync"]`, or a mixed set containing an auto-trait leaf, with or without `including_submodules()`
+- **THEN** the system exits 2 before principal resolution, names the offending operand, and directs the author to use `must_not_expose_impl_trait_bounded_by`, or remove it
+- **PINNED-BY** `impl_auto_trait_operand_is_a_constitution_error`
+- **PINNED-BY** `impl_subtree_auto_trait_operand_is_a_constitution_error`
+- **PINNED-BY** `mixed_auto_trait_operand_is_a_constitution_error`
+- **PINNED-BY** `qualified_std_auto_trait_operand_is_a_constitution_error`
+- **PINNED-BY** `qualified_local_auto_trait_leaf_is_a_constitution_error`
+- **PINNED-BY** `raw_auto_trait_leaf_is_a_constitution_error`
 
 #### Scenario: A returned impl Trait of a named forbidden trait is flagged
 
@@ -186,3 +209,88 @@ their relationship or identity.
 #### Scenario: Shape and operand rules do not collide
 - **WHEN** the same seam violates both shape-only and operand-specific laws
 - **THEN** their semantic rule keys keep the violation identities distinct
+
+### Requirement: Auto-trait bound governance on returned impl Trait
+
+An auto-trait bound impl-trait boundary SHALL be expressed as Rust code via
+`must_not_expose_impl_trait_bounded_by([...])` on `ImplTraitModuleDraft`, targeting a module anchor
+with a non-empty set of auto-trait bound names. The boundary SHALL accept only the standard auto traits:
+`Send`, `Sync`, and `Unpin` under `core::marker` or `std::marker`, and `UnwindSafe` and `RefUnwindSafe`
+under `core::panic` or `std::panic` (or any of the five as bare or raw identifiers). An empty bound set SHALL be rejected as a constitution error (exit 2)
+directing the author to use `must_not_expose_impl_trait()`. An unrecognized bound name SHALL be rejected
+as a constitution error (exit 2) directing the author to use `must_not_expose_impl_trait_of(...)`.
+A malformed path (e.g. `::Send` or containing an empty segment) SHALL be rejected as a constitution error.
+
+The system SHALL emit a violation for each returned `impl Trait` in the governed module's public surface
+whose own bound list contains any of the forbidden auto-trait bounds. The boundary governs written
+return-position `impl Trait` (RPIT) on free functions, inherent methods, and trait methods, and composes
+with `including_submodules()`. It does NOT govern generic type parameters or `where` clauses (`<T: Send>`
+or `where T: Send`), argument-position `impl Trait` (APIT), or `async fn`'s compiler-synthesized existential.
+An auto-trait bound on an inner nested trait object within a returned `impl Trait` (e.g.
+`impl Future<Output = Box<dyn Trait + Send>>`) belongs to the nested trait object and SHALL NOT react
+under this boundary.
+
+The rule key SHALL be `tianheng.rule/hunyi/impl-trait-auto-bound` with parameter `forbidden_auto_bounds`,
+reusing fact `tianheng.fact/hunyi/impl-trait-exposure` with polarity `DenyBreach`, and projecting through
+the existing `list` projections (document/text/markdown) with parameter `forbidden_auto_bounds`.
+The parameter `forbidden_auto_bounds` SHALL be determined by the normalized leaf set: different syntactic
+spellings expressing the same forbidden auto-trait bounds (e.g. `["Send"]`, `["std::marker::Send"]`,
+`["core::marker::Send"]`, `["r#Send"]`, and redundant sets such as `["Send", "std::marker::Send"]`) produce
+the identical rule identity, with `forbidden_auto_bounds` carrying the sorted, deduplicated leaf set. Path
+qualifiers other than the defining module under `std` or `core` (e.g. `foo::Send`) SHALL be rejected as a constitution
+error (exit 2).
+
+#### Scenario: A returned impl Trait carrying a forbidden auto-trait bound is flagged
+
+- **WHEN** the governed module declares a public function returning `impl Future<Output = ()> + Send` and the boundary forbids `["Send"]`
+- **THEN** the system emits a violation whose finding is the seam-qualified rendered shape (`impl Future<Output = ()> + Send exposed by {seam}`)
+
+#### Scenario: An empty auto-trait bound set is a constitution error
+
+- **WHEN** a boundary is declared with `must_not_expose_impl_trait_bounded_by([])`
+- **THEN** the system exits 2, reporting that the auto-trait bound set cannot be empty and directing the author to use `must_not_expose_impl_trait()`
+
+#### Scenario: An unrecognized auto-trait bound name is a constitution error
+
+- **WHEN** a boundary declares `must_not_expose_impl_trait_bounded_by(["Clone"])`
+- **THEN** the system exits 2, reporting that `Clone` is not a recognized auto trait and directing the author to use `must_not_expose_impl_trait_of`
+
+#### Scenario: A qualified impl-trait auto-trait bound names its defining module
+
+- **WHEN** the forbidden path and public impl Trait bound spell each of `Send`, `Sync` and `Unpin` under `marker`
+  and each of `UnwindSafe` and `RefUnwindSafe` under `panic`, with `std` and with `core` as the root, or spell
+  any of those five under the other module with either root
+- **THEN** a defining-module path produces an enforced finding, while a path under the wrong module
+  is a constitution error (exit 2)
+- **PINNED-BY** `auto_bound_qualified_path_matrix`
+- **PINNED-BY** `declared_auto_traits_and_the_producer_are_the_same_set`
+
+#### Scenario: An impl-trait auto-trait path outside the defining modules is refused
+
+- **WHEN** the boundary's forbidden auto-trait path is `foo::Send`
+- **THEN** the declaration is a constitution error (exit 2)
+- **PINNED-BY** `impl_auto_bound_invalid_qualifier_exits_2_shallow_and_subtree`
+
+#### Scenario: A local trait sharing an auto-trait leaf name over-reacts as an impl auto bound - a stated bound
+
+- **WHEN** a module defines a local trait named `Send` and returns `impl Send`, under `must_not_expose_impl_trait_bounded_by(["Send"])`
+- **THEN** the system over-reacts and emits a violation, because auto-trait bounds are identified by leaf name without symbol resolution
+- **PINNED-BY** `impl_trait_local_auto_trait_leaf_over_reacts_is_a_bound`
+
+#### Scenario: A macro-generated impl trait auto bound is a documented bound
+
+- **WHEN** a module defines an item whose return-position impl trait auto bound is generated only by macro expansion with no written `impl` token in the source
+- **THEN** the system does not observe the return-position impl trait and reports no violation — a documented coverage bound
+- **PINNED-BY** `impl_trait_macro_generated_auto_bound_is_a_bound`
+
+#### Scenario: Auto-trait bound rule key identity is normalized across equivalent spellings
+
+- **WHEN** an impl-trait auto-bound boundary is declared with any of `["Send"]`, `["std::marker::Send"]`, `["core::marker::Send"]`, `["r#Send"]`, or `["Send", "std::marker::Send"]`
+- **THEN** the system produces the identical rule key (`tianheng.rule/hunyi/impl-trait-auto-bound` with parameter `forbidden_auto_bounds` as `["Send"]`)
+- **PINNED-BY** `impl_auto_bound_rule_key_normalized_identity`
+
+#### Scenario: The impl-trait projection carries sorted, distinct auto-trait leaves
+
+- **WHEN** an impl-trait auto-bound boundary is declared with `std::marker::Send`, `r#Sync`, and bare `Send`
+- **THEN** JSON carries `forbidden_auto_bounds` as `["Send", "Sync"]`, and text carries `Send, Sync`
+- **PINNED-BY** `auto_bound_projection_uses_normalized_leaf_set`

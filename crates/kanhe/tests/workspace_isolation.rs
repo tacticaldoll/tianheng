@@ -163,13 +163,10 @@ fn a_manifest_without_the_table_is_a_violation() {
 
 #[test]
 fn the_refusal_classes_are_distinct() {
-    let root = std::env::temp_dir().join(format!("kanhe-isolation-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    xingbiao::claim_scratch(&root).expect("create");
+    let root = xingbiao::scratch_root("kanhe-isolation");
     // Not a git repository, so the enumeration cannot answer — which is not the same fact as a manifest
     // that disagrees.
     let refusal = judge(&root).expect_err("an unenumerable tree cannot be judged");
-    let _ = std::fs::remove_dir_all(&root);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
 }
 
@@ -183,9 +180,7 @@ fn the_refusal_classes_are_distinct() {
 /// reporting agreement over a set it never had.
 #[test]
 fn a_repository_carrying_none_of_the_judged_manifests_holds_over_nothing() {
-    let root = std::env::temp_dir().join(format!("kanhe-isolation-empty-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    xingbiao::claim_scratch(&root).expect("create");
+    let root = xingbiao::scratch_root("kanhe-isolation-empty");
     // Through the shared builder, which closes the ambient ignore channel. A bare `Command` here left
     // `git add` reading whatever `core.excludesFile` this machine has, so a fixture could be built without
     // the file it names — and the file it names IS the subject.
@@ -199,7 +194,6 @@ fn a_repository_carrying_none_of_the_judged_manifests_holds_over_nothing() {
     git(&["add", "README.md"]);
 
     let refusal = judge(&root).expect_err("a repository carrying none of them holds over nothing");
-    let _ = std::fs::remove_dir_all(&root);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
     assert!(
         refusal.message.contains("would hold over nothing"),
@@ -215,9 +209,7 @@ fn a_repository_carrying_none_of_the_judged_manifests_holds_over_nothing() {
 /// they had written wrongly.
 #[test]
 fn a_tracked_manifest_that_cannot_be_read_is_not_one_that_disagrees() {
-    let root = std::env::temp_dir().join(format!("kanhe-isolation-unread-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    xingbiao::claim_scratch(&root).expect("create");
+    let root = xingbiao::scratch_root("kanhe-isolation-unread");
     // Through the shared builder, which closes the ambient ignore channel. A bare `Command` here left
     // `git add` reading whatever `core.excludesFile` this machine has, so a fixture could be built without
     // the file it names — and the file it names IS the subject.
@@ -228,7 +220,6 @@ fn a_tracked_manifest_that_cannot_be_read_is_not_one_that_disagrees() {
     git(&["add", "examples/adopter/Cargo.toml"]);
 
     let refusal = judge(&root).expect_err("a manifest this check cannot read is not one it read");
-    let _ = std::fs::remove_dir_all(&root);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
     assert!(
         refusal.message.contains("could not read"),

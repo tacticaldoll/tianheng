@@ -9,9 +9,10 @@ from [`modou`](https://github.com/tacticaldoll/modou). It reads the shadow the c
 its **imports and dependencies** — from `cargo metadata` and a source `use` scan, compares
 against boundaries you declare in Rust, and reacts.
 
-It is a **pure functional core**: no CLI, no filesystem shell. Its only *external* dependency
-is `serde_json` (it depends internally on [`xuanji`](https://crates.io/crates/xuanji), the
-reaction model).
+It is a **pure functional core**: no CLI, no filesystem shell. Its *external* dependencies are
+`serde_json` and Unicode's identifier and normalization tables, `unicode-ident` and
+`unicode-normalization` — no `syn` (it depends internally on [`xuanji`](https://crates.io/crates/xuanji),
+the reaction model).
 
 ```rust
 use guibiao::{Constitution, CrateBoundary, ModuleBoundary, check};
@@ -91,7 +92,8 @@ conventional orphan file.
 with `RuleKey` + `StructuredFactIdentity`. The adopter-written boundary DSL remains the guarded
 surface; callers may inspect the returned structured `Outcome` directly through this crate.
 
-Adopt 圭表 on its own — the footprint is just `guibiao` (+ `serde_json`), no `syn` — or graduate to
+Adopt 圭表 on its own — the footprint is `guibiao` and the normal dependencies `cargo tree -p guibiao -e normal`
+lists, none of them `syn` — or graduate to
 the composed constitution through the [`tianheng`](https://crates.io/crates/tianheng) shell (which
 re-exports this crate's surface): a single 儀 is an on-ramp, the suite is the destination. Onboard
 without a red wall — declare at `.warn()`, `Baseline::of(...)` to grandfather an existing codebase,

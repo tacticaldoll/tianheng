@@ -243,8 +243,10 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   The projection gained nineteen lines, fourteen of them these two entries, with their own targets, rules and
   severities. What was recorded as a relocation was a formation, and a formation carries its own acceptance.
 
-  Accepted as declared: **繩墨 may depend on 天衡 and serde_json only; 勘合 on 繩墨, 天衡 and serde_json
-  only.** Both at `enforce`. Both crates ship in no package, so no adopter is reached either way. The cost
+  Accepted as declared: **each one's direct normal edges are the closed allowlist its own boundary names**,
+  both at `enforce` — `AGENTS.self-law.md` projects the two memberships and
+  `crates/kanhe/tests/self_law_amendment.rs` holds them, so neither is restated here to drift away from the
+  law. Both crates ship in no package, so no adopter is reached either way. The cost
   accepted with them is the ordinary one: a later edge from either to a dimension is an amendment, not a
   commit.
 
@@ -309,25 +311,26 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   (e.g. two stacked, jointly-exhaustive per-platform attributes, neither a plain file nor a direct
   `#[path]`) is governed rather than hard-errored, matching 渾儀/漏刻's identical rule for the same
   shape. Only when every candidate is absent, with no other cfg-conditional gate, does it fail
-  loud rather than governing a same-named orphan. Comments and
-  string literals (normal, byte, and raw) are stripped so their text is never mistaken
-  for a `use`. A module's identity is derived in three places — its file path, its `mod`
+  loud rather than governing a same-named orphan. A comment is no
+  token and a string literal (normal, byte, or raw) is one literal token, so their text is
+  never mistaken for a `use`. A module's identity is derived in three places — its file path, its `mod`
   declaration, and a `use` path that names it — and these MUST stay in lockstep, since a
   divergence both fails to govern a real module and silently hides its imports (a false
   negative, the one thing the core contract forbids). Two consequences stay token-level,
   not parser-level, to keep the hand-rolled scanner: a raw identifier is canonicalized
   (`mod r#type;` compiles to `type.rs`, so `r#type` and `type` are one module), and a
   `use` is attributed to the inline `mod { … }` that encloses it (so `self`/`super`
-  resolve correctly); macro bodies are stripped before scanning for `mod` declarations
-  too, not just `use`s, so the out-of-scope rule for macro-generated items is symmetric.
-  One macro is carved out of that stripping in **all three** dimensions: `cfg_if!`, whose
+  resolve correctly); a macro body is passed over when reading `mod` declarations too, not
+  just `use`s, so the out-of-scope rule for macro-generated items is symmetric.
+  One macro is carved out of that in **all three** dimensions: `cfg_if!`, whose
   arms wrap human-authored items without transforming their identities, so its contents
   are real code (圭表 0.2.3, 渾儀 and 漏刻 0.4.0 — each hand-written, 三儀 ⊥ 三儀, with
   `cfg_if_transparency_conformance.rs` as the drift check). Gating that carve-out on the
   macro **name** is soundness, not caution: an arbitrary macro's nested blocks are not arms,
   and reading them as such invents items the macro may never emit.
   Adopting a real parser (`syn`) would resolve all of this for free but would break the
-  dependency-light core, whose self-law admits no external dependency besides `serde_json`; that is an amendment, not a
+  dependency-light core, whose self-law admits only the external dependencies its allowlist names
+  (`AGENTS.self-law.md`), `syn` not among them; that is an amendment, not a
   silent trade. A boundary's governed *target* is file-based: an inline `mod name { … }`
   is reachable for import attribution but owns no file, so it cannot be a target — a
   boundary on one fails loud with a self-describing constitution error (exit 2), distinct
@@ -443,8 +446,8 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   one requiring it would forbid the small change that needs no plan.
 - **繩墨 and 勘合 are two crates because they answer to different subjects, and the dependency law states only
   what it can observe.** 繩墨 holds the law 天衡 declares over itself and the dogfood gates running the
-  delivered product's reactions against this workspace; 勘合 holds this repository's record against itself and
-  reaches no product contract. Keeping them apart is what stops a claim about the law being read as a claim
+  delivered product's reactions against this workspace; 勘合 holds this repository's record against itself,
+  reaching the product only through the edges its `restrict_dependencies_to` allowlist names. Keeping them apart is what stops a claim about the law being read as a claim
   about document hygiene, and it is why 繩墨 is an adopter of the shell rather than a member of the family it
   governs — exercising exactly the surface an adopter has. **None of that is observable by a dependency
   rule**, so it lives here: the two `restrict_dependencies_to` boundaries state only their allowlists and the

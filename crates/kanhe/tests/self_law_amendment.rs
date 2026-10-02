@@ -58,7 +58,7 @@ struct Boundary {
 /// derived, because a typed list drifts. Here the drift *is* the reaction: this list is the second artifact an
 /// amendment has to produce, so it must be the thing that has to be edited, and a derived one would agree with
 /// the law by construction and observe nothing.
-const DECLARED: [Boundary; 13] = [
+const DECLARED: [Boundary; 15] = [
     Boundary {
         heading: "`xuanji` (crate)",
         reason: "璇璣 is the dimension-agnostic reaction model: its direct normal edges reach only serde_json",
@@ -77,9 +77,9 @@ const DECLARED: [Boundary; 13] = [
     },
     Boundary {
         heading: "`guibiao` (crate)",
-        reason: "the 圭表 static core stays dependency-light: its direct normal edges reach only serde_json, xuanji (reaction model), and xingbiao (metadata substrate). functional core ⊥ imperative shell: none reaches the 天衡 shell. 三儀 ⊥ 三儀: none names a sibling dimension",
+        reason: "the 圭表 static core stays dependency-light: its direct normal edges reach only serde_json, xuanji (reaction model), xingbiao (metadata substrate), unicode-ident (Unicode identifier tables), and unicode-normalization (Unicode NFC). functional core ⊥ imperative shell: none reaches the 天衡 shell. 三儀 ⊥ 三儀: none names a sibling dimension",
         fields: &[
-            "- **rule**: restrict dependencies to (only: serde_json, xuanji, xingbiao)",
+            "- **rule**: restrict dependencies to (only: serde_json, xuanji, xingbiao, unicode-ident, unicode-normalization)",
             "- **kind**: crate · **severity**: enforce",
         ],
     },
@@ -136,6 +136,22 @@ const DECLARED: [Boundary; 13] = [
         reason: "path canonicalization and cycle/dedup guards in guibiao must resolve through `xingbiao::canonicalize_or_fail` or `try_visit` for unified failure handling",
         fields: &[
             "- **rule**: inline symbol path confined to module (confined_prefix: std::fs; ending_with: canonicalize)",
+            "- **kind**: module · **severity**: enforce · **crate**: guibiao",
+        ],
+    },
+    Boundary {
+        heading: "`guibiao::crate::module_scan::source_texts` (module)",
+        reason: "guibiao calls std::fs to read or open a file in module_scan::source_texts alone",
+        fields: &[
+            "- **rule**: inline symbol path permitted only in module (confined_prefix: std::fs; ending_with: read_to_string, read, open)",
+            "- **kind**: module · **severity**: enforce · **crate**: guibiao",
+        ],
+    },
+    Boundary {
+        heading: "`guibiao::crate::module_scan::token_tree` (module)",
+        reason: "guibiao's token tree imports no other guibiao module, so the readers of its tokens import it and it imports none of them",
+        fields: &[
+            "- **rule**: restrict imports to (only: )",
             "- **kind**: module · **severity**: enforce · **crate**: guibiao",
         ],
     },

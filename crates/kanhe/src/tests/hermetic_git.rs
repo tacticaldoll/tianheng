@@ -1,6 +1,33 @@
 use crate::hermetic_git::hermetic;
 use std::process::Command;
 
+/// A fixture that runs `git` without its own `git init` does not reach the outer repository.
+///
+/// The control is the same command without the builder, which does answer the outer repository: the
+/// assertion is a **difference**, so it cannot pass because discovery was never going to find one.
+#[test]
+fn a_fixture_without_its_own_repository_does_not_reach_the_outer_one() {
+    let root = xingbiao::scratch_root("kanhe-ceiling");
+    let toplevel = |mut command: Command| {
+        command
+            .args(["rev-parse", "--show-toplevel"])
+            .current_dir(root.path())
+            .output()
+            .expect("run git")
+    };
+    let bare = toplevel(Command::new("git"));
+    assert!(
+        bare.status.success(),
+        "control: a root under the build directory sits inside the outer repository, so bare git finds it"
+    );
+    let isolated = toplevel(hermetic("git"));
+    assert!(
+        !isolated.status.success(),
+        "the builder stops discovery at the scratch base, found {}",
+        String::from_utf8_lossy(&isolated.stdout)
+    );
+}
+
 /// The load-bearing half of [`hermetic`], as a case rather than as a sentence.
 ///
 /// Every fixture in this crate assumes the global config file cannot reach it. If that stopped being true the
@@ -11,15 +38,13 @@ use std::process::Command;
 /// absence of a key that might never have been readable.
 #[test]
 fn the_global_config_file_cannot_reach_a_hermetic_command() {
-    let home = std::env::temp_dir().join(format!("kanhe-hermetic-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&home);
-    xingbiao::claim_scratch(&home).expect("create the fixture home");
+    let home = xingbiao::scratch_root("kanhe-hermetic");
     std::fs::write(home.join(".gitconfig"), "[probe]\n\tkey = AMBIENT\n").expect("write");
 
     let read = |mut command: Command| {
         let out = command
             .args(["config", "--get", "probe.key"])
-            .env("HOME", &home)
+            .env("HOME", home.path())
             .output()
             .expect("run git");
         String::from_utf8_lossy(&out.stdout).trim().to_string()
@@ -27,7 +52,6 @@ fn the_global_config_file_cannot_reach_a_hermetic_command() {
 
     let ambient = read(Command::new("git"));
     let isolated = read(hermetic("git"));
-    std::fs::remove_dir_all(&home).ok();
 
     assert_eq!(
         ambient, "AMBIENT",
@@ -122,9 +146,7 @@ fn no_ambient_channel_moves_what_a_hermetic_command_reads() {
     };
     let inventory = shengmo::hermetic_probe::read(&root_of);
 
-    let root = std::env::temp_dir().join(format!("kanhe-hermetic-channels-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    xingbiao::claim_scratch(&root).expect("create the fixture root");
+    let root = xingbiao::scratch_root("kanhe-hermetic-channels");
     let build = |name: &str| {
         let dir = root.join(name);
         std::fs::create_dir_all(&dir).expect("create the fixture repository");
@@ -167,8 +189,6 @@ fn no_ambient_channel_moves_what_a_hermetic_command_reads() {
         ));
     }
 
-    let _ = std::fs::remove_dir_all(&root);
-
     for (case, reading) in readings {
         shengmo::hermetic_probe::judge(&case, &reading);
     }
@@ -196,9 +216,7 @@ fn no_ambient_channel_moves_what_a_hermetic_command_reads() {
 /// close it. Both channels are delivered here, and either one left uncleared shows up in what is classified.
 #[test]
 fn no_ambient_configuration_reaches_a_hermetic_command() {
-    let root = std::env::temp_dir().join(format!("kanhe-hermetic-config-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    xingbiao::claim_scratch(&root).expect("create the fixture root");
+    let root = xingbiao::scratch_root("kanhe-hermetic-config");
     for args in [
         vec!["init", "-q", "."],
         vec!["config", "user.email", "t@example.invalid"],
@@ -268,7 +286,7 @@ fn no_ambient_configuration_reaches_a_hermetic_command() {
         ])
         .env("GIT_CONFIG_PARAMETERS", parameters)
         .env("GIT_CONFIG", &foreign)
-        .env("KANHE_HERMETIC_PROBE_REPO", &root)
+        .env("KANHE_HERMETIC_PROBE_REPO", root.path())
         .output()
         .expect("run the probe child");
     let probe = String::from_utf8_lossy(&probe.stdout).into_owned();
@@ -277,8 +295,6 @@ fn no_ambient_configuration_reaches_a_hermetic_command() {
         .and_then(|(_, rest)| rest.split_once("PROBE_END"))
         .map(|(body, _)| body.to_string())
         .unwrap_or_else(|| panic!("the probe child produced no reading:\n{probe}"));
-
-    std::fs::remove_dir_all(&root).ok();
 
     for (channel, control, arrival) in [
         ("GIT_CONFIG_PARAMETERS", &by_parameters, "ambient-probe"),
@@ -358,9 +374,7 @@ fn no_ambient_configuration_reaches_a_hermetic_command() {
 /// absent in the child. Stated rather than implied, and it is the same residue the sibling rows carry.
 #[test]
 fn a_repository_selector_cannot_reach_a_hermetic_command() {
-    let root = std::env::temp_dir().join(format!("kanhe-hermetic-selector-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    xingbiao::claim_scratch(&root).expect("create the fixture root");
+    let root = xingbiao::scratch_root("kanhe-hermetic-selector");
 
     // Two repositories whose HEAD subjects differ, so a redirected read is legible as the wrong subject
     // rather than as an error.
@@ -423,8 +437,6 @@ fn a_repository_selector_cannot_reach_a_hermetic_command() {
         .map(|(key, _)| key.to_string_lossy().into_owned())
         .collect();
 
-    std::fs::remove_dir_all(&root).ok();
-
     assert_eq!(
         redirected, "elsewhere",
         "the control did not follow GIT_DIR, so the channel this case is about was not demonstrated and the \
@@ -458,9 +470,7 @@ fn a_repository_selector_cannot_reach_a_hermetic_command() {
 /// never readable on this machine.
 #[test]
 fn an_ignore_file_outside_the_repository_cannot_reach_a_hermetic_command() {
-    let home = std::env::temp_dir().join(format!("kanhe-hermetic-ignore-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&home);
-    xingbiao::claim_scratch(&home).expect("create the fixture home");
+    let home = xingbiao::scratch_root("kanhe-hermetic-ignore");
     let xdg = home.join("xdg");
     std::fs::create_dir_all(xdg.join("git")).expect("create the fixture XDG tree");
     std::fs::write(xdg.join("git").join("ignore"), "probe-excluded\n").expect("write");
@@ -471,7 +481,7 @@ fn an_ignore_file_outside_the_repository_cannot_reach_a_hermetic_command() {
     let ignored = |mut command: Command| {
         command
             .args(["check-ignore", "-q", "--", "probe-excluded"])
-            .env("HOME", &home)
+            .env("HOME", home.path())
             .env("XDG_CONFIG_HOME", &xdg)
             .current_dir(&repo)
             .status()
@@ -499,7 +509,6 @@ fn an_ignore_file_outside_the_repository_cannot_reach_a_hermetic_command() {
 
     let ambient = ignored(bare());
     let isolated = ignored(hermetic("git"));
-    std::fs::remove_dir_all(&home).ok();
 
     assert!(
         ambient,
@@ -600,9 +609,7 @@ fn the_builder_writes_the_config_count_and_takes_index_zero() {
 #[test]
 #[cfg(unix)]
 fn a_pattern_that_is_not_text_is_refused_rather_than_replaced() {
-    let root = std::env::temp_dir().join(format!("kanhe-git-stdin-bytes-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    xingbiao::claim_scratch(&root).expect("create the fixture root");
+    let root = xingbiao::scratch_root("kanhe-git-stdin-bytes");
     for args in [
         &["init", "-q", "."][..],
         &["config", "user.email", "fixture@example.invalid"][..],
@@ -624,7 +631,6 @@ fn a_pattern_that_is_not_text_is_refused_rather_than_replaced() {
         &["check-ignore", "-z", "-v", "--no-index", "--stdin"],
         &["foo"],
     );
-    let _ = std::fs::remove_dir_all(&root);
 
     match answered {
         Err(crate::hermetic_git::Failure::Unreadable(why)) => assert!(
@@ -662,9 +668,7 @@ fn a_pattern_that_is_not_text_is_refused_rather_than_replaced() {
 fn both_accessors_report_an_undecodable_answer_in_the_same_words() {
     use std::os::unix::ffi::OsStrExt;
 
-    let root = std::env::temp_dir().join(format!("kanhe-git-bytes-twin-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    xingbiao::claim_scratch(&root).expect("create the fixture root");
+    let root = xingbiao::scratch_root("kanhe-git-bytes-twin");
     for args in [
         &["init", "-q", "."][..],
         &["config", "user.email", "fixture@example.invalid"][..],
@@ -678,7 +682,6 @@ fn both_accessors_report_an_undecodable_answer_in_the_same_words() {
 
     let trimmed = crate::hermetic_git::run(&root, &[], &["ls-files", "-z"]);
     let exact = crate::hermetic_git::run_exact(&root, &[], &["ls-files", "-z"]);
-    let _ = std::fs::remove_dir_all(&root);
 
     let sentence = |result| match result {
         Err(crate::hermetic_git::Failure::Unreadable(why)) => why,
@@ -702,9 +705,7 @@ fn both_accessors_report_an_undecodable_answer_in_the_same_words() {
 /// those characters.
 #[test]
 fn a_tracked_path_git_would_quote_reads_back_as_its_own_name() {
-    let root = std::env::temp_dir().join(format!("kanhe-git-quoted-path-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    xingbiao::claim_scratch(&root).expect("create the fixture root");
+    let root = xingbiao::scratch_root("kanhe-git-quoted-path");
     for args in [
         &["init", "-q", "."][..],
         &["config", "user.email", "fixture@example.invalid"][..],
@@ -720,7 +721,6 @@ fn a_tracked_path_git_would_quote_reads_back_as_its_own_name() {
         crate::hermetic_git::tracked_paths(&root, &[]).expect("the tracked set is enumerable");
     let line_oriented = crate::hermetic_git::run(&root, &[], &["ls-files"])
         .expect("the line-oriented listing is readable");
-    let _ = std::fs::remove_dir_all(&root);
 
     assert!(
         owned.contains(&"圭表.md".to_string()),
@@ -766,9 +766,7 @@ fn a_tracked_path_git_would_quote_reads_back_as_its_own_name() {
 fn git_output_that_is_not_utf8_is_refused_rather_than_replaced() {
     use std::os::unix::ffi::OsStrExt;
 
-    let root = std::env::temp_dir().join(format!("kanhe-git-bytes-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    xingbiao::claim_scratch(&root).expect("create the fixture root");
+    let root = xingbiao::scratch_root("kanhe-git-bytes");
     for args in [
         &["init", "-q", "."][..],
         &["config", "user.email", "fixture@example.invalid"][..],
@@ -783,7 +781,6 @@ fn git_output_that_is_not_utf8_is_refused_rather_than_replaced() {
     crate::hermetic_git::run(&root, &[], &["add", "-A"]).expect("git stages what is there");
 
     let read = crate::hermetic_git::run(&root, &[], &["ls-files", "-z"]);
-    let _ = std::fs::remove_dir_all(&root);
 
     match read {
         Err(crate::hermetic_git::Failure::Unreadable(why)) => assert!(
@@ -814,9 +811,7 @@ fn git_output_that_is_not_utf8_is_refused_rather_than_replaced() {
 #[test]
 #[cfg(unix)]
 fn a_refusal_during_the_conversation_is_reported_as_the_refusal_it_is() {
-    let root = std::env::temp_dir().join(format!("kanhe-git-stdin-refusal-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    xingbiao::claim_scratch(&root).expect("create the fixture root");
+    let root = xingbiao::scratch_root("kanhe-git-stdin-refusal");
     for args in [
         &["init", "-q", "."][..],
         &["config", "user.email", "fixture@example.invalid"][..],
@@ -838,7 +833,6 @@ fn a_refusal_during_the_conversation_is_reported_as_the_refusal_it_is() {
         &["check-ignore", "-z", "-v", "--no-index", "--stdin"],
         &refs,
     );
-    let _ = std::fs::remove_dir_all(&root);
 
     match answered {
         Err(crate::hermetic_git::Failure::Exit { code, stderr }) => {

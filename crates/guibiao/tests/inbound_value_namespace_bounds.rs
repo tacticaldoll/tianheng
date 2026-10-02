@@ -6,19 +6,11 @@
 use guibiao::{Constitution, ModuleBoundary, Outcome, check};
 use std::path::{Path, PathBuf};
 
-struct Probe(PathBuf);
+struct Probe(xingbiao::ScratchRoot);
 
 impl Probe {
     fn new(label: &str, files: &[(&str, &str)]) -> Self {
-        use std::sync::atomic::{AtomicU32, Ordering};
-        static N: AtomicU32 = AtomicU32::new(0);
-        let dir = std::env::temp_dir().join(format!(
-            "guibiao-inbound-value-{label}-{}-{}",
-            std::process::id(),
-            N.fetch_add(1, Ordering::Relaxed)
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        xingbiao::claim_scratch(&dir).expect("the fixture root is writable");
+        let dir = xingbiao::scratch_root(&format!("guibiao-inbound-value-{label}"));
         std::fs::create_dir_all(dir.join("src")).expect("create src");
         std::fs::write(
             dir.join("Cargo.toml"),
@@ -35,12 +27,6 @@ impl Probe {
 
     fn manifest(&self) -> PathBuf {
         self.0.join("Cargo.toml")
-    }
-}
-
-impl Drop for Probe {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
     }
 }
 
@@ -73,7 +59,10 @@ fn a_real_value_binding_still_reacts() {
     let probe = Probe::new(
         "binding",
         &[
-            ("lib.rs", "pub mod protected;\npub mod consumer;\n"),
+            (
+                "lib.rs",
+                "pub mod protected;\npub mod consumer;\npub mod facade {}\n",
+            ),
             ("protected.rs", "pub mod foo;\npub fn foo() -> u8 { 7 }\n"),
             ("protected/foo.rs", "pub const INSIDE: u8 = 1;\n"),
             ("consumer.rs", "use crate::protected::foo;\n"),
@@ -101,7 +90,10 @@ fn a_glob_import_does_not_bind_a_value_and_does_not_react() {
     let probe = Probe::new(
         "glob",
         &[
-            ("lib.rs", "pub mod protected;\npub mod consumer;\n"),
+            (
+                "lib.rs",
+                "pub mod protected;\npub mod consumer;\npub mod facade {}\n",
+            ),
             ("protected.rs", "pub mod foo;\npub fn foo() -> u8 { 7 }\n"),
             ("protected/foo.rs", "pub const INSIDE: u8 = 1;\n"),
             ("consumer.rs", "use crate::protected::foo::*;\n"),
@@ -140,7 +132,10 @@ fn a_self_brace_import_binds_the_module_only_and_does_not_react() {
         let probe = Probe::new(
             label,
             &[
-                ("lib.rs", "pub mod protected;\npub mod consumer;\n"),
+                (
+                    "lib.rs",
+                    "pub mod protected;\npub mod consumer;\npub mod facade {}\n",
+                ),
                 ("protected.rs", "pub mod foo;\npub fn foo() -> u8 { 7 }\n"),
                 ("protected/foo.rs", "pub const INSIDE: u8 = 1;\n"),
                 ("consumer.rs", consumer),
@@ -181,7 +176,10 @@ fn a_value_declared_in_an_extern_block_reacts() {
         let probe = Probe::new(
             label,
             &[
-                ("lib.rs", "pub mod protected;\npub mod consumer;\n"),
+                (
+                    "lib.rs",
+                    "pub mod protected;\npub mod consumer;\npub mod facade {}\n",
+                ),
                 ("protected.rs", protected),
                 ("protected/foo.rs", "pub const INSIDE: u8 = 1;\n"),
                 ("consumer.rs", "use crate::protected::foo;\n"),
@@ -238,7 +236,10 @@ fn a_value_declared_past_a_modifier_token_reacts() {
         let probe = Probe::new(
             label,
             &[
-                ("lib.rs", "pub mod protected;\npub mod consumer;\n"),
+                (
+                    "lib.rs",
+                    "pub mod protected;\npub mod consumer;\npub mod facade {}\n",
+                ),
                 ("protected.rs", protected),
                 ("protected/foo.rs", "pub const INSIDE: u8 = 1;\n"),
                 ("consumer.rs", "use crate::protected::foo;\n"),
@@ -263,7 +264,10 @@ fn a_value_in_a_nested_scope_is_still_not_the_enclosing_modules() {
     let probe = Probe::new(
         "nested-scope",
         &[
-            ("lib.rs", "pub mod protected;\npub mod consumer;\n"),
+            (
+                "lib.rs",
+                "pub mod protected;\npub mod consumer;\npub mod facade {}\n",
+            ),
             (
                 "protected.rs",
                 "pub mod foo;\npub mod inner { pub fn foo() -> u8 { 7 } }\n",
@@ -281,10 +285,9 @@ fn a_value_in_a_nested_scope_is_still_not_the_enclosing_modules() {
 
 /// A value name that is only *text* — a comment, a string literal, a macro body — declares nothing.
 ///
-/// The collector's own precondition is declaration-cleaned source; it was handed the raw file, so any
-/// of these three read as a declaration and made an ordinary `use protected::foo;` react even though
-/// `protected` declares only the module. Each shape is asserted separately: one fixture covering all
-/// three could pass while two of the strippings were missing.
+/// The collector reads declarations from the token tree, so none of these three is a declaration, and an
+/// ordinary `use protected::foo;` does not react when `protected` declares only the module. Each shape is
+/// asserted separately: one fixture covering all three could pass while two of them were read as items.
 #[test]
 fn a_value_named_only_in_text_declares_nothing() {
     for (label, protected) in [
@@ -301,7 +304,10 @@ fn a_value_named_only_in_text_declares_nothing() {
         let probe = Probe::new(
             label,
             &[
-                ("lib.rs", "pub mod protected;\npub mod consumer;\n"),
+                (
+                    "lib.rs",
+                    "pub mod protected;\npub mod consumer;\npub mod facade {}\n",
+                ),
                 ("protected.rs", protected),
                 ("protected/foo.rs", "pub const INSIDE: u8 = 1;\n"),
                 ("consumer.rs", "use crate::protected::foo;\n"),

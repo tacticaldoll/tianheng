@@ -84,6 +84,16 @@ The system SHALL react when a governed type acquires a forbidden trait by **eith
 
 A forbidden entry SHALL match a derive/trait path by **leaf identifier** — so a forbidden `Serialize` or `serde::Serialize` matches `#[derive(Serialize)]`, `#[derive(serde::Serialize)]`, `#[derive(serde_derive::Serialize)]`, and `impl serde::Serialize for …` alike (the derive-macro re-export path and the trait path share a leaf, and the resolver is cross-crate-blind, so leaf is what reliably catches acquisition). The compared leaf is taken from the path **resolved through the acquisition site's `use`-map**, so a locally renamed trait or derive — `use serde::Serialize as Ser; impl Ser for …` or `#[derive(Ser)]` — resolves to its true leaf `Serialize` and reacts (a local rename is observable, so a missed one would be a false negative); a path that does not resolve locally — a bare/prelude name or a cross-crate path — falls back to its **written** leaf, keeping the match cross-crate-blind (the derive-macro-crate path `serde_derive::Serialize` still matches by the leaf `Serialize`). A path-qualified forbidden entry is accepted for the author's clarity but does **not** narrow the match — narrowing by resolved path would silently miss the derive-macro-crate path (`serde_derive::Serialize`), the exact false negative the contract forbids. The cost is a documented false **positive** when two traits share a leaf — reportable, and the safe direction, since a false negative is the one forbidden bug. When the acquisition site's `use`-map resolves the derive/trait name to **more than one** candidate — a mutually-exclusive `#[cfg]`-gated `use` alias for the identical local name — every candidate's leaf SHALL be checked and the match SHALL react if any candidate's leaf matches, never silently keeping only the leaf of whichever declaration was written last (observation cannot know which `#[cfg]` branch is live). A forbidden entry whose **leaf itself would be empty** — a trailing `::` (`"serde::"`), a doubled `::`, or the empty string — SHALL be rejected as a constitution error rather than silently compared: leaf-identifier matching is immune to a *leading* `::` (`leaf_of("::serde::Serialize")` is still the real leaf `Serialize`), but not to a *trailing* one, since no real identifier is ever empty and such an entry could therefore never match anything, in the same silent-pass class signature-coupling's own forbidden-operand validation closes for its own (full-path) matching mechanism.
 
+An auto-trait leaf such as `Send` remains a valid `must_not_acquire` operand: this boundary
+observes a governed type genuinely acquiring that trait by a hand impl or derive. The
+principal-trait operand refusal for dyn/impl-trait exposure does not apply to acquisition.
+
+#### Scenario: An auto-trait acquisition remains observable
+
+- **WHEN** a governed type has `impl Send for T` and its forbidden-marker boundary declares `must_not_acquire("Send")`
+- **THEN** the system emits an acquisition violation rather than refusing the operand as a constitution error
+- **PINNED-BY** `named_principal_and_forbidden_marker_send_remain_observable`
+
 #### Scenario: A derive-macro-crate path still reacts
 
 - **WHEN** a governed type declares `#[derive(serde_derive::Serialize)] pub struct Order;` under a boundary forbidding `serde::Serialize`
@@ -143,6 +153,49 @@ If the boundary's target crate is absent from the workspace, the system SHALL tr
 
 - **WHEN** a governed module is declared only via `#[cfg_attr(any(), path = "never.rs")] pub mod domain;` with `domain.rs` (the conventional file, present) declaring `#[derive(serde::Serialize)] pub struct Order;` and `never.rs` (the target) absent, under a boundary forbidding `serde::Serialize`
 - **THEN** the system reads `domain.rs` — the file every build actually compiles here — and reacts, never treating the `cfg_attr` attribute as a bound to skip the module outright
+
+### Requirement: A forbidden-marker anchor has one canonical spelling
+
+The forbidden-marker boundary's module anchor SHALL be held to the spelling `semantic-signature-coupling`
+states for every module-anchored semantic capability: `crate`, or `crate::` followed by
+`::`-separated identifiers. Any other spelling SHALL be a constitution error (exit 2) quoting what was
+written and naming the canonical spelling where the text determines one, and a raw identifier SHALL
+be accepted as its plain form in the violation target and identity. The anchor is this boundary's
+violation `target`, so the spelling is what decides which baseline entry a finding matches.
+
+#### Scenario: A forbidden-marker anchor not rooted at `crate` is a constitution error
+
+- **WHEN** a developer writes `ForbiddenMarkerBoundary::in_crate("app").module("domain")` and the crate declares `crate::domain`
+- **THEN** the system emits a constitution error (exit 2) quoting `domain` and suggesting `crate::domain`, rather than reacting under a target spelled `domain`
+- **PINNED-BY** `every_anchored_capability_refuses_a_non_canonical_spelling`
+
+#### Scenario: A raw-identifier forbidden-marker anchor keeps the plain identity
+
+- **WHEN** a forbidden-marker boundary anchors to `crate::r#domain`
+- **THEN** its violations carry the target `crate::domain` and the identities a `crate::domain` anchor produces
+- **PINNED-BY** `a_raw_identifier_anchor_is_the_same_identity_as_its_plain_spelling`
+
+### Requirement: A forbidden-marker anchor names a module that exists
+
+The governed subtree's anchor SHALL name a module the target crate declares. A canonical anchor
+that no compilation unit of the crate declares SHALL be a constitution error (exit 2) naming the
+anchor, the refusal every single-module capability makes through anchor resolution. The subtree is
+judged by where types are defined, so without it a mistyped anchor would govern no type and the
+boundary would report clean. A package's roots are separate module graphs: an anchor declared in
+one compilation unit and absent from another SHALL be governed where it is declared, and refused
+only where no unit declares it.
+
+#### Scenario: An anchor naming no module is a constitution error
+
+- **WHEN** a forbidden-marker boundary anchors to `crate::domian` and the crate declares no such module
+- **THEN** the system emits a constitution error (exit 2) naming `crate::domian`, never exit 0
+- **PINNED-BY** `every_anchored_capability_refuses_a_module_that_does_not_exist`
+
+#### Scenario: An anchor declared in one compilation unit is governed there
+
+- **WHEN** a package has a library declaring `crate::ffi` and a binary that does not, and a forbidden-marker boundary anchors to `crate::ffi`
+- **THEN** the library's acquisitions under `crate::ffi` react, and the binary's absence of the module is not an error
+- **PINNED-BY** `a_module_present_in_one_compilation_unit_is_not_absent`
 
 ### Requirement: CI reaction, severity, and baseline parity
 

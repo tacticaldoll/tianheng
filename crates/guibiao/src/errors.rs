@@ -87,6 +87,59 @@ pub(crate) fn unknown_module_error(module: &str, crate_package: &str) -> String 
     )
 }
 
+/// A module path — a governed module, or a module a rule names — written in a spelling other than
+/// the canonical one. `suggestion` is the canonical spelling the written one most plausibly meant,
+/// when there is one.
+///
+/// Deliberate **verbatim** twin of hunyi's `non_canonical_module_anchor_error` (dimension split; a
+/// shared module would need a forbidden guibiao↔hunyi edge). The two copies MUST stay
+/// byte-identical — one spelling rule reads the same in either dimension.
+pub(crate) fn non_canonical_module_path_error(
+    written: &str,
+    crate_package: &str,
+    suggestion: Option<&str>,
+) -> String {
+    let repair = match suggestion {
+        Some("crate") => "write `crate` for the crate root".to_string(),
+        Some(spelling) => format!("write `{spelling}`"),
+        None => "write the module's path from the crate root, starting `crate::`".to_string(),
+    };
+    format!(
+        "a module is named by one spelling or it becomes two identities: '{written}' in crate \
+         '{crate_package}' is not `crate` or `crate::` followed by `::`-separated identifiers — \
+         {repair}"
+    )
+}
+
+/// A `must_not_import` or `must_not_be_imported_by` boundary naming a module that no compiled root
+/// of the crate declares: the edge it forbids can never be observed.
+pub(crate) fn unknown_forbidden_module_error(
+    module: &str,
+    crate_package: &str,
+    rule_method: &str,
+) -> String {
+    format!(
+        "a forbidden module must be a real module or the rule silently never reacts: `{rule_method}` \
+         names '{module}', which is not found among the reachable modules of crate \
+         '{crate_package}' (declared via `mod`) — check the path"
+    )
+}
+
+/// A `restrict_imports_to` or `must_only_be_imported_by` allowlist entry naming a module that no
+/// compiled root of the crate declares: the entry can never match, so every edge it was meant to
+/// permit is reported.
+pub(crate) fn unknown_allowed_module_error(
+    module: &str,
+    crate_package: &str,
+    rule_method: &str,
+) -> String {
+    format!(
+        "an allowed module must be a real module or it can never match: `{rule_method}` names \
+         '{module}', which is not found among the reachable modules of crate '{crate_package}' \
+         (declared via `mod`) — check the path"
+    )
+}
+
 /// A `restrict_imports_to` boundary targets the crate root `crate`, which has no
 /// outward internal edge.
 pub(crate) fn restrict_imports_to_on_crate_error(crate_package: &str) -> String {
@@ -164,6 +217,56 @@ pub(crate) fn inline_empty_prefix_error(crate_package: &str, rule: &str) -> Stri
     )
 }
 
+/// An inline confinement (`must_not_call_inline` or `confine_inline_call`, named by `rule`) declares a
+/// prefix in a spelling other than `::`-separated identifiers. `suggestion` is the spelling it most
+/// plausibly meant, when there is one.
+pub(crate) fn non_canonical_inline_prefix_error(
+    written: &str,
+    crate_package: &str,
+    rule: &str,
+    suggestion: Option<&str>,
+) -> String {
+    let repair = match suggestion {
+        Some(spelling) => format!("write `{spelling}`"),
+        None => "write the path from `crate`, `std`, `core`, `alloc` or a dependency".to_string(),
+    };
+    format!(
+        "a prefix is compared segment by segment, so it has one spelling: `{rule}` in crate \
+         '{crate_package}' names '{written}', which is not `::`-separated identifiers rooted at a crate — {repair}"
+    )
+}
+
+/// An inline confinement (`must_not_call_inline` or `confine_inline_call`, named by `rule`) declares a
+/// prefix whose first segment no sysroot crate, dependency or library of the package confirms, while the
+/// same path rooted at `crate` — `rooted` — names something the crate declares.
+pub(crate) fn unknown_inline_prefix_head_error(
+    written: &str,
+    crate_package: &str,
+    rule: &str,
+    rooted: &str,
+) -> String {
+    format!(
+        "a prefix of the crate's own path starts at `crate`, or the rule silently never reacts: `{rule}` \
+         in crate '{crate_package}' names '{written}', whose first segment is not a sysroot crate, a \
+         dependency or the package's library, while `{rooted}` names something the crate declares — \
+         write `{rooted}`, or `::{written}` for an external crate"
+    )
+}
+
+/// An inline confinement (`must_not_call_inline` or `confine_inline_call`, named by `rule`) declares a
+/// `crate::` prefix naming neither a module some compiled root declares nor an item one defines.
+pub(crate) fn unknown_inline_prefix_error(
+    written: &str,
+    crate_package: &str,
+    rule: &str,
+) -> String {
+    format!(
+        "a prefix must name something or the rule silently never reacts: `{rule}` names \
+         '{written}', which is neither a reachable module of crate '{crate_package}' (declared via \
+         `mod`) nor an item one defines — check the path"
+    )
+}
+
 /// An inline confinement (`must_not_call_inline` or `confine_inline_call`, named by `rule`) declares
 /// `.ending_with([])` with an empty verb set, which would narrow the reaction to nothing — a silent no-op, resolved
 /// loudly (exit 2).
@@ -193,6 +296,43 @@ pub(crate) fn unreadable_governed_file_error(file: &Path, err: &str) -> String {
         "a governed file that cannot be read is 'cannot judge', not 'nothing to judge' — skipping \
          it could hide a real violation: cannot read governed source file '{}' ({err})",
         file.display()
+    )
+}
+
+/// A source file the scan read but could not judge — a nesting cap, a chain past its cap — named with the refusal, so
+/// a crate of many files says which one to repair. It is a governed file, or for the inline scan any file of the
+/// compilation unit, since every file's scope table is read in resolving a governed one.
+pub(crate) fn scan_refusal_in_file(file: &Path, refusal: &str) -> String {
+    format!("cannot judge source file '{}': {refusal}", file.display())
+}
+
+/// A refusal the module walk of one compilation unit returned, named with the crate and the unit it walked, so a
+/// package of several roots says which one declares the module to repair.
+pub(crate) fn walk_refusal_in_unit(
+    crate_package: &str,
+    unit: Option<&str>,
+    refusal: &str,
+) -> String {
+    let unit_qualifier = match unit {
+        Some(u) => format!(" in compilation unit '{u}'"),
+        None => String::new(),
+    };
+    format!("cannot walk crate '{crate_package}'{unit_qualifier}: {refusal}")
+}
+
+/// Targets sharing one root in different editions are two compilations of one file, and a scan reads it once.
+pub(crate) fn root_in_several_editions_error(
+    crate_package: &str,
+    root: &std::path::Path,
+    editions: &[&str],
+) -> String {
+    format!(
+        "a crate root is read in the edition its target is compiled in, and targets sharing one root in \
+         different editions compile it once in each, which one reading cannot judge: crate \
+         '{crate_package}' roots targets in editions {} at '{}'; give each edition its own root file, or \
+         one edition to every target rooted there",
+        editions.join(", "),
+        root.display()
     )
 }
 

@@ -156,9 +156,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             Extent::Reached(Reached::UnderReacts {
                 because: "the reader joins a chain `rustfmt` broke and decides one logical line, so a \
                           consumer reached through a binding is outside what it can see. Following the \
-                          binding is name resolution, which no reader over text performs. Measured when \
-                          this was written: no site in the tree binds a `split(..).next()` and consumes it \
-                          later"
+                          binding is name resolution, which no reader over text performs"
                     .into(),
                 owner: Owner::Engine,
             }),
@@ -283,6 +281,19 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                     .into(),
             },
             "`BACKLOG.md` — *a check that never wrote a region decision is invisible*",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "repository-checks/a-spawn-marker-inside-a-string-literal-is-read-as-a-spawn-a-stated-bound",
+            ),
+            "a spawn marker inside a string literal of a test target, after a byte that is neither a quote nor an \
+             identifier character",
+            Extent::Reached(Reached::OverReacts {
+                because: "a string literal's contents are executed text, and the position rule excludes only a \
+                          marker a quote or an identifier character precedes"
+                    .into(),
+            }),
+            "a_spawn_marker_inside_a_string_literal_is_read_as_a_spawn",
         ),
         BoundDecl::pinned(
             BoundId::new(
@@ -986,6 +997,76 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                 owner: Owner::Engine,
             }),
             "a_construction_through_a_program_value_is_not_read",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "repository-checks/a-root-reached-through-a-value-is-not-read-a-stated-bound",
+            ),
+            "a fixture root built from a path another function passes in, or `TMPDIR` read through a name \
+             bound to a string elsewhere",
+            Extent::Reached(Reached::UnderReacts {
+                because: "which value a parameter holds, and what a constant names, is name resolution and \
+                          not something a parse tree carries. The reader names the call that produces a \
+                          system root and not every path that could hold one, so a root handed in from a \
+                          caller is judged where the caller builds it. No mutation record isolates it: \
+                          reaching through a value means resolving names, which is a different reader \
+                          rather than a perturbation of this one"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "a_root_reached_through_a_value_is_not_read",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "repository-checks/a-system-temporary-directory-named-in-prose-a-string-or-a-child-environment-is-not-read-a-stated-bound",
+            ),
+            "`temp_dir` named in a comment or a string literal, or `TMPDIR` set on a child process's \
+             environment",
+            Extent::Reached(Reached::UnderReacts {
+                because: "a comment is what a lexer discards and a literal is one token, so neither is a \
+                          call; setting a child's `TMPDIR` is a method call and not a read of this \
+                          process's. What the stop leaves unobserved is the temporary files a child \
+                          process writes for itself -- a script's `mktemp`, rustc and cargo -- which this \
+                          check does not govern. No mutation record isolates it: a literal's contents are \
+                          not a token stream, so reaching into them is a different reader rather than a \
+                          perturbation of this one"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "naming_temp_dir_in_a_comment_a_string_or_a_child_environment_is_not_read",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "repository-checks/a-root-composed-without-naming-the-helper-is-not-read-a-stated-bound",
+            ),
+            "a fixture root composed from the running executable's path, from `CARGO_TARGET_TMPDIR`, or \
+             from any path that does not spell `scratch_base` or `scratch_ceiling`",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the reader asks whether a file names one of two words, and whether a value is a \
+                          fixture root is a question about what the value means. `scratch_ceiling` is the \
+                          instance this tree holds: kanhe derives the same layout from the executable's path \
+                          because its normal edges may not reach the helper, and the reader sees it only \
+                          because it is named. A word added to the question's list is the perturbation of \
+                          this stop, and its mutation record makes it"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "a_root_composed_without_naming_the_helper_is_not_read",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "repository-checks/a-second-naming-in-a-declared-file-is-not-separated-from-the-declared-one-a-stated-bound",
+            ),
+            "a second naming of the helper's base directory in a file the declared set already names",
+            Extent::Reached(Reached::UnderReacts {
+                because: "the reader answers once per file and a declaration is a path, so every naming in a \
+                          declared file stands behind the one its reason gives. No mutation record isolates \
+                          it: separating the namings means returning a count or a site where the reader \
+                          returns a verdict, which is a different reader and not a perturbation of this one"
+                    .into(),
+                owner: Owner::Engine,
+            }),
+            "a_second_naming_in_a_declared_file_is_not_separated_from_the_first",
         ),
         BoundDecl::pinned(
             BoundId::new("repository-checks/a-git-named-in-prose-is-not-read-a-stated-bound"),

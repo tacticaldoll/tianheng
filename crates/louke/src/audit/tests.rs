@@ -53,16 +53,13 @@ fn every_audit_rule_family_has_exact_semantic_identity() {
 
 /// A unique, self-cleaning temp base directory for an `assert_boundary!`-probe source fixture:
 /// write source files under it, then hand its root (or a derived path) to `audit_probe_coverage`
-/// — replaces the hand-rolled `temp_dir().join(format!(...))` + manual `remove_dir_all` at both
+/// — replaces the hand-rolled `join(format!(...))` path building + manual `remove_dir_all` at both
 /// ends that every test in this file otherwise repeated.
-struct TempBase(PathBuf);
+struct TempBase(xingbiao::ScratchRoot);
 
 impl TempBase {
     fn new(label: &str) -> Self {
-        let base = std::env::temp_dir().join(format!("louke-{label}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        xingbiao::claim_scratch(&base).expect("the fixture root is writable");
-        Self(base)
+        Self(xingbiao::scratch_root(&format!("louke-{label}")))
     }
 
     fn path(&self) -> &Path {
@@ -112,12 +109,6 @@ impl TempBase {
         markers: &[&str],
     ) -> Outcome {
         audit_probe_coverage_with_markers(declared, roots, self.path(), markers)
-    }
-}
-
-impl Drop for TempBase {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
     }
 }
 

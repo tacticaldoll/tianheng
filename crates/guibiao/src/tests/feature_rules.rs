@@ -834,6 +834,31 @@ pub(super) fn an_unreadable_utf8_governed_source_file_is_a_scan_error() {
     );
 }
 
+/// Every file reachable from the crate root is read, so an unreadable one no boundary governs is refused as a governed
+/// one is: its `mod` declarations decide what else is reachable, and a glob or a re-export in it may be what a
+/// governed file's head names.
+#[test]
+pub(super) fn an_unreadable_reachable_source_file_is_a_scan_error() {
+    let ws = TempWorkspace::new("utf8sibling");
+    ws.write(
+        "lib.rs",
+        "pub mod forbidden;\npub mod kernel;\npub mod other;\n",
+    );
+    ws.write("forbidden.rs", "");
+    ws.write("kernel.rs", "use crate::other::*;\n");
+    std::fs::write(ws.src().join("other.rs"), [0xFF, 0xFE, 0x00, 0x80]).expect("write other.rs");
+
+    let metadata = ws.metadata("x");
+    let boundary = ModuleBoundary::in_crate("x")
+        .module("crate::kernel")
+        .must_not_import("crate::forbidden")
+        .because("kernel must not import forbidden");
+    let mut violations = Vec::new();
+    let refusal = check_module_boundary(&metadata, &boundary, &mut violations)
+        .expect_err("an unreadable reachable file must be a scan error");
+    assert!(refusal.to_string().contains("other.rs"), "{refusal}");
+}
+
 #[test]
 pub(super) fn dependency_kind_appears_in_the_projection() {
     let constitution = Constitution::new("p")
@@ -901,7 +926,7 @@ pub(super) fn an_anchored_boundary_stamps_its_violations_with_the_anchor() {
     let (result, violations) = run_module_check(
         "anchored",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod secret {}\npub mod kernel;\n"),
             ("kernel.rs", "use crate::secret::Thing;\n"),
         ],
         ModuleBoundary::in_crate("x")
@@ -923,7 +948,7 @@ pub(super) fn an_anchorless_boundary_leaves_its_violations_unanchored() {
     let (result, violations) = run_module_check(
         "unanchored",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod secret {}\npub mod kernel;\n"),
             ("kernel.rs", "use crate::secret::Thing;\n"),
         ],
         ModuleBoundary::in_crate("x")
@@ -943,7 +968,7 @@ pub(super) fn a_module_violation_carries_its_rule_repair_polarity() {
     let (_r, deny) = run_module_check(
         "polarity-deny",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod secret {}\npub mod kernel;\n"),
             ("kernel.rs", "use crate::secret::Thing;\n"),
         ],
         ModuleBoundary::in_crate("x")
@@ -956,7 +981,7 @@ pub(super) fn a_module_violation_carries_its_rule_repair_polarity() {
     let (_r, allow) = run_module_check(
         "polarity-allow",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod types {}\npub mod kernel;\n"),
             ("kernel.rs", "use crate::infra::Thing;\n"),
         ],
         ModuleBoundary::in_crate("x")

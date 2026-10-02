@@ -62,6 +62,8 @@ impl UnsafeCrateDraft {
     /// `crate::ffi` also allows `crate::ffi::raw`). A site outside all of them reacts. An **empty**
     /// set, or one naming the crate root, is a constitution error (exit 2) — use
     /// `#![forbid(unsafe_code)]` for a crate-wide ban.
+    /// Each path is written from the crate root (`crate::ffi`) and names a module the crate declares;
+    /// any other spelling, or a module no compilation unit declares, is a constitution error too.
     pub fn only_under<I, S>(self, locations: I) -> UnsafeBoundaryDraft
     where
         I: IntoIterator<Item = S>,

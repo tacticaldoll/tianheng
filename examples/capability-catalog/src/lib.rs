@@ -1,9 +1,11 @@
 //! Deliberately violating source for the capability-catalog contract checks.
 
+pub mod allowed;
 pub mod governance;
 pub mod marked;
 pub mod misplaced;
 pub mod shapes;
+pub mod stateful;
 
 /// A local architectural command whose implementations are confined by the catalog law.
 pub trait Command {}

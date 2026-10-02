@@ -1,10 +1,11 @@
 use super::render::{coverage_report, report_sarif, violations_text, violations_text_styled};
 use super::term_color::Style;
 use super::{
-    BaselineWriteError, Coverage, boundary_params, check_constitution, constitution_markdown,
-    create_baseline_file, dispatch, dyn_trait_text, impl_trait_text, list_document, list_markdown,
-    merge_outcomes, nearest_manifest_from, projection_gate, report_json, runtime_text,
-    semantic_text, trait_impl_text, visibility_text,
+    BaselineWriteError, Coverage, async_exposure_text, boundary_params, check_constitution,
+    constitution_markdown, create_baseline_file, dispatch, dyn_trait_text, impl_trait_text,
+    list_document, list_markdown, merge_outcomes, nearest_manifest_from, projection_gate,
+    reexport_only_text, report_json, runtime_text, semantic_text, static_item_text,
+    trait_impl_text, visibility_text,
 };
 use crate::prelude::*;
 use guibiao::Subject;
@@ -12,17 +13,12 @@ use serde_json::Value;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-/// A unique temp path, cleaned up (as a directory tree or a lone file, whichever this test
-/// builds) before use and on drop — replaces the hand-rolled `remove_dir_all`/`remove_file`
-/// pre/post pairs this file's fixture tests otherwise each repeat. Doesn't create anything
-/// itself; each test still builds its own directory tree or file content under the path.
+/// A path cleaned up (as a directory tree or a lone file, whichever this test builds) before use and
+/// on drop. It exists for the one artifact that must be a working-directory-relative path, which no
+/// fixture root can hold; every other fixture here takes a `xingbiao::scratch_root`.
 struct TempPath(PathBuf);
 
 impl TempPath {
-    fn named(label: &str) -> Self {
-        Self::new(std::env::temp_dir().join(format!("tianheng-{label}-{}", std::process::id())))
-    }
-
     fn new(path: PathBuf) -> Self {
         let guard = Self(path);
         guard.clean();
@@ -554,6 +550,35 @@ fn operand_scoped_impl_trait_boundary_projects_its_forbidden_operands() {
 }
 
 #[test]
+fn auto_bound_projection_uses_normalized_leaf_set() {
+    let impl_boundary = ImplTraitBoundary::in_crate("app")
+        .module("crate::core")
+        .must_not_expose_impl_trait_bounded_by(["std::marker::Send", "r#Sync", "Send"])
+        .because("the core seam must not return auto-bound existentials");
+    let dyn_boundary = DynTraitBoundary::in_crate("app")
+        .module("crate::core")
+        .must_not_expose_dyn_bounded_by([
+            "std::panic::UnwindSafe",
+            "core::panic::RefUnwindSafe",
+            "UnwindSafe",
+        ])
+        .because("the core seam must not leak auto-bound trait objects");
+    let impl_doc =
+        list_document(&Constitution::new("app").impl_trait_boundary(impl_boundary.clone()));
+    assert_eq!(
+        impl_doc["impl_trait_boundaries"][0]["forbidden_auto_bounds"],
+        serde_json::json!(["Send", "Sync"])
+    );
+    let dyn_doc = list_document(&Constitution::new("app").dyn_trait_boundary(dyn_boundary.clone()));
+    assert_eq!(
+        dyn_doc["dyn_trait_boundaries"][0]["forbidden_auto_bounds"],
+        serde_json::json!(["RefUnwindSafe", "UnwindSafe"])
+    );
+    assert!(impl_trait_text(&[impl_boundary]).contains("bounded by: Send, Sync"));
+    assert!(dyn_trait_text(&[dyn_boundary]).contains("bounded by: RefUnwindSafe, UnwindSafe"));
+}
+
+#[test]
 fn operand_scoped_dyn_boundary_projects_its_forbidden_operands() {
     let c = Constitution::new("app").dyn_trait_boundary(
         DynTraitBoundary::in_crate("app")
@@ -942,9 +967,8 @@ fn the_runtime_audit_reports_the_declared_unprobed_seam() {
 
 #[test]
 fn composed_runtime_audit_uses_custom_roots_and_rejects_orphan_only_coverage() {
-    let base = TempPath::named("runtime-root");
+    let base = xingbiao::scratch_root("tianheng-runtime-root");
     let base = base.path();
-    xingbiao::claim_scratch(base).unwrap();
     std::fs::write(
         base.join("Cargo.toml"),
         "[package]\nname='runtime-root-fixture'\nversion='0.0.0'\nedition='2021'\n\
@@ -989,6 +1013,111 @@ fn composed_runtime_audit_uses_custom_roots_and_rejects_orphan_only_coverage() {
     let _ = std::fs::remove_dir_all(base);
 }
 
+/// Every semantic module boundary carrying a depth projects it with the same vocabulary, and the projected
+/// depth is read from the boundary itself.
+#[test]
+fn every_semantic_depth_projects_in_one_vocabulary_read_from_the_boundary() {
+    let reexport = |depth| {
+        ReexportOnlyBoundary::in_crate("app")
+            .module("crate::facade")
+            .must_declare_only_reexports()
+            .depth(depth)
+            .because("facade carries only re-exports")
+    };
+    let asynchronous = |depth| {
+        AsyncExposureBoundary::in_crate("app")
+            .module("crate::core")
+            .must_not_expose_async_fn()
+            .depth(depth)
+            .because("the core seam is synchronous")
+    };
+    let existential = |depth| {
+        ImplTraitBoundary::in_crate("app")
+            .module("crate::core")
+            .must_not_expose_impl_trait()
+            .depth(depth)
+            .because("the core seam returns named types")
+    };
+    let statics = StaticBoundary::in_crate("app")
+        .module("crate::kernel")
+        .must_not_declare_static()
+        .because("the kernel declares no `static` item or `thread_local!`");
+    let expected_json = |depth: ScanDepth| {
+        if depth.is_shallow() {
+            (None, None)
+        } else {
+            (Some(Value::Bool(true)), Some(Value::from("subtree")))
+        }
+    };
+    let json_depth = |entry: &Value| {
+        (
+            entry.get("including_submodules").cloned(),
+            entry.get("scan_depth").cloned(),
+        )
+    };
+    let text_suffix = |text: &str, rule: &str| {
+        let line = text
+            .lines()
+            .find(|line| line.contains(rule))
+            .unwrap_or_else(|| panic!("a rule line naming {rule} in {text}"))
+            .to_string();
+        assert!(!line.contains("scan_depth"), "{line}");
+        line.ends_with(&format!("{rule} (including submodules)"))
+    };
+    for depth in [ScanDepth::Shallow, ScanDepth::Subtree] {
+        let constitution = Constitution::new("app")
+            .reexport_only_boundary(reexport(depth))
+            .async_exposure_boundary(asynchronous(depth))
+            .impl_trait_boundary(existential(depth));
+        let doc = list_document(&constitution);
+        let semantic = constitution.semantic_boundaries();
+        for (key, text, rule) in [
+            (
+                "reexport_only_boundaries",
+                reexport_only_text(&semantic.reexport_only),
+                hunyi::REEXPORT_ONLY_RULE,
+            ),
+            (
+                "async_exposure_boundaries",
+                async_exposure_text(&semantic.async_exposure),
+                hunyi::ASYNC_EXPOSURE_RULE,
+            ),
+            (
+                "impl_trait_boundaries",
+                impl_trait_text(&semantic.impl_trait),
+                hunyi::IMPL_TRAIT_RULE,
+            ),
+        ] {
+            assert_eq!(
+                json_depth(&doc[key][0]),
+                expected_json(depth),
+                "{key} at {depth:?}: {}",
+                doc[key][0]
+            );
+            assert_eq!(
+                text_suffix(&text, rule),
+                depth == ScanDepth::Subtree,
+                "{key} at {depth:?}: {text}"
+            );
+        }
+    }
+    let constitution = Constitution::new("app").static_boundary(statics.clone());
+    let doc = list_document(&constitution);
+    assert_eq!(
+        json_depth(&doc["static_item_boundaries"][0]),
+        expected_json(statics.scan_depth()),
+        "{}",
+        doc["static_item_boundaries"][0]
+    );
+    assert_eq!(
+        text_suffix(
+            &static_item_text(&constitution.semantic_boundaries().static_item),
+            hunyi::STATIC_ITEM_RULE
+        ),
+        statics.scan_depth() == ScanDepth::Subtree
+    );
+}
+
 #[test]
 fn list_document_covers_every_populated_dimension() {
     // The previous json-list test ran only an empty SemanticBoundaries, so the projection's
@@ -1031,6 +1160,18 @@ fn list_document_covers_every_populated_dimension() {
                 .must_not_declare_pub()
                 .because("internal is private"),
         )
+        .reexport_only_boundary(
+            ReexportOnlyBoundary::in_crate("app")
+                .module("crate::facade")
+                .must_declare_only_reexports()
+                .because("facade carries only re-exports"),
+        )
+        .static_boundary(
+            StaticBoundary::in_crate("app")
+                .module("crate::kernel")
+                .must_not_declare_static()
+                .because("the kernel declares no `static` item or `thread_local!`"),
+        )
         .forbidden_marker_boundary(
             ForbiddenMarkerBoundary::in_crate("app")
                 .module("crate::domain")
@@ -1049,6 +1190,8 @@ fn list_document_covers_every_populated_dimension() {
         ("semantic_boundaries", "semantic", "crate::domain"),
         ("trait_impl_boundaries", "semantic", "crate::Command"),
         ("visibility_boundaries", "semantic", "crate::internal"),
+        ("reexport_only_boundaries", "semantic", "crate::facade"),
+        ("static_item_boundaries", "semantic", "crate::kernel"),
         ("forbidden_marker_boundaries", "semantic", "crate::domain"),
         ("runtime_boundaries", "runtime", "domain-entry"),
     ] {
@@ -1127,6 +1270,18 @@ fn markdown_projection_covers_every_dimension_the_json_document_emits() {
                 .must_not_declare_pub()
                 .because("internal is private"),
         )
+        .reexport_only_boundary(
+            ReexportOnlyBoundary::in_crate("app")
+                .module("crate::facade")
+                .must_declare_only_reexports()
+                .because("facade carries only re-exports"),
+        )
+        .static_boundary(
+            StaticBoundary::in_crate("app")
+                .module("crate::kernel")
+                .must_not_declare_static()
+                .because("the kernel declares no `static` item or `thread_local!`"),
+        )
         .forbidden_marker_boundary(
             ForbiddenMarkerBoundary::in_crate("app")
                 .module("crate::domain")
@@ -1167,11 +1322,12 @@ fn markdown_projection_covers_every_dimension_the_json_document_emits() {
 
     // Each known dimension: the fixture must populate it (a non-empty JSON array), and the
     // Markdown must carry its section — so the Markdown never carries less than the JSON.
-    const DIMENSIONS: [(&str, &str); 10] = [
+    const DIMENSIONS: [(&str, &str); 12] = [
         ("boundaries", "## Static boundaries"),
         ("semantic_boundaries", "## Semantic boundaries"),
         ("trait_impl_boundaries", "## Trait-impl-locality boundaries"),
         ("visibility_boundaries", "## Visibility boundaries"),
+        ("reexport_only_boundaries", "## Re-export-only boundaries"),
         (
             "forbidden_marker_boundaries",
             "## Forbidden-marker boundaries",
@@ -1183,6 +1339,7 @@ fn markdown_projection_covers_every_dimension_the_json_document_emits() {
             "unsafe_confinement_boundaries",
             "## Unsafe-confinement boundaries",
         ),
+        ("static_item_boundaries", "## Static-item boundaries"),
         ("runtime_boundaries", "## Runtime boundaries"),
     ];
 
@@ -1247,6 +1404,18 @@ fn full_constitution() -> Constitution {
                 .module("crate::internal")
                 .must_not_declare_pub()
                 .because("internal is private"),
+        )
+        .reexport_only_boundary(
+            ReexportOnlyBoundary::in_crate("app")
+                .module("crate::facade")
+                .must_declare_only_reexports()
+                .because("facade carries only re-exports"),
+        )
+        .static_boundary(
+            StaticBoundary::in_crate("app")
+                .module("crate::kernel")
+                .must_not_declare_static()
+                .because("the kernel declares no `static` item or `thread_local!`"),
         )
         .forbidden_marker_boundary(
             ForbiddenMarkerBoundary::in_crate("app")
@@ -2122,14 +2291,15 @@ fn write_baseline_rejects_a_flag_that_cannot_apply_to_it() {
         vec!["--format", "text"],
         vec!["--format=json"],
     ] {
-        let out = TempPath::named("inapplicable-flag-baseline");
+        let root = xingbiao::scratch_root("tianheng-inapplicable-flag-baseline");
+        let out = root.path().join("baseline.json");
         let mut args = vec![
             "tianheng".to_string(),
             "check".to_string(),
             "--manifest-path".to_string(),
             fixture("clean"),
             "--write-baseline".to_string(),
-            out.path().to_string_lossy().into_owned(),
+            out.to_string_lossy().into_owned(),
         ];
         args.extend(extra.iter().map(|a| (*a).to_string()));
         let argv: Vec<&str> = args.iter().map(String::as_str).collect();
@@ -2139,7 +2309,7 @@ fn write_baseline_rejects_a_flag_that_cannot_apply_to_it() {
             "--write-baseline with {extra:?} must be a usage error, not a silent no-op",
         );
         assert!(
-            !out.path().exists(),
+            !out.exists(),
             "a rejected invocation must write no baseline: {extra:?}",
         );
     }
@@ -2153,7 +2323,8 @@ fn write_baseline_still_accepts_the_flags_that_do_apply() {
     let Some(manifest) = fixture_manifest("clean") else {
         return;
     };
-    let out = TempPath::named("applicable-flag-baseline");
+    let root = xingbiao::scratch_root("tianheng-applicable-flag-baseline");
+    let out = root.path().join("baseline.json");
     assert_eq!(
         run_args(&[
             "tianheng",
@@ -2161,12 +2332,12 @@ fn write_baseline_still_accepts_the_flags_that_do_apply() {
             "--manifest-path",
             &manifest,
             "--write-baseline",
-            &out.path().to_string_lossy(),
+            &out.to_string_lossy(),
         ]),
         0,
         "a plain --write-baseline must still record and exit 0",
     );
-    assert!(out.path().exists(), "the baseline must have been written");
+    assert!(out.exists(), "the baseline must have been written");
 }
 
 #[test]
@@ -2391,9 +2562,8 @@ fn warn_uncovered_never_changes_the_exit_code() {
 fn nearest_manifest_walks_up_to_the_nearest_cargo_toml() {
     // `check` defaults its target to the nearest `Cargo.toml`, cargo-style. Drive the pure
     // ascent over a real temp tree so the walk is proven without touching the process cwd.
-    let root = TempPath::named("nearest");
+    let root = xingbiao::scratch_root("tianheng-nearest");
     let root = root.path();
-    xingbiao::claim_scratch(root).expect("mkdir root");
     let outer = root.join("outer");
     let inner = outer.join("inner");
     let leaf = inner.join("a").join("b");
@@ -2428,8 +2598,9 @@ fn nearest_manifest_walks_up_to_the_nearest_cargo_toml() {
 fn write_baseline_preserves_hand_added_metadata_across_regeneration() {
     // The metadata-preserving merge, driven through the real write path + a temp file: write a
     // baseline, hand-annotate an entry, re-write from the same report — the annotation survives.
-    let path = TempPath::named("baseline-merge");
-    let path = path.path();
+    let root = xingbiao::scratch_root("tianheng-baseline-merge");
+    let path = root.path().join("baseline.json");
+    let path = path.as_path();
     let path_str = path.to_str().expect("utf-8 temp path");
 
     let outcome = Outcome::Violations(Report::new(vec![violation("core", "rule", "serde", None)]));
@@ -2463,8 +2634,9 @@ fn write_baseline_preserves_hand_added_metadata_across_regeneration() {
 
 #[test]
 fn write_baseline_refuses_every_unsupported_existing_document_without_modifying_it() {
-    let path = TempPath::named("baseline-v1-upgrade");
-    let path = path.path();
+    let root = xingbiao::scratch_root("tianheng-baseline-v1-upgrade");
+    let path = root.path().join("baseline.json");
+    let path = path.as_path();
     let path_str = path.to_str().expect("utf-8 temp path");
     let outcome = Outcome::Violations(Report::new(vec![violation("core", "rule", "serde", None)]));
     for unsupported in [
@@ -2486,8 +2658,9 @@ fn write_baseline_refuses_every_unsupported_existing_document_without_modifying_
 
 #[test]
 fn missing_baseline_creation_cannot_clobber_a_file_that_appeared() {
-    let path = TempPath::named("baseline-create-race");
-    let path = path.path();
+    let root = xingbiao::scratch_root("tianheng-baseline-create-race");
+    let path = root.path().join("baseline.json");
+    let path = path.as_path();
     std::fs::write(path, "appeared concurrently").unwrap();
 
     let err = super::create_baseline_file(path.to_str().unwrap(), "replacement")
@@ -2509,7 +2682,7 @@ fn missing_baseline_creation_cannot_clobber_a_file_that_appeared() {
 fn projection_gate_reacts_to_missing_stale_and_regenerates_on_bless() {
     // Pass `bless` as a bool (the helper reads no environment), so this test mutates no
     // process-global state and cannot race the parallel self-law gate.
-    let dir = TempPath::named("gate");
+    let dir = xingbiao::scratch_root("tianheng-gate");
     // A not-yet-existing subdir, so bless must `create_dir_all` the parent.
     let path = dir.path().join("sub").join("law.md");
     let hint = "BLESS=1 cargo test";
@@ -2559,8 +2732,7 @@ fn projection_gate_reacts_to_missing_stale_and_regenerates_on_bless() {
 #[cfg(unix)]
 #[test]
 fn a_symlink_is_reported_dangling_only_when_its_target_does_not_resolve() {
-    let dir = TempPath::named("symlink-classification");
-    xingbiao::claim_scratch(dir.path()).expect("create dir");
+    let dir = xingbiao::scratch_root("tianheng-symlink-classification");
 
     let dangling = dir.path().join("dangling-baseline.json");
     std::os::unix::fs::symlink(dir.path().join("absent.json"), &dangling).expect("dangling link");

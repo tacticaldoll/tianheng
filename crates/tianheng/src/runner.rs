@@ -402,11 +402,13 @@ fn dispatch_list(constitution: &Constitution, parsed: &ParsedArgs) -> u8 {
             print!("{}", semantic_text(&semantic.signature));
             print!("{}", trait_impl_text(&semantic.trait_impl));
             print!("{}", visibility_text(&semantic.visibility));
+            print!("{}", reexport_only_text(&semantic.reexport_only));
             print!("{}", forbidden_marker_text(&semantic.forbidden_marker));
             print!("{}", dyn_trait_text(&semantic.dyn_trait));
             print!("{}", impl_trait_text(&semantic.impl_trait));
             print!("{}", async_exposure_text(&semantic.async_exposure));
             print!("{}", unsafe_text(&semantic.unsafe_confinement));
+            print!("{}", static_item_text(&semantic.static_item));
             print!("{}", runtime_text(runtime));
         }
         Format::Sarif => {

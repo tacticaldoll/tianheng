@@ -182,12 +182,7 @@ fn definition_pattern(name: &str) -> String {
 /// definition the same way it matches any other — traced by direct reasoning until now, never by a fixture.
 #[test]
 fn a_raw_identifier_citation_resolves_to_its_definition() {
-    let fixture = std::env::temp_dir().join(format!(
-        "tianheng-bound-register-raw-ident-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&fixture);
-    xingbiao::claim_scratch(&fixture).expect("the fixture directory is writable");
+    let fixture = xingbiao::scratch_root("tianheng-bound-register-raw-ident");
     std::fs::write(
         fixture.join("probe.rs"),
         "#[test]\nfn r#type() {\n    assert!(true);\n}\n",
@@ -206,7 +201,6 @@ fn a_raw_identifier_citation_resolves_to_its_definition() {
         "git",
         &["grep", "-n", "-E", &definition_pattern("r#type"), "--", "."],
     );
-    let _ = std::fs::remove_dir_all(&fixture);
     assert_eq!(
         sites.len(),
         1,
@@ -281,11 +275,8 @@ fn search_and_must_panic_on_a_genuine_failure_not_only_on_a_clean_miss() {
 
     // The target repository itself unavailable — the shell era's `cd` failure, ported here as a `root` that
     // does not exist. Neither `search` nor `must` may read this as an ordinary clean miss.
-    let missing_root = std::env::temp_dir().join(format!(
-        "tianheng-bound-register-missing-root-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&missing_root);
+    let holder = xingbiao::scratch_root("tianheng-bound-register-missing-root");
+    let missing_root = holder.join("absent");
     let missing_search = std::panic::catch_unwind(|| {
         search(
             &missing_root,
@@ -318,12 +309,7 @@ fn search_and_must_panic_on_a_genuine_failure_not_only_on_a_clean_miss() {
 /// every sibling enumeration in this module refuses the same way.
 #[test]
 fn tracked_specs_refuses_a_repository_with_no_spec_md_rather_than_reporting_it_empty() {
-    let fixture = std::env::temp_dir().join(format!(
-        "tianheng-bound-register-no-specs-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&fixture);
-    xingbiao::claim_scratch(&fixture).expect("the fixture directory is writable");
+    let fixture = xingbiao::scratch_root("tianheng-bound-register-no-specs");
     std::fs::create_dir_all(fixture.join("openspec")).expect("the fixture directory is writable");
     std::fs::write(fixture.join("openspec").join("README.md"), "# Not a spec\n").expect("writable");
     // Through the shared builder, which closes the ambient ignore channel — and written once, because this
@@ -334,7 +320,6 @@ fn tracked_specs_refuses_a_repository_with_no_spec_md_rather_than_reporting_it_e
     prepare(&fixture);
 
     let refused = std::panic::catch_unwind(|| parse::tracked_specs(&fixture));
-    let _ = std::fs::remove_dir_all(&fixture);
     assert!(
         refused.is_err(),
         "a repository with no openspec/specs/*/spec.md must refuse rather than report zero bounds declared"

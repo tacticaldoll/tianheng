@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 use xuanji::{Outcome, Polarity, Violation};
 
+use crate::anchor::canonical_module_anchor;
 use crate::collect::collect_item_async_exposures;
 use crate::driver::run_boundaries;
 use crate::dsl::AsyncExposureBoundary;
@@ -14,8 +15,7 @@ use crate::emit::{
     MultiModuleViolationContext, SingleModuleViolationContext, push_multi_module_violations,
     push_single_module_violations,
 };
-use crate::errors::unknown_module_error;
-use crate::file_scope::{over_each_unit, resolve_crate_units};
+use crate::file_scope::{UnitAnchor, over_each_unit, resolve_crate_units};
 use crate::finding::{SemanticFact, sort_attributed_facts};
 use crate::resolve::collect_uses;
 use crate::rules::ASYNC_EXPOSURE_RULE;
@@ -39,62 +39,61 @@ pub(crate) fn check_async_exposure_boundary(
     boundary: &AsyncExposureBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
+    let module = canonical_module_anchor(&boundary.module, &boundary.crate_package)?;
     let (_package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
-    over_each_unit(
-        &units,
-        &unknown_module_error(&boundary.module, &boundary.crate_package),
-        |root_file, src_dir, unit| {
-            let rule_key = boundary.rule_key();
+    let anchor = UnitAnchor::Module {
+        module: &module,
+        crate_package: &boundary.crate_package,
+    };
+    over_each_unit(&units, anchor, |root_file, src_dir, unit| {
+        let rule_key = boundary.rule_key();
 
-            if boundary.including_submodules() {
-                let findings = async_exposure_subtree_findings(
-                    src_dir,
-                    root_file,
-                    &boundary.module,
-                    &boundary.crate_package,
-                )?;
-                push_multi_module_violations(
-                    violations,
-                    MultiModuleViolationContext {
-                        target: &boundary.module,
-                        rule: ASYNC_EXPOSURE_RULE,
-                        rule_key,
-                        reason: &boundary.reason,
-                        severity: boundary.severity,
-                        anchor: boundary.anchor(),
-                        polarity: Polarity::DenyBreach,
-                        crate_package: &boundary.crate_package,
-                        unit,
-                    },
-                    findings,
-                );
-                return Ok(());
-            }
-
-            let findings = async_exposure_module_findings(
+        if boundary.including_submodules() {
+            let findings = async_exposure_subtree_findings(
                 src_dir,
                 root_file,
-                &boundary.module,
+                &module,
                 &boundary.crate_package,
-            )?;
-
-            push_single_module_violations(
+            )
+            .map_err(crate::errors::ResolveError::Other)?;
+            push_multi_module_violations(
                 violations,
-                SingleModuleViolationContext {
-                    module: &boundary.module,
+                MultiModuleViolationContext {
+                    target: &module,
                     rule: ASYNC_EXPOSURE_RULE,
                     rule_key,
                     reason: &boundary.reason,
                     severity: boundary.severity,
                     anchor: boundary.anchor(),
+                    polarity: Polarity::DenyBreach,
                     crate_package: &boundary.crate_package,
                     unit,
                 },
                 findings,
             );
-            Ok(())
-        },
-    )
+            return Ok(());
+        }
+
+        let findings =
+            async_exposure_module_findings(src_dir, root_file, &module, &boundary.crate_package)
+                .map_err(crate::errors::ResolveError::Other)?;
+
+        push_single_module_violations(
+            violations,
+            SingleModuleViolationContext {
+                module: &module,
+                rule: ASYNC_EXPOSURE_RULE,
+                rule_key,
+                reason: &boundary.reason,
+                severity: boundary.severity,
+                anchor: boundary.anchor(),
+                crate_package: &boundary.crate_package,
+                unit,
+            },
+            findings,
+        );
+        Ok(())
+    })
 }
 
 /// The pure heart of the **subtree** async-exposure reaction: walk the anchored module's whole

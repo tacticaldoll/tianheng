@@ -14,11 +14,29 @@ fn fixture_manifest(name: &str) -> Option<PathBuf> {
     None
 }
 
-fn temp_baseline(test: &str) -> PathBuf {
-    std::env::temp_dir().join(format!(
-        "tianheng-{test}-{}-baseline.json",
-        std::process::id()
-    ))
+/// A baseline path inside a root of its own, removed with the root when the value drops.
+struct BaselinePath {
+    _root: xingbiao::ScratchRoot,
+    path: PathBuf,
+}
+
+impl std::ops::Deref for BaselinePath {
+    type Target = Path;
+    fn deref(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl AsRef<Path> for BaselinePath {
+    fn as_ref(&self) -> &Path {
+        &self.path
+    }
+}
+
+fn temp_baseline(test: &str) -> BaselinePath {
+    let root = xingbiao::scratch_root(&format!("tianheng-{test}"));
+    let path = root.path().join("baseline.json");
+    BaselinePath { _root: root, path }
 }
 
 fn command_for(manifest: &Path) -> Command {
@@ -145,8 +163,6 @@ fn baseline_gate_rejects_wrong_typed_metadata_through_the_cli() {
     let stderr = String::from_utf8(output.stderr).expect("UTF-8 stderr");
     assert!(stderr.contains("invalid baseline"), "{stderr}");
     assert!(stderr.contains("owner"), "{stderr}");
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[test]
@@ -173,8 +189,6 @@ fn baseline_rewrite_refuses_wrong_typed_metadata_and_preserves_the_file() {
         wrong_typed_baseline(),
         "unsupported input must remain byte-for-byte unchanged"
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[test]
@@ -296,7 +310,6 @@ fn write_baseline_names_the_flag_that_cannot_apply_and_records_nothing() {
         "a rejected invocation must record no baseline: {}",
         baseline.display()
     );
-    let _ = std::fs::remove_file(&baseline);
 }
 
 #[test]
@@ -336,7 +349,6 @@ fn a_zero_length_baseline_is_recorded_afresh_but_partial_content_is_still_refuse
         document["format"], "tianheng.baseline/structured-facts",
         "the fresh snapshot must be a whole semantic baseline: {document:?}"
     );
-    let _ = std::fs::remove_file(&empty);
 
     for partial in ["   \n", "{\"format\":"] {
         let path = temp_baseline("partial-still-refused");
@@ -358,7 +370,6 @@ fn a_zero_length_baseline_is_recorded_afresh_but_partial_content_is_still_refuse
             partial,
             "refused content must remain byte-for-byte unchanged"
         );
-        let _ = std::fs::remove_file(&path);
     }
 }
 
@@ -385,8 +396,6 @@ fn the_gate_does_not_tolerate_a_zero_length_baseline() {
         stderr.contains("invalid baseline"),
         "the gate must name it an invalid baseline: {stderr}"
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[test]
@@ -434,7 +443,6 @@ fn rewriting_an_existing_baseline_leaves_no_stray_temp_file() {
         return;
     };
     let path = temp_baseline("overwrite-no-stray-temp");
-    let _ = std::fs::remove_file(&path);
 
     let first = run_with(&manifest, "--write-baseline", &path);
     assert_eq!(first.status.code(), Some(0), "{first:?}");
@@ -474,8 +482,6 @@ fn rewriting_an_existing_baseline_leaves_no_stray_temp_file() {
         sibling_temp_files.is_empty(),
         "no temp sibling should remain after a durable baseline write: {sibling_temp_files:?}"
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[test]
@@ -494,12 +500,10 @@ fn a_directory_that_cannot_be_flushed_does_not_fail_a_landed_write() {
     let Some(manifest) = fixture_manifest("clean") else {
         return;
     };
-    let dir = std::env::temp_dir().join(format!("tianheng-unflushable-dir-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    xingbiao::claim_scratch(&dir).expect("create the test directory");
+    let dir = xingbiao::scratch_root("tianheng-unflushable-dir");
 
-    // Restore a readable mode before any assertion can unwind, so a failure cannot leave an
-    // unreadable directory behind in the temp dir.
+    // Restore a readable mode before any assertion can unwind, so the root's removal can read the
+    // directory it is about to remove. `_restore` is declared after `dir`, so it drops first.
     struct Restore(PathBuf);
     impl Drop for Restore {
         fn drop(&mut self) {
@@ -508,14 +512,9 @@ fn a_directory_that_cannot_be_flushed_does_not_fail_a_landed_write() {
                 &self.0,
                 std::fs::set_permissions(&self.0, std::fs::Permissions::from_mode(0o700)),
             );
-            xingbiao::settle_cleanup(
-                "Restore: removing",
-                &self.0,
-                std::fs::remove_dir_all(&self.0),
-            );
         }
     }
-    let _restore = Restore(dir.clone());
+    let _restore = Restore(dir.path().to_path_buf());
 
     let created = dir.join("created.json");
     let overwritten = dir.join("overwritten.json");
@@ -580,7 +579,6 @@ fn rewriting_an_existing_baseline_preserves_its_permissions() {
         return;
     };
     let path = temp_baseline("overwrite-preserves-mode");
-    let _ = std::fs::remove_file(&path);
 
     let first = run_with(&manifest, "--write-baseline", &path);
     assert_eq!(first.status.code(), Some(0), "{first:?}");
@@ -601,8 +599,6 @@ fn rewriting_an_existing_baseline_preserves_its_permissions() {
         "rewriting an existing baseline must preserve its permissions, not reset them to the \
          process umask"
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[test]
@@ -617,8 +613,6 @@ fn rewriting_a_symlinked_baseline_preserves_the_symlink() {
     };
     let real_target = temp_baseline("symlink-preserved-real-target");
     let link = temp_baseline("symlink-preserved-link");
-    let _ = std::fs::remove_file(&real_target);
-    let _ = std::fs::remove_file(&link);
 
     let first = run_with(&manifest, "--write-baseline", &real_target);
     assert_eq!(first.status.code(), Some(0), "{first:?}");
@@ -636,12 +630,9 @@ fn rewriting_a_symlinked_baseline_preserves_the_symlink() {
     );
     assert_eq!(
         std::fs::read_link(&link).expect("read the symlink target"),
-        real_target,
+        real_target.to_path_buf(),
         "the symlink must still point at its original target"
     );
-
-    let _ = std::fs::remove_file(&link);
-    let _ = std::fs::remove_file(&real_target);
 }
 
 #[test]
@@ -659,8 +650,6 @@ fn a_symlink_planted_at_the_predicted_temp_path_is_refused_not_followed() {
     };
     let baseline = temp_baseline("symlink-race-baseline");
     let victim = temp_baseline("symlink-race-victim");
-    let _ = std::fs::remove_file(&baseline);
-    let _ = std::fs::remove_file(&victim);
 
     let first = run_with(&manifest, "--write-baseline", &baseline);
     assert_eq!(first.status.code(), Some(0), "{first:?}");
@@ -701,9 +690,6 @@ fn a_symlink_planted_at_the_predicted_temp_path_is_refused_not_followed() {
             .is_symlink(),
         "the real baseline path must not become a dangling symlink to the victim"
     );
-
-    let _ = std::fs::remove_file(&baseline);
-    let _ = std::fs::remove_file(&victim);
 }
 
 #[test]
@@ -718,7 +704,6 @@ fn a_stale_leftover_temp_file_is_reported_by_its_own_name_not_the_baseline_path(
         return;
     };
     let baseline = temp_baseline("stale-temp-collision-baseline");
-    let _ = std::fs::remove_file(&baseline);
 
     // The plant races the child; a run where it lands late writes the baseline cleanly and exits 0,
     // which used to fail this test spuriously (observed in CI) rather than telling anyone the
@@ -745,7 +730,6 @@ fn a_stale_leftover_temp_file_is_reported_by_its_own_name_not_the_baseline_path(
     );
 
     let _ = std::fs::remove_file(&predicted_tmp);
-    let _ = std::fs::remove_file(&baseline);
 }
 
 #[test]
@@ -762,8 +746,6 @@ fn a_dangling_symlink_baseline_path_is_reported_by_its_own_cause_not_a_race() {
     };
     let target = temp_baseline("dangling-symlink-target");
     let link = temp_baseline("dangling-symlink-link");
-    let _ = std::fs::remove_file(&target);
-    let _ = std::fs::remove_file(&link);
     std::os::unix::fs::symlink(&target, &link).expect("create a dangling symlink");
 
     let output = run_with(&manifest, "--write-baseline", &link);
@@ -785,8 +767,6 @@ fn a_dangling_symlink_baseline_path_is_reported_by_its_own_cause_not_a_race() {
             .is_symlink(),
         "the dangling link itself must be left untouched"
     );
-
-    let _ = std::fs::remove_file(&link);
 }
 
 #[test]
@@ -806,23 +786,20 @@ fn rewriting_through_a_symlink_into_a_non_utf8_named_directory_still_succeeds() 
     // A normal write first, purely to obtain valid baseline content without needing a non-UTF-8
     // CLI argument (which std::env::args() would reject before this code ever runs).
     let seed = temp_baseline("nonutf8-dir-seed");
-    let _ = std::fs::remove_file(&seed);
     let seed_write = run_with(&manifest, "--write-baseline", &seed);
     assert_eq!(seed_write.status.code(), Some(0), "{seed_write:?}");
     let valid_baseline_content = std::fs::read_to_string(&seed).expect("read seed baseline");
-    let _ = std::fs::remove_file(&seed);
 
-    let mut dir_name = std::env::temp_dir().into_os_string().into_vec();
-    dir_name.extend_from_slice(format!("/tianheng-nonutf8-{}-", std::process::id()).as_bytes());
+    let root = xingbiao::scratch_root("tianheng-nonutf8");
+    let mut dir_name = root.path().to_path_buf().into_os_string().into_vec();
+    dir_name.extend_from_slice(b"/weird-");
     dir_name.push(0xFF);
     let weird_dir = PathBuf::from(OsString::from_vec(dir_name));
-    let _ = std::fs::remove_dir_all(&weird_dir);
-    xingbiao::claim_scratch(&weird_dir).expect("create the non-UTF-8-named directory");
+    std::fs::create_dir_all(&weird_dir).expect("create the non-UTF-8-named directory");
 
     let real_target = weird_dir.join("baseline.json");
     std::fs::write(&real_target, &valid_baseline_content).expect("seed the real target");
     let link = temp_baseline("nonutf8-dir-link");
-    let _ = std::fs::remove_file(&link);
     std::os::unix::fs::symlink(&real_target, &link).expect("create the symlinked baseline");
 
     let second = run_with(&manifest, "--write-baseline", &link);
@@ -831,9 +808,6 @@ fn rewriting_through_a_symlink_into_a_non_utf8_named_directory_still_succeeds() 
         Some(0),
         "rewriting through a symlink into a non-UTF-8-named directory must still succeed: {second:?}"
     );
-
-    let _ = std::fs::remove_file(&link);
-    let _ = std::fs::remove_dir_all(&weird_dir);
 }
 
 #[test]
@@ -883,8 +857,6 @@ fn disallow_stale_fails_gate_when_stale_entry_is_present() {
     let stderr = String::from_utf8(stale_output.stderr).expect("UTF-8 stderr");
     assert!(stderr.contains("stale baseline entry"), "{stderr}");
     assert!(stderr.contains("--disallow-stale failed"), "{stderr}");
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[test]
@@ -937,8 +909,6 @@ fn disallow_stale_json_and_sarif_projections_are_consistent_with_exit_code() {
     assert_eq!(run["results"].as_array().unwrap().len(), 1);
     assert_eq!(run["results"][0]["level"], "error");
     assert_eq!(run["invocations"][0]["executionSuccessful"], false);
-
-    let _ = std::fs::remove_file(path);
 }
 
 #[test]
@@ -963,8 +933,6 @@ fn disallow_stale_equals_form_is_unrecognized_argument_usage_error() {
         stderr.contains("unrecognized argument '--disallow-stale=false'"),
         "{stderr}"
     );
-
-    let _ = std::fs::remove_file(path);
 }
 
 /// Every flag `list` rejects, with the value each needs to reach the rejection at all.

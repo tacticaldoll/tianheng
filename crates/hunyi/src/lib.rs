@@ -41,6 +41,7 @@ pub use dsl::*;
 mod rules;
 pub use rules::*;
 
+mod anchor;
 mod collect;
 mod containment;
 mod crate_scope;
@@ -60,6 +61,8 @@ mod dyn_trait;
 mod exposure;
 mod forbidden_marker;
 mod impl_trait;
+mod reexport_only;
+mod static_item;
 mod trait_impl;
 mod unsafe_confinement;
 mod visibility;
@@ -69,6 +72,8 @@ pub use dyn_trait::check_dyn_trait;
 pub use exposure::check;
 pub use forbidden_marker::check_forbidden_marker;
 pub use impl_trait::check_impl_trait;
+pub use reexport_only::check_reexport_only;
+pub use static_item::check_static_item;
 pub use trait_impl::check_trait_impl_locality;
 pub use unsafe_confinement::check_unsafe_confinement;
 pub use visibility::check_visibility;
@@ -85,6 +90,8 @@ pub(crate) use impl_trait::{
     impl_trait_operand_subtree_findings, impl_trait_subtree_findings,
 };
 #[cfg(test)]
+pub(crate) use reexport_only::reexport_only_findings;
+#[cfg(test)]
 pub(crate) use trait_impl::trait_impl_findings;
 #[cfg(test)]
 pub(crate) use unsafe_confinement::unsafe_findings;
@@ -97,6 +104,8 @@ use crate::dyn_trait::check_dyn_trait_boundary;
 use crate::exposure::check_boundary;
 use crate::forbidden_marker::check_forbidden_marker_boundary;
 use crate::impl_trait::check_impl_trait_boundary;
+use crate::reexport_only::check_reexport_only_boundary;
+use crate::static_item::check_static_boundary;
 use crate::trait_impl::check_trait_impl_boundary;
 use crate::unsafe_confinement::check_unsafe_boundary;
 use crate::visibility::check_visibility_boundary;
@@ -104,7 +113,28 @@ use crate::visibility::check_visibility_boundary;
 /// The 渾儀 (semantic) dimension's boundaries, gathered so the shell takes the dimension as
 /// one unit rather than one parameter per capability. Each field is one capability's
 /// boundaries; [`check_all`] evaluates every non-empty bundle with a single `cargo metadata` read.
+/// Construct it with [`Default::default`], then push into or assign its public fields.
+///
+/// ```
+/// use hunyi::SemanticBoundaries;
+///
+/// let mut boundaries = SemanticBoundaries::default();
+/// boundaries.signature.push(
+///     hunyi::SignatureBoundary::in_crate("app")
+///         .module("crate::api")
+///         .must_not_expose("crate::internal::Client")
+///         .because("the API owns its vocabulary"),
+/// );
+/// assert_eq!(boundaries.signature.len(), 1);
+/// ```
+///
+/// ```compile_fail
+/// use hunyi::SemanticBoundaries;
+///
+/// let _ = SemanticBoundaries { ..Default::default() };
+/// ```
 #[derive(Debug, Clone, Default)]
+#[non_exhaustive]
 pub struct SemanticBoundaries {
     /// Exposure boundaries (`semantic-signature-coupling`).
     pub signature: Vec<SignatureBoundary>,
@@ -112,6 +142,8 @@ pub struct SemanticBoundaries {
     pub trait_impl: Vec<TraitImplBoundary>,
     /// Visibility boundaries (`semantic-visibility-boundary`).
     pub visibility: Vec<VisibilityBoundary>,
+    /// Re-export-only module boundaries (`semantic-visibility-boundary`).
+    pub reexport_only: Vec<ReexportOnlyBoundary>,
     /// Forbidden-marker boundaries (`semantic-forbidden-marker`).
     pub forbidden_marker: Vec<ForbiddenMarkerBoundary>,
     /// Dyn-trait exposure boundaries (`semantic-dyn-trait-boundary`).
@@ -122,6 +154,8 @@ pub struct SemanticBoundaries {
     pub async_exposure: Vec<AsyncExposureBoundary>,
     /// Unsafe-confinement boundaries (`semantic-unsafe-confinement`).
     pub unsafe_confinement: Vec<UnsafeBoundary>,
+    /// Static-item boundaries (`semantic-static-item-boundary`).
+    pub static_item: Vec<StaticBoundary>,
 }
 
 /// One capability's boundaries, its `crate_package` accessor, and its `check_*_boundary`
@@ -191,6 +225,11 @@ impl SemanticBoundaries {
                 check: check_visibility_boundary,
             }),
             Box::new(Capability {
+                boundaries: &self.reexport_only,
+                crate_package: ReexportOnlyBoundary::crate_package,
+                check: check_reexport_only_boundary,
+            }),
+            Box::new(Capability {
                 boundaries: &self.forbidden_marker,
                 crate_package: ForbiddenMarkerBoundary::crate_package,
                 check: check_forbidden_marker_boundary,
@@ -214,6 +253,11 @@ impl SemanticBoundaries {
                 boundaries: &self.unsafe_confinement,
                 crate_package: UnsafeBoundary::crate_package,
                 check: check_unsafe_boundary,
+            }),
+            Box::new(Capability {
+                boundaries: &self.static_item,
+                crate_package: StaticBoundary::crate_package,
+                check: check_static_boundary,
             }),
         ]
     }

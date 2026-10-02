@@ -4,10 +4,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use crate::errors::{
-    dual_backed_module_error, missing_module_file_error, unknown_module_error,
-    unparseable_source_error, unreadable_source_error,
-};
+use crate::errors::ResolveError;
 use crate::resolve::strip_raw;
 #[cfg(test)]
 use crate::syn_util::flatten_transparent_macro_items;
@@ -36,7 +33,7 @@ pub(crate) fn resolve_module_items_with_files(
     root_file: &Path,
     module: &str,
     crate_package: &str,
-) -> Result<Vec<(syn::Item, PathBuf, usize)>, String> {
+) -> Result<Vec<(syn::Item, PathBuf, usize)>, ResolveError> {
     let branches = resolve_module_branches(src_dir, root_file, module, crate_package)?;
     let mut items = Vec::new();
     for (branch_index, (branch_items, file, ..)) in branches.iter().enumerate() {
@@ -52,6 +49,27 @@ pub(crate) fn resolve_module_items_with_files(
     Ok(items)
 }
 
+/// The governed module's **direct** items, each with the file that declares it: every branch's
+/// items after transparent `cfg_if!` invocations are replaced by their arms' items. Unlike
+/// [`resolve_module_items_with_files`], an `impl` inside a function body is not recovered, so an item
+/// nested in a function stays part of that function rather than becoming a direct item.
+pub(crate) fn resolve_module_direct_items_with_files(
+    src_dir: &Path,
+    root_file: &Path,
+    module: &str,
+    crate_package: &str,
+) -> Result<Vec<(syn::Item, PathBuf)>, ResolveError> {
+    let branches = resolve_module_branches(src_dir, root_file, module, crate_package)?;
+    Ok(branches
+        .into_iter()
+        .flat_map(|(items, file, ..)| {
+            flatten_transparent_macros(&items)
+                .into_iter()
+                .map(move |flat| (flat.item, file.clone()))
+        })
+        .collect())
+}
+
 /// Like [`resolve_module_items_with_files`], but retains each item's [`FlatItem`] tag (its own
 /// `cfg_if!` arm membership) instead of discarding it. A `#[cfg]`/`cfg_if!`-split at the MODULE
 /// level already gets its own branch index above; this is for the finer split that stays WITHIN
@@ -64,7 +82,7 @@ pub(crate) fn resolve_module_items_with_cfg_tags(
     root_file: &Path,
     module: &str,
     crate_package: &str,
-) -> Result<Vec<(FlatItem, PathBuf, usize)>, String> {
+) -> Result<Vec<(FlatItem, PathBuf, usize)>, ResolveError> {
     let branches = resolve_module_branches(src_dir, root_file, module, crate_package)?;
     let mut items = Vec::new();
     for (branch_index, (branch_items, file, ..)) in branches.iter().enumerate() {
@@ -89,7 +107,7 @@ pub(crate) fn resolve_module_file(
     root_file: &Path,
     module: &str,
     crate_package: &str,
-) -> Result<PathBuf, String> {
+) -> Result<PathBuf, ResolveError> {
     resolve_module_root(src_dir, root_file, module, crate_package).map(|(_items, file, _, _)| file)
 }
 
@@ -100,7 +118,7 @@ pub(crate) fn resolve_module_root(
     root_file: &Path,
     module: &str,
     crate_package: &str,
-) -> Result<(Vec<syn::Item>, PathBuf, PathBuf, PathBuf), String> {
+) -> Result<(Vec<syn::Item>, PathBuf, PathBuf, PathBuf), ResolveError> {
     let branches = resolve_module_branches(src_dir, root_file, module, crate_package)?;
     let mut items = Vec::new();
     for (branch_items, ..) in &branches {
@@ -125,7 +143,7 @@ pub(crate) fn resolve_module_branches(
     root_file: &Path,
     module: &str,
     crate_package: &str,
-) -> Result<Vec<(Vec<syn::Item>, PathBuf, PathBuf, PathBuf)>, String> {
+) -> Result<Vec<(Vec<syn::Item>, PathBuf, PathBuf, PathBuf)>, ResolveError> {
     let root = read_parse(root_file)?;
     let segments = module_segments(module);
     let initial = Branch {
@@ -194,7 +212,7 @@ fn push_inline_mod_branches(
     flat_items: &[FlatItem],
     seg: &str,
     next_branches: &mut Vec<Branch>,
-) -> Result<(), String> {
+) -> Result<(), ResolveError> {
     for flat in flat_items {
         if let syn::Item::Mod(module_item) = &flat.item {
             if strip_raw(&module_item.ident.to_string()) != *seg {
@@ -217,7 +235,7 @@ fn push_inline_mod_branches(
                     let mut present: Vec<PathBuf> = {
                         let mut kept = Vec::new();
                         for base in present {
-                            if xingbiao::is_directory(&base)? {
+                            if xingbiao::is_directory(&base).map_err(ResolveError::Other)? {
                                 kept.push(base);
                             }
                         }
@@ -273,7 +291,7 @@ fn push_file_form_branches(
     module: &str,
     crate_package: &str,
     next_branches: &mut Vec<Branch>,
-) -> Result<(), String> {
+) -> Result<(), ResolveError> {
     let mut file_forms: Vec<(Vec<syn::Item>, PathBuf, PathBuf, PathBuf)> = Vec::new();
     let mut seen_files: HashSet<PathBuf> = HashSet::new();
     for flat in flat_items {
@@ -287,13 +305,16 @@ fn push_file_form_branches(
             let cfg_conditional = flat.in_transparent_arm || has_cfg_attr(&module_item.attrs);
             if let Some(rel) = direct_path_value(&module_item.attrs) {
                 let file = branch.path_base.join(&rel);
-                if !xingbiao::is_regular_file(&file)? {
+                if !xingbiao::is_regular_file(&file).map_err(ResolveError::Other)? {
                     if cfg_conditional {
                         continue;
                     }
-                    return Err(missing_module_file_error(module, crate_package));
+                    return Err(ResolveError::MissingModuleFile(
+                        module.to_string(),
+                        crate_package.to_string(),
+                    ));
                 }
-                if !xingbiao::try_visit(&mut seen_files, &file)? {
+                if !xingbiao::try_visit(&mut seen_files, &file).map_err(ResolveError::Other)? {
                     continue;
                 }
                 let parsed = read_parse(&file)?;
@@ -308,9 +329,9 @@ fn push_file_form_branches(
             let mut has_backing_source = false;
             for rel in &cfg_attr_targets {
                 let file = branch.path_base.join(rel);
-                if xingbiao::is_regular_file(&file)? {
+                if xingbiao::is_regular_file(&file).map_err(ResolveError::Other)? {
                     has_backing_source = true;
-                    if xingbiao::try_visit(&mut seen_files, &file)? {
+                    if xingbiao::try_visit(&mut seen_files, &file).map_err(ResolveError::Other)? {
                         let parsed = read_parse(&file)?;
                         let next_dir = file
                             .parent()
@@ -323,22 +344,25 @@ fn push_file_form_branches(
             let file = match locate_module_file(&branch.child_dir, seg)? {
                 ModuleFile::One(file) => file,
                 ModuleFile::Ambiguous { flat, nested } => {
-                    return Err(dual_backed_module_error(
-                        module,
-                        seg,
-                        crate_package,
-                        &flat,
-                        &nested,
+                    return Err(ResolveError::DualBackedModule(
+                        module.to_string(),
+                        seg.to_string(),
+                        crate_package.to_string(),
+                        flat,
+                        nested,
                     ));
                 }
                 ModuleFile::Absent => {
                     if has_backing_source || cfg_conditional {
                         continue;
                     }
-                    return Err(missing_module_file_error(module, crate_package));
+                    return Err(ResolveError::MissingModuleFile(
+                        module.to_string(),
+                        crate_package.to_string(),
+                    ));
                 }
             };
-            if !xingbiao::try_visit(&mut seen_files, &file)? {
+            if !xingbiao::try_visit(&mut seen_files, &file).map_err(ResolveError::Other)? {
                 continue;
             }
             let parsed = read_parse(&file)?;
@@ -365,7 +389,7 @@ fn descend(
     segments: &[String],
     module: &str,
     crate_package: &str,
-) -> Result<Vec<Branch>, String> {
+) -> Result<Vec<Branch>, ResolveError> {
     let Some(seg) = segments.first() else {
         return Ok(branches);
     };
@@ -383,7 +407,10 @@ fn descend(
         )?;
     }
     if next_branches.is_empty() {
-        return Err(unknown_module_error(module, crate_package));
+        return Err(ResolveError::UnresolvableModule(
+            module.to_string(),
+            crate_package.to_string(),
+        ));
     }
     descend(next_branches, &segments[1..], module, crate_package)
 }
@@ -405,12 +432,12 @@ pub(crate) enum ModuleFile {
     Ambiguous { flat: PathBuf, nested: PathBuf },
 }
 
-pub(crate) fn locate_module_file(child_dir: &Path, seg: &str) -> Result<ModuleFile, String> {
+pub(crate) fn locate_module_file(child_dir: &Path, seg: &str) -> Result<ModuleFile, ResolveError> {
     let flat = child_dir.join(format!("{seg}.rs"));
     let nested = child_dir.join(seg).join("mod.rs");
     match (
-        xingbiao::is_regular_file(&flat)?,
-        xingbiao::is_regular_file(&nested)?,
+        xingbiao::is_regular_file(&flat).map_err(ResolveError::Other)?,
+        xingbiao::is_regular_file(&nested).map_err(ResolveError::Other)?,
     ) {
         (true, true) => Ok(ModuleFile::Ambiguous { flat, nested }),
         (true, false) => Ok(ModuleFile::One(flat)),
@@ -419,8 +446,9 @@ pub(crate) fn locate_module_file(child_dir: &Path, seg: &str) -> Result<ModuleFi
     }
 }
 
-pub(crate) fn read_parse(file: &Path) -> Result<syn::File, String> {
+pub(crate) fn read_parse(file: &Path) -> Result<syn::File, ResolveError> {
     let text = std::fs::read_to_string(file)
-        .map_err(|err| unreadable_source_error(file, &err.to_string()))?;
-    syn::parse_file(&text).map_err(|err| unparseable_source_error(file, &err.to_string()))
+        .map_err(|err| ResolveError::UnreadableSource(file.to_path_buf(), err.to_string()))?;
+    syn::parse_file(&text)
+        .map_err(|err| ResolveError::UnparseableSource(file.to_path_buf(), err.to_string()))
 }

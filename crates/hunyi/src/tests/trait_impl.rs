@@ -14,13 +14,15 @@ pub(super) fn locality_findings(
     let result = trait_impl_findings(tree.src(), &tree.root(), trait_path, &allowed, "x");
     // The pure-heart tests assert on findings only; drop the resolved anchor and the per-finding
     // module/file here. `locality_anchor` below is for the tests that are about the anchor itself.
-    result.map(|reaction| {
-        reaction
-            .findings
-            .into_iter()
-            .map(|(finding, _module, _file)| finding.to_string())
-            .collect()
-    })
+    result
+        .map(|reaction| {
+            reaction
+                .findings
+                .into_iter()
+                .map(|(finding, _module, _file)| finding.to_string())
+                .collect()
+        })
+        .map_err(|e| e.to_string())
 }
 
 /// The resolved trait anchor a declaration denotes — the value that becomes the violation's `target`
@@ -33,7 +35,9 @@ pub(super) fn locality_anchor(
 ) -> Result<String, String> {
     let tree = TempSrcTree::new(&format!("loc-anchor-{name}"));
     tree.write_all(files);
-    trait_impl_findings(tree.src(), &tree.root(), trait_path, &[], "x").map(|r| r.anchor)
+    trait_impl_findings(tree.src(), &tree.root(), trait_path, &[], "x")
+        .map(|r| r.anchor)
+        .map_err(|e| e.to_string())
 }
 
 /// Two mutually-exclusive `#[cfg]`-gated `use ... as T;` aliases for an `impl T for Foo`'s trait
@@ -451,8 +455,8 @@ pub(super) fn trait_impl_rejects_a_malformed_colon_allowed_location() {
             "constitution error must name the malformed allowed entry {bad:?}: {err}"
         );
     }
-    // The empty string itself is also a malformed allowed entry — see must_not_expose's
-    // identical note; this shares the same `validate_path_operands` guard.
+    // The empty string itself is also a malformed allowed entry: a location is a module anchor,
+    // so it is held to the anchor's one spelling and the refusal suggests the crate root.
     let empty_err = locality_findings(
         "malformed-allowed-empty",
         files,
@@ -461,7 +465,7 @@ pub(super) fn trait_impl_rejects_a_malformed_colon_allowed_location() {
     )
     .unwrap_err();
     assert!(
-        empty_err.contains("is empty"),
+        empty_err.contains("''") && empty_err.contains("write `crate`"),
         "constitution error must flag the empty allowed entry: {empty_err}"
     );
     // Control: the well-formed spelling for the identical, genuinely-in-place impl still passes
@@ -1167,4 +1171,37 @@ pub(super) fn a_glob_imported_type_in_an_impl_position_is_a_documented_coverage_
         1,
         "the control must react, or the empty result above says nothing: {written:?}"
     );
+}
+
+#[test]
+fn trait_anchor_absent_from_one_unit_defers_using_typed_resolve_error() {
+    let tree = TempSrcTree::new("trait-anchor-multi-unit");
+    tree.write_all(&[
+        ("lib.rs", "pub mod ffi;\npub mod other;\npub trait Tr {}\n"),
+        ("ffi.rs", "pub struct K;\nimpl crate::Tr for K {}\n"),
+        ("other.rs", "\n"),
+        ("bin/tool.rs", "fn main() {}\n"),
+    ]);
+    let metadata = serde_json::json!({
+        "packages": [{
+            "name": "x",
+            "dependencies": [],
+            "targets": [
+                { "kind": ["lib"], "src_path": tree.root().to_string_lossy().into_owned() },
+                { "kind": ["bin"], "src_path": tree.src().join("bin/tool.rs").to_string_lossy().into_owned() },
+            ],
+        }],
+    });
+    let boundary = TraitImplBoundary::in_crate("x")
+        .trait_("crate::Tr")
+        .only_implemented_in("crate::other")
+        .because("Tr only in other");
+    let mut violations = Vec::new();
+    check_trait_impl_boundary(&metadata, &boundary, &mut violations).unwrap();
+    assert_eq!(
+        violations.len(),
+        1,
+        "the library's impl produces a violation"
+    );
+    assert_eq!(violations[0].fact().shape(), "misplaced-implementation");
 }

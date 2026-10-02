@@ -1,11 +1,83 @@
 use super::*;
 use serde_json::Value;
 
-use crate::module_scan::package_name_to_import_ident;
+use crate::module_scan::{Edition, package_name_to_import_ident};
 
 pub(crate) use xingbiao::{
     cargo_metadata, compilation_unit_label, crate_roots, find_package, member_src_dirs,
 };
+
+/// What the targets rooted at one file ask of reading it: the edition they are read in, and whether one is a
+/// proc-macro crate, whose extern prelude holds `proc_macro` without an `extern crate` — measured against rustc 1.96.0,
+/// edition 2021, a `[lib] proc-macro = true` crate calls `proc_macro::TokenStream::new()` with none.
+pub(crate) struct RootReading {
+    /// The one edition the root is read in; a mix of 2018 and later reads as 2018, and a mix with 2015 is refused.
+    pub(crate) edition: Edition,
+    /// Whether any target rooted at the file is a proc-macro crate, so `proc_macro` resolves with no `extern crate`.
+    pub(crate) proc_macro: bool,
+}
+
+/// The [`RootReading`] of the targets rooted at `root_file`, or of every target of the package where the roots are not
+/// reported. rustc compiles each target in its own edition, and `cargo metadata` reports a target's `[lib]` or
+/// `[[bin]]` `edition` on the target and the package's own beside it — measured under cargo 1.96.0, a 2024 package with
+/// `[lib] edition = "2015"` reports `2015` on its library target and `2024` on the package, and builds a 2015 crate. A
+/// target reporting no edition reads as the package's. Targets sharing the root in editions the scanner reads apart are
+/// compiled twice, once in each, so one reading cannot judge both and the root is refused; 2018 beside 2021, whose
+/// paths it reads alike, are one reading, in 2018: the two differ only in whether a `c` before a string opens a C
+/// string, and the 2018 reading lexes as code what the 2021 one could read as a string's contents, so it misses
+/// nothing the other reads.
+pub(crate) fn root_reading(
+    package: &Value,
+    root_file: Option<&Path>,
+    crate_package: &str,
+) -> Result<RootReading, String> {
+    let package_edition = package["edition"].as_str();
+    let targets: Vec<&Value> = package["targets"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|target| {
+            root_file.is_none_or(|root| target["src_path"].as_str().map(Path::new) == Some(root))
+        })
+        .collect();
+    let proc_macro = targets.iter().any(|target| {
+        target["kind"]
+            .as_array()
+            .is_some_and(|kinds| kinds.iter().any(|kind| kind.as_str() == Some("proc-macro")))
+    });
+    let edition = match root_file {
+        None => Edition::of(package_edition),
+        Some(root) => {
+            let mut written: Vec<Option<&str>> = targets
+                .iter()
+                .map(|target| target["edition"].as_str().or(package_edition))
+                .collect();
+            written.sort();
+            written.dedup();
+            let readings: Vec<Edition> = written
+                .iter()
+                .map(|edition| Edition::of(*edition))
+                .collect();
+            let paths_alike = |reading: &Edition| reading != &Edition::Rust2015;
+            match readings.first() {
+                None => Edition::of(package_edition),
+                Some(first) if readings.iter().all(|reading| reading == first) => *first,
+                Some(_) if readings.iter().all(paths_alike) => Edition::Rust2018,
+                Some(_) => {
+                    return Err(crate::errors::root_in_several_editions_error(
+                        crate_package,
+                        root,
+                        &written.iter().map(|e| e.unwrap_or("?")).collect::<Vec<_>>(),
+                    ));
+                }
+            }
+        }
+    };
+    Ok(RootReading {
+        edition,
+        proc_macro,
+    })
+}
 
 /// The membership set, or why it could not be read.
 ///
@@ -157,7 +229,7 @@ pub(crate) fn dependencies(package: &Value, kind: DependencyKind) -> Vec<String>
 /// **Deliberately unfiltered by kind or source** (unlike [`dependencies`]/[`external_dependencies`]):
 /// dev-, build-, and path dependencies are all included. A broader name set makes MORE heads resolve
 /// as external, never fewer — the fail-safe direction for the one forbidden bug (a false negative) —
-/// while the local-precedence ladder still keeps any genuinely-local item local. The only cost is a
+/// while the scope lookup still keeps any genuinely-local item local. The only cost is a
 /// possible reaction on a dev/build-dep name used inside scanned test code.
 pub(crate) fn dependency_import_names(package: &Value) -> Vec<String> {
     let mut names: Vec<String> = package["dependencies"]
@@ -176,6 +248,29 @@ pub(crate) fn dependency_import_names(package: &Value) -> Vec<String> {
     names.sort();
     names.dedup();
     names
+}
+
+/// The import identifiers of the package's own library targets — what a binary root of the same package
+/// names that library by. A target's `name` is its crate name, `[lib] name` when one is declared, so it is
+/// read rather than derived from the package name.
+pub(crate) fn library_import_names(package: &Value) -> Vec<String> {
+    const LIBRARY_KINDS: [&str; 6] = ["lib", "rlib", "dylib", "cdylib", "staticlib", "proc-macro"];
+    package["targets"]
+        .as_array()
+        .map(|targets| {
+            targets
+                .iter()
+                .filter(|target| {
+                    target["kind"].as_array().is_some_and(|kinds| {
+                        kinds
+                            .iter()
+                            .any(|kind| kind.as_str().is_some_and(|k| LIBRARY_KINDS.contains(&k)))
+                    })
+                })
+                .filter_map(|target| target["name"].as_str().map(package_name_to_import_ident))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Classify a dependency's **declared** source kind from its `cargo metadata` (`--no-deps`)

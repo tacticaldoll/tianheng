@@ -17,7 +17,7 @@ use guibiao::{Constitution, CrateBoundary, Outcome, SourceKind, check};
 /// A minimal, single-crate probe workspace, decoupled from Tianheng's own workspace via its own
 /// `[workspace]` table (the same convention `crates/tianheng/tests/fixtures/*` uses).
 struct ProbeWorkspace {
-    dir: PathBuf,
+    _dir: xingbiao::ScratchRoot,
     manifest: PathBuf,
 }
 
@@ -25,15 +25,7 @@ impl ProbeWorkspace {
     /// Write a probe crate named `name` whose `[dependencies]` table is exactly `dependencies_toml`
     /// (a raw TOML fragment, e.g. `r#"foo = { git = "https://example.invalid/foo.git" }"#`).
     fn new(name: &str, dependencies_toml: &str) -> Self {
-        use std::sync::atomic::{AtomicU32, Ordering};
-        static COUNTER: AtomicU32 = AtomicU32::new(0);
-        let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!(
-            "guibiao-self-dep-source-identity-{name}-{}-{unique}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        xingbiao::claim_scratch(&dir).expect("the fixture root is writable");
+        let dir = xingbiao::scratch_root(&format!("guibiao-self-dep-source-identity-{name}"));
         std::fs::create_dir_all(dir.join("src")).expect("create temp src dir");
         let manifest = dir.join("Cargo.toml");
         std::fs::write(
@@ -45,17 +37,14 @@ impl ProbeWorkspace {
         )
         .expect("write Cargo.toml");
         std::fs::write(dir.join("src/lib.rs"), "pub fn hi() {}\n").expect("write lib.rs");
-        Self { dir, manifest }
+        Self {
+            _dir: dir,
+            manifest,
+        }
     }
 
     fn manifest(&self) -> &Path {
         &self.manifest
-    }
-}
-
-impl Drop for ProbeWorkspace {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
     }
 }
 

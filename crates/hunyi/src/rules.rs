@@ -24,7 +24,11 @@ pub const VISIBILITY_RULE: &str = "must not declare pub items";
 pub const VISIBILITY_SUPER_RULE: &str = "must not declare items more visible than pub(super)";
 /// Visibility, `Module` ceiling: nothing more visible than module-private.
 pub const VISIBILITY_MODULE_RULE: &str = "must not declare items more visible than module-private";
+/// Re-export-only: every direct item is a use declaration.
+pub const REEXPORT_ONLY_RULE: &str = "must declare only re-exports";
 /// Forbidden-marker: a subtree's types must not acquire a forbidden trait.
 pub const FORBIDDEN_MARKER_RULE: &str = "must not acquire trait";
 /// Unsafe-confinement: `unsafe` is confined to the declared subtree(s).
 pub const UNSAFE_CONFINEMENT_RULE: &str = "unsafe is confined to the declared subtree(s)";
+/// Static-item: a subtree declares no `static` item or `thread_local!`.
+pub const STATIC_ITEM_RULE: &str = "must not declare static items";

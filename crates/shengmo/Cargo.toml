@@ -25,3 +25,9 @@ tianheng = { path = "../tianheng" }
 # Reading cargo's own `--message-format=json` stream: a reaction's corpus comes from the build,
 # never from a list anyone maintains. Declared in the law beside the tianheng edge.
 serde_json = { workspace = true }
+
+[dev-dependencies]
+# The fixture root (`xingbiao::scratch_root`), so a test's scratch lives in the build directory. Dev-only:
+# 繩墨's crate boundary (crates/shengmo/src/law.rs) restricts only its Normal dependencies. No edge to `kanhe`
+# beside it: that one would close a cycle, which this crate's tests and docs state as a standing constraint.
+xingbiao = { workspace = true }

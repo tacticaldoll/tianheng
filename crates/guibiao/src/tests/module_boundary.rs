@@ -65,7 +65,7 @@ pub(super) fn unreadable_governed_directory_is_a_scan_error() {
 #[test]
 pub(super) fn a_raw_identifier_module_is_governed_and_its_import_observed() {
     let ws = TempWorkspace::new("rawid");
-    ws.write("lib.rs", "pub mod r#type;\n");
+    ws.write("lib.rs", "pub mod r#type;\npub mod r#mod {}\n");
     ws.write("type.rs", "use crate::r#mod::Thing;\n");
 
     let metadata = ws.metadata("x");
@@ -93,7 +93,7 @@ pub(super) fn a_raw_identifier_module_is_governed_and_its_import_observed() {
 #[test]
 pub(super) fn module_boundary_uses_the_package_target_src_path() {
     let ws = TempWorkspace::new("custom-lib-path");
-    let root = ws.write_at("lib.rs", "pub mod kernel;\n");
+    let root = ws.write_at("lib.rs", "pub mod kernel;\npub mod io {}\n");
     ws.write_at("kernel.rs", "use crate::io::Sink;\n");
 
     let manifest = ws.dir().join("Cargo.toml");
@@ -138,7 +138,10 @@ pub(super) fn path_remapped_module_is_followed_not_governed_via_a_conventional_o
     let (result, violations) = run_module_check(
         "path-remap-boundary",
         &[
-            ("lib.rs", "#[path = \"weird.rs\"]\npub mod kernel;\n"),
+            (
+                "lib.rs",
+                "pub mod projection {}\n#[path = \"weird.rs\"]\npub mod kernel;\n",
+            ),
             ("weird.rs", "use crate::projection::Thing;\n"),
             ("kernel.rs", "use crate::projection::Wrong;\n"),
         ],
@@ -347,7 +350,7 @@ pub(super) fn a_file_backed_module_is_still_governed() {
     let (result, violations) = run_module_check(
         "file-backed",
         &[
-            ("lib.rs", "pub mod real;\n"),
+            ("lib.rs", "pub mod secret {}\npub mod real;\n"),
             ("real.rs", "use crate::secret::Thing;\n"),
         ],
         ModuleBoundary::in_crate("x")
@@ -373,7 +376,7 @@ pub(super) fn a_cfg_dual_declared_module_keeps_governing_its_conventional_file()
         &[
             (
                 "lib.rs",
-                "#[cfg(feature = \"k\")]\npub mod kernel;\n\
+                "pub mod secret {}\n#[cfg(feature = \"k\")]\npub mod kernel;\n\
                      #[cfg(not(feature = \"k\"))]\npub mod kernel { }\n",
             ),
             ("kernel.rs", "use crate::secret::Thing;\n"),
@@ -454,7 +457,7 @@ pub(super) fn a_cfg_gated_missing_plain_module_file_does_not_fail_an_unrelated_b
         &[
             (
                 "lib.rs",
-                "#[cfg(feature = \"absent\")]\npub mod child;\npub mod present;\n",
+                "pub mod forbidden {}\n#[cfg(feature = \"absent\")]\npub mod child;\npub mod present;\n",
             ),
             ("present.rs", "use crate::forbidden::Thing;\n"),
         ],
@@ -484,7 +487,7 @@ pub(super) fn a_missing_module_file_declared_inside_a_cfg_if_arm_is_tolerated() 
         &[
             (
                 "lib.rs",
-                "cfg_if::cfg_if! {\n\
+                "pub mod forbidden {}\ncfg_if::cfg_if! {\n\
                  if #[cfg(unix)] {\n\
                  pub mod unix_impl;\n\
                  } else {\n\
@@ -509,6 +512,34 @@ pub(super) fn a_missing_module_file_declared_inside_a_cfg_if_arm_is_tolerated() 
     );
 }
 
+/// A group directly under `cfg_if!` with neither an attribute nor an `else` before it is no arm, so a `mod` in it
+/// stands in a block, and the reading that numbers a block's modules and the one that builds the scopes agree on it.
+/// The input compiles: the local `cfg_if!` expands to nothing. The import is read through the file's own scopes, so a
+/// disagreement between the two readings refuses it rather than passing unseen.
+#[test]
+pub(super) fn a_module_in_an_unlabelled_group_under_cfg_if_is_judged() {
+    let (result, violations) = run_module_check(
+        "unlabelled-cfg-if-group",
+        &[(
+            "lib.rs",
+            "pub mod forbidden { pub struct T; }\n\
+             macro_rules! cfg_if { ($($t:tt)*) => {} }\n\
+             cfg_if! { { mod m; } }\n\
+             use forbidden::T;\n",
+        )],
+        ModuleBoundary::in_crate("x")
+            .module("crate")
+            .must_not_import("crate::forbidden")
+            .because("probe"),
+    );
+    assert!(
+        result.is_ok(),
+        "a module in an unlabelled group under cfg_if! must be judged: {result:?}"
+    );
+    assert_eq!(violations.len(), 1, "{violations:?}");
+    assert_eq!(violations[0].finding, "crate::forbidden::T");
+}
+
 /// The control for the test above: tolerating the fileless sibling arm must not stop the arm whose
 /// file DOES exist from being reached and governed. Without this, the tolerance could pass by
 /// dropping both arm modules from the graph.
@@ -519,7 +550,7 @@ pub(super) fn an_arm_declared_module_whose_file_exists_is_still_governed() {
         &[
             (
                 "lib.rs",
-                "cfg_if::cfg_if! {\n\
+                "pub mod forbidden {}\ncfg_if::cfg_if! {\n\
                  if #[cfg(unix)] {\n\
                  pub mod unix_impl;\n\
                  } else {\n\
@@ -575,10 +606,10 @@ pub(super) fn a_dual_backed_module_declared_inside_a_cfg_if_arm_is_still_a_scan_
 }
 
 /// The `cfg_attr` half of the cfg-conditional rule, which nothing in 圭表 previously pinned even
-/// though the requirement asserts it: `cfg_attr` never REMOVES the item, it only conditionally applies
-/// its wrapped attribute, so a missing file beneath it is a genuine compile error (E0583) on every
-/// configuration and must not be tolerated. Without this test, an `attr_prefix_has_bare_cfg` that
-/// accidentally matched `cfg_attr` would turn a real build failure into a silent skip.
+/// though the requirement asserts it: a `cfg_attr` applying no `cfg` never REMOVES the item, it only
+/// conditionally applies its wrapped attribute, so a missing file beneath it is a genuine compile error (E0583)
+/// on every configuration and must not be tolerated. Without this test, a bare-`cfg` arm of `attributes_before`
+/// that accidentally matched `cfg_attr` would turn a real build failure into a silent skip.
 #[test]
 pub(super) fn a_cfg_attr_decorated_missing_module_file_is_not_tolerated() {
     let (result, _violations) = run_module_check(
@@ -634,7 +665,7 @@ pub(super) fn a_missing_path_remap_target_declared_inside_a_cfg_if_arm_is_tolera
         &[
             (
                 "lib.rs",
-                "cfg_if::cfg_if! {\n\
+                "pub mod forbidden {}\ncfg_if::cfg_if! {\n\
                  if #[cfg(windows)] {\n\
                  #[path = \"windows_impl.rs\"]\n\
                  pub mod imp;\n\
@@ -722,7 +753,7 @@ pub(super) fn a_cfg_gated_unconditional_path_target_does_not_fail_an_unrelated_b
         &[
             (
                 "lib.rs",
-                "#[cfg(windows)]\n#[path = \"windows_impl.rs\"]\npub mod imp;\npub mod present;\n",
+                "pub mod forbidden {}\n#[cfg(windows)]\n#[path = \"windows_impl.rs\"]\npub mod imp;\npub mod present;\n",
             ),
             ("present.rs", "use crate::forbidden::Thing;\n"),
         ],
@@ -751,7 +782,7 @@ pub(super) fn a_cfg_gated_unconditional_path_target_is_tolerated_regardless_of_a
         &[
             (
                 "lib.rs",
-                "#[path = \"windows_impl.rs\"]\n#[cfg(windows)]\npub mod imp;\npub mod present;\n",
+                "pub mod forbidden {}\n#[path = \"windows_impl.rs\"]\n#[cfg(windows)]\npub mod imp;\npub mod present;\n",
             ),
             ("present.rs", "use crate::forbidden::Thing;\n"),
         ],
@@ -783,7 +814,7 @@ pub(super) fn a_cfg_attr_wrapped_path_is_recognized_as_a_remap() {
         &[
             (
                 "lib.rs",
-                "#[cfg_attr(unix, path = \"weird.rs\")]\npub mod foo;\n",
+                "pub mod forbidden {}\n#[cfg_attr(unix, path = \"weird.rs\")]\npub mod foo;\n",
             ),
             ("foo.rs", "use crate::forbidden::Y;\n"),
             ("weird.rs", "// the cfg(unix) remap target, clean\n"),
@@ -815,7 +846,7 @@ pub(super) fn restrict_imports_to_flags_an_import_outside_the_allowlist() {
     let (result, violations) = run_module_check(
         "restrict-outside",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod types {}\npub mod kernel;\n"),
             ("kernel.rs", "use crate::io::Sink;\n"),
         ],
         restrict_kernel_to_types("crate::kernel", &["crate::types"]),
@@ -833,7 +864,7 @@ pub(super) fn a_module_violation_carries_its_offending_file() {
     let (result, violations) = run_module_check(
         "module-file",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod types {}\npub mod kernel;\n"),
             ("kernel.rs", "use crate::io::Sink;\n"),
         ],
         restrict_kernel_to_types("crate::kernel", &["crate::types"]),
@@ -891,7 +922,7 @@ pub(super) fn restrict_imports_to_is_clean_within_the_allowlist() {
     let (result, violations) = run_module_check(
         "restrict-within",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod types {}\npub mod kernel;\n"),
             ("kernel.rs", "use crate::types::Id;\n"),
         ],
         restrict_kernel_to_types("crate::kernel", &["crate::types"]),
@@ -908,7 +939,7 @@ pub(super) fn restrict_imports_to_allows_the_governed_modules_own_subtree() {
     let (result, violations) = run_module_check(
         "restrict-ownsubtree",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod types {}\npub mod kernel;\n"),
             (
                 "kernel.rs",
                 "use crate::kernel;\nuse crate::kernel::detail::Thing;\nuse self::other::Thing2;\n",
@@ -942,7 +973,7 @@ pub(super) fn restrict_imports_to_does_not_treat_a_prefix_colliding_sibling_as_a
     let (result, violations) = run_module_check(
         "restrict-sibling",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod types {}\npub mod kernel;\n"),
             (
                 "kernel.rs",
                 "use crate::types::Id;\nuse crate::types_extra::Y;\n",
@@ -981,7 +1012,7 @@ pub(super) fn restrict_imports_to_governs_a_super_reaching_outward_import() {
     let (result, violations) = run_module_check(
         "restrict-super",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod types {}\npub mod kernel;\n"),
             ("kernel.rs", "use super::other::Thing;\n"),
         ],
         restrict_kernel_to_types("crate::kernel", &["crate::types"]),
@@ -999,7 +1030,7 @@ pub(super) fn restrict_imports_to_canonicalizes_a_raw_identifier_allowlist_entry
     let (result, violations) = run_module_check(
         "restrict-rawid",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod r#type {}\npub mod kernel;\n"),
             ("kernel.rs", "use crate::r#type::Thing;\n"),
         ],
         restrict_kernel_to_types("crate::kernel", &["crate::r#type"]),
@@ -1029,7 +1060,7 @@ pub(super) fn restrict_imports_to_honors_warn_severity_and_its_distinct_label() 
     let (result, violations) = run_module_check(
         "restrict-warn",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod types {}\npub mod kernel;\n"),
             ("kernel.rs", "use crate::io::Sink;\n"),
         ],
         ModuleBoundary::in_crate("x")
@@ -1201,4 +1232,76 @@ pub(super) fn must_not_be_imported_by_does_not_flag_the_protected_modules_own_su
         violations.is_empty(),
         "the protected module's own subtree is not an importer: {violations:?}"
     );
+}
+
+/// A refusal of the module walk names the crate and the compilation unit it walked, so a package of several roots
+/// says which root declares the module to repair.
+#[test]
+pub(super) fn a_walk_refusal_names_its_compilation_unit() {
+    let (result, _) = run_module_check(
+        "walk-refusal-unit",
+        &[
+            ("lib.rs", "pub mod kernel;\nmod ghost;\n"),
+            ("kernel.rs", ""),
+        ],
+        ModuleBoundary::in_crate("x")
+            .module("crate::kernel")
+            .must_not_import("crate::ghost")
+            .because("the kernel must not import a ghost"),
+    );
+    let err = result.expect_err("a declared module with no file is a scan error");
+    assert!(
+        err.starts_with(
+            "cannot walk crate 'x' in compilation unit 'lib.rs': module 'crate::ghost'"
+        ),
+        "{err}"
+    );
+}
+
+/// A walk refusal names the file whose `mod` declares the module, and a missing file every declaring source sought:
+/// a nested `mod ghost;` names `a.rs`, and a block module whose two `cfg_attr` paths name no directory names the file
+/// it expected under each, where the first alone was named.
+#[test]
+pub(super) fn a_walk_refusal_names_where_each_declaration_is_written() {
+    let boundary = || {
+        ModuleBoundary::in_crate("x")
+            .module("crate::kernel")
+            .must_not_import("crate::ghost")
+            .because("the kernel must not import a ghost")
+    };
+    let (nested, _) = run_module_check(
+        "walk-refusal-declared-in",
+        &[
+            ("lib.rs", "pub mod kernel;\npub mod a;\n"),
+            ("kernel.rs", ""),
+            ("a.rs", "mod ghost;\n"),
+        ],
+        boundary(),
+    );
+    let nested = nested.expect_err("a declared module with no file is a scan error");
+    assert!(
+        nested.contains("could not be located (declared in '")
+            && nested.contains("a.rs', expected '"),
+        "{nested}"
+    );
+    let (candidates, _) = run_module_check(
+        "walk-refusal-candidates",
+        &[
+            (
+                "lib.rs",
+                "pub mod kernel;\npub fn f() { #[cfg_attr(unix, path = \"d\")] \
+                 #[cfg_attr(windows, path = \"e\")] mod k { pub mod m; } }\n",
+            ),
+            ("kernel.rs", ""),
+        ],
+        boundary(),
+    );
+    let candidates = candidates.expect_err("a block module no candidate backs is a scan error");
+    let separator = std::path::MAIN_SEPARATOR;
+    for expected in [
+        format!("{separator}d{separator}m.rs"),
+        format!("{separator}e{separator}m.rs"),
+    ] {
+        assert!(candidates.contains(&expected), "{expected} in {candidates}");
+    }
 }

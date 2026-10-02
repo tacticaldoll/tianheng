@@ -26,6 +26,42 @@ use crate::syn_util::{FlatItem, reexport_externs_for, reexport_renames_for};
 mod shape;
 pub(crate) use shape::*;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AutoTraitBoundaryKind {
+    Dyn,
+    Impl,
+}
+
+impl AutoTraitBoundaryKind {
+    pub(crate) fn display_name(self) -> &'static str {
+        match self {
+            Self::Dyn => "dyn-trait",
+            Self::Impl => "impl-trait",
+        }
+    }
+
+    pub(crate) fn operand_builder(self) -> &'static str {
+        match self {
+            Self::Dyn => "must_not_expose_dyn_of",
+            Self::Impl => "must_not_expose_impl_trait_of",
+        }
+    }
+
+    pub(crate) fn bound_builder(self) -> &'static str {
+        match self {
+            Self::Dyn => "must_not_expose_dyn_bounded_by",
+            Self::Impl => "must_not_expose_impl_trait_bounded_by",
+        }
+    }
+
+    pub(crate) fn shape_builder(self) -> &'static str {
+        match self {
+            Self::Dyn => "must_not_expose_dyn",
+            Self::Impl => "must_not_expose_impl_trait",
+        }
+    }
+}
+
 /// Each name a `use` brings into a module's scope mapped to **every** written full path declared
 /// for that name — almost always exactly one, but two mutually-exclusive `#[cfg]`-gated `use ...
 /// as Name;` declarations in the same file are never compiled together, so both candidate targets
@@ -87,9 +123,10 @@ pub(crate) fn has_empty_path_segment(operand: &str) -> bool {
 /// Reject the first malformed entry in a forbidden- or allowed-operand list (per
 /// [`has_empty_path_segment`]) as a constitution error, else `Ok(())`. The one shared guard
 /// behind every forbidden/allowed-operand-shaped DSL method — `must_not_expose`,
-/// `must_not_acquire`, the dyn/impl-trait operand families, `only_implemented_in`'s
-/// `allowed_locations`, and unsafe-confinement's `allowed_locations` — so the check's wording and
-/// checked-before-any-resolution-work timing never drifts between call sites. Callers pass their
+/// `must_not_acquire`, and the dyn/impl-trait operand families — so the check's wording and
+/// checked-before-any-resolution-work timing never drifts between call sites. An allowed-location
+/// list names modules rather than operands, and is held to the module anchor's spelling in
+/// `crate::anchor` instead. Callers pass their
 /// own raw, pre-canonicalization operand list: [`canonical_path_str`] never removes or collapses
 /// an empty segment (it only strips a raw-identifier prefix per segment), so this reacts
 /// identically whether applied before or after that canonicalization.
@@ -98,6 +135,130 @@ pub(crate) fn validate_path_operands(operands: &[String]) -> Result<(), String> 
         return Err(crate::errors::malformed_path_operand_error(bad));
     }
     Ok(())
+}
+
+/// Validate only dyn/impl-trait exposure operands. The observer removes auto-trait
+/// bounds before principal resolution, so a forbidden auto-trait leaf cannot react.
+pub(crate) fn validate_exposed_trait_operands(
+    operands: &[String],
+    boundary_kind: AutoTraitBoundaryKind,
+) -> Result<(), String> {
+    validate_path_operands(operands)?;
+    if let Some(bad) = operands.iter().find(|operand| {
+        let leaf = operand
+            .rsplit_once("::")
+            .map_or(operand.as_str(), |(_, leaf)| leaf);
+        shape::is_auto_trait_leaf(leaf)
+    }) {
+        return Err(crate::errors::auto_trait_operand_error(bad, boundary_kind));
+    }
+    Ok(())
+}
+
+/// Validate and normalize auto-trait bounds for dyn/impl-trait boundaries.
+///
+/// An operand set must be non-empty and well-formed (no empty path segments).
+/// Each entry must name one of the five std auto traits (`Send`, `Sync`, `Unpin`,
+/// `UnwindSafe`, `RefUnwindSafe`), either bare, or qualified with its defining module under
+/// `std` or `core`. Any other path is rejected with an exit-2 constitution error.
+///
+/// Returns the normalized, deduplicated, sorted leaf names (e.g. `["Send"]`).
+pub(crate) fn auto_bound_leaves<'a>(
+    bounds: impl IntoIterator<Item = &'a (impl AsRef<str> + 'a)>,
+    boundary_kind: AutoTraitBoundaryKind,
+) -> Result<std::collections::BTreeSet<String>, String> {
+    let mut leaves = std::collections::BTreeSet::new();
+    let mut any = false;
+
+    for raw in bounds {
+        any = true;
+        let s = raw.as_ref();
+        if has_empty_path_segment(s) {
+            return Err(crate::errors::malformed_path_operand_error(s));
+        }
+        let segs: Vec<&str> = s.split("::").collect();
+        let leaf_raw = *segs
+            .last()
+            .expect("split always yields at least one segment");
+        let stripped_leaf = strip_raw(leaf_raw);
+        let leaf = if shape::is_auto_trait_leaf(&stripped_leaf) {
+            let correct_module =
+                shape::auto_trait_module(&stripped_leaf).expect("auto-trait leaf has module");
+            if segs.len() == 1 {
+                stripped_leaf
+            } else {
+                let p1 = strip_raw(segs[0]);
+                let root = if p1 == "core" { "core" } else { "std" };
+                if segs.len() == 3
+                    && (p1 == "std" || p1 == "core")
+                    && strip_raw(segs[1]) == correct_module
+                {
+                    stripped_leaf
+                } else {
+                    let standard_path = format!("{}::{}::{}", root, correct_module, stripped_leaf);
+                    return Err(crate::errors::wrong_auto_trait_module_error(
+                        s,
+                        &stripped_leaf,
+                        correct_module,
+                        root,
+                        standard_path,
+                        boundary_kind,
+                    ));
+                }
+            }
+        } else {
+            return Err(crate::errors::unrecognized_auto_trait_error(
+                s,
+                boundary_kind,
+            ));
+        };
+        leaves.insert(leaf);
+    }
+
+    if !any {
+        return Err(crate::errors::empty_auto_bound_error(boundary_kind));
+    }
+
+    Ok(leaves)
+}
+
+/// A typed result of auto-bound resolution: the normalized leaf set, or the original syntax if invalid.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ResolvedAutoBounds {
+    Normalized(std::collections::BTreeSet<String>),
+    InvalidSyntax(Vec<String>),
+}
+
+impl ResolvedAutoBounds {
+    pub fn into_vec(self) -> Vec<String> {
+        match self {
+            Self::Normalized(leaves) => leaves.into_iter().collect(),
+            Self::InvalidSyntax(original) => original,
+        }
+    }
+}
+
+/// Resolve auto-trait bounds into a typed result for both the rule key and the projection.
+pub(crate) fn resolved_auto_bounds<'a>(
+    bounds: impl IntoIterator<Item = &'a String>,
+    boundary_kind: AutoTraitBoundaryKind,
+) -> ResolvedAutoBounds {
+    let bounds_vec: Vec<String> = bounds.into_iter().cloned().collect();
+    match auto_bound_leaves(&bounds_vec, boundary_kind) {
+        Ok(leaves) => ResolvedAutoBounds::Normalized(leaves),
+        Err(_) => ResolvedAutoBounds::InvalidSyntax(bounds_vec),
+    }
+}
+
+/// Whether an exposure's auto traits contain any of the forbidden auto bound leaves.
+pub(crate) fn exposure_matches_auto_bounds(
+    exposure: &ShapeExposure,
+    forbidden_leaves: &std::collections::BTreeSet<String>,
+) -> bool {
+    exposure
+        .auto_traits
+        .iter()
+        .any(|t| forbidden_leaves.contains(t.as_str()))
 }
 
 /// Map each name a `use` brings into the module's scope to its full written path

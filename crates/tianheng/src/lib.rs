@@ -56,13 +56,14 @@ pub use louke::RuntimeObserver;
 
 pub use hunyi::{
     AsyncExposureBoundary, DynTraitBoundary, ForbiddenMarkerBoundary, ImplTraitBoundary,
-    SemanticBoundaries, SignatureBoundary, TraitImplBoundary, UnsafeBoundary, VisibilityBoundary,
-    VisibilityCeiling, check as check_semantic,
+    ReexportOnlyBoundary, SemanticBoundaries, SignatureBoundary, StaticBoundary, TraitImplBoundary,
+    UnsafeBoundary, VisibilityBoundary, VisibilityCeiling, check as check_semantic,
 };
 #[doc(hidden)]
 pub use hunyi::{
     check_all, check_async_exposure, check_dyn_trait, check_forbidden_marker, check_impl_trait,
-    check_trait_impl_locality, check_unsafe_confinement, check_visibility,
+    check_reexport_only, check_static_item, check_trait_impl_locality, check_unsafe_confinement,
+    check_visibility,
 };
 pub use louke::{OriginEntry, Posture, RuntimeBoundary, Tracked, audit_probe_coverage};
 
@@ -77,9 +78,9 @@ pub use hunyi::{
     DynTraitBoundaryDraft, DynTraitCrateDraft, DynTraitModuleDraft, ForbiddenMarkerBoundaryDraft,
     ForbiddenMarkerCrateDraft, ForbiddenMarkerModuleDraft, ImplTraitBoundaryDraft,
     ImplTraitCrateDraft, ImplTraitModuleDraft, SignatureBoundaryDraft, SignatureCrateDraft,
-    SignatureModuleDraft, TraitImplBoundaryDraft, TraitImplCrateDraft, TraitImplTraitDraft,
-    UnsafeBoundaryDraft, UnsafeCrateDraft, VisibilityBoundaryDraft, VisibilityCrateDraft,
-    VisibilityModuleDraft,
+    SignatureModuleDraft, StaticBoundaryDraft, StaticCrateDraft, StaticModuleDraft,
+    TraitImplBoundaryDraft, TraitImplCrateDraft, TraitImplTraitDraft, UnsafeBoundaryDraft,
+    UnsafeCrateDraft, VisibilityBoundaryDraft, VisibilityCrateDraft, VisibilityModuleDraft,
 };
 #[doc(hidden)]
 pub use louke::{RuntimeBoundaryDraft, RuntimeSeamDraft};
@@ -144,6 +145,12 @@ impl Constitution {
         self
     }
 
+    /// Add a 渾儀 re-export-only module boundary.
+    pub fn reexport_only_boundary(mut self, boundary: ReexportOnlyBoundary) -> Self {
+        self.semantic.reexport_only.push(boundary);
+        self
+    }
+
     /// Add a 渾儀 forbidden-marker boundary (a subtree must not acquire a forbidden trait).
     pub fn forbidden_marker_boundary(mut self, boundary: ForbiddenMarkerBoundary) -> Self {
         self.semantic.forbidden_marker.push(boundary);
@@ -171,6 +178,12 @@ impl Constitution {
     /// Add a 渾儀 unsafe-confinement boundary (`unsafe` may appear only under the declared subtree).
     pub fn unsafe_boundary(mut self, boundary: UnsafeBoundary) -> Self {
         self.semantic.unsafe_confinement.push(boundary);
+        self
+    }
+
+    /// Add a 渾儀 static-item boundary (a module's subtree declares no `static` item or `thread_local!`).
+    pub fn static_boundary(mut self, boundary: StaticBoundary) -> Self {
+        self.semantic.static_item.push(boundary);
         self
     }
 
@@ -237,10 +250,10 @@ pub mod prelude {
         Constitution, CrateBoundary, Defence, Demonstrates, DependencyKind, DynTraitBoundary,
         Extent, FactGranularity, Finding, ForbiddenMarkerBoundary, GovernanceTest,
         ImplTraitBoundary, ModuleBoundary, ModuleRule, NoExistentialLeak, Observer, Outcome, Owner,
-        Polarity, Reached, Report, Rule, RuleKey, Run, RuntimeBoundary, RuntimeObserver,
-        SansIoPure, ScanDepth, SemanticObserver, Severity, SignatureBoundary, SourceKind,
-        StaticObserver, StructuredFactIdentity, Subject, TraitImplBoundary, UnsafeBoundary,
-        Violation, ViolationId, VisibilityBoundary, VisibilityCeiling, check, check_constitution,
-        run,
+        Polarity, Reached, ReexportOnlyBoundary, Report, Rule, RuleKey, Run, RuntimeBoundary,
+        RuntimeObserver, SansIoPure, ScanDepth, SemanticObserver, Severity, SignatureBoundary,
+        SourceKind, StaticBoundary, StaticObserver, StructuredFactIdentity, Subject,
+        TraitImplBoundary, UnsafeBoundary, Violation, ViolationId, VisibilityBoundary,
+        VisibilityCeiling, check, check_constitution, run,
     };
 }

@@ -11,6 +11,7 @@ use crate::{Constitution, check, observation_bounds};
 /// Holds the static boundaries it was built from, so the protocol's `observe` takes only a manifest path.
 #[derive(Debug, Clone)]
 pub struct StaticObserver {
+    /// The boundaries every `observe` call checks; fixed at construction.
     constitution: Constitution,
 }
 

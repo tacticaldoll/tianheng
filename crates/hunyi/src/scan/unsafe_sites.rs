@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use syn::visit::{self, Visit};
 
 use super::items::*;
+use super::owner::canonical_self_type_owner;
 use super::types::*;
 use crate::collect::type_param_names;
 use crate::crate_scope::local_type_namespace_names;
@@ -69,42 +70,6 @@ impl<'a> UnsafeSiteCollector<'a> {
     }
 }
 
-fn canonical_unsafe_owner(
-    self_ty: &syn::Type,
-    uses: &UseMap,
-    local_types: &HashSet<String>,
-    module: &str,
-    impl_type_params: &HashSet<String>,
-) -> Result<String, OwnerUnnameable> {
-    if let syn::Type::Path(tp) = self_ty {
-        if tp.qself.is_none() && !is_shadowed_param_path(&tp.path, impl_type_params) {
-            let head = tp
-                .path
-                .segments
-                .first()
-                .map(|segment| strip_raw(&segment.ident.to_string()));
-            let should_resolve = tp.path.leading_colon.is_some()
-                || matches!(head.as_deref(), Some("crate" | "self" | "super"))
-                || head
-                    .as_ref()
-                    .is_some_and(|head| uses.contains_key(head) || local_types.contains(head));
-            if should_resolve {
-                let mut candidates =
-                    resolve_path_all(&tp.path, uses, module, BareFallback::CurrentModule);
-                candidates.sort();
-                candidates.dedup();
-                let [base] = candidates.as_slice() else {
-                    return Err(OwnerUnnameable::AmbiguousAlias);
-                };
-                let args =
-                    render_last_segment_args(&tp.path).ok_or(OwnerUnnameable::Unrenderable)?;
-                return Ok(format!("{base}{args}"));
-            }
-        }
-    }
-    type_to_string(self_ty).ok_or(OwnerUnnameable::Unrenderable)
-}
-
 impl<'ast> Visit<'ast> for UnsafeSiteCollector<'_> {
     fn visit_expr_unsafe(&mut self, node: &'ast syn::ExprUnsafe) {
         self.sites.push(UnsafeSiteFact::Block);
@@ -165,7 +130,7 @@ impl<'ast> Visit<'ast> for UnsafeSiteCollector<'_> {
 
     fn visit_item_impl(&mut self, node: &'ast syn::ItemImpl) {
         let params = type_param_names(&node.generics);
-        let owner = canonical_unsafe_owner(
+        let owner = canonical_self_type_owner(
             &node.self_ty,
             self.uses,
             self.local_types,

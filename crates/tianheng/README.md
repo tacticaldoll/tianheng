@@ -45,6 +45,14 @@ fn main() -> std::process::ExitCode {
   baselines, boundary/rule model types, the pure static `check`, and `check_constitution` for the
   unified law.
 
+The prelude also exports `ReexportOnlyBoundary` for a module that declares only re-exports and
+`StaticBoundary` for a module subtree that declares no `static` item or `thread_local!`.
+
+Semantic builders are available from the same prelude: use
+`DynTraitBoundary::in_crate(...).module(...).must_not_expose_dyn_bounded_by([...])` or
+`ImplTraitBoundary::in_crate(...).module(...).must_not_expose_impl_trait_bounded_by([...])`
+to govern selected auto-trait bounds without forbidding every `dyn` or returned `impl Trait`.
+
 Rules remain builder-owned even though they are inspectable: obtain `Rule` or `ModuleRule` from a
 built boundary's `rule()` accessor and match known fields with `..`. For a focused semantic
 signature-coupling test, import `tianheng::check_semantic` explicitly; it is not the full semantic
@@ -101,7 +109,7 @@ repair direction; the human text report and the Markdown projection lead with it
 | 儀 | Crate | Observes |
 |---|---|---|
 | 圭表 (static) | [`guibiao`](https://crates.io/crates/guibiao) | imports, dependencies & their declared source kind (`cargo metadata` + `use` scan) |
-| 渾儀 (semantic) | [`hunyi`](https://crates.io/crates/hunyi) | type exposure (incl. public re-exports and the opt-in trait-impl surface), impl locality, visibility, forbidden markers, `dyn` & `impl Trait` (existential) exposure (shape-only & named-operand), `async fn` (implicit existential) exposure (AST/`syn`) |
+| 渾儀 (semantic) | [`hunyi`](https://crates.io/crates/hunyi) | type exposure (incl. public re-exports and the opt-in trait-impl surface), impl locality, visibility, re-export-only facades, forbidden markers, `dyn` & `impl Trait` (existential) exposure (shape-only & named-operand), `async fn` (implicit existential) exposure, `static` / `thread_local!` declarations (AST/`syn`) |
 | 漏刻 (runtime) | [`louke`](https://crates.io/crates/louke) | the concrete type behind a `dyn Trait` crossing a seam (runtime `TypeId`) |
 
 Beneath them sits [`xuanji`](https://crates.io/crates/xuanji) — the dimension-agnostic

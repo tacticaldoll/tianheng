@@ -325,7 +325,7 @@ pub(super) fn must_not_import_dedups_a_finding_across_subtree_files() {
     let (result, violations) = run_module_check(
         "dedup-mni-subtree",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod forbidden {}\npub mod kernel;\n"),
             ("kernel.rs", "pub mod sub;\nuse crate::forbidden::X;\n"),
             ("kernel/sub.rs", "use crate::forbidden::X;\n"),
         ],
@@ -481,7 +481,7 @@ pub(super) fn restrict_imports_to_keeps_two_importing_modules_distinct() {
     let (result, violations) = run_module_check(
         "dedup-rit-subtree",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod types {}\npub mod kernel;\n"),
             ("kernel.rs", "pub mod sub;\nuse crate::io::Sink;\n"),
             ("kernel/sub.rs", "use crate::io::Sink;\n"),
         ],
@@ -504,7 +504,7 @@ pub(super) fn outbound_dedup_collapses_a_repeated_pair_but_keeps_distinct_ones()
     let (result, violations) = run_module_check(
         "dedup-distinct",
         &[
-            ("lib.rs", "pub mod kernel;\n"),
+            ("lib.rs", "pub mod forbidden {}\npub mod kernel;\n"),
             (
                 "kernel.rs",
                 "pub mod sub;\nuse crate::forbidden::X;\nuse crate::forbidden::X as Dup;\n",
@@ -549,7 +549,7 @@ pub(super) fn restrict_imports_to_does_not_flag_an_over_popped_super() {
     let (result, violations) = run_module_check(
         "restrict-super-overflow",
         &[
-            ("lib.rs", "pub mod a;\n"),
+            ("lib.rs", "pub mod types {}\npub mod a;\n"),
             ("a.rs", "use super::super::other::X;\n"),
         ],
         restrict_kernel_to_types("crate::a", &["crate::types"]),

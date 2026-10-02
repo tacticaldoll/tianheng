@@ -40,8 +40,12 @@ principal trait canonicalizes to a member of the forbidden operand set, and SHAL
 violation for a `dyn` whose principal trait is outside the set. The **principal trait** is the trait
 object's sole non-auto trait — matched regardless of its position among the bounds, so an auto-trait
 (`Send`, `Sync`) or lifetime bound (which may be written before or after it, e.g. `dyn Send + Port`)
-is never the matched operand. The principal trait path SHALL be canonicalized and matched **exactly as
-signature-coupling matches a forbidden type** — through the *same* resolver ladder: the module's
+is never the matched operand. A forbidden operand whose final path segment is recognized as
+an auto trait by the same std leaf-name test that removes auto-trait bounds from the principal list
+(e.g. `Send`, including qualified and raw-identifier spellings) SHALL be rejected as a
+constitution error before resolution, even when another operand is valid: the observer removes
+those bounds before principal resolution, so that entry can never react. The principal trait path
+SHALL be canonicalized and matched **exactly as signature-coupling matches a forbidden type** — through the *same* resolver ladder: the module's
 `use` map, `crate`/`self`/`super`-relative paths, the **external-crate name-set oracle** (declared
 dependencies ∪ sysroot, `.rename`- and `-`→`_`-aware, with a crate-root `extern crate … as` rename
 applied and a leading-`::` head resolved against the raw set), and the `pub use` re-export closure,
@@ -111,10 +115,20 @@ The finding is the **seam-qualified** rendered `dyn …` shape (`{shape} exposed
 - **THEN** the system does not resolve the principal and reports no violation — a stated resolver-coverage bound (the oracle does not over-reach a single bare segment), never a silent claim of cleanliness over a resolvable operand
 - **PINNED-BY** `dyn_operand_genuinely_unresolvable_bare_principal_is_a_bound`
 
-#### Scenario: Auto-trait markers are not operands
+#### Scenario: Auto-trait markers are not principal operands
 
 - **WHEN** the module exposes `dyn crate::ports::Port + Send` and the boundary forbids `["crate::ports::Port"]`
-- **THEN** the system emits a violation on the principal trait `crate::ports::Port` (the sole non-auto trait); the trailing `Send` marker is not the operand, so a boundary forbidding only `["Send"]` flags nothing here — and a bare `dyn Send` carries no principal at all, `Send` being removed as an auto trait *before* any resolution runs, so no candidate is ever built for it
+- **THEN** the system emits a violation on the principal trait `crate::ports::Port`; the trailing `Send` marker is removed before principal resolution
+- **PINNED-BY** `dyn_operand_filters_auto_trait_markers_and_refuses_them_as_operands`
+- **PINNED-BY** `principal_collector_keeps_named_trait_and_discards_auto_marker`
+
+#### Scenario: An auto-trait operand is a constitution error
+
+- **WHEN** a dyn operand boundary forbids `["Send"]`, `["std::marker::Sync"]`, or a mixed set containing an auto-trait leaf
+- **THEN** the system exits 2 before principal resolution, names the offending operand, and directs the author to use `must_not_expose_dyn_bounded_by`, or remove it
+- **PINNED-BY** `dyn_auto_trait_operand_is_a_constitution_error`
+- **PINNED-BY** `dyn_qualified_auto_trait_operand_is_a_constitution_error`
+- **PINNED-BY** `dyn_mixed_auto_trait_operand_is_a_constitution_error`
 
 #### Scenario: Two mutually-exclusive cfg-gated use aliases for the principal trait's name both react
 
@@ -185,3 +199,92 @@ their relationship or identity.
 #### Scenario: Shape and operand rules do not collide
 - **WHEN** the same seam violates both shape-only and operand-specific laws
 - **THEN** their semantic rule keys keep the violation identities distinct
+
+### Requirement: Auto-trait bound governance on exposed dyn Trait
+
+An auto-trait bound dyn-trait boundary SHALL be expressed as Rust code via
+`must_not_expose_dyn_bounded_by([...])` on `DynTraitModuleDraft`, targeting a module anchor with a
+non-empty set of auto-trait bound names. The boundary SHALL accept only the standard auto traits:
+`Send`, `Sync`, and `Unpin` under `core::marker` or `std::marker`, and `UnwindSafe` and `RefUnwindSafe`
+under `core::panic` or `std::panic` (or any of the five as bare or raw identifiers). An empty bound set SHALL be rejected as a constitution error (exit 2)
+directing the author to use `must_not_expose_dyn()`. An unrecognized bound name SHALL be rejected as a
+constitution error (exit 2) directing the author to use `must_not_expose_dyn_of(...)`.
+A malformed path (e.g. `::Send` or containing an empty segment) SHALL be rejected as a constitution error.
+
+The system SHALL emit a violation for each trait object (`dyn`) node in the governed module's public
+surface whose own bound list contains any of the forbidden auto-trait bounds. The boundary governs
+trait objects at any depth in the public API surface. It does NOT govern generic type parameters or
+`where` bounds (`<T: Send>` or `where T: Send`), which are not trait object bounds.
+
+The rule key SHALL be `tianheng.rule/hunyi/dyn-trait-auto-bound` with parameter `forbidden_auto_bounds`,
+reusing fact `tianheng.fact/hunyi/dyn-trait-exposure` with polarity `DenyBreach`, and projecting through
+the existing `list` projections (document/text/markdown) with parameter `forbidden_auto_bounds`.
+The parameter `forbidden_auto_bounds` SHALL be determined by the normalized leaf set: different syntactic
+spellings expressing the same forbidden auto-trait bounds (e.g. `["Send"]`, `["std::marker::Send"]`,
+`["core::marker::Send"]`, `["r#Send"]`, and redundant sets such as `["Send", "std::marker::Send"]`) produce
+the identical rule identity, with `forbidden_auto_bounds` carrying the sorted, deduplicated leaf set. Path
+qualifiers other than the defining module under `std` or `core` (e.g. `foo::Send`) SHALL be rejected as a constitution
+error (exit 2).
+
+#### Scenario: An exposed dyn Trait carrying a forbidden auto-trait bound is flagged
+
+- **WHEN** the governed module declares a public function returning `Pin<Box<dyn Future<Output = ()> + Send>>` and the boundary forbids `["Send"]`
+- **THEN** the system emits a violation whose finding is the seam-qualified rendered shape (`dyn Future<Output = ()> + Send exposed by {seam}`)
+
+#### Scenario: An empty dyn auto-trait bound set is a constitution error
+
+- **WHEN** a boundary is declared with `must_not_expose_dyn_bounded_by([])`
+- **THEN** the system exits 2, reporting that the auto-trait bound set cannot be empty and directing the author to use `must_not_expose_dyn()`
+
+#### Scenario: An unrecognized dyn auto-trait bound name is a constitution error
+
+- **WHEN** a boundary declares `must_not_expose_dyn_bounded_by(["Clone"])`
+- **THEN** the system exits 2, reporting that `Clone` is not a recognized auto trait and directing the author to use `must_not_expose_dyn_of`
+
+#### Scenario: A qualified dyn auto-trait bound names its defining module
+
+- **WHEN** the forbidden path and public dyn bound spell each of `Send`, `Sync` and `Unpin` under `marker`
+  and each of `UnwindSafe` and `RefUnwindSafe` under `panic`, with `std` and with `core` as the root, or spell
+  any of those five under the other module with either root
+- **THEN** a defining-module path produces an enforced finding, while a path under the wrong module
+  is a constitution error (exit 2)
+- **PINNED-BY** `auto_bound_qualified_path_matrix`
+- **PINNED-BY** `declared_auto_traits_and_the_producer_are_the_same_set`
+
+#### Scenario: A dyn auto-trait path outside the defining modules is refused
+
+- **WHEN** the boundary's forbidden auto-trait path is `foo::Send`
+- **THEN** the declaration is a constitution error (exit 2)
+- **PINNED-BY** `dyn_auto_bound_invalid_qualifier_exits_2`
+
+#### Scenario: A local trait sharing an auto-trait leaf name over-reacts as a dyn auto bound - a stated bound
+
+- **WHEN** a module defines a local trait named `Send` and exposes `Box<dyn Send>`, under `must_not_expose_dyn_bounded_by(["Send"])`
+- **THEN** the system over-reacts and emits a violation, because auto-trait bounds are identified by leaf name without symbol resolution
+- **PINNED-BY** `dyn_trait_local_auto_trait_leaf_over_reacts_is_a_bound`
+
+#### Scenario: A macro-generated dyn auto bound is a documented bound
+
+- **WHEN** a module defines an item whose dyn auto bound is generated only by macro expansion with no written `dyn` token in the source
+- **THEN** the system does not observe the trait object and reports no violation — a documented coverage bound
+- **PINNED-BY** `dyn_macro_generated_auto_bound_is_a_bound`
+
+#### Scenario: A private alias hiding a dyn auto bound in a public position is a stated bound
+
+- **WHEN** a private `type` alias holds a `dyn Trait + Send` and a public signature names that alias
+- **THEN** the system does not observe the hidden `dyn` auto bound and reports no violation — a stated coverage bound
+- **PINNED-BY** `dyn_private_alias_hiding_auto_bound_is_a_bound`
+
+#### Scenario: Auto-trait bound rule key identity is normalized across equivalent spellings
+
+- **WHEN** a dyn-trait auto-bound boundary is declared with any of `["Send"]`, `["std::marker::Send"]`, `["core::marker::Send"]`, `["r#Send"]`, or `["Send", "std::marker::Send"]`
+- **THEN** the system produces the identical rule key (`tianheng.rule/hunyi/dyn-trait-auto-bound` with parameter `forbidden_auto_bounds` as `["Send"]`)
+- **PINNED-BY** `dyn_auto_bound_rule_key_normalized_identity`
+
+#### Scenario: The dyn projection carries sorted, distinct auto-trait leaves
+
+- **WHEN** a dyn auto-bound boundary is declared with `std::panic::UnwindSafe`,
+  `core::panic::RefUnwindSafe`, and bare `UnwindSafe`
+- **THEN** JSON carries `forbidden_auto_bounds` as `["RefUnwindSafe", "UnwindSafe"]`, and text carries
+  `RefUnwindSafe, UnwindSafe`
+- **PINNED-BY** `auto_bound_projection_uses_normalized_leaf_set`

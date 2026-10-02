@@ -76,6 +76,11 @@ pub(crate) enum SemanticFact {
         name: String,
         tail: String,
     },
+    DeclaredItemKind {
+        module: String,
+        item_kind: String,
+        item_name: String,
+    },
     Visibility {
         visibility: String,
         item_kind: VisibleItemKind,
@@ -85,6 +90,50 @@ pub(crate) enum SemanticFact {
         module: String,
         site: UnsafeSiteFact,
     },
+    /// `{kind} {name} in {module}` — static-item: a declared `static`, foreign `static` or
+    /// `thread_local!` static. `module` is the module that declares it, never the anchor; `owner` is
+    /// the chain of named value items enclosing it (`fn`, method, `const NAME`, `static NAME`), empty
+    /// at module level. Its `safe` or `unsafe` qualifier is not recorded; its mutability is, in `kind`.
+    StaticItem {
+        module: String,
+        kind: StaticKind,
+        name: String,
+        owner: String,
+    },
+}
+
+/// Which declaration a static-item fact records. Mutability is part of the kind, so a baseline
+/// accepting `static X` does not accept a later `static mut X`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum StaticKind {
+    Static,
+    StaticMut,
+    ForeignStatic,
+    ForeignStaticMut,
+    ThreadLocal,
+}
+
+impl StaticKind {
+    /// The fact's `shape`, the published label for the kind.
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Static => "static",
+            Self::StaticMut => "static_mut",
+            Self::ForeignStatic => "foreign_static",
+            Self::ForeignStaticMut => "foreign_static_mut",
+            Self::ThreadLocal => "thread_local",
+        }
+    }
+
+    fn rendered(self) -> &'static str {
+        match self {
+            Self::Static => "static",
+            Self::StaticMut => "static mut",
+            Self::ForeignStatic => "extern static",
+            Self::ForeignStaticMut => "extern static mut",
+            Self::ThreadLocal => "thread_local! static",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -207,6 +256,17 @@ impl std::fmt::Display for SemanticFact {
             } => {
                 write!(f, "async fn <{owner}>::{name}{tail}")
             }
+            Self::DeclaredItemKind {
+                item_kind,
+                item_name,
+                ..
+            } => {
+                if item_name.is_empty() {
+                    write!(f, "{item_kind}")
+                } else {
+                    write!(f, "{item_kind} {item_name}")
+                }
+            }
             Self::Visibility {
                 visibility,
                 item_kind,
@@ -263,6 +323,18 @@ impl std::fmt::Display for SemanticFact {
                 UnsafeSiteFact::Trait { name } => write!(f, "unsafe trait {name} in {module}"),
                 UnsafeSiteFact::ExternBlock => write!(f, "unsafe extern block in {module}"),
             },
+            Self::StaticItem {
+                module,
+                kind,
+                name,
+                owner,
+            } => {
+                if owner.is_empty() {
+                    write!(f, "{} {name} in {module}", kind.rendered())
+                } else {
+                    write!(f, "{} {name} in {module} (in {owner})", kind.rendered())
+                }
+            }
         }
     }
 }
@@ -294,6 +366,47 @@ impl SemanticFact {
             }
             SemanticFact::UnsafeSite { module, site } => {
                 return unsafe_site_finding(module, site, text, unit);
+            }
+            SemanticFact::StaticItem {
+                module,
+                kind,
+                name,
+                owner,
+            } => {
+                return Finding::new(
+                    text,
+                    StructuredFactIdentity::of(
+                        "tianheng.fact/hunyi/static-item",
+                        kind.as_str(),
+                        [
+                            ("module", module.as_str()),
+                            ("name", name.as_str()),
+                            ("owner", owner.as_str()),
+                            ("unit", unit),
+                            ("governing_package", governing_package),
+                        ],
+                    ),
+                );
+            }
+            SemanticFact::DeclaredItemKind {
+                module,
+                item_kind,
+                item_name,
+            } => {
+                let qualified_name = format!("{module}::{item_name}");
+                return Finding::new(
+                    text,
+                    StructuredFactIdentity::of(
+                        "tianheng.fact/hunyi/declared-item-kind",
+                        "declared-item-kind",
+                        [
+                            ("item_kind", item_kind.as_str()),
+                            ("item_name", qualified_name.as_str()),
+                            ("unit", unit),
+                            ("governing_package", governing_package),
+                        ],
+                    ),
+                );
             }
             _ => {}
         }
@@ -335,6 +448,7 @@ impl SemanticFact {
                     ("owner", owner),
                 ],
             ),
+
             SemanticFact::Visibility {
                 visibility,
                 item_kind,
@@ -351,7 +465,9 @@ impl SemanticFact {
             SemanticFact::AsyncFreeFn { .. }
             | SemanticFact::AsyncTraitMethod { .. }
             | SemanticFact::AsyncInherentMethod { .. }
-            | SemanticFact::UnsafeSite { .. } => unreachable!("handled above"),
+            | SemanticFact::DeclaredItemKind { .. }
+            | SemanticFact::UnsafeSite { .. }
+            | SemanticFact::StaticItem { .. } => unreachable!("handled above"),
         };
         fields.push(("governing_package", governing_package));
         fields.push(("unit", unit));
@@ -965,6 +1081,7 @@ mod fact_tests {
                 name: _,
                 tail: _,
             } => {}
+            SemanticFact::DeclaredItemKind { .. } => {}
             SemanticFact::Visibility {
                 visibility: _,
                 item_kind,
@@ -973,6 +1090,14 @@ mod fact_tests {
                 published_visibility_item_kind(*item_kind);
             }
             SemanticFact::UnsafeSite { module: _, site } => assert_unsafe_site_is_cataloged(site),
+            SemanticFact::StaticItem {
+                module: _,
+                kind,
+                name: _,
+                owner: _,
+            } => {
+                kind.as_str();
+            }
         }
     }
 
@@ -1649,6 +1774,7 @@ mod fact_tests {
             ShapeExposure {
                 shape: "dyn Port".into(),
                 principals: Vec::new(),
+                auto_traits: Vec::new(),
                 seam: None,
             },
             ExposureKind::DynTrait,

@@ -2,8 +2,9 @@ use guibiao::constitution_json;
 use hunyi::{
     ASYNC_EXPOSURE_RULE, AsyncExposureBoundary, DYN_TRAIT_RULE, DynTraitBoundary,
     FORBIDDEN_MARKER_RULE, ForbiddenMarkerBoundary, IMPL_TRAIT_RULE, ImplTraitBoundary,
-    SIGNATURE_RULE, ScanDepth, SignatureBoundary, TRAIT_IMPL_RULE, TraitImplBoundary,
-    UNSAFE_CONFINEMENT_RULE, UnsafeBoundary, VisibilityBoundary,
+    REEXPORT_ONLY_RULE, ReexportOnlyBoundary, SIGNATURE_RULE, STATIC_ITEM_RULE, ScanDepth,
+    SignatureBoundary, StaticBoundary, TRAIT_IMPL_RULE, TraitImplBoundary, UNSAFE_CONFINEMENT_RULE,
+    UnsafeBoundary, VisibilityBoundary,
 };
 use louke::{RUNTIME_SEAM_RULE, RuntimeBoundary};
 use serde_json::Value;
@@ -104,6 +105,20 @@ pub(in crate::runner) fn visibility_boundary_json(boundary: &VisibilityBoundary)
         boundary.anchor(),
     )
 }
+/// The JSON projection of one re-export-only module boundary.
+pub(in crate::runner) fn reexport_only_boundary_json(boundary: &ReexportOnlyBoundary) -> Value {
+    subtree_scoped(
+        semantic_module_json(
+            boundary.module(),
+            boundary.crate_package(),
+            REEXPORT_ONLY_RULE,
+            boundary.severity().as_str(),
+            boundary.reason(),
+            boundary.anchor(),
+        ),
+        boundary.scan_depth(),
+    )
+}
 /// The JSON projection of one forbidden-marker boundary (`kind`, `target` = the subtree,
 /// `crate`, `rule`, `severity`, `reason`) plus the `forbidden` trait set.
 pub(in crate::runner) fn forbidden_marker_boundary_json(
@@ -151,7 +166,7 @@ fn subtree_scoped(mut object: Value, scan_depth: ScanDepth) -> Value {
 /// `target`, `crate`, `rule`, `severity`, `reason`). An operand-scoped boundary additionally
 /// carries the `forbidden` operand set; a shape-only boundary (empty set) emits no such field.
 pub(in crate::runner) fn dyn_trait_boundary_json(boundary: &DynTraitBoundary) -> Value {
-    shape_operand_boundary_json(
+    let mut object = shape_operand_boundary_json(
         boundary.module(),
         boundary.crate_package(),
         DYN_TRAIT_RULE,
@@ -159,21 +174,28 @@ pub(in crate::runner) fn dyn_trait_boundary_json(boundary: &DynTraitBoundary) ->
         boundary.reason(),
         boundary.anchor(),
         boundary.forbidden_operands(),
-    )
+    );
+    let auto_bounds = boundary.forbidden_auto_bound_leaves();
+    if !auto_bounds.is_empty() {
+        object["forbidden_auto_bounds"] = serde_json::json!(auto_bounds);
+    }
+    object
 }
 pub(in crate::runner) fn impl_trait_boundary_json(boundary: &ImplTraitBoundary) -> Value {
-    subtree_scoped(
-        shape_operand_boundary_json(
-            boundary.module(),
-            boundary.crate_package(),
-            IMPL_TRAIT_RULE,
-            boundary.severity().as_str(),
-            boundary.reason(),
-            boundary.anchor(),
-            boundary.forbidden_operands(),
-        ),
-        boundary.scan_depth(),
-    )
+    let mut object = shape_operand_boundary_json(
+        boundary.module(),
+        boundary.crate_package(),
+        IMPL_TRAIT_RULE,
+        boundary.severity().as_str(),
+        boundary.reason(),
+        boundary.anchor(),
+        boundary.forbidden_operands(),
+    );
+    let auto_bounds = boundary.forbidden_auto_bound_leaves();
+    if !auto_bounds.is_empty() {
+        object["forbidden_auto_bounds"] = serde_json::json!(auto_bounds);
+    }
+    subtree_scoped(object, boundary.scan_depth())
 }
 pub(in crate::runner) fn async_exposure_boundary_json(boundary: &AsyncExposureBoundary) -> Value {
     subtree_scoped(
@@ -202,6 +224,21 @@ pub(in crate::runner) fn unsafe_boundary_json(boundary: &UnsafeBoundary) -> Valu
     );
     object["allowed_locations"] = serde_json::json!(boundary.allowed_locations());
     object
+}
+/// The JSON projection of one static-item boundary. Its scope is the anchored subtree, always, and
+/// the projection says so, read from the boundary rather than assumed here.
+pub(in crate::runner) fn static_item_boundary_json(boundary: &StaticBoundary) -> Value {
+    subtree_scoped(
+        semantic_module_json(
+            boundary.module(),
+            boundary.crate_package(),
+            STATIC_ITEM_RULE,
+            boundary.severity().as_str(),
+            boundary.reason(),
+            boundary.anchor(),
+        ),
+        boundary.scan_depth(),
+    )
 }
 fn append_array<T>(document: &mut Value, key: &str, items: &[T], project: impl Fn(&T) -> Value) {
     if !items.is_empty() {
@@ -238,6 +275,12 @@ pub(in crate::runner) fn list_document(constitution: &Constitution) -> Value {
     );
     append_array(
         &mut document,
+        "reexport_only_boundaries",
+        &semantic.reexport_only,
+        reexport_only_boundary_json,
+    );
+    append_array(
+        &mut document,
         "forbidden_marker_boundaries",
         &semantic.forbidden_marker,
         forbidden_marker_boundary_json,
@@ -265,6 +308,12 @@ pub(in crate::runner) fn list_document(constitution: &Constitution) -> Value {
         "unsafe_confinement_boundaries",
         &semantic.unsafe_confinement,
         unsafe_boundary_json,
+    );
+    append_array(
+        &mut document,
+        "static_item_boundaries",
+        &semantic.static_item,
+        static_item_boundary_json,
     );
     append_array(
         &mut document,

@@ -15,11 +15,13 @@ pub(super) fn marker_findings(
     let forbidden: Vec<String> = forbidden.iter().map(|s| s.to_string()).collect();
     let result = forbidden_marker_findings(tree.src(), &tree.root(), subtree, &forbidden, "x");
     // The pure-heart tests assert on findings only; drop the per-finding module/file here.
-    result.map(|v| {
-        v.into_iter()
-            .map(|(finding, _module, _file)| finding.to_string())
-            .collect()
-    })
+    result
+        .map(|v| {
+            v.into_iter()
+                .map(|(finding, _module, _file)| finding.to_string())
+                .collect()
+        })
+        .map_err(|e| e.to_string())
 }
 
 #[test]
@@ -627,9 +629,10 @@ pub(super) fn a_symlinked_module_cycle_is_a_scan_error_not_a_stack_overflow() {
     let result = forbidden_marker_findings(tree.src(), &tree.root(), "crate", &[], "x");
     let err =
         result.expect_err("a symlinked module cycle must be a scan error, not a hang/overflow");
+    let err_str = err.to_string();
     assert!(
-        err.contains("module cycle") || err.contains("symlink"),
-        "the error must name the cycle it could not judge: {err}"
+        err_str.contains("module cycle") || err_str.contains("symlink"),
+        "the error must name the cycle it could not judge: {err_str}"
     );
 }
 
@@ -658,9 +661,10 @@ pub(super) fn a_deeply_nested_acyclic_module_tree_is_a_scan_error_not_a_stack_ov
     let err = result.expect_err(
         "a deeply nested but acyclic module tree must be a scan error, not a hang/overflow",
     );
+    let err_str = err.to_string();
     assert!(
-        err.contains("depth bound"),
-        "the error must name the depth bound it could not judge past: {err}"
+        err_str.contains("depth bound"),
+        "the error must name the depth bound it could not judge past: {err_str}"
     );
 }
 

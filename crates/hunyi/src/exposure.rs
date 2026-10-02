@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 use xuanji::{Outcome, Violation};
 
+use crate::anchor::canonical_module_anchor;
 use crate::collect::{collect_item_exposures, collect_trait_impl_exposures};
 use crate::containment::matches_forbidden;
 use crate::crate_scope::{
@@ -18,8 +19,8 @@ use crate::crate_scope::{
 use crate::driver::run_boundaries;
 use crate::dsl::SignatureBoundary;
 use crate::emit::{SingleModuleViolationContext, push_single_module_violations};
-use crate::errors::unknown_module_error;
-use crate::file_scope::{over_each_unit, resolve_crate_units};
+use crate::errors::undecodable_foreign_item_error;
+use crate::file_scope::{UnitAnchor, over_each_unit, resolve_crate_units};
 use crate::finding::{ExposureKind, PathExposure, SemanticFact, sort_faceted_facts};
 use crate::module_resolve::resolve_module_items_with_cfg_tags;
 use crate::resolve::{
@@ -52,38 +53,40 @@ pub(crate) fn check_boundary(
     boundary: &SignatureBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
+    let module = canonical_module_anchor(&boundary.module, &boundary.crate_package)?;
     let (package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
-    over_each_unit(
-        &units,
-        &unknown_module_error(&boundary.module, &boundary.crate_package),
-        |root_file, src_dir, unit| {
-            let findings = module_findings(
-                src_dir,
-                root_file,
-                &boundary.module,
-                &boundary.forbidden,
-                &boundary.crate_package,
-                boundary.including_trait_impls,
-                &dependency_names(package),
-            )?;
+    let anchor = UnitAnchor::Module {
+        module: &module,
+        crate_package: &boundary.crate_package,
+    };
+    over_each_unit(&units, anchor, |root_file, src_dir, unit| {
+        let findings = module_findings(
+            src_dir,
+            root_file,
+            &module,
+            &boundary.forbidden,
+            &boundary.crate_package,
+            boundary.including_trait_impls,
+            &dependency_names(package),
+        )
+        .map_err(crate::errors::ResolveError::Other)?;
 
-            push_single_module_violations(
-                violations,
-                SingleModuleViolationContext {
-                    module: &boundary.module,
-                    rule: SIGNATURE_RULE,
-                    rule_key: boundary.rule_key(),
-                    reason: &boundary.reason,
-                    severity: boundary.severity,
-                    anchor: boundary.anchor(),
-                    crate_package: &boundary.crate_package,
-                    unit,
-                },
-                findings,
-            );
-            Ok(())
-        },
-    )
+        push_single_module_violations(
+            violations,
+            SingleModuleViolationContext {
+                module: &module,
+                rule: SIGNATURE_RULE,
+                rule_key: boundary.rule_key(),
+                reason: &boundary.reason,
+                severity: boundary.severity,
+                anchor: boundary.anchor(),
+                crate_package: &boundary.crate_package,
+                unit,
+            },
+            findings,
+        );
+        Ok(())
+    })
 }
 
 /// Per-branch (mutually-exclusive `#[cfg]`-group) resolution context: `uses` (a bare local `use …
@@ -169,12 +172,14 @@ fn collect_all_exposures(
     scopes: &HashMap<usize, FileScope>,
     module: &str,
     include_trait_impls: bool,
-) -> Vec<(PathExposure, PathBuf, usize, FlatItem)> {
+) -> Result<Vec<(PathExposure, PathBuf, usize, FlatItem)>, String> {
     let mut exposed = Vec::new();
     for (ordinal, (flat, file, branch)) in items_with_files.iter().enumerate() {
         let uses = &scopes[branch].uses;
         let mut buf = Vec::new();
-        collect_item_exposures(&flat.item, module, uses, ordinal, &mut buf);
+        collect_item_exposures(&flat.item, module, uses, ordinal, &mut buf).map_err(
+            |undecodable| undecodable_foreign_item_error(module, file, &undecodable.seen),
+        )?;
         if include_trait_impls {
             collect_trait_impl_exposures(&flat.item, module, uses, ordinal, &mut buf);
         }
@@ -183,7 +188,7 @@ fn collect_all_exposures(
                 .map(|exposure| (exposure, file.clone(), *branch, flat.clone())),
         );
     }
-    exposed
+    Ok(exposed)
 }
 
 /// Resolve one exposure's path against the in-scope `use`s, the crate-wide re-export/alias
@@ -297,7 +302,7 @@ pub(crate) fn module_findings(
     let scopes = build_file_scopes(&items_by_branch, &externs, &extern_renames);
     let forbidden: Vec<String> = forbidden.iter().map(|f| canonical_path_str(f)).collect();
 
-    let exposed = collect_all_exposures(&items_with_files, &scopes, module, include_trait_impls);
+    let exposed = collect_all_exposures(&items_with_files, &scopes, module, include_trait_impls)?;
 
     let mut findings: Vec<(SemanticFact, PathBuf)> = exposed
         .iter()

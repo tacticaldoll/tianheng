@@ -9,29 +9,24 @@ use crate::errors::{
     confine_external_crate_on_crate_error, confine_inline_call_on_crate_error,
     confine_inline_call_shallow_error, crate_not_found_error, inline_empty_prefix_error,
     inline_empty_verbs_error, inline_module_target_error, inline_narrow_and_strict_error,
-    missing_src_error, must_not_be_imported_by_on_crate_error,
-    must_only_be_imported_by_on_crate_error, no_compiled_root_error, out_of_package_root_error,
-    restrict_imports_to_on_crate_error, unknown_module_error, unreadable_governed_file_error,
+    must_not_be_imported_by_on_crate_error, must_only_be_imported_by_on_crate_error,
+    no_compiled_root_error, non_canonical_inline_prefix_error, non_canonical_module_path_error,
+    restrict_imports_to_on_crate_error, unknown_allowed_module_error,
+    unknown_forbidden_module_error, unknown_inline_prefix_error, unknown_inline_prefix_head_error,
+    unknown_module_error,
 };
 use crate::finding::ModuleFact;
 use crate::model::module_rule::Perimeter;
 use crate::module_scan::{
-    ImportedPath, InlineFinding, canonical_module_path, declaration_text,
-    external_imports_with_importers, governed_files, imports_with_importers,
-    inline_symbol_findings, names_crate_by_path_alone, package_name_to_import_ident, path_within,
-    reachable_modules, rust_files, value_namespace_item_names,
+    EvaluationScans, ImportedPath, InlineFinding, PrefixRoot, RootScan, SymbolPrefix,
+    canonical_module_path, canonical_module_spelling, canonical_symbol_path_spelling,
+    governed_files, package_name_to_import_ident, path_within, sysroot_crate,
 };
 use crate::{BoundaryKind, ModuleBoundary, ModuleRule, Violation, ViolationId};
 
-/// The conventional source directory, `manifest_dir/src`, for metadata reporting no target — the one case a root
-/// is judged without a root file, since every package Cargo reports carries its targets.
-fn package_src_dir(package: &Value) -> Option<PathBuf> {
-    package["manifest_path"]
-        .as_str()
-        .and_then(|manifest| Path::new(manifest).parent())
-        .map(|crate_dir| crate_dir.join("src"))
-}
-
+/// Push the module violation `fact` produces under `boundary`: its identity is `target`, the
+/// boundary's rule key, and the fact keyed by the governing package and compilation `unit`, so the
+/// same fact in two roots or two declaring crates stays distinct.
 #[allow(clippy::too_many_arguments)]
 fn push_module_violation(
     violations: &mut Vec<Violation>,
@@ -119,15 +114,16 @@ fn hosts_only_permitted_importers(
 ///
 /// That gap used to be a **stated bound** — a recorded false negative — on the grounds that closing it
 /// "needs a value-namespace item observation this crate does not have". That premise was wrong: it does
-/// have one. [`also_binds_a_value_of_the_governed_module`] consults [`value_namespace_item_names`] and
+/// have one. [`also_binds_a_value_of_the_governed_module`] consults
+/// [`crate::module_scan::UnitScan::value_items`] and
 /// reacts only when the governed module really declares a `fn`/`const`/`static` of that name, which is
 /// why it does not become the broad false positive that reacting on both readings would have been — an
 /// ordinary `use m::child;` naming only a module still does not react, as `rule-model-surface` requires
 /// and `shallow_inbound_rules_protect_only_the_exact_module` pins.
 ///
 /// What remains bounded is the observation, not the resolution: a value declared inside a macro body or
-/// arriving through a re-export is not seen, matching every other reader in `module_scan` (macro bodies
-/// are stripped before declarations are read). Either directs the reaction toward the module reading
+/// arriving through a re-export is not seen, matching every other reader in `module_scan` (no
+/// declaration inside a macro's group is recorded). Either directs the reaction toward the module reading
 /// alone, which is the pre-existing behaviour rather than a new gap.
 fn resolve_import_module<'a>(
     import_path: &'a str,
@@ -153,9 +149,10 @@ fn resolve_import_module<'a>(
 /// longest reachable module, `m::foo`, which under `Shallow` anchored at `m` is only a descendant and
 /// does not react; yet the value reading reaches `m` itself and must. That was a recorded false
 /// negative, left because closing it "needs a value-namespace item observation guibiao does not have".
-/// It does have one: [`value_namespace_item_names`] reads exactly the `fn`/`const`/`static` names a
+/// It does have one: [`crate::module_scan::UnitScan::value_items`] reads exactly the
+/// `fn`/`const`/`static` names a
 /// module declares at its own top level, with the true-inline-module and top-level-only disciplines
-/// already established for the local-precedence ladder.
+/// already established for the prefix existence check's item set.
 ///
 /// Four conditions must hold together, and each is what keeps this from becoming the broad false
 /// positive that reacting on both readings would have been:
@@ -190,7 +187,7 @@ fn also_binds_a_value_of_the_governed_module(
     governed_module: &str,
     can_bind_a_value: bool,
     cache: &mut Option<std::collections::HashSet<String>>,
-    ctx: &ScanContext<'_>,
+    root: &RootScan,
 ) -> Result<bool, String> {
     if !can_bind_a_value {
         return Ok(false);
@@ -205,75 +202,273 @@ fn also_binds_a_value_of_the_governed_module(
         return Ok(false);
     }
     if cache.is_none() {
-        *cache = Some(ctx.governed_module_value_items(governed_module)?);
+        *cache = Some(root.governed_module_value_items(governed_module)?);
     }
     Ok(cache
         .as_ref()
         .is_some_and(|items| items.contains(&format!("{governed_module}::{leaf}"))))
 }
 
-/// The crate-wide scan state every rule family below reads from — resolved once in
-/// [`check_module_boundary`], then shared read-only across whichever family actually evaluates.
-struct ScanContext<'a> {
-    /// The compilation unit these observations came from — see `ModuleFact::into_finding`.
-    unit: &'a str,
-    src_dir: &'a Path,
-    files: &'a [PathBuf],
-    root_relative: Option<&'a Path>,
-    reachable: &'a std::collections::BTreeSet<String>,
-    inline_only: &'a std::collections::BTreeMap<String, PathBuf>,
-    remapped: &'a [(PathBuf, String)],
-    remap_shadowed: &'a std::collections::BTreeSet<String>,
-    root_modules: &'a [String],
+/// `written` in its canonical module spelling, or the constitution error naming it and the spelling
+/// it most plausibly meant.
+fn canonical_spelling_or_error(written: &str, crate_package: &str) -> Result<String, String> {
+    canonical_module_spelling(written).map_err(|suggestion| {
+        non_canonical_module_path_error(written, crate_package, suggestion.as_deref())
+    })
 }
 
-impl ScanContext<'_> {
-    /// The value-namespace item names `governed_module` declares at its own top level, read from the
-    /// files that back that module alone (`Shallow`), not the whole crate: the question is only ever
-    /// about the governed module itself. A module can be backed by more than one reachable file (a
-    /// `#[path]` remap beside a conventional file, a `cfg_attr` union), so every backing file
-    /// contributes, and inline descendants are excluded by the collector's own true-module keying.
-    /// Source is cleaned through `declaration_text` before scanning item names.
-    fn governed_module_value_items(
-        &self,
-        governed_module: &str,
-    ) -> Result<std::collections::HashSet<String>, String> {
-        let mut items = std::collections::HashSet::new();
-        for (file, module) in governed_files(
-            self.src_dir,
-            self.files,
-            governed_module,
-            self.reachable,
-            self.inline_only,
-            self.remapped,
-            self.remap_shadowed,
-            self.root_relative,
-            ScanDepth::Shallow,
-        ) {
-            let raw = std::fs::read_to_string(&file).map_err(|err| {
-                crate::errors::unreadable_governed_file_error(&file, &err.to_string())
-            })?;
-            items.extend(value_namespace_item_names(&module, &declaration_text(&raw)));
-        }
-        Ok(items)
+/// The modules a rule names besides the governed module, each in its canonical spelling, with the
+/// builder that names them and whether they are an allowlist. Every module path a boundary carries
+/// passes through here or through the governed module's own check in [`check_module_boundary`], so
+/// none is matched against the module graph in a spelling the graph never produces.
+struct NamedModules {
+    /// The builder method a refusal names; empty for a confinement rule, which names no modules.
+    rule_method: &'static str,
+    /// Whether the modules are permitted (an unknown one is an unknown *allowed* module) rather than
+    /// forbidden.
+    allowlist: bool,
+    /// The named modules in canonical spelling.
+    modules: Vec<String>,
+}
+
+impl NamedModules {
+    /// Read the modules `boundary`'s rule names, refusing the first one written in a non-canonical
+    /// spelling.
+    fn of(boundary: &ModuleBoundary) -> Result<Self, String> {
+        let (rule_method, allowlist, written): (&'static str, bool, Vec<&String>) =
+            match &boundary.rule {
+                ModuleRule::MustNotImport { module } => ("must_not_import", false, vec![module]),
+                ModuleRule::MustNotBeImportedBy { importer } => {
+                    ("must_not_be_imported_by", false, vec![importer])
+                }
+                ModuleRule::RestrictImportsTo { allowed } => {
+                    ("restrict_imports_to", true, allowed.iter().collect())
+                }
+                ModuleRule::MustOnlyBeImportedBy { allowed } => {
+                    ("must_only_be_imported_by", true, allowed.iter().collect())
+                }
+                ModuleRule::ConfineExternalCrate { .. }
+                | ModuleRule::ConfineInlineSymbolPath { .. }
+                | ModuleRule::ConfineInlineCall { .. } => ("", false, Vec::new()),
+            };
+        let modules = written
+            .into_iter()
+            .map(|module| canonical_spelling_or_error(module, &boundary.crate_package))
+            .collect::<Result<_, _>>()?;
+        Ok(Self {
+            rule_method,
+            allowlist,
+            modules,
+        })
     }
 
-    /// `governed_files(.., "crate", ScanDepth::Subtree)` reused by every rule family that scans
-    /// the whole crate rather than just the governed subtree (inbound, external confinement,
-    /// inline confinement) — the identical crate-wide selector, no new scanner.
-    fn all_files(&self) -> Vec<(PathBuf, String)> {
-        governed_files(
-            self.src_dir,
-            self.files,
-            "crate",
-            self.reachable,
-            self.inline_only,
-            self.remapped,
-            self.remap_shadowed,
-            self.root_relative,
-            ScanDepth::Subtree,
-        )
+    /// Refuse the first named module that no compiled root declares. A package's roots are separate
+    /// module graphs, so a module present in one root and absent from another is a real module; it
+    /// is refused only when it is present in none — the policy the governed module is held to.
+    fn require_exist(
+        &self,
+        declared: &std::collections::BTreeSet<String>,
+        crate_package: &str,
+    ) -> Result<(), String> {
+        match self
+            .modules
+            .iter()
+            .find(|module| !declared.contains(*module))
+        {
+            None => Ok(()),
+            Some(module) if self.allowlist => Err(unknown_allowed_module_error(
+                module,
+                crate_package,
+                self.rule_method,
+            )),
+            Some(module) => Err(unknown_forbidden_module_error(
+                module,
+                crate_package,
+                self.rule_method,
+            )),
+        }
     }
+}
+
+/// An inline confinement's prefix, in its canonical spelling, with the builder that declared it.
+///
+/// Both builders — `must_not_call_inline` and `confine_inline_call` — pass through here, so the
+/// prefix a call is compared with is one spelling in either. The spelling is judged before the
+/// package is read; what the prefix names is judged by [`DeclaredPrefix::require_names_something`]
+/// once every root has been, since a module or item present in one compilation unit is real.
+struct DeclaredPrefix {
+    /// The builder the prefix was declared through, named in every refusal of it.
+    rule_method: &'static str,
+    /// The prefix exactly as the boundary wrote it, which a refusal quotes back.
+    written: String,
+    /// The canonical spelling every call is compared with.
+    prefix: SymbolPrefix,
+}
+
+/// What a boundary's rule declares as an inline confinement: nothing, because the rule is no inline confinement; or
+/// the confinement, whose prefix is canonical and whose modifiers passed every boundary-local refusal. Only the
+/// second reaches the inline judgement, so a rule with no inline payload cannot be judged as one.
+enum InlinePrefix<'a> {
+    /// The rule carries no inline payload; no prefix is judged and no item set is collected.
+    NotInline,
+    /// The rule is `must_not_call_inline` or `confine_inline_call`, with a declaration that passed
+    /// every boundary-local refusal.
+    Inline(Inline<'a>),
+}
+
+/// An inline confinement's declaration: the builder method it was declared through, its prefix and the modifiers
+/// the judgement reads.
+struct Inline<'a> {
+    /// The prefix as written and in canonical spelling, with the builder method that declared it.
+    declared: DeclaredPrefix,
+    /// The terminal-segment verbs a call must end with to react; `None` reacts on every call under the
+    /// prefix, and `Some` is never empty nor combined with `strict`.
+    ending_with: Option<&'a [String]>,
+    /// Whether any path mention under the prefix reacts, not only calls.
+    strict: bool,
+    /// Whether a bare path head no scope binds, matching a declared dependency's import name, resolves as that
+    /// external crate; only then are the dependency names passed to the findings.
+    external: bool,
+}
+
+impl<'a> InlinePrefix<'a> {
+    /// The confinement this prefix carries, or `None` when the rule is no inline confinement.
+    fn inline(&self) -> Option<&Inline<'a>> {
+        let InlinePrefix::Inline(inline) = self else {
+            return None;
+        };
+        Some(inline)
+    }
+
+    /// Read an inline confinement's declaration, refusing every misdeclaration the boundary alone decides — a
+    /// blank or non-canonical prefix, and `confine_inline_call` over `crate` or at `ScanDepth::Shallow` — before
+    /// any root is walked, so a scan refusal in some file cannot stand in front of the line the operator must
+    /// change.
+    fn of(boundary: &'a ModuleBoundary) -> Result<Self, String> {
+        let Some((prefix, ending_with, strict, external)) = boundary.rule.inline_payload() else {
+            return Ok(InlinePrefix::NotInline);
+        };
+        let permitting = matches!(boundary.rule, ModuleRule::ConfineInlineCall { .. });
+        let rule_method = if permitting {
+            "confine_inline_call"
+        } else {
+            "must_not_call_inline"
+        };
+        let blank = prefix.trim().is_empty();
+        let canonical = if blank {
+            None
+        } else {
+            Some(
+                canonical_symbol_path_spelling(prefix).map_err(|suggestion| {
+                    non_canonical_inline_prefix_error(
+                        prefix,
+                        &boundary.crate_package,
+                        rule_method,
+                        suggestion.as_deref(),
+                    )
+                })?,
+            )
+        };
+        if permitting && canonical_module_path(&boundary.module) == "crate" {
+            return Err(confine_inline_call_on_crate_error(&boundary.crate_package));
+        }
+        if permitting && boundary.depth == ScanDepth::Shallow {
+            return Err(confine_inline_call_shallow_error(&boundary.crate_package));
+        }
+        let Some(canonical) = canonical else {
+            return Err(inline_empty_prefix_error(
+                &boundary.crate_package,
+                rule_method,
+            ));
+        };
+        if ending_with.is_some() && strict {
+            return Err(inline_narrow_and_strict_error(
+                &boundary.crate_package,
+                rule_method,
+            ));
+        }
+        if ending_with.is_some_and(|verbs| verbs.is_empty()) {
+            return Err(inline_empty_verbs_error(
+                &boundary.crate_package,
+                rule_method,
+            ));
+        }
+        let declared = DeclaredPrefix {
+            rule_method,
+            written: prefix.to_string(),
+            prefix: canonical,
+        };
+        Ok(InlinePrefix::Inline(Inline {
+            declared,
+            ending_with,
+            strict,
+            external,
+        }))
+    }
+}
+
+impl DeclaredPrefix {
+    /// Refuse a prefix that names nothing a call can reach, where the refusal can be decided.
+    ///
+    /// A `crate::` prefix must name a module some compiled root declares, or an item defined at the
+    /// top level of one; segments past that item are not read, since the scanner collects no
+    /// associated items. Any other first segment names a crate, and what that crate holds is its own
+    /// source, which the scanner does not read. A sysroot crate, a dependency under its local name, or
+    /// the package's own library is accepted as such. A first segment none of those confirms is still
+    /// accepted — a dependency's crate name can differ from its package name, and `--no-deps` metadata
+    /// does not say what it is — unless the same path rooted at `crate` names something, which is the
+    /// one reading the text determines: that prefix is refused, suggesting the rooted spelling.
+    fn require_names_something(
+        &self,
+        modules: &std::collections::BTreeSet<String>,
+        items: &std::collections::BTreeSet<String>,
+        external_crates: &[String],
+        crate_package: &str,
+    ) -> Result<(), String> {
+        let path = self.prefix.path.as_str();
+        let head = path.split_once("::").map_or(path, |(head, _)| head);
+        match head {
+            _ if self.prefix.root == PrefixRoot::Global => Ok(()),
+            "crate" if names_a_local_path(path, modules, items) => Ok(()),
+            "crate" => Err(unknown_inline_prefix_error(
+                &self.written,
+                crate_package,
+                self.rule_method,
+            )),
+            _ if sysroot_crate(head).is_some() => Ok(()),
+            _ if external_crates.iter().any(|name| name == head) => Ok(()),
+            _ => {
+                let rooted = format!("crate::{path}");
+                if names_a_local_path(&rooted, modules, items) {
+                    Err(unknown_inline_prefix_head_error(
+                        &self.written,
+                        crate_package,
+                        self.rule_method,
+                        &rooted,
+                    ))
+                } else {
+                    Ok(())
+                }
+            }
+        }
+    }
+}
+
+/// Whether a `crate`-rooted path names a declared module, or descends through declared modules to an
+/// item one of them defines. Whatever follows that item is not read.
+fn names_a_local_path(
+    path: &str,
+    modules: &std::collections::BTreeSet<String>,
+    items: &std::collections::BTreeSet<String>,
+) -> bool {
+    let segments: Vec<&str> = path.split("::").collect();
+    for end in 2..=segments.len() {
+        let named = segments[..end].join("::");
+        if !modules.contains(&named) {
+            return items.contains(&named);
+        }
+    }
+    true
 }
 
 /// The inbound rules invert the scope: they scan every reachable file and test each importing
@@ -287,7 +482,7 @@ impl ScanContext<'_> {
 /// submodule is its own importer). Files within the protected module's subtree host only self-imports
 /// and are skipped. Offending modules are deduplicated, keeping the first file deterministically.
 fn check_inbound_rule(
-    ctx: &ScanContext,
+    root: &RootScan,
     boundary: &ModuleBoundary,
     governed_module: &str,
     rule: &str,
@@ -313,27 +508,25 @@ fn check_inbound_rule(
     };
     let mut offenders: Vec<(String, String)> = Vec::new();
     let mut governed_value_items: Option<std::collections::HashSet<String>> = None;
-    for (file, file_module) in ctx.all_files() {
-        if is_inside_protected_module(&file_module, governed_module) {
+    for (file, file_module) in root.all_files() {
+        if is_inside_protected_module(file_module, governed_module) {
             continue;
         }
         if let Some(forbidden) = &forbidden_importer {
-            if !(path_within(&file_module, forbidden) || path_within(forbidden, &file_module)) {
+            if !(path_within(file_module, forbidden) || path_within(forbidden, file_module)) {
                 continue;
             }
         }
-        let text = std::fs::read_to_string(&file)
-            .map_err(|err| unreadable_governed_file_error(&file, &err.to_string()))?;
-        for (importer, import) in imports_with_importers(&text, &file_module, ctx.root_modules)? {
-            if is_inside_protected_module(&importer, governed_module) {
+        for (importer, import) in root.unit_scan().imports(file, file_module)? {
+            if is_inside_protected_module(importer, governed_module) {
                 continue;
             }
             if let Some(forbidden) = &forbidden_importer {
-                if !path_within(&importer, forbidden) {
+                if !path_within(importer, forbidden) {
                     continue;
                 }
             }
-            let import_module = resolve_import_module(&import.path, ctx.reachable);
+            let import_module = resolve_import_module(&import.path, &root.reachable);
             let imports_protected =
                 within_scan_depth(import_module, governed_module, boundary.depth)
                     || (import.is_glob && path_within(governed_module, &import.path))
@@ -343,7 +536,7 @@ fn check_inbound_rule(
                         governed_module,
                         import.can_bind_a_value(),
                         &mut governed_value_items,
-                        ctx,
+                        root,
                     )?;
             if !imports_protected {
                 continue;
@@ -351,12 +544,12 @@ fn check_inbound_rule(
             if forbidden_importer.is_none() {
                 let within_allowed = allowed_importers
                     .iter()
-                    .any(|entry| path_within(&importer, entry));
+                    .any(|entry| path_within(importer, entry));
                 if within_allowed {
                     continue;
                 }
             }
-            offenders.push((importer, file.display().to_string()));
+            offenders.push((importer.clone(), file.display().to_string()));
         }
     }
     offenders.sort();
@@ -369,7 +562,7 @@ fn check_inbound_rule(
             ModuleFact::ImporterModule(importer_module),
             file,
             boundary,
-            ctx.unit,
+            root.unit_label(),
         );
     }
     Ok(())
@@ -385,7 +578,7 @@ fn check_inbound_rule(
 /// to underscores to match import identifiers. Files whose module is within the permitted subtree
 /// host only permitted imports and are skipped. Offending importer modules are deduplicated.
 fn check_external_confinement(
-    ctx: &ScanContext,
+    root: &RootScan,
     boundary: &ModuleBoundary,
     governed_module: &str,
     rule: &str,
@@ -399,22 +592,18 @@ fn check_external_confinement(
     }
     let confined = package_name_to_import_ident(&canonical_module_path(crate_name));
     let mut offenders: Vec<(String, String)> = Vec::new();
-    for (file, file_module) in ctx.all_files() {
-        if hosts_only_permitted_importers(&file_module, governed_module, boundary.depth) {
+    for (file, file_module) in root.all_files() {
+        if hosts_only_permitted_importers(file_module, governed_module, boundary.depth) {
             continue;
         }
-        let text = std::fs::read_to_string(&file)
-            .map_err(|err| unreadable_governed_file_error(&file, &err.to_string()))?;
-        for (importer, external) in
-            external_imports_with_importers(&text, &file_module, ctx.root_modules)?
-        {
-            if external != confined {
+        for (importer, external) in root.unit_scan().external_imports(file, file_module)? {
+            if external != &confined {
                 continue;
             }
-            if within_scan_depth(&importer, governed_module, boundary.depth) {
+            if within_scan_depth(importer, governed_module, boundary.depth) {
                 continue;
             }
-            offenders.push((importer, file.display().to_string()));
+            offenders.push((importer.clone(), file.display().to_string()));
         }
     }
     offenders.sort();
@@ -427,7 +616,7 @@ fn check_external_confinement(
             ModuleFact::ExternalImporter(importer_module),
             file,
             boundary,
-            ctx.unit,
+            root.unit_label(),
         );
     }
     Ok(())
@@ -443,55 +632,32 @@ fn check_external_confinement(
 /// [`check_outbound_rule`] (whose inline arm is `unreachable!()`), which would skip the inline
 /// scan and silently observe nothing (a false negative). Identity (`target`/`rule`/`finding`) is
 /// byte-identical across the two forms; the only strict-external-conditional behavior is inside
-/// `inline_symbol_findings` / `resolve_head`. `external` reflects the single rule's
+/// `UnitScan::findings` / `resolve_written`. `external` reflects the single rule's
 /// `strict_external` modifier.
 ///
-/// Empty prefix, conflicting narrow-and-strict, or empty verbs misdeclarations fail loud (exit 2).
+/// Its misdeclarations are refused by `InlinePrefix::of` before any root is walked.
 /// Crate-wide files feed type alias and pub use resolution; dependency names are read on demand
 /// when external confinement is active.
 #[allow(clippy::too_many_arguments)]
 fn check_inline_confinement(
-    ctx: &ScanContext,
+    root: &RootScan,
     boundary: &ModuleBoundary,
     package: &Value,
     governed: &[(PathBuf, String)],
     rule: &str,
-    prefix: &str,
+    prefix: &SymbolPrefix,
     ending_with: Option<&[String]>,
     strict: bool,
     external: bool,
-    declared_as: &str,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
-    if prefix.trim().is_empty() {
-        return Err(inline_empty_prefix_error(
-            &boundary.crate_package,
-            declared_as,
-        ));
-    }
-    if ending_with.is_some() && strict {
-        return Err(inline_narrow_and_strict_error(
-            &boundary.crate_package,
-            declared_as,
-        ));
-    }
-    if ending_with.is_some_and(|verbs| verbs.is_empty()) {
-        return Err(inline_empty_verbs_error(
-            &boundary.crate_package,
-            declared_as,
-        ));
-    }
-    let all_files = ctx.all_files();
     let dependency_names = if external {
         crate::cargo_metadata::dependency_import_names(package)
     } else {
         Vec::new()
     };
-    let confined_prefix = canonical_module_path(prefix);
-    let findings = inline_symbol_findings(
-        &all_files,
+    let findings = root.unit_scan().findings(
         governed,
-        ctx.root_modules,
         prefix,
         ending_with,
         strict,
@@ -501,12 +667,12 @@ fn check_inline_confinement(
     for InlineFinding { fact, file } in findings {
         push_module_violation(
             violations,
-            &confined_prefix,
+            &prefix.path,
             rule,
             fact,
             file,
             boundary,
-            ctx.unit,
+            root.unit_label(),
         );
     }
     Ok(())
@@ -523,7 +689,7 @@ fn check_inline_confinement(
 /// canonicalized. An unreadable file fails as a scan error (exit 2). Violations are deduplicated
 /// per distinct (importing module, import path).
 fn check_outbound_rule(
-    ctx: &ScanContext,
+    root: &RootScan,
     boundary: &ModuleBoundary,
     governed_module: &str,
     governed: Vec<(PathBuf, String)>,
@@ -563,12 +729,13 @@ fn check_outbound_rule(
     };
     let mut findings: Vec<(String, String, String)> = Vec::new();
     for (file, current_module) in governed {
-        let text = std::fs::read_to_string(&file)
-            .map_err(|err| unreadable_governed_file_error(&file, &err.to_string()))?;
-        for (importer, import) in imports_with_importers(&text, &current_module, ctx.root_modules)?
-        {
-            if is_violation(&import) {
-                findings.push((importer, import.path, file.display().to_string()));
+        for (importer, import) in root.unit_scan().imports(&file, &current_module)? {
+            if is_violation(import) {
+                findings.push((
+                    importer.clone(),
+                    import.path.clone(),
+                    file.display().to_string(),
+                ));
             }
         }
     }
@@ -582,7 +749,7 @@ fn check_outbound_rule(
             ModuleFact::ImportedPath { path, importer },
             file,
             boundary,
-            ctx.unit,
+            root.unit_label(),
         );
     }
     Ok(())
@@ -605,21 +772,50 @@ fn check_outbound_rule(
 /// Only missing-module errors are deferred; an inline target, unreadable files and other scan failures
 /// propagate immediately. A package whose every target is an example, a test, a bench or a build script is
 /// refused before any root is read: no compiled root reads its `src/`, so a boundary over it could never react.
+///
+/// Every module path the boundary carries — the governed module and each module its rule names — is held
+/// to its canonical spelling before the package is read. The named modules are held to existence after the
+/// governed module is: each must be declared in some root's graph, by the same deferral, or the boundary is
+/// refused rather than judged against a module no import can reach.
 pub(crate) fn check_module_boundary(
     metadata: &Value,
+    scans: &EvaluationScans,
     boundary: &ModuleBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
+    canonical_spelling_or_error(&boundary.module, &boundary.crate_package)?;
+    let named = NamedModules::of(boundary)?;
+    let inline_prefix = InlinePrefix::of(boundary)?;
     let package = find_package(metadata, &boundary.crate_package)
         .ok_or_else(|| crate_not_found_error(&boundary.crate_package))?;
+    let require_named = |declared: &std::collections::BTreeSet<String>,
+                         items: &std::collections::BTreeSet<String>| {
+        named.require_exist(declared, &boundary.crate_package)?;
+        match &inline_prefix {
+            InlinePrefix::Inline(Inline {
+                declared: prefix, ..
+            }) => prefix.require_names_something(
+                declared,
+                items,
+                &crate::cargo_metadata::dependency_import_names(package)
+                    .into_iter()
+                    .chain(crate::cargo_metadata::library_import_names(package))
+                    .collect::<Vec<_>>(),
+                &boundary.crate_package,
+            ),
+            InlinePrefix::NotInline => Ok(()),
+        }
+    };
     let compiled = match crate_roots(package) {
         CrateRoots::Compiled(roots) => roots,
         CrateRoots::NoneCompiled => return Err(no_compiled_root_error(&boundary.crate_package)),
         CrateRoots::Unreported => {
-            let mut found = Vec::new();
-            return match check_one_root(package, None, None, boundary, &mut found)? {
+            let root = scans.root_scan(package, &boundary.crate_package, None, None)?;
+            let mut judged = check_one_root(&root, package, boundary, &inline_prefix)?;
+            return match judged.outcome {
                 RootOutcome::Governed => {
-                    violations.append(&mut found);
+                    require_named(&judged.declared, &judged.items)?;
+                    violations.append(&mut judged.violations);
                     Ok(())
                 }
                 RootOutcome::ModuleAbsent(reason) => Err(reason),
@@ -629,15 +825,21 @@ pub(crate) fn check_module_boundary(
     let roots = compiled.as_slice();
     let mut deferred: Option<String> = None;
     let mut governed_somewhere = false;
+    let mut declared = std::collections::BTreeSet::new();
+    let mut items = std::collections::BTreeSet::new();
     let mut found = Vec::new();
     for root in roots {
-        match check_one_root(
+        let scan = scans.root_scan(
             package,
+            &boundary.crate_package,
             Some(root.as_path()),
             Some(roots),
-            boundary,
-            &mut found,
-        )? {
+        )?;
+        let mut judged = check_one_root(&scan, package, boundary, &inline_prefix)?;
+        declared.append(&mut judged.declared);
+        items.append(&mut judged.items);
+        found.append(&mut judged.violations);
+        match judged.outcome {
             RootOutcome::Governed => governed_somewhere = true,
             RootOutcome::ModuleAbsent(reason) => {
                 if deferred.is_none() {
@@ -649,6 +851,7 @@ pub(crate) fn check_module_boundary(
     match deferred {
         Some(reason) if !governed_somewhere => Err(reason),
         _ => {
+            require_named(&declared, &items)?;
             violations.append(&mut found);
             Ok(())
         }
@@ -658,8 +861,28 @@ pub(crate) fn check_module_boundary(
 /// Whether one root hosted the governed module. Distinguishing absence from failure is what keeps a real
 /// scan error from being deferred away by a sibling root — see the loop above.
 enum RootOutcome {
+    /// The root has at least one file backing the governed module.
     Governed,
+    /// The root has no file backing the governed module; the string is the unknown-module
+    /// constitution error, returned only when no root of the package is governed.
     ModuleAbsent(String),
+}
+
+/// What one root contributes to its package's judgement: whether it hosted the governed module, the modules
+/// and items it declares — which the named modules and an inline prefix are held to across every root — and
+/// the violations found in it. The caller merges every root's and keeps the violations only when some root is
+/// governed.
+struct RootJudgement {
+    /// Whether this root hosted the governed module.
+    outcome: RootOutcome,
+    /// Every module path reachable in this root.
+    declared: std::collections::BTreeSet<String>,
+    /// The `module::item` names this root defines at module scope, collected only for an inline
+    /// confinement.
+    items: std::collections::BTreeSet<String>,
+    /// The violations this root's rule family produced; always empty for a root decided absent
+    /// before dispatch.
+    violations: Vec<Violation>,
 }
 
 /// Derives the package-relative label for an inline module extraction suggestion.
@@ -670,111 +893,118 @@ fn suggested_module_path(package: &Value, candidate: &Path) -> String {
     compilation_unit_label(package, candidate).unwrap_or_else(|| xingbiao::path_label(candidate))
 }
 
-/// Check one compilation unit root. Custom target roots relative to `src_dir` map to `crate`.
-/// Roots outside the package manifest directory error as configuration errors.
-/// Sibling compilation unit roots are excluded from module discovery to prevent duplicate violations.
-/// Inline modules own no source file and cannot be governed targets (exit 2). An inline target is
-/// present in its root rather than absent from it, so that refusal is returned at once: deferring it,
-/// a sibling root backing the same path with a file would absorb it and leave the inline body
-/// unobserved behind a clean report.
-///
-/// A root without the governed module reports [`RootOutcome::ModuleAbsent`]. Whether it is judged
-/// first is the rule's [`Perimeter`]: under `GovernedModule` it holds nothing the rule governs and is
-/// not; under `WholeRoot` it is judged through the same dispatch as a governed root, with an empty
-/// permitted region. The caller keeps those findings only when some root is governed, so a package where
-/// no root has the module is still a constitution error.
-///
-/// `confine_inline_call` judges the complement of `must_not_call_inline`'s set: every file of the root whose
-/// module is outside the permitted subtree. An inline finding carries its file's module, and every inline child of
-/// a file lies within that file's module's subtree, so excluding a file by its module is exact under the subtree
-/// depth. It is not under `ScanDepth::Shallow`, where the permitted region is the anchored module alone and the
-/// permitted file's inline children fall outside it, so a shallow declaration is refused rather than judged.
+/// Judge one compiled root by deriving its membership, deciding its outcome, then dispatching its rule family.
 fn check_one_root(
+    root: &RootScan,
     package: &Value,
-    root_file: Option<&Path>,
-    sibling_roots: Option<&[PathBuf]>,
     boundary: &ModuleBoundary,
-    violations: &mut Vec<Violation>,
-) -> Result<RootOutcome, String> {
-    let src_dir = match root_file.and_then(Path::parent) {
-        Some(dir) => dir.to_path_buf(),
-        None => {
-            package_src_dir(package).ok_or_else(|| missing_src_error(&boundary.crate_package))?
+    inline_prefix: &InlinePrefix,
+) -> Result<RootJudgement, String> {
+    let facts = collect_root_facts(root, boundary, inline_prefix);
+    match decide_root_outcome(root, package, boundary, &facts)? {
+        RootDecision::Absent(reason) => Ok(RootJudgement {
+            outcome: RootOutcome::ModuleAbsent(reason),
+            declared: facts.declared,
+            items: facts.items,
+            violations: Vec::new(),
+        }),
+        RootDecision::Judge(outcome) => {
+            dispatch_root_rule_family(root, package, boundary, inline_prefix, facts, outcome)
         }
-    };
-
-    let root_relative = root_file
-        .and_then(|rf| rf.strip_prefix(&src_dir).ok())
-        .map(|p| p.to_path_buf());
-    let unit_owned = match root_file {
-        Some(rf) => Some(
-            compilation_unit_label(package, rf)
-                .ok_or_else(|| out_of_package_root_error(&boundary.crate_package, rf))?,
-        ),
-        None => None,
-    };
-    let unit: &str = unit_owned.as_deref().unwrap_or("src");
-    let mut files = rust_files(&src_dir)?;
-    if let Some(siblings) = sibling_roots {
-        files.retain(|f| root_file.is_some_and(|r| r == f.as_path()) || !siblings.contains(f));
     }
-    files.retain(|f| !names_crate_by_path_alone(f, &src_dir, root_relative.as_deref()));
-    let (reachable, inline_only, remapped, remap_shadowed) =
-        reachable_modules(&src_dir, &files, root_relative.as_deref())?;
-    let root_modules: Vec<String> = reachable
-        .iter()
-        .filter_map(|module| {
-            module
-                .strip_prefix("crate::")
-                .filter(|rest| !rest.contains("::"))
-                .map(str::to_string)
-        })
-        .collect();
+}
+
+/// The root-level sets derived from one shared scan and one boundary.
+struct RootFacts {
+    /// Every module path reachable in this root.
+    declared: std::collections::BTreeSet<String>,
+    /// The `module::item` names this root defines at module scope; read only for an inline
+    /// confinement, and empty for every other rule.
+    items: std::collections::BTreeSet<String>,
+    /// The boundary's target module in canonical `crate::…` form.
+    governed_module: String,
+    /// Each file backing the governed module at the boundary's depth, paired with the module it is
+    /// read as; empty when this root does not have the governed module.
+    governed: Vec<(PathBuf, String)>,
+}
+
+/// Derive the governed set and root-level declared and item sets from the shared scan. [`RootScan`]
+/// owns the walk and unit scan — custom target roots relative to `src_dir` map to `crate`, roots
+/// outside the package manifest directory error as configuration errors, and sibling compilation
+/// unit roots are excluded from module discovery to prevent duplicate violations. The caller obtains
+/// that scan before this step, so a walk refusal and a file the unit scan cannot read both surface
+/// ahead of whether the governed module exists.
+fn collect_root_facts(
+    root: &RootScan,
+    boundary: &ModuleBoundary,
+    inline_prefix: &InlinePrefix,
+) -> RootFacts {
+    let declared = root.reachable.iter().cloned().collect();
     let governed_module = canonical_module_path(&boundary.module);
     let governed = governed_files(
-        &src_dir,
-        &files,
+        &root.src_dir,
+        &root.files,
         &governed_module,
-        &reachable,
-        &inline_only,
-        &remapped,
-        &remap_shadowed,
-        root_relative.as_deref(),
+        &root.reachable,
+        &root.inline_only,
+        &root.remapped,
+        &root.remap_shadowed,
+        root.root_relative.as_deref(),
         boundary.depth,
     );
-    let rule = boundary.rule.label();
-    let ctx = ScanContext {
-        unit,
-        src_dir: &src_dir,
-        files: &files,
-        root_relative: root_relative.as_deref(),
-        reachable: &reachable,
-        inline_only: &inline_only,
-        remapped: &remapped,
-        remap_shadowed: &remap_shadowed,
-        root_modules: &root_modules,
+    let inline = inline_prefix.inline();
+    let items = if inline.is_some() {
+        root.item_definitions().iter().cloned().collect()
+    } else {
+        std::collections::BTreeSet::new()
     };
 
+    RootFacts {
+        declared,
+        items,
+        governed_module,
+        governed,
+    }
+}
+
+/// Decide whether this root contains the governed module and whether its perimeter still judges it.
+/// Inline modules own no source file and cannot be governed targets (exit 2). An inline target is
+/// present in its root rather than absent from it, so its refusal returns at once: deferring it lets
+/// a sibling root backing the same path with a file absorb it and leave the inline body unobserved
+/// behind a clean report.
+///
+/// A root without the governed module reports [`RootOutcome::ModuleAbsent`]. Under
+/// [`Perimeter::GovernedModule`] it holds nothing the rule governs and is not judged; under
+/// [`Perimeter::WholeRoot`] it is judged through the same dispatch as a governed root, with an
+/// empty permitted region. The caller keeps those findings only when some root is governed, so a
+/// package where no root has the module is still a constitution error.
+fn decide_root_outcome(
+    root: &RootScan,
+    package: &Value,
+    boundary: &ModuleBoundary,
+    facts: &RootFacts,
+) -> Result<RootDecision, String> {
     let outcome = match (
-        governed.is_empty(),
-        inline_only.get(&governed_module),
+        facts.governed.is_empty(),
+        root.inline_only.get(&facts.governed_module),
         boundary.rule.perimeter(),
     ) {
         (true, Some(candidate), _) => {
-            let leaf = governed_module
+            let leaf = facts
+                .governed_module
                 .rsplit_once("::")
-                .map_or(governed_module.as_str(), |(_, leaf)| leaf);
+                .map_or(facts.governed_module.as_str(), |(_, leaf)| leaf);
             let suggested_path = suggested_module_path(package, candidate);
             return Err(inline_module_target_error(
                 &boundary.module,
                 &boundary.crate_package,
                 leaf,
-                unit_owned.as_deref(),
+                root.unit.as_deref(),
                 &suggested_path,
             ));
         }
         (true, None, Perimeter::GovernedModule) => {
-            return Ok(RootOutcome::ModuleAbsent(unknown_module_error(
+            return Ok(RootDecision::Absent(unknown_module_error(
                 &boundary.module,
                 &boundary.crate_package,
             )));
@@ -786,60 +1016,101 @@ fn check_one_root(
         (false, _, _) => RootOutcome::Governed,
     };
 
+    Ok(RootDecision::Judge(outcome))
+}
+
+/// Dispatch this root to its rule family, in precedence order: an inbound rule
+/// (`MustNotBeImportedBy` / `MustOnlyBeImportedBy`), then `ConfineExternalCrate`, then an inline
+/// confinement, then an outbound rule.
+/// `confine_inline_call` judges the complement of `must_not_call_inline`'s set: every file of the
+/// root whose module is outside the permitted subtree. An inline finding carries its file's module,
+/// and every inline child of a file lies within that file's module subtree, so excluding a file by
+/// its module is exact under subtree depth. It is not exact under `ScanDepth::Shallow`, where the
+/// permitted region is the anchored module alone and its inline children fall outside it, so a
+/// shallow declaration is refused rather than judged.
+fn dispatch_root_rule_family(
+    root: &RootScan,
+    package: &Value,
+    boundary: &ModuleBoundary,
+    inline_prefix: &InlinePrefix,
+    facts: RootFacts,
+    outcome: RootOutcome,
+) -> Result<RootJudgement, String> {
+    let RootFacts {
+        declared,
+        items,
+        governed_module,
+        governed,
+    } = facts;
+    let rule = boundary.rule.label();
+    let inline = inline_prefix.inline();
     let inbound = matches!(
         &boundary.rule,
         ModuleRule::MustNotBeImportedBy { .. } | ModuleRule::MustOnlyBeImportedBy { .. }
     );
+    let mut violations = Vec::new();
     if inbound {
-        check_inbound_rule(&ctx, boundary, &governed_module, rule, violations)?;
-        return Ok(outcome);
-    }
-    if let ModuleRule::ConfineExternalCrate { crate_name } = &boundary.rule {
+        check_inbound_rule(root, boundary, &governed_module, rule, &mut violations)?;
+    } else if let ModuleRule::ConfineExternalCrate { crate_name } = &boundary.rule {
         check_external_confinement(
-            &ctx,
+            root,
             boundary,
             &governed_module,
             rule,
             crate_name,
-            violations,
+            &mut violations,
         )?;
-        return Ok(outcome);
-    }
-    if let Some((prefix, ending_with, strict, external)) = boundary.rule.inline_payload() {
+    } else if let Some(inline) = inline {
         let permitting = matches!(boundary.rule, ModuleRule::ConfineInlineCall { .. });
-        if permitting && governed_module == "crate" {
-            return Err(confine_inline_call_on_crate_error(&boundary.crate_package));
-        }
-        if permitting && boundary.depth == ScanDepth::Shallow {
-            return Err(confine_inline_call_shallow_error(&boundary.crate_package));
-        }
         let judged: Vec<(PathBuf, String)> = if permitting {
-            ctx.all_files()
-                .into_iter()
+            root.all_files()
+                .iter()
                 .filter(|(_, module)| !within_scan_depth(module, &governed_module, boundary.depth))
+                .cloned()
                 .collect()
         } else {
             governed
         };
+        let prefix = &inline.declared.prefix;
         check_inline_confinement(
-            &ctx,
+            root,
             boundary,
             package,
             &judged,
             rule,
             prefix,
-            ending_with,
-            strict,
-            external,
-            if permitting {
-                "confine_inline_call"
-            } else {
-                "must_not_call_inline"
-            },
-            violations,
+            inline.ending_with,
+            inline.strict,
+            inline.external,
+            &mut violations,
         )?;
-        return Ok(outcome);
+    } else {
+        check_outbound_rule(
+            root,
+            boundary,
+            &governed_module,
+            governed,
+            rule,
+            &mut violations,
+        )?;
     }
-    check_outbound_rule(&ctx, boundary, &governed_module, governed, rule, violations)?;
-    Ok(outcome)
+    Ok(RootJudgement {
+        outcome,
+        declared,
+        items,
+        violations,
+    })
+}
+
+/// A root either ends here, as an absence no rule family is dispatched for — which carries only the
+/// absence's reason, so an absence reported as governed is unconstructible — or continues through its
+/// rule family with the outcome that dispatch will report.
+enum RootDecision {
+    /// The root lacks the governed module and its rule's perimeter is the governed module, so nothing in
+    /// it is judged; the string is the unknown-module constitution error the caller reports if no root
+    /// is governed.
+    Absent(String),
+    /// The root is dispatched to its rule family, which reports this outcome — `Governed`, or
+    /// `ModuleAbsent` for a whole-root perimeter judged with an empty permitted region.
+    Judge(RootOutcome),
 }

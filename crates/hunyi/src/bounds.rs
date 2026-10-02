@@ -78,6 +78,36 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
         ),
         BoundDecl::pinned(
             BoundId::new(
+                "semantic-dyn-trait-operand-boundary/a-local-trait-sharing-an-auto-trait-leaf-name-over-reacts-as-a-dyn-auto-bound-a-stated-bound",
+            ),
+            "an exposed dyn Trait whose bound is a local trait sharing an auto-trait leaf name",
+            Extent::Reached(Reached::OverReacts {
+                because: "auto-trait bounds are identified by leaf name without symbol resolution, so a local trait sharing an auto-trait name reacts as that auto trait".into(),
+            }),
+            "dyn_trait_local_auto_trait_leaf_over_reacts_is_a_bound",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "semantic-dyn-trait-operand-boundary/a-macro-generated-dyn-auto-bound-is-a-documented-bound",
+            ),
+            "a dyn auto bound appearing only in a macro's expansion, with no dyn token in the source",
+            Extent::OutOfReach {
+                because: "macros are not expanded, so a trait object introduced only by macro expansion is not observed".into(),
+            },
+            "dyn_macro_generated_auto_bound_is_a_bound",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "semantic-dyn-trait-operand-boundary/a-private-alias-hiding-a-dyn-auto-bound-in-a-public-position-is-a-stated-bound",
+            ),
+            "a non-public type alias holding a dyn with auto bounds, named by a public signature",
+            Extent::OutOfReach {
+                because: "the resolver does not expand type aliases, so the dyn is never seen from the public position that exposes it".into(),
+            },
+            "dyn_private_alias_hiding_auto_bound_is_a_bound",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
                 "semantic-forbidden-marker/an-unresolvable-hand-impl-self-type-is-a-documented-bound",
             ),
             "a hand-written impl whose self-type arrives through a glob import",
@@ -98,6 +128,26 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                           not over-reached".into(),
             },
             "impl_trait_operand_genuinely_unresolvable_bare_principal_is_a_bound",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "semantic-impl-trait-operand-boundary/a-local-trait-sharing-an-auto-trait-leaf-name-over-reacts-as-an-impl-auto-bound-a-stated-bound",
+            ),
+            "a returned impl Trait whose bound is a local trait sharing an auto-trait leaf name",
+            Extent::Reached(Reached::OverReacts {
+                because: "auto-trait bounds are identified by leaf name without symbol resolution, so a local trait sharing an auto-trait name reacts as that auto trait".into(),
+            }),
+            "impl_trait_local_auto_trait_leaf_over_reacts_is_a_bound",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "semantic-impl-trait-operand-boundary/a-macro-generated-impl-trait-auto-bound-is-a-documented-bound",
+            ),
+            "an impl trait auto bound appearing only in a macro's expansion, with no impl trait in the source",
+            Extent::OutOfReach {
+                because: "macros are not expanded, so a return-position impl trait introduced only by macro expansion is not observed".into(),
+            },
+            "impl_trait_macro_generated_auto_bound_is_a_bound",
         ),
         BoundDecl::pinned(
             BoundId::new("semantic-reexport-exposure/an-underscore-rename-is-a-documented-bound"),
@@ -266,6 +316,30 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             "unsafe_in_a_macro_body_is_a_stated_bound",
         ),
         BoundDecl::pinned(
+            BoundId::new("semantic-visibility-boundary/cfg-gated-items-are-observed-as-written-a-stated-bound"),
+            "a directly declared item whose cfg predicate is false on the host",
+            Extent::Reached(Reached::OverReacts {
+                because: "the AST reader observes the declaration as written without evaluating cfg, so a host-inactive item may react".into(),
+            }),
+            "cfg_is_observed_as_written",
+        ),
+        BoundDecl::pinned_by_many(
+            BoundId::new("semantic-visibility-boundary/direct-items-that-render-alike-share-one-identity-a-stated-bound"),
+            "two direct items of one module that render alike: a repeated macro path, several impl blocks \
+             whose self type and trait render alike, several extern blocks, or several unrenderable items",
+            Extent::Reached(Reached::AsIntended {
+                bounded: FactGranularity::Identity,
+                because: "identity names the declared item kind, module and rendered name, never scan position, \
+                          and an extern block renders no name, so its ABI is not part of it".into(),
+            }),
+            "repeated_macro_path_shares_one_identity",
+            [
+                "repeated_inherent_impl_shares_one_identity",
+                "repeated_extern_block_shares_one_identity",
+                "repeated_unrenderable_items_share_one_identity",
+            ],
+        ),
+        BoundDecl::pinned(
             BoundId::new(
                 "semantic-visibility-boundary/a-macro-generated-item-is-a-documented-bound",
             ),
@@ -285,6 +359,99 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
                           private item may react — never a silent pass".into(),
             }),
             "a_pub_in_narrow_path_over_reacts_under_a_module_ceiling",
+        ),
+        BoundDecl::pinned(
+            BoundId::new("semantic-static-item-boundary/a-macro-generated-static-is-a-documented-bound"),
+            "a `static` appearing only in a macro's expansion — a `macro_rules!` that declares one, a \
+             `lazy_static!`-shaped invocation, or a `thread_local!` wrapped in another macro",
+            Extent::OutOfReach {
+                because: "macros other than `thread_local!` are not expanded, so the declaration never \
+                          enters the observed AST".into(),
+            },
+            "a_macro_generated_static_is_a_documented_bound",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "semantic-static-item-boundary/a-local-macro-sharing-the-thread-local-name-over-reacts-a-stated-bound",
+            ),
+            "a local `macro_rules! thread_local` invoked in the governed subtree",
+            Extent::Reached(Reached::OverReacts {
+                because: "`thread_local!` is recognized by its name, so a local macro of that name is read \
+                          as the std one and the statics its body spells react".into(),
+            }),
+            "a_local_thread_local_macro_over_reacts_is_a_bound",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "semantic-static-item-boundary/cfg-gated-statics-are-observed-as-written-a-stated-bound",
+            ),
+            "a `static` whose `#[cfg]` predicate is false on the host, such as `#[cfg(test)]`",
+            Extent::Reached(Reached::OverReacts {
+                because: "the AST reader observes the declaration as written without evaluating cfg, so a \
+                          host-inactive static reacts".into(),
+            }),
+            "static_cfg_is_observed_as_written",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "semantic-static-item-boundary/an-interior-mutable-const-is-not-a-static-a-stated-bound",
+            ),
+            "a `const` whose type has interior mutability, such as `const C: Cell<u8>`",
+            Extent::Reached(Reached::NotAViolation {
+                because: "a `const` is a value inlined at each use, never one shared location, so it declares \
+                          no state for the module to hold".into(),
+            }),
+            "an_interior_mutable_const_is_not_a_static",
+        ),
+        BoundDecl::pinned_by_many(
+            BoundId::new(
+                "semantic-static-item-boundary/same-named-statics-under-one-owner-share-one-identity-a-stated-bound",
+            ),
+            "two statics of one name under one owner: in two nested blocks of one fn, in two `const _` \
+             initializers, or in two closures of one fn",
+            Extent::Reached(Reached::AsIntended {
+                bounded: FactGranularity::Identity,
+                because: "identity is kind, declaring module, name and the chain of named value items, never \
+                          scan position, and a block, a `const _` or a closure adds no name to the chain".into(),
+            }),
+            "nested_block_statics_share_one_identity",
+            [
+                "anonymous_const_statics_share_one_identity",
+                "closure_statics_share_one_identity",
+            ],
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "semantic-static-item-boundary/a-thread-local-body-that-is-not-static-declarations-refuses-to-judge-a-stated-bound",
+            ),
+            "a `thread_local!` at or beneath the anchored module whose body does not parse as `static` declarations",
+            Extent::Reached(Reached::RefusesToJudge {
+                because: "the statics it declares cannot be named, and passing it would be a silent pass over \
+                          a declaration".into(),
+            }),
+            "an_unparseable_thread_local_body_refuses_to_judge",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "semantic-static-item-boundary/a-foreign-crate-rename-of-thread-local-is-a-documented-bound",
+            ),
+            "a `thread_local!` invoked under a name another crate re-exported it as",
+            Extent::OutOfReach {
+                because: "another crate's source is not parsed, so its rename is never seen and the renamed \
+                          invocation is not recognized by name".into(),
+            },
+            "a_foreign_crate_rename_of_thread_local_is_a_documented_bound",
+        ),
+        BoundDecl::pinned(
+            BoundId::new(
+                "semantic-static-item-boundary/a-crate-renaming-thread-local-refuses-to-judge-a-stated-bound",
+            ),
+            "`use std::thread_local as tls;` anywhere in the governed crate, a function body included",
+            Extent::Reached(Reached::RefusesToJudge {
+                because: "a `thread_local!` is recognized by its name, so an invocation under the new name \
+                          would escape it; the boundary asks for the macro to be written by its name".into(),
+            }),
+            "a_renamed_thread_local_refuses_to_judge",
         ),
     ]
 }

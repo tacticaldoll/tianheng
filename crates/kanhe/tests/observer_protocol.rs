@@ -1321,12 +1321,7 @@ fn trait_object_offenders(root: &Path) -> (usize, Vec<String>) {
 
 #[test]
 fn a_trait_object_in_a_nested_source_file_is_observed() {
-    let root = std::env::temp_dir().join(format!(
-        "tianheng-observer-protocol-nested-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&root);
-    xingbiao::claim_scratch(&root).expect("create nested source fixture");
+    let root = xingbiao::scratch_root("tianheng-observer-protocol-nested");
     let nested = root.join("runner");
     std::fs::create_dir_all(&nested).expect("create nested source fixture");
     std::fs::write(
@@ -1341,7 +1336,6 @@ fn a_trait_object_in_a_nested_source_file_is_observed() {
     .expect("write nested fixture");
 
     let (_, offenders) = trait_object_offenders(&root);
-    let _ = std::fs::remove_dir_all(&root);
     assert_eq!(
         offenders.len(),
         1,

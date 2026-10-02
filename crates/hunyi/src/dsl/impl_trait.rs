@@ -2,6 +2,15 @@
 
 use xuanji::{RuleKey, ScanDepth, Severity};
 
+/// The target matching policy of an impl-trait boundary: shape-only, principal-trait operand-scoped,
+/// or auto-trait bound-scoped.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ImplTraitTarget {
+    Any,
+    Principal(Vec<String>),
+    AutoBounds(Vec<String>),
+}
+
 /// An impl-trait boundary: a module's public API must not **return** a written `impl Trait`
 /// (return-position `impl Trait` / RPIT). The **existential** complement of [`DynTraitBoundary`]:
 /// where that forbids the *dynamic-dispatch* shape (`dyn`), this forbids the *existential* shape —
@@ -11,21 +20,21 @@ use xuanji::{RuleKey, ScanDepth, Severity};
 /// `impl Future` is a distinct compiler-inserted existential, out of scope. Declared in Rust and
 /// composed with the other dimensions at the gate.
 ///
-/// Two depths on one boundary type, selected by the builder (mirroring [`DynTraitBoundary`]):
+/// Three policies on one boundary type, selected by the builder (mirroring [`DynTraitBoundary`]):
 /// - [`must_not_expose_impl_trait`](ImplTraitModuleDraft::must_not_expose_impl_trait) —
 ///   **shape-only**: an empty operand set, so *any* returned `impl Trait` reacts.
 /// - [`must_not_expose_impl_trait_of`](ImplTraitModuleDraft::must_not_expose_impl_trait_of) —
 ///   **operand-scoped**: only a returned `impl Trait` whose principal trait resolves into the named
 ///   `forbidden_operands` set reacts.
+/// - [`must_not_expose_impl_trait_bounded_by`](ImplTraitModuleDraft::must_not_expose_impl_trait_bounded_by) —
+///   **auto-bound-scoped**: only a returned `impl Trait` whose own bounds carry one of the named auto traits reacts.
 ///
 /// [`DynTraitBoundary`]: crate::DynTraitBoundary
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImplTraitBoundary {
     pub(crate) crate_package: String,
     pub(crate) module: String,
-    /// The forbidden trait operands. **Empty ⇒ shape-only** (any returned `impl Trait` reacts); a
-    /// named set ⇒ only a returned `impl Trait` whose principal trait canonicalizes into the set.
-    pub(crate) forbidden_operands: Vec<String>,
+    pub(crate) target: ImplTraitTarget,
     pub(crate) reason: String,
     pub(crate) anchor: Option<String>,
     pub(crate) severity: Severity,
@@ -35,13 +44,31 @@ pub struct ImplTraitBoundary {
 impl ImplTraitBoundary {
     /// Stable semantic identity for this impl-trait exposure rule.
     pub fn rule_key(&self) -> RuleKey {
-        RuleKey::of(
-            "tianheng.rule/hunyi/impl-trait-exposure",
-            [(
-                "forbidden_operands",
-                super::canonical_path_set(&self.forbidden_operands),
-            )],
-        )
+        match &self.target {
+            ImplTraitTarget::Any => RuleKey::of(
+                "tianheng.rule/hunyi/impl-trait-exposure",
+                [("forbidden_operands", "[]".to_string())],
+            ),
+            ImplTraitTarget::Principal(operands) => RuleKey::of(
+                "tianheng.rule/hunyi/impl-trait-exposure",
+                [("forbidden_operands", super::canonical_path_set(operands))],
+            ),
+            ImplTraitTarget::AutoBounds(_bounds) => {
+                let json = match self.resolved_auto_bounds() {
+                    crate::resolve::ResolvedAutoBounds::Normalized(leaves) => {
+                        serde_json::to_string(&leaves.into_iter().collect::<Vec<_>>())
+                            .expect("serialized leaves")
+                    }
+                    crate::resolve::ResolvedAutoBounds::InvalidSyntax(original) => {
+                        super::canonical_path_set(&original)
+                    }
+                };
+                RuleKey::of(
+                    "tianheng.rule/hunyi/impl-trait-auto-bound",
+                    [("forbidden_auto_bounds", json)],
+                )
+            }
+        }
     }
 
     /// The observation scan depth for this boundary.
@@ -61,10 +88,34 @@ impl ImplTraitBoundary {
         &self.module
     }
 
-    /// The forbidden trait operands. Empty ⇒ shape-only (any returned `impl Trait` reacts); a named
+    /// The forbidden trait operands. Empty ⇒ shape-only or auto-bound; a named
     /// set ⇒ only a returned `impl Trait` whose principal trait resolves into the set reacts.
     pub fn forbidden_operands(&self) -> &[String] {
-        &self.forbidden_operands
+        match &self.target {
+            ImplTraitTarget::Principal(operands) => operands,
+            _ => &[],
+        }
+    }
+
+    /// The forbidden auto-trait bounds.
+    pub fn forbidden_auto_bounds(&self) -> &[String] {
+        match &self.target {
+            ImplTraitTarget::AutoBounds(bounds) => bounds,
+            _ => &[],
+        }
+    }
+
+    /// The typed resolution of the boundary's auto traits.
+    pub(crate) fn resolved_auto_bounds(&self) -> crate::resolve::ResolvedAutoBounds {
+        crate::resolve::resolved_auto_bounds(
+            self.forbidden_auto_bounds(),
+            crate::resolve::AutoTraitBoundaryKind::Impl,
+        )
+    }
+
+    /// Return the sorted, deduplicated auto-trait leaves used by the rule key and projections.
+    pub fn forbidden_auto_bound_leaves(&self) -> Vec<String> {
+        self.resolved_auto_bounds().into_vec()
     }
 
     /// The human-readable reason recorded with the boundary (the repair hint).
@@ -89,6 +140,8 @@ pub struct ImplTraitCrateDraft {
 
 impl ImplTraitCrateDraft {
     /// Anchor the boundary to a module path within the crate (e.g. `crate::core`).
+    /// Written from the crate root — `crate` or `crate::a::b`, a raw identifier read as its plain
+    /// form; any other spelling, or a module the crate does not declare, is a constitution error (exit 2).
     pub fn module(self, module: &str) -> ImplTraitModuleDraft {
         ImplTraitModuleDraft {
             crate_package: self.crate_package,
@@ -114,7 +167,7 @@ impl ImplTraitModuleDraft {
         ImplTraitBoundaryDraft {
             crate_package: self.crate_package,
             module: self.module,
-            forbidden_operands: Vec::new(),
+            target: ImplTraitTarget::Any,
             severity: Severity::Enforce,
             depth: ScanDepth::Shallow,
         }
@@ -129,8 +182,10 @@ impl ImplTraitModuleDraft {
     /// facade matches its defining path (the same 渾儀 resolver the forbidden-type rule uses).
     ///
     /// Bounds (stated): an **empty** `operands` set degenerates to shape-only (any returned
-    /// `impl Trait`) — loud, never an inert no-op. Auto-trait/lifetime bounds are never operands
-    /// (a returned `impl Foo + Bar` may name several non-auto traits — forbidding any one flags it).
+    /// `impl Trait`) — loud, never an inert no-op. Auto-trait/lifetime bounds are never
+    /// principal operands (a returned `impl Foo + Bar` may name several non-auto traits —
+    /// forbidding any one flags it). A forbidden operand whose leaf names an auto trait is a
+    /// constitution error; remove that entry.
     /// A principal that does not resolve — a bare std trait
     /// (`impl Iterator`/`impl Future` written bare), a macro/glob re-export — is out of the
     /// resolver's stated coverage and not matched; a *resolvable* operand is never silently passed.
@@ -143,7 +198,23 @@ impl ImplTraitModuleDraft {
         ImplTraitBoundaryDraft {
             crate_package: self.crate_package,
             module: self.module,
-            forbidden_operands: operands.into_iter().map(Into::into).collect(),
+            target: ImplTraitTarget::Principal(operands.into_iter().map(Into::into).collect()),
+            severity: Severity::Enforce,
+            depth: ScanDepth::Shallow,
+        }
+    }
+
+    /// Forbid the module's public API from **returning** a `impl Trait` carrying any of the
+    /// named **auto-trait bounds** (e.g. `Send`, `Sync`).
+    pub fn must_not_expose_impl_trait_bounded_by<I, S>(self, bounds: I) -> ImplTraitBoundaryDraft
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        ImplTraitBoundaryDraft {
+            crate_package: self.crate_package,
+            module: self.module,
+            target: ImplTraitTarget::AutoBounds(bounds.into_iter().map(Into::into).collect()),
             severity: Severity::Enforce,
             depth: ScanDepth::Shallow,
         }
@@ -155,7 +226,7 @@ impl ImplTraitModuleDraft {
 pub struct ImplTraitBoundaryDraft {
     crate_package: String,
     module: String,
-    forbidden_operands: Vec<String>,
+    pub(crate) target: ImplTraitTarget,
     severity: Severity,
     depth: ScanDepth,
 }
@@ -183,7 +254,7 @@ impl ImplTraitBoundaryDraft {
         ImplTraitBoundary {
             crate_package: self.crate_package,
             module: self.module,
-            forbidden_operands: self.forbidden_operands,
+            target: self.target,
             reason: reason.to_string(),
             anchor: None,
             severity: self.severity,

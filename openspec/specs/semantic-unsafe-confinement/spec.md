@@ -71,6 +71,36 @@ always either inert or broken, never meaningfully different from the bare form.
 - **WHEN** a boundary declares `only_under(["crate::ffi"])` against the same crate
 - **THEN** the system reports no violation for the genuinely-confined site, exactly as before this requirement existed
 
+### Requirement: An allowed location is a canonical module that exists
+
+Each allowed-location entry SHALL be held to the module-anchor spelling `semantic-signature-coupling`
+states: `crate`, or `crate::` followed by `::`-separated identifiers, any other spelling a
+constitution error (exit 2) quoting the entry as written and naming the canonical spelling where
+the text determines one, and a raw identifier accepted as its plain form. The empty-segment shapes the
+requirement above names are among the spellings refused here. Each canonical entry SHALL also name a
+module some compilation unit of the crate declares, and one that no unit declares SHALL be a
+constitution error (exit 2) naming it. An entry naming no module can never contain a `unsafe` site, so every
+genuinely placed `unsafe` site would be reported as a violation that names no cause, where the refusal names
+the entry. An entry declared in one compilation unit and absent from another is a real location.
+
+#### Scenario: A location not rooted at `crate` is a constitution error
+
+- **WHEN** a boundary declares `only_under(["ffi"])` and the crate declares `crate::ffi`
+- **THEN** the system emits a constitution error (exit 2) quoting `ffi` and suggesting `crate::ffi`, rather than reporting the `unsafe` sites placed under `crate::ffi` as violations
+- **PINNED-BY** `every_anchored_capability_refuses_a_non_canonical_spelling`
+
+#### Scenario: A location naming no module is a constitution error
+
+- **WHEN** a boundary declares `only_under(["crate::nope"])` and the crate declares no such module
+- **THEN** the system emits a constitution error (exit 2) naming `crate::nope`, rather than reporting every `unsafe` site as a violation
+- **PINNED-BY** `every_anchored_capability_refuses_a_module_that_does_not_exist`
+
+#### Scenario: A location declared in one compilation unit is real
+
+- **WHEN** a package has a library declaring `crate::ffi` and a binary that does not, and the boundary allows `crate::ffi`
+- **THEN** the system judges the boundary, and the `unsafe` sites under the library's `crate::ffi` are clean
+- **PINNED-BY** `a_module_present_in_one_compilation_unit_is_not_absent`
+
 ### Requirement: Unsafe-site observation
 
 The system SHALL walk the whole target crate (descending file-based `mod x;` and inline `mod x { … }` alike) and observe every `unsafe` **site**, attributing each to its enclosing module. The observed sites SHALL be: an `unsafe fn` (free function, inherent method, trait method declaration, or trait-impl method), an `unsafe impl`, an `unsafe trait`, an `unsafe extern` block (the `unsafe` keyword form), and an `unsafe {}` expression block (observed within item bodies, including bodies of `const`/`static` initializers, closures, and nested functions). A `mod` declared **inside a function or block body** (which the top-level module walk does not descend) SHALL still be observed — its `unsafe` attributed to the enclosing file module — so no body-nested `unsafe` is silently dropped. A site SHALL react iff its enclosing module is **not under** any allowed subtree (a module equal to or beneath an allowed subtree passes). Within the observed source there SHALL be no false negative: an observed `unsafe` site outside every allowed subtree MUST react.

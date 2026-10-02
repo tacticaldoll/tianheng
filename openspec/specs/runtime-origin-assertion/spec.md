@@ -347,7 +347,7 @@ undeclared-seam probe there is caught. A declaration whose preamble merely
 NOT be read as a relocation and SHALL resolve conventionally, so no reachable module is dropped by a
 false substring match (which would silently drop every probe beneath it — a coverage false negative,
 the worst outcome under FN-first). A `cfg_attr`-wrapped `#[path]` is cfg-conditional on which file a
-given build compiles, but `cfg_attr` never removes the `mod` item the way a bare `#[cfg]` does — so
+given build compiles, but a `cfg_attr` applying a `path` never removes the `mod` item the way a bare `#[cfg]` does — so
 its own target SHALL be followed too, resolved the identical way an unconditional `#[path]` is (from
 the containing file's own directory): EVERY such target that exists on disk SHALL be read, unioned
 with the conventional file if it too exists — cfg-blind observation cannot know which one a given
@@ -1007,3 +1007,17 @@ adding one would be a second copy of a fact the compiler already holds.
 
 - **WHEN** a new rule variant is added to a dimension whose findings carry a repair direction
 - **THEN** it does not compile until it declares one, so that half of the contract needs no reaction of its own
+
+### Requirement: The probe audit lexes source in no edition
+
+The probe audit SHALL read source from its roots alone, with no package edition to read it in, so a lexical shape
+whose reading an edition decides SHALL be read one way in every edition and the divergence declared rather than
+silent: an `r#"` is read as a raw string whatever precedes it, which before edition 2021, where `cr#"x"` is the
+identifier `cr`, a `#` and a string, reads the code up to the next `"#` as the string's contents. The cross-dimension
+lexical ledger SHALL hold the divergence against 圭表's reading of the same file, which reads each target in its
+edition.
+
+#### Scenario: A raw string after an identifier character is read as one in every edition — a stated bound
+- **WHEN** an edition-2018 crate writes `m!(cr#"x");`, then a `use` 圭表 forbids and a probe of a declared seam, then `m!("#");`
+- **THEN** 圭表 reports the `use`, and the probe audit does not see the probe and reports the seam unprobed: the audit reads `cr#"` as the start of a raw string in every edition, a stated bound; rustc 1.96.0 builds the crate in edition 2018 and refuses it in 2021
+- **PINNED-BY** `louke_reads_a_raw_string_after_an_identifier_character_in_every_edition`

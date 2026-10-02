@@ -240,7 +240,9 @@ struct Fixture {
 
 impl Fixture {
     fn new(name: &str) -> Self {
-        let root = std::env::temp_dir().join(format!("house-rules-{name}-{}", std::process::id()));
+        // cargo hands an integration test a scratch directory inside its own target directory.
+        let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+            .join(format!("house-rules-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("src")).expect("a writable temporary subtree");
         std::fs::write(

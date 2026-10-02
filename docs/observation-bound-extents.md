@@ -3,12 +3,14 @@
 Where each declared **observation bound** stops the measure — not how far a scan walks (that is
 `ScanDepth`, an adopter's knob), but where this family's own reaction deliberately stops.
 
-**60 of 110 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
+**66 of 146 declared bounds are declared false negatives** — the reaction fires less than the truth, which is the one direction this family treats as a defect. That figure leads this document because a number in a footnote is not read, and each such bound names who must act:
 
 - `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-future-read-verb-outside-the-declared-set-is-a-documented-bound` — owner: adopter
+- `inline-symbol-path-confinement/a-macro-generated-item-called-bare-in-its-own-module-is-not-observed-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/a-path-taken-as-a-value-is-a-documented-bound-under-the-default` — owner: adopter
-- `inline-symbol-path-confinement/an-extern-crate-rename-is-a-stated-bound-under-strict-external` — owner: engine
+- `inline-symbol-path-confinement/a-prelude-name-called-bare-is-not-read-as-its-std-path-a-stated-bound` — owner: engine
+- `inline-symbol-path-confinement/a-use-written-in-a-macro-group-outside-any-block-binds-nothing-a-stated-bound` — owner: engine
 - `inline-symbol-path-confinement/the-fully-qualified-external-call-is-a-stated-bound-under-the-default` — owner: adopter
 - `module-boundary/an-example-test-bench-or-build-script-root-is-not-governed-a-stated-bound` — owner: engine
 - `observation-bound-register/what-code-executed-inside-the-checkout-does-outside-it-is-not-observed-a-stated-bound` — owner: engine
@@ -50,6 +52,10 @@ Where each declared **observation bound** stops the measure — not how far a sc
 - `repository-checks/a-paragraph-repeated-in-prose-is-not-read-a-stated-bound` — owner: engine
 - `repository-checks/a-paragraph-repeated-out-of-line-is-not-read-a-stated-bound` — owner: engine
 - `repository-checks/a-refusal-constructed-outside-the-register-s-corpus-is-not-triaged-a-stated-bound` — owner: engine
+- `repository-checks/a-root-composed-without-naming-the-helper-is-not-read-a-stated-bound` — owner: engine
+- `repository-checks/a-root-reached-through-a-value-is-not-read-a-stated-bound` — owner: engine
+- `repository-checks/a-second-naming-in-a-declared-file-is-not-separated-from-the-declared-one-a-stated-bound` — owner: engine
+- `repository-checks/a-system-temporary-directory-named-in-prose-a-string-or-a-child-environment-is-not-read-a-stated-bound` — owner: engine
 - `repository-checks/a-tool-configuration-set-in-the-environment-is-not-observed-a-stated-bound` — owner: engine
 - `repository-checks/a-whitespace-preceded-shell-marker-inside-quotes-is-cut-a-stated-bound` — owner: engine
 - `repository-checks/an-assignment-that-is-not-an-assignment-word-is-not-read-a-stated-bound` — owner: engine
@@ -73,7 +79,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 **refuses to judge** and *out of reach* are kept distinct deliberately. The misclassification this model exists to prevent was exactly a confusion between them — a prediction of a silent false negative where the real behaviour was a fail-loud refusal — and a direction that cannot be named cannot be predicted with.
 
-## as intended, granularity bounded (5)
+## as intended, granularity bounded (7)
 
 ### `observation-bound-model/an-answer-that-depends-on-the-corpus-entry-point-has-no-extent-of-its-own-a-stated-bound`
 
@@ -115,7 +121,44 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: collapses granularity
 - **pinned by**: `an_unrenderable_sub_node_is_a_stated_rendering_bound`
 
-## declines to refuse (1)
+### `semantic-static-item-boundary/same-named-statics-under-one-owner-share-one-identity-a-stated-bound`
+
+> two statics of one name under one owner: in two nested blocks of one fn, in two `const _` initializers, or in two closures of one fn
+
+- **because**: identity is kind, declaring module, name and the chain of named value items, never scan position, and a block, a `const _` or a closure adds no name to the chain
+- **its defence must show**: collapses granularity
+- **pinned by**: `nested_block_statics_share_one_identity`
+- **pinned by**: `anonymous_const_statics_share_one_identity`
+- **pinned by**: `closure_statics_share_one_identity`
+
+### `semantic-visibility-boundary/direct-items-that-render-alike-share-one-identity-a-stated-bound`
+
+> two direct items of one module that render alike: a repeated macro path, several impl blocks whose self type and trait render alike, several extern blocks, or several unrenderable items
+
+- **because**: identity names the declared item kind, module and rendered name, never scan position, and an extern block renders no name, so its ABI is not part of it
+- **its defence must show**: collapses granularity
+- **pinned by**: `repeated_macro_path_shares_one_identity`
+- **pinned by**: `repeated_inherent_impl_shares_one_identity`
+- **pinned by**: `repeated_extern_block_shares_one_identity`
+- **pinned by**: `repeated_unrenderable_items_share_one_identity`
+
+## declines to refuse (3)
+
+### `inline-symbol-path-confinement/a-cfg-closed-re-export-ring-is-read-in-time-exponential-in-its-length-a-stated-bound`
+
+> a ring of modules each re-exporting a name from the next under one `cfg` and from elsewhere under its negation, the last closing it
+
+- **because**: an answer read past a cut cycle depends on the walk it was entered from and is not remembered, so each link is re-read once per path to it and the reading doubles per link; no budget refuses it, and the chain cap bounds the depth rather than the time
+- **its defence must show**: does not refuse
+- **pinned by**: `a_cfg_closed_re_export_ring_is_read_in_time_exponential_in_its_length`
+
+### `inline-symbol-path-confinement/a-prefix-segment-past-what-guibiao-reads-is-not-verified-a-stated-bound`
+
+> an inline-call prefix misspelled after a crate's name or after an item of the crate, or starting at a segment nothing confirms and whose `crate::` reading names nothing
+
+- **because**: another crate's contents are its own source and associated items are not collected, and a dependency's crate name can differ from what `--no-deps` metadata reports, so refusing what those segments name would refuse prefixes that are right
+- **its defence must show**: does not refuse
+- **pinned by**: `a_prefix_past_what_guibiao_reads_is_not_verified`
 
 ### `semantic-trait-impl-locality/a-cfg-gated-module-with-an-absent-file-is-skipped-not-a-scan-error-a-stated-bound`
 
@@ -125,7 +168,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not refuse
 - **pinned by**: `hunyi::a_cfg_gated_module_with_no_file_is_skipped_not_errored`
 
-## not a violation (3)
+## not a violation (4)
 
 ### `semantic-async-exposure-boundary/a-body-nested-module-is-a-stated-bound`
 
@@ -151,23 +194,32 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_plain_fn_directly_in_a_const_body_stays_a_stated_bound`
 
-## out of reach (25)
+### `semantic-static-item-boundary/an-interior-mutable-const-is-not-a-static-a-stated-bound`
+
+> a `const` whose type has interior mutability, such as `const C: Cell<u8>`
+
+- **because**: a `const` is a value inlined at each use, never one shared location, so it declares no state for the module to hold
+- **its defence must show**: does not react
+- **pinned by**: `an_interior_mutable_const_is_not_a_static`
+
+## out of reach (31)
 
 ### `external-crate-confinement/a-confined-crate-use-inside-a-string-or-macro-body-is-not-observed-a-stated-bound`
 
 > a confined-crate `use` written inside a string literal or a macro body
 
-- **because**: comments, string literals and macro bodies are stripped before scanning
+- **because**: a comment is no token, a string literal is one literal token, and no import rule reads a `use` written inside a macro's group other than a `cfg_if!` arm
 - **its defence must show**: does not react
-- **pinned by**: `confine_ignores_a_use_inside_a_string_literal`
+- **pinned by**: `confine_ignores_a_use_inside_a_string_literal_or_macro_body`
 
 ### `inline-symbol-path-confinement/a-receiver-method-read-is-a-documented-bound`
 
-> a read reached through a method call on a receiver
+> a read reached through a method call on a receiver, or through a path beginning with `<`
 
-- **because**: no type inference is performed on the receiver, so the confined path is never resolved from the call site
+- **because**: no type inference is performed on the receiver or the qualified type, so the confined path is never resolved from the call site
 - **its defence must show**: does not react
 - **pinned by**: `inline_receiver_method_read_is_a_bound`
+- **pinned by**: `inline_qualified_path_is_the_type_directed_bound`
 
 ### `inline-symbol-path-confinement/an-external-crate-re-export-is-a-documented-bound`
 
@@ -233,6 +285,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_merge_made_outside_the_wrapper_is_not_observed`
 
+### `runtime-origin-assertion/a-raw-string-after-an-identifier-character-is-read-as-one-in-every-edition-a-stated-bound`
+
+> a probe written after `cr#"` in an edition-2015 or 2018 crate, before a later `"#`
+
+- **because**: the audit reads source roots with no edition, and takes an `r#"` for a raw string whatever precedes it, so before edition 2021, where `cr` is an identifier, the code up to the next `"#` is read as the string's contents
+- **its defence must show**: does not react
+- **pinned by**: `louke_reads_a_raw_string_after_an_identifier_character_in_every_edition`
+
 ### `runtime-origin-assertion/source-outside-a-member-s-library-or-binary-target-subtree-is-out-of-scope-a-stated-bound`
 
 > a probe or seam mention in `tests/`, `examples/`, or `build.rs`
@@ -265,6 +325,22 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `dyn_operand_genuinely_unresolvable_bare_principal_is_a_bound`
 
+### `semantic-dyn-trait-operand-boundary/a-macro-generated-dyn-auto-bound-is-a-documented-bound`
+
+> a dyn auto bound appearing only in a macro's expansion, with no dyn token in the source
+
+- **because**: macros are not expanded, so a trait object introduced only by macro expansion is not observed
+- **its defence must show**: does not react
+- **pinned by**: `dyn_macro_generated_auto_bound_is_a_bound`
+
+### `semantic-dyn-trait-operand-boundary/a-private-alias-hiding-a-dyn-auto-bound-in-a-public-position-is-a-stated-bound`
+
+> a non-public type alias holding a dyn with auto bounds, named by a public signature
+
+- **because**: the resolver does not expand type aliases, so the dyn is never seen from the public position that exposes it
+- **its defence must show**: does not react
+- **pinned by**: `dyn_private_alias_hiding_auto_bound_is_a_bound`
+
 ### `semantic-forbidden-marker/an-unresolvable-hand-impl-self-type-is-a-documented-bound`
 
 > a hand-written impl whose self-type arrives through a glob import
@@ -280,6 +356,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **because**: the same resolver limit as the `dyn` operand dimension — a single bare segment is not over-reached
 - **its defence must show**: does not react
 - **pinned by**: `impl_trait_operand_genuinely_unresolvable_bare_principal_is_a_bound`
+
+### `semantic-impl-trait-operand-boundary/a-macro-generated-impl-trait-auto-bound-is-a-documented-bound`
+
+> an impl trait auto bound appearing only in a macro's expansion, with no impl trait in the source
+
+- **because**: macros are not expanded, so a return-position impl trait introduced only by macro expansion is not observed
+- **its defence must show**: does not react
+- **pinned by**: `impl_trait_macro_generated_auto_bound_is_a_bound`
 
 ### `semantic-reexport-exposure/a-non-forbidden-root-external-glob-is-a-documented-bound`
 
@@ -321,6 +405,22 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `an_arbitrary_macro_body_is_not_read_as_transparent_arms`
 
+### `semantic-static-item-boundary/a-foreign-crate-rename-of-thread-local-is-a-documented-bound`
+
+> a `thread_local!` invoked under a name another crate re-exported it as
+
+- **because**: another crate's source is not parsed, so its rename is never seen and the renamed invocation is not recognized by name
+- **its defence must show**: does not react
+- **pinned by**: `a_foreign_crate_rename_of_thread_local_is_a_documented_bound`
+
+### `semantic-static-item-boundary/a-macro-generated-static-is-a-documented-bound`
+
+> a `static` appearing only in a macro's expansion — a `macro_rules!` that declares one, a `lazy_static!`-shaped invocation, or a `thread_local!` wrapped in another macro
+
+- **because**: macros other than `thread_local!` are not expanded, so the declaration never enters the observed AST
+- **its defence must show**: does not react
+- **pinned by**: `a_macro_generated_static_is_a_documented_bound`
+
 ### `semantic-trait-impl-exposure/a-glob-imported-type-in-an-impl-position-is-a-documented-bound`
 
 > an impl position naming a type that arrives through a glob import
@@ -353,7 +453,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `a_macro_invocation_pub_item_is_a_documented_bound`
 
-## over-reacts (15)
+## over-reacts (30)
 
 ### `crate-dependency-boundary/an-optional-dependency-edge-is-observed-as-a-declared-one-a-stated-bound`
 
@@ -379,13 +479,85 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `confine_external_crate_is_cfg_blind_to_unenabled_cfg_arms`
 
+### `inline-symbol-path-confinement/a-cfg-gated-name-beside-a-glob-is-read-with-the-glob-a-stated-bound`
+
+> a name a scope binds or declares only by items a `cfg` gates, which a glob of that scope, or the scope around a block, also names
+
+- **because**: the predicate is never evaluated, so on a build that compiles the gated item in, the name is resolved through what the lookup reads past the scope as well as through it
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `a_cfg_gated_name_beside_a_glob_is_read_with_the_glob`
+
+### `inline-symbol-path-confinement/a-generic-parameter-named-like-an-import-is-read-as-the-import-a-stated-bound`
+
+> a head naming a generic parameter that shares its name with a `use` of the enclosing module
+
+- **because**: generic parameter lists are not read, so the head is resolved through whatever the module binds under that name
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `inline_generic_parameter_named_like_an_import_is_read_as_the_import`
+
 ### `inline-symbol-path-confinement/a-glob-reacts-to-any-alias-or-re-export-beneath-its-resolved-module-a-stated-bound`
 
-> a glob import whose resolved module has, anywhere beneath it, a `type` alias or `pub use` of the confined prefix — `use super::*` inside an inline module included, which resolves against the file's module
+> a glob import whose resolved module has, anywhere beneath it, a `type` alias or `pub use` of the confined prefix, whether or not the glob actually imports that name
 
-- **because**: the glob hazard asks whether any definition beneath the glob's module resolves under the prefix, not whether the glob brings that name into scope, and a glob's `self` or `super` is resolved against the file's module rather than the inline module it stands in — so a sibling's `mod tests { use super::*; }` reads as a glob over the whole crate
+- **because**: the glob hazard asks whether any definition beneath the glob's resolved module resolves under the prefix, not whether the glob brings that name into scope
 - **its defence must show**: reacts on a harmless shape
-- **pinned by**: `a_sibling_test_glob_reacts_to_an_alias_the_permitted_module_declares`
+- **pinned by**: `a_sibling_test_glob_reacts_to_an_alias_in_its_resolved_module`
+
+### `inline-symbol-path-confinement/a-local-binding-named-like-an-import-is-read-as-the-import-a-stated-bound`
+
+> a bare head naming a `fn` or closure parameter, or a `let` binding, that shares its name with an import or an item in scope, and under strict the name such a binding introduces
+
+- **because**: parameters and `let` bindings are not recorded in the scope table, so the head is resolved through whatever the enclosing scopes bind under that name
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `a_local_binding_named_like_an_import_is_read_as_the_import`
+
+### `inline-symbol-path-confinement/a-parenthesized-fn-bound-is-read-as-a-call-a-stated-bound`
+
+> a trait bound of the `Fn` family written with parenthesized arguments — `F: Fn(u8) -> u8`, `impl FnOnce()`, `dyn FnMut(u8)`
+
+- **because**: a path's role is read from the tokens beside it, and a parenthesized bound is written as a call is, so no reading of the tokens tells the bound from the call
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `a_parenthesized_fn_bound_is_read_as_a_call`
+
+### `inline-symbol-path-confinement/a-path-in-a-pattern-position-is-read-as-a-call-a-stated-bound`
+
+> a tuple-struct or tuple-variant path in a pattern position — a `let`, `if let`, `while let` or let-else pattern, a `for` loop's, a match arm's, a `fn` or closure parameter's, a macro's arguments, a destructuring assignment's left side
+
+- **because**: a path's role is read from the tokens beside it, and a tuple-struct or tuple-variant pattern followed by its parenthesized fields is written as a call is, so no reading of the tokens tells the pattern from the call
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `a_path_in_a_pattern_position_is_read_as_a_call`
+
+### `inline-symbol-path-confinement/a-qualified-path-a-shift-opens-in-a-generic-list-is-read-as-a-rooted-path-a-stated-bound`
+
+> under `.strict_prefix_only()` and `.strict_external()`, the tail of a qualified path the second `<` of a `<<` opens in a generic list — `Vec<<u8 as Tr>::md5x>`
+
+- **because**: the token before the `<<` ends an operand, as in `1 << n > ::std::process::id() && n > 0`, so the `<<` is read as a shift and the tail after the inner `>` as a rooted path, which names a dependency where its first segment is one; telling the list from the shift needs a type from a value
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `a_qualified_path_a_shift_opens_in_a_generic_list_is_read_as_a_rooted_path`
+
+### `inline-symbol-path-confinement/a-qualified-path-after-a-closing-brace-is-read-as-a-rooted-path-a-stated-bound`
+
+> under `.strict_external()`, the tail of a qualified path opening a statement right after a `}` — `if c {} <W>::md5x();`
+
+- **because**: a `}` ends a block-like operand as well as a statement, and is read as an operand's end so a comparison after a block never opens a qualified path; the `<` after it is then a comparison, and the tail after its `>` is read as a rooted path, which names a dependency where its first segment is one
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `a_qualified_path_after_a_closing_brace_is_read_as_a_rooted_path`
+
+### `inline-symbol-path-confinement/an-import-in-a-block-of-what-is-not-read-is-read-with-the-scope-around-it-a-stated-bound`
+
+> a bare head a block binds only through an import of what the scanner does not read, which the scope around the block also binds
+
+- **because**: whether such an import holds the name in the namespace the head is read in is not read, so the head is resolved through the block's import and through the scope around the block both
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `a_block_import_of_what_is_not_read_is_read_with_the_scope_around_it`
+
+### `inline-symbol-path-confinement/an-import-of-what-is-not-read-beside-a-glob-is-read-with-the-glob-a-stated-bound`
+
+> a bare head a scope binds only through an import of what the scanner does not read, which a glob of that scope also brings
+
+- **because**: whether such an import holds the name in the namespace the head is read in is not read, so the head is resolved through the import and through the scope's globs both
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `an_import_of_what_is_not_read_beside_a_glob_is_read_with_the_glob`
 
 ### `reference-integrity/a-code-span-shaped-like-an-object-is-refused-though-it-names-none-a-stated-bound`
 
@@ -435,6 +607,14 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_shell_marker_after_a_metacharacter_stays_in_the_region`
 
+### `repository-checks/a-spawn-marker-inside-a-string-literal-is-read-as-a-spawn-a-stated-bound`
+
+> a spawn marker inside a string literal of a test target, after a byte that is neither a quote nor an identifier character
+
+- **because**: a string literal's contents are executed text, and the position rule excludes only a marker a quote or an identifier character precedes
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `a_spawn_marker_inside_a_string_literal_is_read_as_a_spawn`
+
 ### `runtime-origin-assertion/a-composite-shape-yields-a-truncated-origin-a-stated-bound`
 
 > a registered type that is a reference, tuple, array, pointer, or function pointer
@@ -467,6 +647,38 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **unpinned**, tracked by: `BACKLOG.md` — *four limits of the mutual-independence check*
 
+### `semantic-dyn-trait-operand-boundary/a-local-trait-sharing-an-auto-trait-leaf-name-over-reacts-as-a-dyn-auto-bound-a-stated-bound`
+
+> an exposed dyn Trait whose bound is a local trait sharing an auto-trait leaf name
+
+- **because**: auto-trait bounds are identified by leaf name without symbol resolution, so a local trait sharing an auto-trait name reacts as that auto trait
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `dyn_trait_local_auto_trait_leaf_over_reacts_is_a_bound`
+
+### `semantic-impl-trait-operand-boundary/a-local-trait-sharing-an-auto-trait-leaf-name-over-reacts-as-an-impl-auto-bound-a-stated-bound`
+
+> a returned impl Trait whose bound is a local trait sharing an auto-trait leaf name
+
+- **because**: auto-trait bounds are identified by leaf name without symbol resolution, so a local trait sharing an auto-trait name reacts as that auto trait
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `impl_trait_local_auto_trait_leaf_over_reacts_is_a_bound`
+
+### `semantic-static-item-boundary/a-local-macro-sharing-the-thread-local-name-over-reacts-a-stated-bound`
+
+> a local `macro_rules! thread_local` invoked in the governed subtree
+
+- **because**: `thread_local!` is recognized by its name, so a local macro of that name is read as the std one and the statics its body spells react
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `a_local_thread_local_macro_over_reacts_is_a_bound`
+
+### `semantic-static-item-boundary/cfg-gated-statics-are-observed-as-written-a-stated-bound`
+
+> a `static` whose `#[cfg]` predicate is false on the host, such as `#[cfg(test)]`
+
+- **because**: the AST reader observes the declaration as written without evaluating cfg, so a host-inactive static reacts
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `static_cfg_is_observed_as_written`
+
 ### `semantic-visibility-boundary/a-pub-in-narrow-path-item-may-over-react-under-a-tight-ceiling-a-stated-bound`
 
 > `pub(in crate::a) fn` on an item already directly in `crate::a`, under a `Module` ceiling
@@ -475,7 +687,31 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: reacts on a harmless shape
 - **pinned by**: `a_pub_in_narrow_path_over_reacts_under_a_module_ceiling`
 
-## refuses to judge (1)
+### `semantic-visibility-boundary/cfg-gated-items-are-observed-as-written-a-stated-bound`
+
+> a directly declared item whose cfg predicate is false on the host
+
+- **because**: the AST reader observes the declaration as written without evaluating cfg, so a host-inactive item may react
+- **its defence must show**: reacts on a harmless shape
+- **pinned by**: `cfg_is_observed_as_written`
+
+## refuses to judge (5)
+
+### `inline-symbol-path-confinement/a-prefix-naming-a-macro-generated-item-is-refused-a-stated-bound`
+
+> a `crate::` inline-call prefix naming an item a macro invocation defines
+
+- **because**: no declaration inside a macro invocation's group other than a `cfg_if!` arm is recorded, so the item is absent from the set the prefix is held to and the prefix is refused as naming nothing
+- **its defence must show**: refuses to judge
+- **pinned by**: `a_prefix_naming_a_macro_generated_item_is_refused`
+
+### `module-boundary/a-cfg-before-a-separator-its-construct-holds-is-not-read-a-stated-bound`
+
+> a `mod` with no file in a block whose item, statement, match arm, parameter or field carries a `cfg` and holds a `,`, a brace group or an attribute of its own before that block — a generic list's or a `where` clause's comma, a closure's parameters, an `if`'s block before `else`, a struct literal or pattern, a tuple struct's earlier fields, or a type's generic arguments before an array length
+
+- **because**: the owner of an enclosing group is read back to the previous `;`, `,`, brace group or attribute, so a construct holding one of those before the group is not reached and its `cfg` is not read; the missing file is refused rather than tolerated
+- **its defence must show**: refuses to judge
+- **pinned by**: `a_cfg_before_a_separator_its_construct_holds_is_not_read`
 
 ### `publish-source-integrity/whether-a-worktree-holding-an-undecodable-path-is-clean-is-not-observed-a-stated-bound`
 
@@ -485,7 +721,23 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: refuses to judge
 - **pinned by**: `a_worktree_holding_an_undecodable_path_is_not_judged_clean_or_dirty`
 
-## under-reacts (60)
+### `semantic-static-item-boundary/a-crate-renaming-thread-local-refuses-to-judge-a-stated-bound`
+
+> `use std::thread_local as tls;` anywhere in the governed crate, a function body included
+
+- **because**: a `thread_local!` is recognized by its name, so an invocation under the new name would escape it; the boundary asks for the macro to be written by its name
+- **its defence must show**: refuses to judge
+- **pinned by**: `a_renamed_thread_local_refuses_to_judge`
+
+### `semantic-static-item-boundary/a-thread-local-body-that-is-not-static-declarations-refuses-to-judge-a-stated-bound`
+
+> a `thread_local!` at or beneath the anchored module whose body does not parse as `static` declarations
+
+- **because**: the statics it declares cannot be named, and passing it would be a silent pass over a declaration
+- **its defence must show**: refuses to judge
+- **pinned by**: `an_unparseable_thread_local_body_refuses_to_judge`
+
+## under-reacts (66)
 
 ### `external-crate-confinement/an-extern-crate-declaration-is-not-observed-a-stated-bound`
 
@@ -503,6 +755,15 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `inline_a_verb_outside_the_declared_set_is_a_bound`
 
+### `inline-symbol-path-confinement/a-macro-generated-item-called-bare-in-its-own-module-is-not-observed-a-stated-bound`
+
+> a bare call, in its own module, of an item a macro invocation generates
+
+- **because**: no declaration inside a macro invocation's group other than a `cfg_if!` arm is recorded, so the generated item is not in the scope table and a head no scope binds names nothing; a crate-rooted path naming it from another module still reacts
+- **its defence must show**: does not react
+- **pinned by**: `a_macro_generated_item_called_bare_in_its_module_is_a_bound`
+- **pinned by**: `a_crate_rooted_call_of_a_macro_generated_item_reports`
+
 ### `inline-symbol-path-confinement/a-path-taken-as-a-value-is-a-documented-bound-under-the-default`
 
 > a confined path mentioned in value position rather than called
@@ -511,13 +772,21 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **pinned by**: `inline_value_capture_is_a_bound_under_the_default`
 
-### `inline-symbol-path-confinement/an-extern-crate-rename-is-a-stated-bound-under-strict-external`
+### `inline-symbol-path-confinement/a-prelude-name-called-bare-is-not-read-as-its-std-path-a-stated-bound`
 
-> a call reached through an `extern crate … as` alias head under strict-external
+> a bare call of a prelude name — `drop(x)`, `Some(..)`, `Box::new(..)` — under a standard-library prefix
 
-- **because**: the use-map is built from `use` declarations only, so an `extern crate` rename binds an alias the resolver does not know
+- **because**: the prelude's contents are not read, so a head no scope binds names nothing rather than the standard-library path the prelude would give it
 - **its defence must show**: does not react
-- **pinned by**: `inline_strict_external_extern_crate_rename_is_a_stated_bound`
+- **pinned by**: `a_prelude_name_called_bare_is_not_read_as_its_std_path`
+
+### `inline-symbol-path-confinement/a-use-written-in-a-macro-group-outside-any-block-binds-nothing-a-stated-bound`
+
+> a path beside a `use` written directly in a macro's group, outside any block the group holds
+
+- **because**: where a macro expands what its group holds is not read, so a `use` written directly in the group binds in no scope, and a path it would bind names nothing; a `use` a block in the group holds binds that block's paths
+- **its defence must show**: does not react
+- **pinned by**: `a_use_written_in_a_macro_group_outside_any_block_binds_nothing`
 
 ### `inline-symbol-path-confinement/the-fully-qualified-external-call-is-a-stated-bound-under-the-default`
 
@@ -848,6 +1117,38 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *a gate that is its own test is outside the refusal register*
 
+### `repository-checks/a-root-composed-without-naming-the-helper-is-not-read-a-stated-bound`
+
+> a fixture root composed from the running executable's path, from `CARGO_TARGET_TMPDIR`, or from any path that does not spell `scratch_base` or `scratch_ceiling`
+
+- **because**: the reader asks whether a file names one of two words, and whether a value is a fixture root is a question about what the value means. `scratch_ceiling` is the instance this tree holds: kanhe derives the same layout from the executable's path because its normal edges may not reach the helper, and the reader sees it only because it is named. A word added to the question's list is the perturbation of this stop, and its mutation record makes it
+- **its defence must show**: does not react
+- **pinned by**: `a_root_composed_without_naming_the_helper_is_not_read`
+
+### `repository-checks/a-root-reached-through-a-value-is-not-read-a-stated-bound`
+
+> a fixture root built from a path another function passes in, or `TMPDIR` read through a name bound to a string elsewhere
+
+- **because**: which value a parameter holds, and what a constant names, is name resolution and not something a parse tree carries. The reader names the call that produces a system root and not every path that could hold one, so a root handed in from a caller is judged where the caller builds it. No mutation record isolates it: reaching through a value means resolving names, which is a different reader rather than a perturbation of this one
+- **its defence must show**: does not react
+- **pinned by**: `a_root_reached_through_a_value_is_not_read`
+
+### `repository-checks/a-second-naming-in-a-declared-file-is-not-separated-from-the-declared-one-a-stated-bound`
+
+> a second naming of the helper's base directory in a file the declared set already names
+
+- **because**: the reader answers once per file and a declaration is a path, so every naming in a declared file stands behind the one its reason gives. No mutation record isolates it: separating the namings means returning a count or a site where the reader returns a verdict, which is a different reader and not a perturbation of this one
+- **its defence must show**: does not react
+- **pinned by**: `a_second_naming_in_a_declared_file_is_not_separated_from_the_first`
+
+### `repository-checks/a-system-temporary-directory-named-in-prose-a-string-or-a-child-environment-is-not-read-a-stated-bound`
+
+> `temp_dir` named in a comment or a string literal, or `TMPDIR` set on a child process's environment
+
+- **because**: a comment is what a lexer discards and a literal is one token, so neither is a call; setting a child's `TMPDIR` is a method call and not a read of this process's. What the stop leaves unobserved is the temporary files a child process writes for itself -- a script's `mktemp`, rustc and cargo -- which this check does not govern. No mutation record isolates it: a literal's contents are not a token stream, so reaching into them is a different reader rather than a perturbation of this one
+- **its defence must show**: does not react
+- **pinned by**: `naming_temp_dir_in_a_comment_a_string_or_a_child_environment_is_not_read`
+
 ### `repository-checks/a-tool-configuration-set-in-the-environment-is-not-observed-a-stated-bound`
 
 > a value a sanctioned wrapper refuses as an argument, exported into its environment instead
@@ -892,7 +1193,7 @@ Generated from each dimension's `observation_bounds()` by `crates/kanhe/tests/ob
 
 > an always-`Some` value bound to a name and read as if it could be absent on a later statement
 
-- **because**: the reader joins a chain `rustfmt` broke and decides one logical line, so a consumer reached through a binding is outside what it can see. Following the binding is name resolution, which no reader over text performs. Measured when this was written: no site in the tree binds a `split(..).next()` and consumes it later
+- **because**: the reader joins a chain `rustfmt` broke and decides one logical line, so a consumer reached through a binding is outside what it can see. Following the binding is name resolution, which no reader over text performs
 - **its defence must show**: does not react
 - **unpinned**, tracked by: `BACKLOG.md` — *the always-Some consumer reached through a binding*
 

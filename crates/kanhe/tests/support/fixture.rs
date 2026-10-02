@@ -11,55 +11,12 @@
 //! side never reads.
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
-
-/// A scratch root claimed through `xingbiao::claim_scratch`, so it cannot adopt a path planted before it, and
-/// removed on drop, so an assertion failing between its creation and the end of the run leaves nothing behind.
-pub struct Scratch(PathBuf);
-
-impl Scratch {
-    /// A fresh root under the system temporary directory, named `<prefix>-<pid>-<n>`.
-    pub fn claim(prefix: &str) -> Self {
-        static NEXT: AtomicUsize = AtomicUsize::new(0);
-        loop {
-            let candidate = std::env::temp_dir().join(format!(
-                "{prefix}-{}-{}",
-                std::process::id(),
-                NEXT.fetch_add(1, Ordering::Relaxed)
-            ));
-            match xingbiao::claim_scratch(&candidate) {
-                Ok(()) => return Self(candidate),
-                Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
-                Err(err) => panic!(
-                    "cannot acquire a scratch root {}: {err}",
-                    candidate.display()
-                ),
-            }
-        }
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-/// A root that cannot be removed is settled by `xingbiao::settle_cleanup`, as the other guards calling it settle
-/// theirs.
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        xingbiao::settle_cleanup(
-            "Scratch: removing",
-            &self.0,
-            std::fs::remove_dir_all(&self.0),
-        );
-    }
-}
 
 /// The directories a wrapper run is staged in: a claimed scratch root, the `bin` its stubs are found in first,
 /// and the wrapper's own `TMPDIR`, so what it leaves behind is observable and lands in the fixture rather than in
 /// the developer's `/tmp`.
 pub struct Harness {
-    scratch: Scratch,
+    scratch: xingbiao::ScratchRoot,
     bin: PathBuf,
     tmp: PathBuf,
 }
@@ -67,7 +24,7 @@ pub struct Harness {
 impl Harness {
     /// A fresh scratch root with its `bin` and `tmp` made.
     pub fn claim(prefix: &str) -> Self {
-        let scratch = Scratch::claim(prefix);
+        let scratch = xingbiao::scratch_root(prefix);
         let bin = scratch.path().join("bin");
         std::fs::create_dir(&bin).expect("create controlled PATH");
         let tmp = scratch.path().join("tmp");

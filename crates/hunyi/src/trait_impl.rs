@@ -9,16 +9,16 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 use xuanji::{Outcome, Polarity, Violation};
 
+use crate::anchor::{canonical_module_locations, require_locations_exist};
 use crate::containment::matches_allowed;
 use crate::driver::run_boundaries;
 use crate::dsl::TraitImplBoundary;
 use crate::emit::{MultiModuleViolationContext, push_multi_module_violations};
-use crate::errors::{ambiguous_trait_anchor_error, unknown_trait_error};
-use crate::file_scope::{over_each_unit, resolve_crate_units};
+use crate::file_scope::{UnitAnchor, over_each_unit, resolve_crate_units};
 use crate::finding::{SemanticFact, sort_attributed_facts};
 use crate::resolve::{
     AliasMap, BareFallback, canonical_path_str, canonical_self_owner, expand_canonical_paths,
-    render_last_segment_args, resolve_path_all, validate_path_operands,
+    render_last_segment_args, resolve_path_all,
 };
 use crate::rules::TRAIT_IMPL_RULE;
 use crate::scan::scan_crate;
@@ -46,38 +46,40 @@ pub(crate) fn check_trait_impl_boundary(
     boundary: &TraitImplBoundary,
     violations: &mut Vec<Violation>,
 ) -> Result<(), String> {
+    let allowed = canonical_module_locations(&boundary.allowed_locations, &boundary.crate_package)?;
     let (_package, units) = resolve_crate_units(metadata, &boundary.crate_package)?;
-    over_each_unit(
-        &units,
-        &unknown_trait_error(&boundary.trait_path, &boundary.crate_package),
-        |root_file, src_dir, unit| {
-            let TraitImplReaction { anchor, findings } = trait_impl_findings(
-                src_dir,
-                root_file,
-                &boundary.trait_path,
-                &boundary.allowed_locations,
-                &boundary.crate_package,
-            )?;
+    require_locations_exist(&units, &allowed, &boundary.crate_package)?;
+    let anchor = UnitAnchor::Trait {
+        trait_path: &boundary.trait_path,
+        crate_package: &boundary.crate_package,
+    };
+    over_each_unit(&units, anchor, |root_file, src_dir, unit| {
+        let TraitImplReaction { anchor, findings } = trait_impl_findings(
+            src_dir,
+            root_file,
+            &boundary.trait_path,
+            &allowed,
+            &boundary.crate_package,
+        )?;
 
-            let target = anchor;
-            push_multi_module_violations(
-                violations,
-                MultiModuleViolationContext {
-                    target: &target,
-                    rule: TRAIT_IMPL_RULE,
-                    rule_key: boundary.rule_key_for_anchor(&target),
-                    reason: &boundary.reason,
-                    severity: boundary.severity,
-                    anchor: boundary.anchor(),
-                    polarity: Polarity::AllowlistGap,
-                    crate_package: &boundary.crate_package,
-                    unit,
-                },
-                findings,
-            );
-            Ok(())
-        },
-    )
+        let target = anchor;
+        push_multi_module_violations(
+            violations,
+            MultiModuleViolationContext {
+                target: &target,
+                rule: TRAIT_IMPL_RULE,
+                rule_key: boundary.rule_key_for_anchor(&target),
+                reason: &boundary.reason,
+                severity: boundary.severity,
+                anchor: boundary.anchor(),
+                polarity: Polarity::AllowlistGap,
+                crate_package: &boundary.crate_package,
+                unit,
+            },
+            findings,
+        );
+        Ok(())
+    })
 }
 
 /// One trait-impl-locality evaluation's result: the anchor the declaration resolved to, and the
@@ -96,7 +98,7 @@ pub(crate) struct TraitImplReaction {
 /// else a constitution error — then return that anchor with the sorted, deduplicated findings: the
 /// impls of the anchored trait whose module location lies outside the allowed set.
 ///
-/// Allowed locations must have valid `::`-delimited path segments without empty segments.
+/// Allowed locations must each be a canonical module anchor (`crate::…`).
 /// Finding identities preserve written generic arguments and canonicalized self types.
 pub(crate) fn trait_impl_findings(
     src_dir: &Path,
@@ -104,9 +106,11 @@ pub(crate) fn trait_impl_findings(
     trait_path: &str,
     allowed: &[String],
     crate_package: &str,
-) -> Result<TraitImplReaction, String> {
-    validate_path_operands(allowed)?;
-    let scan = scan_crate(src_dir, root_file, crate_package, &HashSet::new())?;
+) -> Result<TraitImplReaction, crate::errors::ResolveError> {
+    let allowed = canonical_module_locations(allowed, crate_package)
+        .map_err(crate::errors::ResolveError::Other)?;
+    let scan = scan_crate(src_dir, root_file, crate_package, &HashSet::new())
+        .map_err(crate::errors::ResolveError::Other)?;
     let given = canonical_path_str(trait_path);
     let true_anchors = expand_canonical_paths(&given, &AliasMap::new(), &scan.reexports);
     let mut defining_anchors: Vec<String> = true_anchors
@@ -117,17 +121,21 @@ pub(crate) fn trait_impl_findings(
     defining_anchors.sort();
     defining_anchors.dedup();
     let anchor = match defining_anchors.len() {
-        0 => return Err(unknown_trait_error(trait_path, crate_package)),
+        0 => {
+            return Err(crate::errors::ResolveError::UnknownTrait(
+                trait_path.to_string(),
+                crate_package.to_string(),
+            ));
+        }
         1 => defining_anchors.remove(0),
         _ => {
-            return Err(ambiguous_trait_anchor_error(
-                trait_path,
-                crate_package,
-                &defining_anchors,
+            return Err(crate::errors::ResolveError::AmbiguousTraitAnchor(
+                trait_path.to_string(),
+                crate_package.to_string(),
+                defining_anchors,
             ));
         }
     };
-    let allowed: Vec<String> = allowed.iter().map(|a| canonical_path_str(a)).collect();
 
     let mut findings = Vec::new();
     for (ordinal, site) in scan.impls.iter().enumerate() {

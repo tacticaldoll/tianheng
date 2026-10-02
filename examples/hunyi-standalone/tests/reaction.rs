@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 
 use api_hygiene::governance::constitution;
 use hunyi::{
-    check, check_visibility, Outcome, SignatureBoundary, VisibilityBoundary, VisibilityCeiling,
+    check, check_reexport_only, check_visibility, Outcome, ReexportOnlyBoundary, SignatureBoundary,
+    VisibilityBoundary, VisibilityCeiling,
 };
 
 fn manifest() -> PathBuf {
@@ -88,5 +89,29 @@ fn a_stricter_super_ceiling_reaches_the_pub_crate_item() {
             findings.iter().any(|f| f.contains("Gadget")),
             "the pub(crate) item exceeds a Super ceiling and must react: {findings:?}"
         );
+    }
+}
+
+/// A facade made only of a re-export passes; a module that owns an item reacts under the
+/// same opt-in boundary, through the external package API.
+#[test]
+fn a_facade_carries_only_reexports() {
+    let facade = ReexportOnlyBoundary::in_crate("api_hygiene")
+        .module("crate::facade")
+        .must_declare_only_reexports()
+        .because("the facade carries only re-exports");
+    assert_eq!(check_reexport_only(&[facade], &manifest()).exit_code(), 0);
+
+    let internal = ReexportOnlyBoundary::in_crate("api_hygiene")
+        .module("crate::internal")
+        .must_declare_only_reexports()
+        .because("a facade owns no implementation items");
+    let outcome = check_reexport_only(&[internal], &manifest());
+    assert_eq!(outcome.exit_code(), 1);
+    if let Outcome::Violations(report) = outcome {
+        assert!(report
+            .violations
+            .iter()
+            .any(|v| v.finding == "struct Widget"));
     }
 }

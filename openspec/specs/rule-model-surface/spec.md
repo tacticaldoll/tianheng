@@ -97,7 +97,7 @@ changes.
 
 ### Requirement: Specific boundary builders SHALL expose explicit ScanDepth toggles
 
-The public reaction model SHALL provide a strongly-typed `ScanDepth` enum (`Shallow`, `Subtree`) with `#[default]` set to `Shallow`. Supporting boundary builders (`guibiao`: `ModuleBoundary`, `InlineConfinementDraft`; `hunyi`: `AsyncExposureBoundary`, `ImplTraitBoundary`) SHALL expose `.depth(ScanDepth)` to allow explicit configuration of observation depth. Legacy module boundaries SHALL preserve their default `Subtree` evaluation and baseline identity, while `.depth(ScanDepth::Shallow)` restricts observation to the anchored seam. Existing ergonomic builders (such as `.including_submodules()`) SHALL map to `.depth(ScanDepth::Subtree)` and SHALL remain fully compatible.
+The public reaction model SHALL provide a strongly-typed `ScanDepth` enum (`Shallow`, `Subtree`) with `#[default]` set to `Shallow`. Supporting boundary builders (`guibiao`: `ModuleBoundary`, `InlineConfinementDraft`; `hunyi`: `AsyncExposureBoundary`, `ImplTraitBoundary`, `ReexportOnlyBoundary`) SHALL expose `.depth(ScanDepth)` to allow explicit configuration of observation depth. Legacy module boundaries SHALL preserve their default `Subtree` evaluation and baseline identity, while `.depth(ScanDepth::Shallow)` restricts observation to the anchored seam. Existing ergonomic builders (such as `.including_submodules()`) SHALL map to `.depth(ScanDepth::Subtree)` and SHALL remain fully compatible.
 
 #### Scenario: Legacy module boundary construction preserves existing Subtree evaluation and identity
 
@@ -140,9 +140,9 @@ on both readings: reacting on both would make an ordinary bare import of a child
 for a broad false positive. Concretely, an import whose whole path resolves to a module that is a
 single-segment child of the anchored module SHALL additionally react when the anchored module itself
 declares a value-namespace item (`fn`, `const`, `static`) of that same final segment, and SHALL NOT react
-when it declares only the module. The observation this needs exists in this dimension: the definition
-observation backing the strict-external local-precedence ladder reads exactly those names, per module, at
-module top level.
+when it declares only the module. The observation this needs exists in this dimension: the value-namespace
+item reader, beside the definition observation backing an inline-call prefix's existence check, reads exactly those
+names, per module, at module top level; the existence check's own observation reads every item a module declares.
 
 An import whose **form cannot bind a value** SHALL NOT react through the value reading, whatever the
 anchored module declares. Two forms cannot, and the exclusions rest on what the language admits rather
@@ -163,8 +163,9 @@ than as a list of excluded spellings.
 
 The **observation** carries the remaining bounds, not the resolution, and each SHALL be stated:
 
-- A value name SHALL be read from **declaration-cleaned** source — comments, string and character
-  literals, and macro bodies removed — so a name appearing only as text declares nothing. Reading raw
+- A value name SHALL be read from the **token tree** — where a comment is no token, a string or character
+  literal is one literal token, and no declaration inside a macro's group is recorded — so a name appearing
+  only as text declares nothing. Reading raw
   source instead makes a name written in a comment or a string react, which is a false positive in the
   same cell this rule exists to make correct.
 - A value name SHALL be read past an interposed **modifier token** where the walk cannot otherwise recover

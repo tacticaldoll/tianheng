@@ -35,9 +35,9 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 
 ### `guibiao` (crate)
 
-> the 圭表 static core stays dependency-light: its direct normal edges reach only serde_json, xuanji (reaction model), and xingbiao (metadata substrate). functional core ⊥ imperative shell: none reaches the 天衡 shell. 三儀 ⊥ 三儀: none names a sibling dimension
+> the 圭表 static core stays dependency-light: its direct normal edges reach only serde_json, xuanji (reaction model), xingbiao (metadata substrate), unicode-ident (Unicode identifier tables), and unicode-normalization (Unicode NFC). functional core ⊥ imperative shell: none reaches the 天衡 shell. 三儀 ⊥ 三儀: none names a sibling dimension
 
-- **rule**: restrict dependencies to (only: serde_json, xuanji, xingbiao)
+- **rule**: restrict dependencies to (only: serde_json, xuanji, xingbiao, unicode-ident, unicode-normalization)
 - **kind**: crate · **severity**: enforce
 
 ### `hunyi` (crate)
@@ -87,6 +87,20 @@ Read the projection below as the imitable shape of Tianheng itself, and work *wi
 > path canonicalization and cycle/dedup guards in guibiao must resolve through `xingbiao::canonicalize_or_fail` or `try_visit` for unified failure handling
 
 - **rule**: inline symbol path confined to module (confined_prefix: std::fs; ending_with: canonicalize)
+- **kind**: module · **severity**: enforce · **crate**: guibiao
+
+### `guibiao::crate::module_scan::source_texts` (module)
+
+> guibiao calls std::fs to read or open a file in module_scan::source_texts alone
+
+- **rule**: inline symbol path permitted only in module (confined_prefix: std::fs; ending_with: read_to_string, read, open)
+- **kind**: module · **severity**: enforce · **crate**: guibiao
+
+### `guibiao::crate::module_scan::token_tree` (module)
+
+> guibiao's token tree imports no other guibiao module, so the readers of its tokens import it and it imports none of them
+
+- **rule**: restrict imports to (only: )
 - **kind**: module · **severity**: enforce · **crate**: guibiao
 
 ### `hunyi::crate` (module)

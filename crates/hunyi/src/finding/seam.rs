@@ -18,6 +18,14 @@ impl ExposureKind {
             Self::ImplTrait => "tianheng.fact/hunyi/impl-trait-exposure",
         }
     }
+
+    pub(crate) fn auto_trait_boundary_kind(self) -> crate::resolve::AutoTraitBoundaryKind {
+        match self {
+            Self::DynTrait => crate::resolve::AutoTraitBoundaryKind::Dyn,
+            Self::ImplTrait => crate::resolve::AutoTraitBoundaryKind::Impl,
+            Self::Signature => unreachable!("signature exposure has no auto-trait bound scoping"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]

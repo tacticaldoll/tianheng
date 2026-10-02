@@ -33,14 +33,8 @@ fn workspace_root() -> Option<PathBuf> {
     )
 }
 
-fn scratch(name: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!(
-        "tianheng-publish-source-{name}-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&root);
-    xingbiao::claim_scratch(&root).expect("the fixture root is writable");
-    root
+fn scratch(name: &str) -> xingbiao::ScratchRoot {
+    xingbiao::scratch_root(&format!("tianheng-publish-source-{name}"))
 }
 
 /// Every `git` this file runs to BUILD a fixture goes through the shared builder, dates and all.
@@ -95,7 +89,6 @@ fn a_signed_tagged_snapshot_at_the_tip_of_main_is_accepted() {
     let root = scratch("accepted");
     let fixture = fixture::build(&root, "ok", "9.9.9");
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
-    let _ = std::fs::remove_dir_all(&root);
     assert!(verdict.is_ok(), "{:?}", verdict.err());
 }
 
@@ -105,7 +98,6 @@ fn a_dirty_worktree_is_a_violation() {
     let fixture = fixture::build(&root, "dirty", "9.9.9");
     std::fs::write(fixture.repo.join("stray.txt"), "untracked").expect("write a stray file");
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a dirty worktree must be refused");
     refusal::expect("publish-source-integrity#worktree-is-not-clean", &refusal);
     assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
@@ -134,7 +126,6 @@ fn the_dirty_worktree_diagnostic_names_each_path_unescaped_and_one_per_line() {
         .expect("write a non-ASCII stray file");
     std::fs::write(fixture.repo.join("plain.txt"), "untracked").expect("write a stray file");
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a dirty worktree must be refused");
     let message = &refusal.message;
 
@@ -184,7 +175,6 @@ fn a_tag_that_is_not_on_the_remote_is_a_violation() {
         &["push", "-q", "--delete", "origin", "v9.9.9"],
     );
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("an unpushed tag must be refused");
     refusal::expect(
         "publish-source-integrity#release-tag-not-on-remote",
@@ -214,7 +204,6 @@ fn a_tag_replaced_after_it_was_pushed_is_a_violation() {
         &["tag", "-f", "-s", "v9.9.9", "-m", "v9.9.9 again"],
     );
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a tag replaced after pushing must be refused");
     refusal::expect(
         "publish-source-integrity#remote-tag-names-another-object",
@@ -232,7 +221,6 @@ fn a_head_that_is_not_the_release_snapshot_is_a_violation() {
     git(&fixture.repo, &["commit", "-qm", "docs: later work"]);
     git(&fixture.repo, &["push", "-q", "origin", "main"]);
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a non-release HEAD must be refused");
     refusal::expect(
         "publish-source-integrity#head-is-not-the-release-snapshot",
@@ -259,7 +247,6 @@ fn a_retired_release_subject_is_not_a_publishable_snapshot() {
     );
     git(&fixture.repo, &["push", "-qf", "origin", "main"]);
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("the retired subject must not reach publish");
     refusal::expect(
         "publish-source-integrity#head-is-not-the-release-snapshot",
@@ -280,7 +267,6 @@ fn an_untagged_snapshot_is_a_violation() {
     let fixture = fixture::build(&root, "untagged", "9.9.9");
     git(&fixture.repo, &["tag", "-d", "v9.9.9"]);
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("an untagged snapshot must be refused");
     refusal::expect("publish-source-integrity#release-tag-absent", &refusal);
     assert_eq!(refusal.kind, Kind::Violation, "{}", refusal.message);
@@ -298,7 +284,6 @@ fn a_lightweight_tag_is_a_violation() {
     git(&fixture.repo, &["tag", "-d", "v9.9.9"]);
     git(&fixture.repo, &["tag", "v9.9.9"]);
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a lightweight tag must be refused");
     refusal::expect(
         "publish-source-integrity#release-tag-is-lightweight",
@@ -333,7 +318,6 @@ fn an_unsigned_annotated_tag_is_a_violation() {
         ],
     );
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("an unsigned annotated tag must be refused");
     refusal::expect(
         "publish-source-integrity#signature-does-not-verify",
@@ -362,7 +346,6 @@ fn a_tag_pointing_elsewhere_than_head_is_a_violation() {
     );
     git(&fixture.repo, &["push", "-qf", "origin", "main"]);
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a tag that does not name HEAD must be refused");
     refusal::expect(
         "publish-source-integrity#release-tag-does-not-name-head",
@@ -394,7 +377,6 @@ fn a_snapshot_that_is_not_the_tip_of_main_is_a_violation() {
     git(&fixture.repo, &["branch", "-qD", "later"]);
 
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a snapshot behind main must be refused");
     refusal::expect(
         "publish-source-integrity#head-is-not-the-tip-of-main",
@@ -435,7 +417,6 @@ fn an_unreadable_source_cannot_be_judged_rather_than_refused() {
         "publish-source-integrity#workspace-version-malformed",
         &malformed,
     );
-    let _ = std::fs::remove_dir_all(&root);
     assert_eq!(malformed.kind, Kind::CannotJudge, "{}", malformed.message);
     assert!(
         malformed.message.contains("malformed"),
@@ -460,7 +441,6 @@ fn a_manifest_this_gate_cannot_read_is_not_judged_as_though_its_version_is_missi
         "publish-source-integrity#workspace-manifest-unreadable",
         &refusal,
     );
-    let _ = std::fs::remove_dir_all(&root);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
     assert!(
         refusal.message.contains("could not read") && refusal.message.contains("Cargo.toml"),
@@ -515,7 +495,6 @@ fn each_unreadable_input_says_which_one_it_could_not_read() {
         "{}",
         refusal.message
     );
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// A version value this reader cannot read stops the publish, and says so in its own words.
@@ -550,7 +529,6 @@ fn a_version_this_reader_cannot_read_stops_the_publish_as_a_cannot_judge() {
         "publish-source-integrity#workspace-version-unreadable",
         &refusal,
     );
-    let _ = std::fs::remove_dir_all(&root);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
     assert!(
         refusal
@@ -588,7 +566,6 @@ fn a_tag_with_no_signature_block_is_named_as_such() {
         ],
     );
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("an annotated tag carrying no signature must be refused");
     refusal::expect(
         "publish-source-integrity#release-tag-carries-no-signature",
@@ -619,7 +596,6 @@ fn a_signature_this_gate_cannot_read_cannot_be_judged() {
         ],
     );
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a signature this gate cannot read must be refused");
     refusal::expect(
         "publish-source-integrity#signature-armour-unverifiable",
@@ -650,7 +626,6 @@ fn a_remote_that_cannot_be_read_cannot_be_judged() {
     let fixture = fixture::build(&root, "no-remote", "9.9.9");
     let absent = root.join("there-is-no-remote-here.git");
     let verdict = judge(&fixture.repo, &absent.display().to_string());
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("an unreadable remote must be refused");
     refusal::expect("publish-source-integrity#remote-main-unreadable", &refusal);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
@@ -688,7 +663,6 @@ fn a_remote_without_main_is_named_as_missing_the_ref() {
         &fixture.repo,
         remote_without_main.to_str().expect("fixture path is UTF-8"),
     );
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a remote without main must be refused");
     refusal::expect("publish-source-integrity#remote-has-no-main", &refusal);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
@@ -712,7 +686,6 @@ fn a_worktree_state_that_cannot_be_read_cannot_be_judged() {
     let fixture = fixture::build(&root, "unreadable-index", "9.9.9");
     std::fs::write(fixture.repo.join(".git/index"), b"not an index").expect("corrupt the index");
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("an unreadable worktree state must be refused");
     refusal::expect(
         "publish-source-integrity#worktree-state-unreadable",
@@ -760,7 +733,6 @@ fn a_tag_whose_object_is_missing_cannot_be_read() {
     let fixture = fixture::build(&root, "missing-tag", "9.9.9");
     drop_object(&fixture.repo, &rev(&fixture.repo, "refs/tags/v9.9.9"));
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a missing tag object must be refused");
     refusal::expect("publish-source-integrity#tag-object-unreadable", &refusal);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
@@ -786,7 +758,6 @@ fn a_head_whose_ancestor_is_missing_cannot_have_its_subject_read() {
     git(&fixture.repo, &["commit", "-qm", "chore(release): 9.9.9"]);
     drop_object(&fixture.repo, &tagged);
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a missing ancestor object must be refused");
     refusal::expect("publish-source-integrity#head-subject-unreadable", &refusal);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
@@ -823,7 +794,6 @@ fn a_tag_whose_commit_is_missing_cannot_be_resolved() {
     git(&fixture.repo, &["commit", "-qm", "chore(release): 9.9.9"]);
     drop_object(&fixture.repo, &tagged);
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a tag naming a missing commit must be refused");
     refusal::expect("publish-source-integrity#tag-commit-unresolvable", &refusal);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
@@ -845,7 +815,7 @@ fn a_tag_whose_commit_is_missing_cannot_be_resolved() {
 // wiring.
 
 /// A repository whose only commit tracks whatever `tracked` names, with `stray` present and untracked.
-fn hiding(name: &str, tracked: &[(&str, &str)], stray: &str) -> (PathBuf, PathBuf) {
+fn hiding(name: &str, tracked: &[(&str, &str)], stray: &str) -> (xingbiao::ScratchRoot, PathBuf) {
     let root = scratch(name);
     let repo = root.join("repo");
     std::fs::create_dir_all(&repo).expect("create");
@@ -868,13 +838,12 @@ fn hiding(name: &str, tracked: &[(&str, &str)], stray: &str) -> (PathBuf, PathBu
 
 #[test]
 fn a_file_ignored_by_tracked_repository_content_is_clean() {
-    let (root, repo) = hiding(
+    let (_root, repo) = hiding(
         "ignored-tracked",
         &[(".gitignore", "stray.txt\n")],
         "stray.txt",
     );
     let hidden = hidden_by_the_checkout(&repo).expect("the classifier reads this repository");
-    let _ = std::fs::remove_dir_all(&root);
     assert!(
         hidden.is_empty(),
         "a file ignored by a tracked `.gitignore` was reported as hidden by the checkout, which would block a \
@@ -888,7 +857,7 @@ fn a_file_ignored_by_tracked_repository_content_is_clean() {
 /// judgement to reach the classification at all, so the failure is supplied rather than arranged.
 #[test]
 fn an_exclusion_classifier_that_cannot_run_cannot_be_judged() {
-    let (root, repo) = hiding(
+    let (_root, repo) = hiding(
         "classifier-failed",
         &[(".gitignore", "stray.txt\n")],
         "stray.txt",
@@ -907,7 +876,6 @@ fn an_exclusion_classifier_that_cannot_run_cannot_be_judged() {
         "publish-source-integrity#exclusion-classifier-cannot-run",
         &refusal,
     );
-    let _ = std::fs::remove_dir_all(&root);
     assert_eq!(refusal.kind, Kind::CannotJudge);
     assert!(
         refusal.message.contains("could not classify"),
@@ -920,7 +888,7 @@ fn an_exclusion_classifier_that_cannot_run_cannot_be_judged() {
 /// checkout's, and that is an answer rather than a refusal.
 #[test]
 fn an_exclusion_classifier_that_matched_nothing_still_answers() {
-    let (root, repo) = hiding(
+    let (_root, repo) = hiding(
         "classifier-empty",
         &[(".gitignore", "stray.txt\n")],
         "stray.txt",
@@ -931,7 +899,6 @@ fn an_exclusion_classifier_that_matched_nothing_still_answers() {
         |_, _| Tracked::Yes,
     )
     .expect("matching nothing is an answer, not a failure to read");
-    let _ = std::fs::remove_dir_all(&root);
     // **The fact, not a placeholder.** This asserted the sentinel `<unshown>` — a string that occupied the
     // same type as a real source path and rendered into the diagnostic as though a file of that name were
     // the ignore source. The state is an `Option`'s `None` now, so the direction reads the sentence the
@@ -952,13 +919,12 @@ fn an_exclusion_classifier_that_matched_nothing_still_answers() {
 /// repair: the source went unshown and the gate refused a file the repository itself ignores.
 #[test]
 fn a_file_with_quoted_bytes_ignored_by_tracked_content_is_clean() {
-    let (root, repo) = hiding(
+    let (_root, repo) = hiding(
         "ignored-quoted",
         &[(".gitignore", "ignored-*\n")],
         "ignored-\u{666e}\u{901a}",
     );
     let hidden = hidden_by_the_checkout(&repo).expect("the classifier reads this repository");
-    let _ = std::fs::remove_dir_all(&root);
     assert!(
         hidden.is_empty(),
         "a file whose name git prints quoted, ignored by a tracked `.gitignore`, was reported as hidden by \
@@ -968,10 +934,9 @@ fn a_file_with_quoted_bytes_ignored_by_tracked_content_is_clean() {
 
 #[test]
 fn a_file_hidden_by_an_untracked_gitignore_is_not_clean() {
-    let (root, repo) = hiding("ignored-untracked", &[("kept.txt", "k\n")], "stray.txt");
+    let (_root, repo) = hiding("ignored-untracked", &[("kept.txt", "k\n")], "stray.txt");
     std::fs::write(repo.join(".gitignore"), "stray.txt\n.gitignore\n").expect("write");
     let hidden = hidden_by_the_checkout(&repo).expect("the classifier reads this repository");
-    let _ = std::fs::remove_dir_all(&root);
     assert!(
         hidden.iter().any(|line| line.contains("stray.txt")),
         "a file hidden by an *untracked* `.gitignore` was accepted; the source is named like repository \
@@ -981,10 +946,9 @@ fn a_file_hidden_by_an_untracked_gitignore_is_not_clean() {
 
 #[test]
 fn a_file_hidden_by_this_clones_exclude_file_is_not_clean() {
-    let (root, repo) = hiding("ignored-clone", &[("kept.txt", "k\n")], "stray.txt");
+    let (_root, repo) = hiding("ignored-clone", &[("kept.txt", "k\n")], "stray.txt");
     std::fs::write(repo.join(".git/info/exclude"), "stray.txt\n").expect("write");
     let hidden = hidden_by_the_checkout(&repo).expect("the classifier reads this repository");
-    let _ = std::fs::remove_dir_all(&root);
     assert!(
         hidden.iter().any(|line| line.contains("info/exclude")),
         "a file hidden by this clone's exclude file was accepted, so the same commit would be judged \
@@ -1020,7 +984,7 @@ const MANY_PATHS_ONE_SOURCE: usize = 400;
 ///
 /// Long deliberately: the deadlock needs the conversation to exceed the kernel's pipe buffers in **bytes**,
 /// so bytes-per-file is the cheap axis and files-created is the expensive one.
-fn crowded(name: &str, count: usize) -> (PathBuf, PathBuf) {
+fn crowded(name: &str, count: usize) -> (xingbiao::ScratchRoot, PathBuf) {
     let (root, repo) = hiding(name, &[(".gitignore", "/ignored/\n")], "kept.txt");
     let ignored = repo.join("ignored");
     std::fs::create_dir_all(&ignored).expect("create the ignored directory");
@@ -1039,14 +1003,13 @@ fn crowded(name: &str, count: usize) -> (PathBuf, PathBuf) {
 /// never returns reports nothing, and reporting nothing is exactly how this reached a release branch.
 #[test]
 fn a_repository_whose_ignored_set_outgrows_a_pipe_is_still_answered() {
-    let (root, repo) = crowded("crowded-pipe", OUTGROWS_A_PIPE);
+    let (_root, repo) = crowded("crowded-pipe", OUTGROWS_A_PIPE);
     let (tx, rx) = std::sync::mpsc::channel();
     let judging = repo.clone();
     std::thread::spawn(move || {
         let _ = tx.send(hidden_by_the_checkout(&judging).map_err(|refusal| refusal.message));
     });
     let answered = rx.recv_timeout(std::time::Duration::from_secs(60));
-    let _ = std::fs::remove_dir_all(&root);
     let hidden = match answered {
         Ok(hidden) => hidden.expect("the classifier reads this repository"),
         Err(_) => panic!(
@@ -1069,7 +1032,7 @@ fn a_repository_whose_ignored_set_outgrows_a_pipe_is_still_answered() {
 /// repair: 73,670 paths, 73,670 spawns, **one** distinct source — 147 seconds spent asking one question.
 #[test]
 fn the_tracked_question_is_asked_once_per_source_not_once_per_path() {
-    let (root, repo) = crowded("crowded-sources", MANY_PATHS_ONE_SOURCE);
+    let (_root, repo) = crowded("crowded-sources", MANY_PATHS_ONE_SOURCE);
     let asked = std::sync::atomic::AtomicUsize::new(0);
     let hidden = hidden_by_the_checkout_with(&repo, gate::classify, |repo, source| {
         asked.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -1084,7 +1047,6 @@ fn the_tracked_question_is_asked_once_per_source_not_once_per_path() {
         }
     })
     .expect("the classifier reads this repository");
-    let _ = std::fs::remove_dir_all(&root);
     assert!(hidden.is_empty(), "{hidden:?}");
     let asked = asked.load(std::sync::atomic::Ordering::Relaxed);
     assert_eq!(
@@ -1144,7 +1106,6 @@ fn a_scratch_path_another_user_could_own_is_refused_rather_than_written_through(
     let fresh = root.join("unclaimed");
     gate::claim_scratch(&fresh).expect("a path nobody holds is claimable");
     assert!(fresh.is_dir());
-    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// The same shape through the whole judgement, so the classifier is known to be wired to a verdict.
@@ -1155,7 +1116,6 @@ fn a_worktree_the_checkout_hides_is_a_violation() {
     std::fs::write(fixture.repo.join(".git/info/exclude"), "stray.txt\n").expect("write");
     std::fs::write(fixture.repo.join("stray.txt"), "stray").expect("write");
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
-    let _ = std::fs::remove_dir_all(&root);
     let refusal = verdict.expect_err("a file only this checkout hides must be refused");
     refusal::expect(
         "publish-source-integrity#worktree-hides-untracked-files",
@@ -1181,7 +1141,7 @@ fn a_worktree_the_checkout_hides_is_a_violation() {
 /// cannot-judge, naming a repository fact it never established.
 #[test]
 fn a_source_whose_tracking_cannot_be_read_is_not_untracked() {
-    let (root, repo) = crowded("unreadable-tracking", 3);
+    let (_root, repo) = crowded("unreadable-tracking", 3);
     let refusal = hidden_by_the_checkout_with(&repo, gate::classify, |_, source| {
         Tracked::Unreadable(format!("git is not on this machine (asked about {source})"))
     })
@@ -1190,7 +1150,6 @@ fn a_source_whose_tracking_cannot_be_read_is_not_untracked() {
         "publish-source-integrity#tracking-question-unaskable",
         &refusal,
     );
-    let _ = std::fs::remove_dir_all(&root);
     assert_eq!(
         refusal.kind,
         Kind::CannotJudge,
@@ -1230,7 +1189,6 @@ fn a_manifest_declaring_no_workspace_version_stops_the_publish() {
         "publish-source-integrity#workspace-version-absent",
         &refusal,
     );
-    let _ = std::fs::remove_dir_all(&root);
     assert_eq!(refusal.kind, Kind::CannotJudge, "{}", refusal.message);
     assert!(
         refusal.message.contains("<missing>"),
@@ -1266,11 +1224,10 @@ fn a_manifest_declaring_no_workspace_version_stops_the_publish() {
 #[test]
 #[cfg(unix)]
 fn an_exclusion_source_that_is_not_text_refuses_rather_than_naming_a_replaced_pattern() {
-    let (root, repo) = hiding("ignored-bytes", &[("kept.txt", "k\n")], "foo");
+    let (_root, repo) = hiding("ignored-bytes", &[("kept.txt", "k\n")], "foo");
     std::fs::write(repo.join(".gitignore"), b"f[o\xFF]o\n").expect("a gitignore is bytes");
     let refusal =
         hidden_by_the_checkout(&repo).expect_err("an answer that is not text must refuse");
-    let _ = std::fs::remove_dir_all(&root);
     refusal::expect(
         "publish-source-integrity#exclusion-source-not-utf8",
         &refusal,
@@ -1326,7 +1283,6 @@ fn a_worktree_holding_an_undecodable_path_is_not_judged_clean_or_dirty() {
     let name = std::ffi::OsStr::from_bytes(b"stray\xFF");
     std::fs::write(fixture.repo.join(name), b"x").expect("a path may be bytes on unix");
     let verdict = judge(&fixture.repo, &fixture.remote.display().to_string());
-    let _ = std::fs::remove_dir_all(&root);
 
     let refusal = verdict.expect_err("a worktree this reader cannot represent must not be judged");
     refusal::expect(

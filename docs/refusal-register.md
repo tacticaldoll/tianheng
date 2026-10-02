@@ -8,7 +8,7 @@ A site that no direction holds is **declared unheld**, with why, an owner and a 
 
 Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.rs`. **Do not edit by hand** — regenerate with `BLESS=1 TIANHENG_WORKSPACE_TESTS=1 cargo test -p kanhe --test refusal_register`. A stale projection fails that gate.
 
-**20 of 151 refusal sites are declared unheld.** 0 carry no identity at all, which is a state this repository does not keep — the register refuses a non-zero figure here.
+**21 of 156 refusal sites are declared unheld.** 0 carry no identity at all, which is a state this repository does not keep — the register refuses a non-zero figure here.
 
 ## Declared unheld
 
@@ -33,6 +33,12 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 ### `publish-source-integrity#tag-object-unresolvable`
 
 - because `rev-parse refs/tags/<tag>` runs after the tag's presence, its object and its signature have all been read from the same store, so a ref-store state that answers those and not this is one no fixture can build — the sibling `release-tag-unreadable` records the same measurement for the reads above it
+- owner: Engine
+- tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
+
+### `release-coherence#release-tags-unreadable`
+
+- because measured on this machine's git, not assumed: a `.git/refs/tags` made unreadable leaves `git tag --list 'v*'` exiting `0` with an **empty** listing, so the ref-store perturbation a fixture can build is answered as *no tags* rather than refused, and the judgement reads no released section — git's own silence, which no reader of its status can split, and which a clean run therefore states as the count of released sections it held. Over this repository that count is held to the release snapshots preceding `HEAD` in its own history, so there the silence fails rather than reads clean. A repository whose earlier reads succeed and whose tag listing exits non-zero is not a state a fixture was found to build
 - owner: Engine
 - tracked by `BACKLOG.md` — *a refusal reachable only by a broken tool is not observed*
 
@@ -349,6 +355,11 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
 - observed by `crates/kanhe/tests/release_coherence.rs`
 
+### `release-coherence#entry-points-by-position`
+
+- produced in `crates/kanhe/src/release_coherence_gate.rs`
+- observed by `crates/kanhe/tests/release_coherence.rs`
+
 ### `release-coherence#example-catalog-entry-inherits`
 
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
@@ -555,6 +566,21 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 - observed by `crates/kanhe/tests/release_coherence.rs`
 
 ### `release-coherence#release-snapshot-version-disagrees`
+
+- produced in `crates/kanhe/src/release_coherence_gate.rs`
+- observed by `crates/kanhe/tests/release_coherence.rs`
+
+### `release-coherence#released-changelog-unreadable`
+
+- produced in `crates/kanhe/src/release_coherence_gate.rs`
+- observed by `crates/kanhe/tests/release_coherence.rs`
+
+### `release-coherence#released-section-not-one-at-head`
+
+- produced in `crates/kanhe/src/release_coherence_gate.rs`
+- observed by `crates/kanhe/tests/release_coherence.rs`
+
+### `release-coherence#released-section-rewritten`
 
 - produced in `crates/kanhe/src/release_coherence_gate.rs`
 - observed by `crates/kanhe/tests/release_coherence.rs`
@@ -772,7 +798,7 @@ Generated from `crates/kanhe/src/**.rs` by `crates/kanhe/tests/refusal_register.
 ### `repository-checks#the-only-found-none`
 
 - produced in `crates/kanhe/src/selection.rs`
-- observed by `crates/kanhe/src/tests/selection.rs, crates/kanhe/src/tests/wrapper_parser.rs`
+- observed by `crates/kanhe/src/tests/selection.rs, crates/kanhe/src/tests/wrapper_parser.rs, crates/kanhe/tests/release_coherence.rs`
 
 ### `repository-checks#the-only-found-several`
 

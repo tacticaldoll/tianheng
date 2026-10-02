@@ -1,19 +1,17 @@
-pub(super) use crate::module_check::check_module_boundary;
+use crate::module_scan::EvaluationScans;
 pub(super) use crate::*;
 pub(super) use serde_json::Value;
 use std::path::{Path, PathBuf};
 
 #[allow(dead_code)]
 pub(super) struct TempWorkspace {
-    pub(super) dir: PathBuf,
+    pub(super) dir: xingbiao::ScratchRoot,
     pub(super) src: PathBuf,
 }
 
 impl TempWorkspace {
     pub(super) fn new(label: &str) -> Self {
-        let dir = std::env::temp_dir().join(format!("guibiao-{label}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        xingbiao::claim_scratch(&dir).expect("the fixture root is writable");
+        let dir = xingbiao::scratch_root(&format!("guibiao-{label}"));
         let src = dir.join("src");
         std::fs::create_dir_all(&src).expect("mkdir src");
         Self { dir, src }
@@ -90,10 +88,20 @@ impl TempWorkspace {
     }
 }
 
-impl Drop for TempWorkspace {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
-    }
+/// Judge one boundary as an evaluation of its own: a fresh scan set, shared within the call, is
+/// what a single boundary under test builds — the production path threads one set through every
+/// boundary of the constitution instead (see `evaluate`).
+pub(super) fn check_module_boundary(
+    metadata: &Value,
+    boundary: &ModuleBoundary,
+    violations: &mut Vec<Violation>,
+) -> Result<(), String> {
+    crate::module_check::check_module_boundary(
+        metadata,
+        &EvaluationScans::shared(),
+        boundary,
+        violations,
+    )
 }
 
 pub(super) fn run_module_check(

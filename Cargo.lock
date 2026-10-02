@@ -22,9 +22,11 @@ checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
 name = "guibiao"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "serde_json",
+ "unicode-ident",
+ "unicode-normalization",
  "xingbiao",
  "xuanji",
 ]
@@ -49,7 +51,7 @@ dependencies = [
 
 [[package]]
 name = "hunyi"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "serde_json",
  "syn",
@@ -75,7 +77,7 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "kanhe"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "proc-macro2",
  "serde_core",
@@ -90,7 +92,7 @@ dependencies = [
 
 [[package]]
 name = "louke"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "xingbiao",
  "xuanji",
@@ -164,10 +166,11 @@ dependencies = [
 
 [[package]]
 name = "shengmo"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "serde_json",
  "tianheng",
+ "xingbiao",
 ]
 
 [[package]]
@@ -183,7 +186,7 @@ dependencies = [
 
 [[package]]
 name = "tianheng"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "guibiao",
  "hunyi",
@@ -191,6 +194,12 @@ dependencies = [
  "serde_json",
  "xingbiao",
 ]
+
+[[package]]
+name = "tinyvec"
+version = "1.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 
 [[package]]
 name = "toml_datetime"
@@ -236,6 +245,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 
 [[package]]
+name = "unicode-normalization"
+version = "0.1.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fd4f6878c9cb28d874b009da9e8d183b5abc80117c40bbd187a1fde336be6e8"
+dependencies = [
+ "tinyvec",
+]
+
+[[package]]
 name = "winnow"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -246,14 +264,14 @@ dependencies = [
 
 [[package]]
 name = "xingbiao"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "xuanji"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "serde_json",
 ]

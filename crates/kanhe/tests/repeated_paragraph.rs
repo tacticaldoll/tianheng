@@ -462,12 +462,7 @@ fn a_comment_shaped_line_inside_a_literal_is_not_a_comment() {
 /// `.md` one, and the file is reported as uninspected rather than as clean.
 #[test]
 fn a_repeated_paragraph_in_a_prose_file_is_outside_the_corpus() {
-    let scratch = std::env::temp_dir().join(format!(
-        "tianheng-repeated-paragraph-prose-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&scratch);
-    xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
+    let scratch = xingbiao::scratch_root("tianheng-repeated-paragraph-prose");
 
     let body = "// a paragraph worth pasting\n// and its second line\n// a paragraph worth pasting\n// and its second line\n";
     std::fs::write(scratch.join("probe.rs"), body).expect("write the Rust probe");
@@ -475,7 +470,6 @@ fn a_repeated_paragraph_in_a_prose_file_is_outside_the_corpus() {
 
     let (rust, rust_inspected) = offences(&scratch, &["probe.rs".to_string()]);
     let (prose, prose_inspected) = offences(&scratch, &["probe.md".to_string()]);
-    let _ = std::fs::remove_dir_all(&scratch);
 
     assert_eq!(rust_inspected, 1);
     assert_eq!(
@@ -509,12 +503,7 @@ fn a_repeated_paragraph_in_a_prose_file_is_outside_the_corpus() {
 fn a_tracked_path_that_is_not_utf8_is_refused_rather_than_renamed() {
     use std::os::unix::ffi::OsStrExt;
 
-    let scratch = std::env::temp_dir().join(format!(
-        "tianheng-repeated-paragraph-not-utf8-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&scratch);
-    xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
+    let scratch = xingbiao::scratch_root("tianheng-repeated-paragraph-not-utf8");
 
     std::fs::write(scratch.join("plain.rs"), "fn main() {}\n").expect("write the decodable probe");
     for args in [
@@ -543,7 +532,6 @@ fn a_tracked_path_that_is_not_utf8_is_refused_rather_than_renamed() {
     }
 
     let refused = std::panic::catch_unwind(|| tracked(&scratch));
-    let _ = std::fs::remove_dir_all(&scratch);
 
     let payload = refused.expect_err(
         "a path this reader cannot represent must stop the enumeration, not be decoded into another name",
@@ -569,16 +557,10 @@ fn a_tracked_path_that_is_not_utf8_is_refused_rather_than_renamed() {
 /// An unreadable tracked file is a cannot-judge, not a file that repeats nothing.
 #[test]
 fn an_unreadable_tracked_rust_file_is_refused_rather_than_skipped() {
-    let scratch = std::env::temp_dir().join(format!(
-        "tianheng-repeated-paragraph-unreadable-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&scratch);
-    xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
+    let scratch = xingbiao::scratch_root("tianheng-repeated-paragraph-unreadable");
 
     let listing = vec!["zzz_absent_paragraph_probe.rs".to_string()];
     let (offences, inspected) = offences(&scratch, &listing);
-    let _ = std::fs::remove_dir_all(&scratch);
 
     assert_eq!(offences.len(), 1, "{offences:?}");
     assert_eq!(
@@ -610,12 +592,7 @@ fn an_unreadable_tracked_rust_file_is_refused_rather_than_skipped() {
 /// the empty shadow map would let through.
 #[test]
 fn a_tracked_rust_file_that_does_not_lex_is_undecided_rather_than_accused() {
-    let scratch = std::env::temp_dir().join(format!(
-        "tianheng-repeated-paragraph-does-not-lex-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&scratch);
-    xingbiao::claim_scratch(&scratch).expect("the scratch root is writable");
+    let scratch = xingbiao::scratch_root("tianheng-repeated-paragraph-does-not-lex");
 
     // The control first: the identical paragraph with the literal TERMINATED is a genuine repetition
     // inside a string, which the shadow map keeps out — so the assertion below is about the lexer
@@ -632,7 +609,6 @@ fn a_tracked_rust_file_that_does_not_lex_is_undecided_rather_than_accused() {
     let unterminated = "fn f() {\n    let s = \"\n    // a note\n    // a note\n}\n";
     std::fs::write(scratch.join("unterminated.rs"), unterminated).expect("write the probe");
     let (offences, inspected) = offences(&scratch, &["unterminated.rs".to_string()]);
-    let _ = std::fs::remove_dir_all(&scratch);
 
     assert_eq!(offences.len(), 1, "{offences:?}");
     assert_eq!(

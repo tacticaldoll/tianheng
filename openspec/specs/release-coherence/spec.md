@@ -815,6 +815,48 @@ always enters; a convenience has to earn its place.
   than a downgrade: with the refusal replaced by a plain redirect, the parser reads the empty capture cleanly
   and reports a document naming a gate as coherent
 
+### Requirement: An entry still being written SHALL name what it points at
+
+An entry SHALL NOT point at another entry by its position, in a section still being written: `[Unreleased]`
+always, and in release-ready and snapshot state the section dated for the workspace version — the sections the
+machinery requirement reads, decided by one predicate. A regroup of the section's headings moves entries
+without changing a word, so a reference by position can come to point at something else, or at nothing, while
+every line of the file is still present, and a line-multiset comparison of the regroup cannot see it.
+
+The question SHALL be asked of words, so it has one syntactic answer: the words `above` and `below`, and `next`,
+`previous`, `preceding` or `following` immediately before `entry`, `entries`, `section`, `sections`, `bullet`,
+`item`, `step`, `group` or `heading`. A paragraph SHALL be read whole, so a phrase wrapped across lines is one
+phrase, and a `- ` or `* ` list item at any depth SHALL end its paragraph, so two entries are not read as one sentence; the
+list-item rule is the one the section's other readers use. A backticked span SHALL be taken out first, paired
+by the shared reader that refuses markers which do not pair, so a word quoted as a word is not read and a stray
+marker is a cannot-judge rather than a shifted pairing. Every heading SHALL be held, `### Self-governance` included, because a
+regroup moves its entries too. The refusal SHALL name the line the word stands on, the heading and the phrase,
+and its repair is one step: name the entry, step or bound meant.
+
+The rule reaches beyond the property, and says so. A reference to the entry immediately after, within one
+group, survives any regroup and is still refused: telling a reference within a group from one across groups is a
+judgement over what the sentence points at, and the price of a question with one answer is that the sound case
+is written as a name too. `above` and `below` used as prepositions — *below 1.85*, *above the limit* — are refused
+as well, and their repair is a rewording rather than a name. A positional phrase spelled with words outside the
+declared ones is not read.
+
+#### Scenario: An entry still being written points by position
+
+- **WHEN** an entry in `[Unreleased]`, or in release preparation the section dated for the workspace version,
+  carries `above`, `below`, or a sequence word before an item noun, outside an inline code span and in any
+  heading, a phrase wrapped across lines and a preposition included
+- **THEN** the check fails naming the line the word stands on, the heading and the phrase
+- **PINNED-BY** `a_changelog_entry_still_being_written_names_what_it_points_at`
+- **PINNED-BY** `an_unreleased_entry_pointing_by_position_is_a_violation`
+
+#### Scenario: What is not a reference by position is not refused
+
+- **WHEN** the word is quoted in an inline code span, a sequence word is followed by a noun outside the item
+  nouns, two `- ` or `* ` list items at any depth would only form the phrase when joined, or the section is record — an older dated
+  section, or in development the section dated for the workspace version
+- **THEN** the check does not report it
+- **PINNED-BY** `a_changelog_entry_still_being_written_names_what_it_points_at`
+
 ### Requirement: An enumeration SHALL NOT pass over content it failed to read
 
 Every enumeration this judgement makes SHALL distinguish **absent** from **unreadable**, and SHALL refuse as a
@@ -901,3 +943,58 @@ fourth was prepared with a date four days behind the day it would be cut on, and
   other than the release commit's
 - **THEN** release coherence fails naming both dates, so an operator can see which to change
 - **PINNED-BY** `a_release_section_dated_away_from_its_commit_is_a_violation`
+
+### Requirement: A released section reads as it read at its tag
+
+Every `vX.Y.Z` tag SHALL have exactly one section of its version at `HEAD`, and that section SHALL read as the one
+section of that version in the tag's `CHANGELOG.md`, line for line with each line's own ending, from its heading to
+the next section's heading, since it is the record of what that release carried: an entry written into it — a fenced block included —
+describes the release as carrying what it did not, and a released section deleted or renamed leaves the release
+with no record. The subject is the tags, so a section `HEAD` no longer carries is judged as surely as one it does. A
+dated section with no tag is the release being prepared and SHALL NOT be held. The link references closing the file
+belong to no section, since each release rewrites them, and that block at the end of the file SHALL NOT be compared,
+while every other section is compared to its last line. A rewritten section SHALL be refused naming the first line
+that differs by its line in `HEAD`'s `CHANGELOG.md`. A clean run SHALL say how many released sections it held,
+so a run that compared none says so, and this repository's own run SHALL hold at least as many as there are
+`chore(release): X.Y.Z` snapshots preceding `HEAD` in its history, since git answers an unlisted `refs/tags` as no
+tags. A tag whose tree yields no `CHANGELOG.md`, or a `CHANGELOG.md` holding other than
+one section for the tag's version, SHALL be a cannot-judge, never a clean answer. Two sections of one version at
+`HEAD` are refused before this is read, by the section-shape requirement, so the several-at-`HEAD` half of *exactly
+one* is reached only as none.
+
+#### Scenario: A released section rewritten after its tag
+
+- **WHEN** a fixture's `0.2.0` release is tagged `v0.2.0` and its dated section then gains an entry; or the same
+  section is left as tagged; or `v0.2.0` names a tree holding no `CHANGELOG.md`
+- **THEN** release coherence fails as a violation naming the tag, passes, and fails as a cannot-judge,
+  respectively
+- **PINNED-BY** `a_released_section_rewritten_after_its_tag_is_a_violation`
+- **PINNED-BY** `a_tag_holding_no_changelog_cannot_be_judged_against`
+
+#### Scenario: A released section deleted, or fenced into
+
+- **WHEN** a fixture's tagged `0.2.0` section gains a fenced block; or `0.1.0` and `0.2.0` sections are tagged and left
+  in place, or the `0.2.0` section, above `0.1.0`, gains a closing line `[x]: y`, or the `0.1.0` section is deleted
+  from `HEAD`
+- **THEN** release coherence fails as a rewrite; passes, saying `2 released section(s) held to their tags`; fails as a
+  rewrite; and fails as a violation naming `v0.1.0`, respectively
+- **PINNED-BY** `a_released_section_deleted_or_fenced_into_is_a_violation`
+
+#### Scenario: A released line rewritten to another ending
+
+- **WHEN** a fixture's tagged `0.2.0` section has its notes line rewritten to end in `\r\n`
+- **THEN** release coherence fails as a rewrite, naming that line's number in `HEAD`'s `CHANGELOG.md`
+- **PINNED-BY** `a_released_line_rewritten_to_another_ending_is_located_in_the_file`
+
+#### Scenario: This repository's count of released sections is held to its release snapshots
+
+- **WHEN** release coherence runs over this repository and holds fewer released sections than there are release
+  snapshots preceding `HEAD`
+- **THEN** the gate's own direction fails, naming both counts
+- **PINNED-BY** `the_release_surfaces_are_coherent`
+
+#### Scenario: A tag whose changelog lacks its own section
+
+- **WHEN** `v0.2.0` names a commit whose `CHANGELOG.md` holds `[Unreleased]` and no `0.2.0` section
+- **THEN** release coherence fails as a cannot-judge, finding no section to hold `HEAD`'s to
+- **PINNED-BY** `a_tag_whose_changelog_lacks_its_section_cannot_be_judged_against`

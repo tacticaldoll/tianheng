@@ -26,6 +26,8 @@ fn wildcard_prelude_is_the_external_adopter_contract() {
     assert_public_type::<SignatureBoundary>();
     assert_public_type::<TraitImplBoundary>();
     assert_public_type::<VisibilityBoundary>();
+    assert_public_type::<ReexportOnlyBoundary>();
+    assert_public_type::<StaticBoundary>();
     assert_public_type::<ForbiddenMarkerBoundary>();
     assert_public_type::<DynTraitBoundary>();
     assert_public_type::<ImplTraitBoundary>();
@@ -143,6 +145,14 @@ fn wildcard_prelude_is_the_external_adopter_contract() {
         .module("crate::internal")
         .max_visibility(VisibilityCeiling::Crate)
         .because("internal implementation stays crate-visible");
+    let reexport_only_boundary = ReexportOnlyBoundary::in_crate("consumer-core")
+        .module("crate::facade")
+        .must_declare_only_reexports()
+        .because("the facade carries only re-exports");
+    let static_boundary = StaticBoundary::in_crate("consumer-core")
+        .module("crate::domain")
+        .must_not_declare_static()
+        .because("the domain declares no `static` item or `thread_local!`");
     let runtime_boundary = RuntimeBoundary::at("domain-entry")
         .only_origins(["consumer::adapter"])
         .because("only the declared adapter crosses the seam");
@@ -159,6 +169,8 @@ fn wildcard_prelude_is_the_external_adopter_contract() {
         .boundary(module_boundary)
         .signature_boundary(signature_boundary)
         .visibility_boundary(visibility_boundary)
+        .reexport_only_boundary(reexport_only_boundary)
+        .static_boundary(static_boundary)
         .runtime(runtime_boundary)
         .sans_io_pure(profile)
         .no_existential_leak(existential_profile);
@@ -197,4 +209,19 @@ fn wildcard_prelude_is_the_external_adopter_contract() {
 
     assert_eq!(BoundaryKind::Crate.as_str(), "crate");
     assert_eq!(Polarity::DenyBreach.as_str(), "deny_breach");
+}
+
+/// Pins the external default-and-push contract; this test also passes without `#[non_exhaustive]`.
+/// The `SemanticBoundaries` compile-fail doctest fails when that attribute is removed because its
+/// snippet then compiles. Its compiling sibling checks the same import and `Default` path.
+#[test]
+fn semantic_boundaries_are_constructible_and_inspectable_from_tianheng() {
+    let mut boundaries = tianheng::SemanticBoundaries::default();
+    boundaries.signature.push(
+        SignatureBoundary::in_crate("consumer-core")
+            .module("crate::api")
+            .must_not_expose("crate::adapter::Client")
+            .because("the public API owns its vocabulary"),
+    );
+    assert_eq!(boundaries.signature.len(), 1);
 }

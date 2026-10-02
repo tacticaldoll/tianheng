@@ -177,7 +177,7 @@ fn the_reader_separates_a_doc_comment_from_an_inner_one() {
             true,
             true,
         ),
-        ("    /// the round 6 fix for the use-map", true, true),
+        ("    /// the round 6 fix for the scope table", true, true),
         ("// found on a round-9 adversarial review", false, true),
         ("    // round-11→round-12", false, true),
         (
