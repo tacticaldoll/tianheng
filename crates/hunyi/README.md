@@ -33,15 +33,16 @@ Built capabilities (each passing Tianheng's capability-admission test — declar
 - **Forbidden-marker** — a module's types must not acquire a forbidden trait/derive.
 - **Dyn-trait** — a module's public API must not *expose* trait-object (`dyn`) syntax (the
   type-shape complement of signature-coupling: internal `dyn` is fine; leaking dynamic
-  dispatch across the declared seam is the violation). Two depths: `must_not_expose_dyn()` is
+  dispatch across the declared seam is the violation). Three modes: `must_not_expose_dyn()` is
   **shape-only** (any exposed `dyn` reacts), and `must_not_expose_dyn_of([...])` is
   **operand-scoped** (only a `dyn` whose principal trait resolves into the named set reacts —
   e.g. forbid `dyn crate::Port` while allowing `dyn std::error::Error`). An empty operand set
   degenerates to shape-only (any `dyn`), never a no-op; auto-trait markers (`Send`) are never
   operands; a principal trait outside the resolver's coverage (a bare std trait, macro/glob
-  re-export) is the stated bound, never a silent pass of a resolvable operand. A third mode,
-  `must_not_expose_dyn_bounded_by(["Send"])`, forbids selected auto-trait bounds; accepted
-  qualified spellings name the defining `marker` or `panic` module under `std` or `core`.
+  re-export) is the stated bound, never a silent pass of a resolvable operand.
+  `must_not_expose_dyn_bounded_by(["Send"])` is the third mode, forbidding selected auto-trait
+  bounds by their normalized leaf names; accepted qualified spellings name the defining `marker`
+  or `panic` module under `std` or `core`.
 - **Impl-trait** — a module's public API must not *return* a written `impl Trait` (RPIT), the
   **existential** complement of dyn-trait's dynamic dispatch: an RPIT at a seam leaks an
   unnameable type the caller cannot name or store, and silently commits to its auto-traits.
