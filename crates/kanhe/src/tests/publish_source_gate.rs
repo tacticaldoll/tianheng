@@ -7,13 +7,9 @@
 
 use crate::publish_source_gate::{TagPresence, Tracked, tag_presence, tracks};
 
-/// A scratch directory of this process's own, removed and recreated so a previous run cannot answer for this
-/// one.
-fn scratch(name: &str) -> std::path::PathBuf {
-    let dir = xingbiao::scratch_base().join(format!("kanhe-tracks-{}-{name}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    xingbiao::claim_scratch(&dir).expect("create the fixture directory");
-    dir
+/// A fresh scratch directory, so a previous run cannot answer for this one.
+fn scratch(name: &str) -> xingbiao::ScratchRoot {
+    xingbiao::scratch_root(&format!("kanhe-tracks-{name}"))
 }
 
 fn git(dir: &std::path::Path, args: &[&str]) {
@@ -44,7 +40,6 @@ fn a_repository_git_can_read_answers_both_ways() {
         "a path the index does not carry was not read as untracked — this is the exit status the question \
          expects, and folding it in with the rest would make every answer unreadable"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// A directory that is not a repository: git exits **128**, which is not the answer to the question.
@@ -67,7 +62,6 @@ fn a_directory_git_will_not_read_is_not_a_directory_that_tracks_nothing() {
         "git declined to read a directory that is no repository, and the reader turned that into an answer \
          about the path: {read:?}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// The control for the tag read: in a repository git can read, a present tag and an absent one differ.
@@ -98,7 +92,6 @@ fn a_repository_git_can_read_answers_both_ways_about_a_tag() {
         "a tag the repository does not carry was not read as absent — this is the exit status the question \
          expects, and folding it in with the rest would make every answer unreadable"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// A directory that is not a repository: git exits **128**, which is not the answer to the question.
@@ -121,7 +114,6 @@ fn a_directory_git_will_not_read_is_not_a_repository_with_no_tag() {
         "git declined to read a directory that is no repository, and the reader turned that into an answer \
          about the tag: {read:?}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// A verifier that could not run is a cannot-judge; one that ran and rejected is the violation.
@@ -141,13 +133,7 @@ fn a_directory_git_will_not_read_is_not_a_repository_with_no_tag() {
 /// still reachable.
 #[test]
 fn a_verifier_that_could_not_run_is_not_a_bad_signature() {
-    let root = xingbiao::scratch_base().join(format!(
-        "kanhe-verifier-class-{}-{:?}",
-        std::process::id(),
-        std::thread::current().id()
-    ));
-    let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir(&root).expect("the fixture root is claimable");
+    let root = xingbiao::scratch_root("kanhe-verifier-class");
     let sig = root.join("tag.sig");
     std::fs::write(
         &sig,
@@ -176,7 +162,6 @@ fn a_verifier_that_could_not_run_is_not_a_bad_signature() {
     // the real verifier runs here and rejects the fixture, which must stay `Ok(false)` — that is the arm
     // the caller turns into `signature-does-not-verify`, and closing the class must not close it too.
     let ran = crate::publish_source_gate::verify_with("ssh-keygen", "a payload", &sig);
-    let _ = std::fs::remove_dir_all(&root);
     assert_eq!(
         ran.as_ref().ok().copied(),
         Some(false),

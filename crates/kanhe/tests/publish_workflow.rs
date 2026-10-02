@@ -14,7 +14,7 @@ use std::process::ExitStatus;
 
 mod support;
 
-use support::fixture::{Scratch, read_if_present, write_executable};
+use support::fixture::{read_if_present, write_executable};
 
 fn workspace_root() -> Option<PathBuf> {
     shengmo::workspace::locate(
@@ -651,7 +651,7 @@ fn an_unguarded_failure_exits_the_unjudged_class() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let claimed = Scratch::claim("tianheng-publish-unguarded");
+    let claimed = xingbiao::scratch_root("tianheng-publish-unguarded");
     let scratch = claimed.path();
 
     // The plant goes into a copy of the wrapper sitting at `scripts/` beneath a fake root, which is where
