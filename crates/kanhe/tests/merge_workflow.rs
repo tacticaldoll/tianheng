@@ -1259,8 +1259,7 @@ fn mode_is_enforced() -> bool {
     let root = xingbiao::scratch_root("tianheng-mode-probe");
     let probe = root.path().join("probe");
     std::fs::write(&probe, b"probe").expect("write this direction's own mode probe");
-    let enforced = xingbiao::Unreadable::try_new(&probe).is_some();
-    enforced
+    xingbiao::Unreadable::try_new(&probe).is_some()
 }
 
 /// The wrapper leaves no temporary file behind, on the path that completes the act as well as on the paths that
