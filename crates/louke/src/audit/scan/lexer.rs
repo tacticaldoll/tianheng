@@ -716,8 +716,14 @@ pub(crate) fn foreign_macro_body_end(b: &[u8], bang: usize) -> Option<usize> {
 
 /// Detect a raw or byte string literal starting at `i` (`r"…"`, `r#"…"#`, `b"…"`,
 /// `br"…"`, `br#"…"#`) and return the index past its end, or `None` if `i` is not such a
-/// literal. Rust syntax guarantees `r`/`b` immediately before `"`/`#` is a literal prefix
-/// (no identifier can precede a string), so no token-boundary check is needed.
+/// literal.
+///
+/// **No token boundary is asked for, so an `r#"` is read as a raw string whatever precedes it** — an
+/// identifier character included, which before edition 2021 is reachable: `cr#"x"` is the identifier `cr`, a
+/// `#` and a string, and this reads to the next `"#`. The audit lexes in no edition, so the divergence is the
+/// declared bound
+/// `runtime-origin-assertion/a-raw-string-after-an-identifier-character-is-read-as-one-in-every-edition-a-stated-bound`,
+/// held by `louke_reads_a_raw_string_after_an_identifier_character_in_every_edition`.
 pub(crate) fn raw_or_byte_string_end(b: &[u8], i: usize) -> Option<usize> {
     let mut j = i;
     let byte = j < b.len() && b[j] == b'b';

@@ -233,7 +233,8 @@ fn a_windows_separator_labels_as_the_canonical_one() {
     );
 }
 
-/// No label carries the platform's own separator unless that separator is already `/`.
+/// No label built from ordinary components carries the platform's own separator unless that separator is
+/// already `/`.
 ///
 /// **This assertion is vacuous on unix and load-bearing on Windows**, and is written this way
 /// deliberately rather than left to a platform CI runner that does not exist. On unix
@@ -242,6 +243,11 @@ fn a_windows_separator_labels_as_the_canonical_one() {
 /// Windows behaviour rests on `std::path::Components`' documented separator parsing, not on a
 /// measurement taken in this repository: there is no Windows runner and no wine here, and claiming
 /// otherwise would be the kind of unearned confidence a green unix suite invites.
+///
+/// **`Component::Prefix` is outside this corpus — a coverage limitation, not a bound.** A prefix is emitted
+/// verbatim, as the separator rule says every component is, so a Windows UNC prefix carries `\` within one
+/// component while `/` still means a boundary; a prefix is produced only on Windows, so what is missing here
+/// is a run, not a verdict.
 #[test]
 fn a_label_never_carries_a_platform_separator() {
     for path in ["src/lib.rs", "a/b/c.rs", "/abs/x.rs"] {
@@ -488,4 +494,58 @@ fn a_second_root_of_the_same_label_leaves_the_first_roots_files() {
         "building a second root of the same label removed the first root's file"
     );
     assert_ne!(first.path(), second.path());
+}
+
+/// A label the base would not contain is refused, and the refusal names it.
+///
+/// Three shapes, each one [`Path::join`] reads: an absolute label replaces the base outright, a leading `..`
+/// names its parent, and an inner separator names a directory beneath one nothing claimed.
+///
+/// **A bare `.` or `..` is accepted, and the direction asserts it rather than leaving it to be inferred.** The
+/// question is asked of the name, which carries the process id and counter after the label, so `..` leaves
+/// `..-<pid>-<counter>` — one ordinary component, under the base. Asking it of the label instead would refuse a
+/// root that is contained, which is the repair this direction exists to refuse.
+#[test]
+fn scratch_root_refuses_a_label_the_base_would_not_contain() {
+    for label in ["/escaped", "../escaped", "nested/escaped"] {
+        let refused = std::panic::catch_unwind(|| scratch_root(label));
+        let why = refused.expect_err(label);
+        let message = why
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| why.downcast_ref::<&str>().copied())
+            .unwrap_or_else(|| panic!("the refusal carries a message: {label}"));
+        assert!(
+            message.contains(label),
+            "the refusal names the label it will not build a root from: {message}"
+        );
+    }
+    for label in [".", ".."] {
+        let root = scratch_root(label);
+        assert!(
+            root.path().starts_with(scratch_base()),
+            "a label the name contains is built, not refused: {}",
+            root.path().display()
+        );
+    }
+}
+
+/// An absent path is removed; a path that is not a directory is an error rather than a silent success.
+///
+/// The distinction is the whole of [`remove_if_present`]: a root left by a previous process under a recycled
+/// id is the expected absence, and every other failure leaves something standing where the caller is about to
+/// claim a directory.
+#[test]
+fn remove_if_present_tells_absence_from_a_failure() {
+    let root = scratch_root("xingbiao-remove-if-present");
+    let absent = root.path().join("never-created");
+    assert!(remove_if_present(&absent).is_ok(), "{}", absent.display());
+    let file = root.path().join("f");
+    std::fs::write(&file, "x").expect("write the file to remove as a directory");
+    let err = remove_if_present(&file).expect_err("a file is not a directory tree to remove");
+    assert_ne!(
+        err.kind(),
+        std::io::ErrorKind::NotFound,
+        "the error a caller must hear is not absence: {err}"
+    );
 }

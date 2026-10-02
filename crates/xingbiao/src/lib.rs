@@ -562,18 +562,66 @@ pub struct ScratchRoot {
 }
 
 /// A fixture root named for `label`, empty and owned by the caller until the returned guard drops.
+///
+/// **A label that does not leave the name it is built into one ordinary path component is a refusal naming the
+/// label, never a root outside the base.** The question is asked of the name, which is what [`Path::join`]
+/// reads: a label carrying a separator, a leading `..` or a root leaves a name for a directory the base does
+/// not contain — and that directory is removed, recursively, before the root is claimed and again when the
+/// guard drops. A bare `.` or `..` leaves one ordinary component, the process id and counter standing after it,
+/// and is contained. Asking it of the name is what makes the containment this function's own rather than every
+/// caller's.
 #[doc(hidden)]
 pub fn scratch_root(label: &str) -> ScratchRoot {
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-    let path = scratch_base().join(format!(
+    let base = scratch_base();
+    let name = format!(
         "{label}-{}-{}",
         std::process::id(),
         NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    ));
-    let _ = std::fs::remove_dir_all(&path);
+    );
+    if !is_one_component(&name) {
+        panic!(
+            "scratch_root: '{name}', built from label '{label}', is not one ordinary path component, so it \
+             does not name a directory under '{}'",
+            base.display()
+        );
+    }
+    let path = base.join(name);
+    settle_cleanup(
+        "scratch_root: removing the root a previous process left at",
+        &path,
+        remove_if_present(&path),
+    );
     claim_scratch(&path)
         .unwrap_or_else(|err| panic!("scratch_root: cannot claim '{}': {err}", path.display()));
     ScratchRoot { path }
+}
+
+/// Whether `name` is one ordinary path component, which is what makes [`Path::join`] append it rather than
+/// name anything above the directory joined to.
+///
+/// **Read through [`std::path::Components`], not by searching for separators**: which bytes separate is the
+/// platform's answer, and a `.`, a `..` and a root are component kinds rather than characters. The equality is
+/// what makes it total — a name yielding one `Normal` that spells less than the whole of it carried something
+/// `join` would read.
+fn is_one_component(name: &str) -> bool {
+    let mut components = Path::new(name).components();
+    matches!(
+        (components.next(), components.next()),
+        (Some(std::path::Component::Normal(only)), None) if only == std::ffi::OsStr::new(name)
+    )
+}
+
+/// Remove `path` and everything under it, taking an already-absent `path` as removed.
+///
+/// **One answer for both removals a fixture root makes** — the one before it is claimed, which clears what a
+/// previous process left under a recycled process id, and the one in `Drop`. Every error but absence names a
+/// directory still standing where the caller is about to claim one, which is the thing it has to hear.
+fn remove_if_present(path: &Path) -> std::io::Result<()> {
+    match std::fs::remove_dir_all(path) {
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        other => other,
+    }
 }
 
 impl ScratchRoot {
@@ -598,11 +646,11 @@ impl AsRef<Path> for ScratchRoot {
 
 impl Drop for ScratchRoot {
     fn drop(&mut self) {
-        let removed = match std::fs::remove_dir_all(&self.path) {
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            other => other,
-        };
-        settle_cleanup("ScratchRoot: removing", &self.path, removed);
+        settle_cleanup(
+            "ScratchRoot: removing",
+            &self.path,
+            remove_if_present(&self.path),
+        );
     }
 }
 
