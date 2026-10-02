@@ -207,6 +207,16 @@ them.
 
 ### Static
 
+- **BREAKING** — **圭表 bounds branching glob resolution and keeps foreign candidates beside local ones out of
+  glob targets and hazard worklists.** Gated sibling-module globs settle instead of generating increasingly long
+  paths, so crates such as rustix and libc return a judgement without exhausting memory. An unbound import or glob
+  head names only a sysroot crate, a declared dependency or the package's library, while a same-named dependency
+  beside a gated module continues to react. Foreign candidates remain available to call findings and namespace
+  presence; enum globs still bring variants. Reports can drop invented glob targets, making their recorded baseline
+  entries stale; regenerate those baselines. A reading wider than 32,768 candidate/work entries or 8,388,608 bytes
+  of path text now returns exit 2 with a request to reduce branching imports, globs or re-exports.
+
+
 - **BREAKING** — **圭表 resolves an inline path's head from one scope table.** `must_not_call_inline` and
   `confine_inline_call` read a path's first identifier from the scope it is written in: the nearest block, then
   its module, with `use` bindings, block-local items, glob edges followed to a fixed point, and the local `type`

@@ -6,7 +6,9 @@ use std::ops::Bound;
 
 use super::item_head::Visibility;
 use super::path_vocab::{names_a_block_item, path_within};
-use super::resolve::{BindingNames, CrateScopes, Namespace, Walk, extern_crate_names, least};
+use super::resolve::{
+    BindingNames, CrateScopes, Namespace, ReadingSize, Walk, extern_crate_names, least,
+};
 use super::scope_tree::{Binding, DeclKind};
 
 /// Whether a glob naming `glob`, written in module `viewer`, can bring a name resolving under `prefix` into scope. It
@@ -35,7 +37,11 @@ pub(super) fn glob_reaches_prefix(
 ) -> Result<bool, String> {
     let mut hazard = Hazard::default();
     let mut visited: BTreeSet<String> = BTreeSet::new();
-    let mut work: Vec<String> = scopes.denote(glob, Namespace::Type)?;
+    let (mut work, terminal_reaches) = scopes.hazard_paths(glob, Namespace::Type, prefix, true)?;
+    hazard.reaches |= terminal_reaches;
+    for path in &work {
+        hazard.work_size.add(path)?;
+    }
     while let Some(glob) = work.pop() {
         if !visited.insert(glob.clone()) {
             continue;
@@ -87,6 +93,7 @@ struct Reading<'a> {
 struct Hazard {
     reaches: bool,
     refused: Option<String>,
+    work_size: ReadingSize,
 }
 
 impl Hazard {
@@ -95,9 +102,11 @@ impl Hazard {
     }
 
     /// Fold what a path through a re-export names: it reaches the prefix, or it is refused.
-    fn read(&mut self, denoted: Result<Vec<String>, String>, prefix: &str) {
+    fn read(&mut self, denoted: Result<(Vec<String>, bool), String>, prefix: &str) {
         match denoted {
-            Ok(found) => self.reaches |= found.iter().any(|p| path_within(p, prefix)),
+            Ok((found, terminal_reaches)) => {
+                self.reaches |= terminal_reaches || found.iter().any(|p| path_within(p, prefix))
+            }
             Err(refusal) => self.refuse(refusal),
         }
     }
@@ -128,7 +137,10 @@ fn read_scope(
             {
                 BindingNames::Paths(paths, _) => {
                     for path in paths {
-                        hazard.read(scopes.denote(&path, Namespace::Either), reading.prefix);
+                        hazard.read(
+                            scopes.hazard_paths(&path, Namespace::Either, reading.prefix, false),
+                            reading.prefix,
+                        );
                     }
                 }
                 BindingNames::Local => {}
@@ -140,7 +152,12 @@ fn read_scope(
         if let DeclKind::ExternCrate { target, .. } = &declaration.kind {
             if declaration.visibility != Visibility::Private {
                 hazard.read(
-                    scopes.denote(extern_crate_names(target).path(), Namespace::Either),
+                    scopes.hazard_paths(
+                        extern_crate_names(target).path(),
+                        Namespace::Either,
+                        reading.prefix,
+                        false,
+                    ),
                     reading.prefix,
                 );
             }
@@ -152,7 +169,15 @@ fn read_scope(
                 && inner.visibility.visible_from(&scope.module, reading.viewer))
         {
             match scopes.glob_targets(t, s, i) {
-                Ok(targets) => work.extend(targets),
+                Ok(targets) => {
+                    for target in targets {
+                        if let Err(refusal) = hazard.work_size.add(&target) {
+                            hazard.refuse(refusal);
+                            break;
+                        }
+                        work.push(target);
+                    }
+                }
                 Err(refusal) => hazard.refuse(refusal),
             }
         }

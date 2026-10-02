@@ -110,6 +110,7 @@ impl UnitScan {
         all_files: &[(PathBuf, String)],
         edition: Edition,
         proc_macro: bool,
+        dependencies: BTreeSet<String>,
     ) -> Result<Self, String> {
         let mut files = Vec::new();
         let mut index = HashMap::new();
@@ -125,7 +126,7 @@ impl UnitScan {
             files.push(scan);
             tables.push(table);
         }
-        let scopes = CrateScopes::new(tables, edition);
+        let scopes = CrateScopes::new(tables, edition).depending_on(dependencies);
         Ok(UnitScan {
             files,
             index,

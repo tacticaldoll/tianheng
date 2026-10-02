@@ -286,7 +286,10 @@ SHALL answer it for certain only where that `extern crate` is one no `cfg` gates
 gated, the name SHALL also be read as the crate it spells, whatever else the root declares under it, since a root's
 `mod` of that name is seen by no other module; and what a glob of a crate whose contents are not
 read brings SHALL stay a candidate beside what the unit's own modules bind, for a path through the scope's module,
-whether the two meet in one scope's globs, in cfg-exclusive files of one module, or in a name's two namespaces. A crate-rooted path
+whether the two meet in one scope's globs, in cfg-exclusive files of one module, or in a name's two namespaces. These foreign candidates beside local ones SHALL be reported by a finding reader, but SHALL NOT be
+used as glob targets or fed back into a hazard worklist. They SHALL contribute unknown presence in that namespace, while a known local candidate keeps its known presence.
+A hazard SHALL compare terminal foreign candidates with its prefix without enqueuing them. A bare head no scope binds SHALL name a crate for an import or glob only if the unit's extern
+prelude can hold it: a sysroot crate, a declared dependency import name, or the package's own library import name. A crate-rooted path
 SHALL name itself and every path each binding on it names: where a segment names something a module binds
 rather than declares — an import, a `type` alias read in that module's own scope, or a name one of its
 globs brings — every path those bindings name is read on from it, to a fixed point, so a module's
@@ -1449,3 +1452,44 @@ for the lookup it answers rather than as a cycle the walk cut.
 
 - **WHEN** a governed file declares a grouped glob nested well under the depth cap
 - **THEN** the system observes and reacts to it exactly as a shallower grouped glob would
+
+
+### Requirement: Branching resolution has a finite candidate budget
+
+A resolution reading SHALL refuse with a constitution error (exit 2) when its candidate or queued work entries
+exceed 32,768, or its accumulated path text exceeds 8,388,608 bytes. This width budget SHALL apply to joins of
+scope answers, crate-rooted denotation work, combined path readings and the hazard worklist, independently of the
+chain-depth cap. Each expansion SHALL charge the budget before retaining its output. A whole glob graph's held
+answers SHALL have a separate aggregate budget of 1,048,576 candidate entries and 67,108,864 bytes of path text,
+so a long chain's repeated intermediate paths do not consume an individual reading's width budget.
+Each refusal SHALL name its entry and byte limits and ask the author to reduce branching imports, globs or re-exports.
+
+#### Scenario: Gated sibling globs settle while calls remain observed
+- **WHEN** a module declares two, three or four cfg-gated child modules, re-exports each through a bare-head glob, and a child calls `std::process::id()`
+- **THEN** the system reports the forbidden call in the child in either mode, without inventing dependency crates from the child-module heads
+- **PINNED-BY** `gated_sibling_globs_settle_and_observe_calls`
+
+#### Scenario: A gated module glob keeps a real dependency candidate
+- **WHEN** a package depending on `md5x` declares `#[cfg(any())] mod md5x {}` beside `use md5x::*;` and calls `compute()`
+- **THEN** the glob reports under `crate::core::md5x` in either mode, and under `md5x` with `.strict_external()`
+- **PINNED-BY** `a_gated_module_glob_keeps_its_dependency_candidate`
+
+#### Scenario: An internal non-module glob target does not hide observations
+- **WHEN** a cfg-gated glob names an absent crate-internal target beside an enum glob and a forbidden direct call
+- **THEN** the reading settles and reports the direct call and the enum variant under their respective prefixes
+- **PINNED-BY** `an_internal_non_module_glob_target_keeps_enum_variants_and_calls`
+
+#### Scenario: Foreign candidates beside local ones are terminal
+- **WHEN** cfg-exclusive globs bring a local declaration and a foreign candidate for a crate-rooted path
+- **THEN** the finding reader keeps the foreign candidate, the readable-path view excludes it, and the hazard still detects its prefix, and a known local candidate keeps its known presence
+- **PINNED-BY** `foreign_candidates_beside_local_ones_are_terminal_for_every_reader`
+
+#### Scenario: Mutually globbed gated modules have bounded reading work
+- **WHEN** eight or sixteen cfg-gated modules each glob every other module, or thirty-two each glob both neighbours in a cycle, and one declares `f`
+- **THEN** a call through `f` names `crate::m0::f` and the reading visits no more than `32 * n * n * n` scopes for `n` modules
+- **PINNED-BY** `mutually_globbed_gated_modules_have_bounded_reading_work`
+
+#### Scenario: Candidate width or path bytes past the budget are refused
+- **WHEN** a scope-answer join holds more than 32,768 foreign candidate paths, a combined path or glob-target reading exceeds that entry count, the graph's retained answers exceed 1,048,576 entries, or a path-text reading exceeds 8,388,608 bytes
+- **THEN** the resolver returns the named width refusal before another expansion
+- **PINNED-BY** `resolution_width_and_path_bytes_refuse_before_growth`
