@@ -16,15 +16,13 @@ pub(super) use crate::module_resolve::resolve_module_file;
 /// fixture-building helpers otherwise each repeat.
 #[allow(dead_code)]
 pub(super) struct TempSrcTree {
-    pub(super) dir: PathBuf,
+    pub(super) dir: xingbiao::ScratchRoot,
     pub(super) src: PathBuf,
 }
 
 impl TempSrcTree {
     pub(super) fn new(label: &str) -> Self {
-        let dir = xingbiao::scratch_base().join(format!("hunyi-{label}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        xingbiao::claim_scratch(&dir).expect("the fixture root is writable");
+        let dir = xingbiao::scratch_root(&format!("hunyi-{label}"));
         let src = dir.join("src");
         std::fs::create_dir_all(&src).expect("mkdir src");
         Self { dir, src }
@@ -68,12 +66,6 @@ impl TempSrcTree {
                 "targets": [{ "kind": ["lib"], "src_path": self.root().to_string_lossy().into_owned() }],
             }],
         })
-    }
-}
-
-impl Drop for TempSrcTree {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
     }
 }
 

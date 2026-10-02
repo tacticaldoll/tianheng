@@ -18,10 +18,8 @@ mod visibility;
 
 #[test]
 fn empty_composition_is_clean_without_reading_a_manifest() {
-    let absent = xingbiao::scratch_base().join(format!(
-        "tianheng-empty-semantic-composition-{}-does-not-exist/Cargo.toml",
-        std::process::id()
-    ));
+    let root = xingbiao::scratch_root("tianheng-empty-semantic-composition");
+    let absent = root.join("does-not-exist/Cargo.toml");
 
     assert!(matches!(
         crate::check_all(&crate::SemanticBoundaries::default(), &absent),
