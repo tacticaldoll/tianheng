@@ -10,7 +10,7 @@ use crate::publish_source_gate::{TagPresence, Tracked, tag_presence, tracks};
 /// A scratch directory of this process's own, removed and recreated so a previous run cannot answer for this
 /// one.
 fn scratch(name: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("kanhe-tracks-{}-{name}", std::process::id()));
+    let dir = xingbiao::scratch_base().join(format!("kanhe-tracks-{}-{name}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     xingbiao::claim_scratch(&dir).expect("create the fixture directory");
     dir
@@ -141,7 +141,7 @@ fn a_directory_git_will_not_read_is_not_a_repository_with_no_tag() {
 /// still reachable.
 #[test]
 fn a_verifier_that_could_not_run_is_not_a_bad_signature() {
-    let root = std::env::temp_dir().join(format!(
+    let root = xingbiao::scratch_base().join(format!(
         "kanhe-verifier-class-{}-{:?}",
         std::process::id(),
         std::thread::current().id()

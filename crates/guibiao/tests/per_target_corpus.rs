@@ -36,7 +36,7 @@ impl RootProbe {
         use std::sync::atomic::{AtomicU32, Ordering};
         static COUNTER: AtomicU32 = AtomicU32::new(0);
         let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!(
+        let dir = xingbiao::scratch_base().join(format!(
             "guibiao-single-root-{name}-{}-{unique}",
             std::process::id()
         ));
@@ -279,7 +279,7 @@ fn a_root_cargo_reports_twice_is_scanned_once() {
 #[test]
 fn a_target_root_outside_the_package_directory_is_refused_not_labeled() {
     // The shared source lives beside the package, so the package's own directory does not contain it.
-    let shared = std::env::temp_dir().join(format!(
+    let shared = xingbiao::scratch_base().join(format!(
         "guibiao-out-of-package-shared-{}",
         std::process::id()
     ));

@@ -246,7 +246,8 @@ struct Scratch {
 
 impl Scratch {
     fn new(root: &Path) -> Self {
-        let work = std::env::temp_dir().join(format!("tianheng-pin-bites-{}", std::process::id()));
+        let work =
+            xingbiao::scratch_base().join(format!("tianheng-pin-bites-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&work);
         xingbiao::claim_scratch(&work).expect("the scratch root is writable");
         std::fs::create_dir_all(work.join("no-hooks")).expect("the scratch root is writable");

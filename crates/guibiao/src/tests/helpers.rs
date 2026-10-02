@@ -11,7 +11,7 @@ pub(super) struct TempWorkspace {
 
 impl TempWorkspace {
     pub(super) fn new(label: &str) -> Self {
-        let dir = std::env::temp_dir().join(format!("guibiao-{label}-{}", std::process::id()));
+        let dir = xingbiao::scratch_base().join(format!("guibiao-{label}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         xingbiao::claim_scratch(&dir).expect("the fixture root is writable");
         let src = dir.join("src");

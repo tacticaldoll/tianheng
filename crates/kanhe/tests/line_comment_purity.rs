@@ -165,7 +165,7 @@ fn a_corpus_with_an_inner_comment_is_refused() {
 /// A newly publishable crate enters the same corpus the gate judges; an unpublished one does not.
 #[test]
 fn a_new_published_crate_with_an_inner_comment_is_refused() {
-    let root = std::env::temp_dir().join(format!(
+    let root = xingbiao::scratch_base().join(format!(
         "kanhe-line-comment-new-crate-{}",
         std::process::id()
     ));

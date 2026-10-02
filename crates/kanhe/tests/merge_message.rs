@@ -740,7 +740,7 @@ fn gate_over_channel(subject: &std::ffi::OsStr, channel: Option<&Path>) -> (bool
     // channel had the child write there while this read the default scratch file, so the returned class was
     // always empty. Its only caller passed an unwritable path, where empty is also the right answer — so the
     // mismatch was invisible, and the direction asserting `reported.is_empty()` passed for the wrong reason.
-    let scratch = std::env::temp_dir().join(format!(
+    let scratch = xingbiao::scratch_base().join(format!(
         "kanhe-merge-subject-{}-{}",
         std::process::id(),
         SUBJECT_PROBE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
@@ -828,7 +828,7 @@ fn a_subject_supplied_as_bytes_this_gate_cannot_read_is_not_an_absent_subject() 
 /// who runs it. A missing parent fails the same way for everyone.
 #[test]
 fn a_verdict_that_cannot_reach_the_channel_is_not_an_absent_one() {
-    let unwritable = std::env::temp_dir()
+    let unwritable = xingbiao::scratch_base()
         .join(format!("kanhe-no-such-dir-{}", std::process::id()))
         .join("verdict");
     assert!(
@@ -865,7 +865,7 @@ fn a_verdict_that_cannot_reach_the_channel_is_not_an_absent_one() {
 /// arm and was cited for the refused one.
 #[test]
 fn a_refused_verdict_that_cannot_reach_the_channel_still_reads_as_unjudged() {
-    let unwritable = std::env::temp_dir()
+    let unwritable = xingbiao::scratch_base()
         .join(format!("kanhe-no-such-dir-refused-{}", std::process::id()))
         .join("verdict");
 
@@ -890,7 +890,7 @@ fn a_refused_verdict_that_cannot_reach_the_channel_still_reads_as_unjudged() {
 /// writable custom channel is the one input that tells the two apart.
 #[test]
 fn the_channel_this_helper_names_is_the_one_it_reads() {
-    let scratch = std::env::temp_dir().join(format!(
+    let scratch = xingbiao::scratch_base().join(format!(
         "kanhe-channel-roundtrip-{}-{}",
         std::process::id(),
         SUBJECT_PROBE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)

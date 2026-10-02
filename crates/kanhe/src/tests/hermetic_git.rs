@@ -46,7 +46,7 @@ fn a_fixture_without_its_own_repository_does_not_reach_the_outer_one() {
 /// absence of a key that might never have been readable.
 #[test]
 fn the_global_config_file_cannot_reach_a_hermetic_command() {
-    let home = std::env::temp_dir().join(format!("kanhe-hermetic-{}", std::process::id()));
+    let home = xingbiao::scratch_base().join(format!("kanhe-hermetic-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&home);
     xingbiao::claim_scratch(&home).expect("create the fixture home");
     std::fs::write(home.join(".gitconfig"), "[probe]\n\tkey = AMBIENT\n").expect("write");
@@ -157,7 +157,8 @@ fn no_ambient_channel_moves_what_a_hermetic_command_reads() {
     };
     let inventory = shengmo::hermetic_probe::read(&root_of);
 
-    let root = std::env::temp_dir().join(format!("kanhe-hermetic-channels-{}", std::process::id()));
+    let root =
+        xingbiao::scratch_base().join(format!("kanhe-hermetic-channels-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     xingbiao::claim_scratch(&root).expect("create the fixture root");
     let build = |name: &str| {
@@ -231,7 +232,8 @@ fn no_ambient_channel_moves_what_a_hermetic_command_reads() {
 /// close it. Both channels are delivered here, and either one left uncleared shows up in what is classified.
 #[test]
 fn no_ambient_configuration_reaches_a_hermetic_command() {
-    let root = std::env::temp_dir().join(format!("kanhe-hermetic-config-{}", std::process::id()));
+    let root =
+        xingbiao::scratch_base().join(format!("kanhe-hermetic-config-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     xingbiao::claim_scratch(&root).expect("create the fixture root");
     for args in [
@@ -393,7 +395,8 @@ fn no_ambient_configuration_reaches_a_hermetic_command() {
 /// absent in the child. Stated rather than implied, and it is the same residue the sibling rows carry.
 #[test]
 fn a_repository_selector_cannot_reach_a_hermetic_command() {
-    let root = std::env::temp_dir().join(format!("kanhe-hermetic-selector-{}", std::process::id()));
+    let root =
+        xingbiao::scratch_base().join(format!("kanhe-hermetic-selector-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     xingbiao::claim_scratch(&root).expect("create the fixture root");
 
@@ -493,7 +496,8 @@ fn a_repository_selector_cannot_reach_a_hermetic_command() {
 /// never readable on this machine.
 #[test]
 fn an_ignore_file_outside_the_repository_cannot_reach_a_hermetic_command() {
-    let home = std::env::temp_dir().join(format!("kanhe-hermetic-ignore-{}", std::process::id()));
+    let home =
+        xingbiao::scratch_base().join(format!("kanhe-hermetic-ignore-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&home);
     xingbiao::claim_scratch(&home).expect("create the fixture home");
     let xdg = home.join("xdg");
@@ -635,7 +639,8 @@ fn the_builder_writes_the_config_count_and_takes_index_zero() {
 #[test]
 #[cfg(unix)]
 fn a_pattern_that_is_not_text_is_refused_rather_than_replaced() {
-    let root = std::env::temp_dir().join(format!("kanhe-git-stdin-bytes-{}", std::process::id()));
+    let root =
+        xingbiao::scratch_base().join(format!("kanhe-git-stdin-bytes-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     xingbiao::claim_scratch(&root).expect("create the fixture root");
     for args in [
@@ -697,7 +702,8 @@ fn a_pattern_that_is_not_text_is_refused_rather_than_replaced() {
 fn both_accessors_report_an_undecodable_answer_in_the_same_words() {
     use std::os::unix::ffi::OsStrExt;
 
-    let root = std::env::temp_dir().join(format!("kanhe-git-bytes-twin-{}", std::process::id()));
+    let root =
+        xingbiao::scratch_base().join(format!("kanhe-git-bytes-twin-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     xingbiao::claim_scratch(&root).expect("create the fixture root");
     for args in [
@@ -737,7 +743,8 @@ fn both_accessors_report_an_undecodable_answer_in_the_same_words() {
 /// those characters.
 #[test]
 fn a_tracked_path_git_would_quote_reads_back_as_its_own_name() {
-    let root = std::env::temp_dir().join(format!("kanhe-git-quoted-path-{}", std::process::id()));
+    let root =
+        xingbiao::scratch_base().join(format!("kanhe-git-quoted-path-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     xingbiao::claim_scratch(&root).expect("create the fixture root");
     for args in [
@@ -801,7 +808,7 @@ fn a_tracked_path_git_would_quote_reads_back_as_its_own_name() {
 fn git_output_that_is_not_utf8_is_refused_rather_than_replaced() {
     use std::os::unix::ffi::OsStrExt;
 
-    let root = std::env::temp_dir().join(format!("kanhe-git-bytes-{}", std::process::id()));
+    let root = xingbiao::scratch_base().join(format!("kanhe-git-bytes-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     xingbiao::claim_scratch(&root).expect("create the fixture root");
     for args in [
@@ -849,7 +856,8 @@ fn git_output_that_is_not_utf8_is_refused_rather_than_replaced() {
 #[test]
 #[cfg(unix)]
 fn a_refusal_during_the_conversation_is_reported_as_the_refusal_it_is() {
-    let root = std::env::temp_dir().join(format!("kanhe-git-stdin-refusal-{}", std::process::id()));
+    let root =
+        xingbiao::scratch_base().join(format!("kanhe-git-stdin-refusal-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     xingbiao::claim_scratch(&root).expect("create the fixture root");
     for args in [

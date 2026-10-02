@@ -61,7 +61,7 @@ fn workspace_root() -> Option<PathBuf> {
 fn scratch(label: &str) -> PathBuf {
     static NEXT: AtomicUsize = AtomicUsize::new(0);
     loop {
-        let candidate = std::env::temp_dir().join(format!(
+        let candidate = xingbiao::scratch_base().join(format!(
             "tianheng-reference-integrity-{label}-{}-{}",
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
@@ -909,7 +909,7 @@ fn every_extraction_form_is_seen_when_it_names_something_absent() {
     };
     let tracked_paths = tracked(&root);
 
-    let scratch = std::env::temp_dir().join(format!(
+    let scratch = xingbiao::scratch_base().join(format!(
         "tianheng-reference-integrity-{}",
         std::process::id()
     ));
@@ -1187,7 +1187,7 @@ fn an_active_plan_may_name_a_path_it_intends_to_create() {
         return;
     };
     let tracked_paths = tracked(&root);
-    let scratch = std::env::temp_dir().join(format!(
+    let scratch = xingbiao::scratch_base().join(format!(
         "tianheng-reference-integrity-plan-{}",
         std::process::id()
     ));
@@ -1624,7 +1624,8 @@ fn relative_anchor_offences_in(corpus_root: &Path, corpus: &[String]) -> BTreeSe
 /// specimens on this page as the corpus.
 #[test]
 fn a_wrapped_anchor_reacts_in_every_marker_shape() {
-    let fixture = std::env::temp_dir().join(format!("kanhe-anchor-wrap-{}", std::process::id()));
+    let fixture =
+        xingbiao::scratch_base().join(format!("kanhe-anchor-wrap-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&fixture);
     xingbiao::claim_scratch(&fixture).expect("create the fixture root");
 
@@ -2357,7 +2358,7 @@ fn live_prose(kind: Prose, text: &str, records: &kanhe::record::Records) -> Stri
 /// reports 0 of 3.
 #[test]
 fn a_citation_glued_to_punctuation_is_read() {
-    let root = std::env::temp_dir().join(format!("kanhe-citation-{}", std::process::id()));
+    let root = xingbiao::scratch_base().join(format!("kanhe-citation-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     xingbiao::claim_scratch(&root).expect("the fixture root is writable");
 
@@ -2401,7 +2402,7 @@ fn a_citation_glued_to_punctuation_is_read() {
 /// is a way to spell the prohibited form behind the sanctioned one's prefix, so each is a row here.
 #[test]
 fn a_third_partys_action_pin_is_not_read_as_this_repositorys_object() {
-    let root = std::env::temp_dir().join(format!("kanhe-action-pin-{}", std::process::id()));
+    let root = xingbiao::scratch_base().join(format!("kanhe-action-pin-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     xingbiao::claim_scratch(&root).expect("the fixture root is writable");
 

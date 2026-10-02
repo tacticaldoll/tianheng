@@ -28,7 +28,7 @@ impl ProbeWorkspace {
         use std::sync::atomic::{AtomicU32, Ordering};
         static COUNTER: AtomicU32 = AtomicU32::new(0);
         let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!(
+        let dir = xingbiao::scratch_base().join(format!(
             "guibiao-self-dep-source-identity-{name}-{}-{unique}",
             std::process::id()
         ));

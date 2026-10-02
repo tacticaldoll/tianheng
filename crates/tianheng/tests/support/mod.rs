@@ -28,7 +28,7 @@ impl TempFixture {
     /// The same fixture carrying extra manifest lines (an autotargets switch, a target table), for
     /// a package shape the plain form cannot express.
     pub fn with_manifest_extra(name: &str, manifest_extra: &str, body: &str) -> Self {
-        let dir = std::env::temp_dir().join(format!(
+        let dir = xingbiao::scratch_base().join(format!(
             "tianheng-conformance-{name}-{}",
             std::process::id()
         ));

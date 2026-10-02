@@ -472,7 +472,7 @@ fn a_pull_request_from_another_worktree_is_refused_before_any_evidence_is_read()
     let Some(root) = workspace_root() else {
         return;
     };
-    let elsewhere = std::env::temp_dir().join(format!(
+    let elsewhere = xingbiao::scratch_base().join(format!(
         "tianheng-merge-workflow-elsewhere-{}",
         std::process::id()
     ));
@@ -546,7 +546,7 @@ fn an_ambient_repository_selector_does_not_make_two_worktrees_one() {
     let Some(root) = workspace_root() else {
         return;
     };
-    let scratch = std::env::temp_dir().join(format!(
+    let scratch = xingbiao::scratch_base().join(format!(
         "tianheng-merge-workflow-ambient-{}",
         std::process::id()
     ));
@@ -1269,7 +1269,7 @@ fn an_unreadable_body_file_is_unjudgeable_rather_than_an_empty_body() {
 /// coverage, it refuses. A probe that cannot be written refuses too, rather than reading as a mode that does not
 /// bite.
 fn mode_is_enforced() -> bool {
-    let probe = std::env::temp_dir().join(format!(
+    let probe = xingbiao::scratch_base().join(format!(
         "tianheng-mode-probe-{}-{}",
         std::process::id(),
         MODE_PROBE.fetch_add(1, Ordering::Relaxed)

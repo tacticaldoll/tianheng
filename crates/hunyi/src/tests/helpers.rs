@@ -12,7 +12,7 @@ pub(super) use crate::module_resolve::resolve_module_file;
 
 /// A unique, self-cleaning temp `src/` tree: write source files (and, where needed, a symlink),
 /// then hand its root/src paths to a pure entrypoint under test — replaces the hand-rolled
-/// `temp_dir().join(format!(...))` + manual `remove_dir_all` at both ends that this file's many
+/// `join(format!(...))` path building + manual `remove_dir_all` at both ends that this file's many
 /// fixture-building helpers otherwise each repeat.
 #[allow(dead_code)]
 pub(super) struct TempSrcTree {
@@ -22,7 +22,7 @@ pub(super) struct TempSrcTree {
 
 impl TempSrcTree {
     pub(super) fn new(label: &str) -> Self {
-        let dir = std::env::temp_dir().join(format!("hunyi-{label}-{}", std::process::id()));
+        let dir = xingbiao::scratch_base().join(format!("hunyi-{label}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         xingbiao::claim_scratch(&dir).expect("the fixture root is writable");
         let src = dir.join("src");

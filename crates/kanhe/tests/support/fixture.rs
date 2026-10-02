@@ -18,11 +18,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 pub struct Scratch(PathBuf);
 
 impl Scratch {
-    /// A fresh root under the system temporary directory, named `<prefix>-<pid>-<n>`.
+    /// A fresh root under the build directory, named `<prefix>-<pid>-<n>`.
     pub fn claim(prefix: &str) -> Self {
         static NEXT: AtomicUsize = AtomicUsize::new(0);
         loop {
-            let candidate = std::env::temp_dir().join(format!(
+            let candidate = xingbiao::scratch_base().join(format!(
                 "{prefix}-{}-{}",
                 std::process::id(),
                 NEXT.fetch_add(1, Ordering::Relaxed)

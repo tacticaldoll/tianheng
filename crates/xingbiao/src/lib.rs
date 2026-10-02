@@ -510,6 +510,9 @@ pub fn claim_scratch(path: &Path) -> std::io::Result<()> {
 /// a root under a target directory the user owns is not claimable by anyone else, survives a system temporary
 /// directory that is unwritable, and is removed by `cargo clean`.
 ///
+/// The path is canonical, because a consumer comparing it with a working directory's real path (git's ceiling
+/// directories do) would otherwise miss when the target directory is reached through a symlink.
+///
 /// **A layout it cannot recognise panics, naming the executable's path.** It never falls back to the system
 /// temporary directory, because a fallback is a second behaviour that depends on the environment.
 #[doc(hidden)]
@@ -520,8 +523,6 @@ pub fn scratch_base() -> PathBuf {
     let base = scratch_base_for(&exe).unwrap_or_else(|why| panic!("{why}"));
     std::fs::create_dir_all(&base)
         .unwrap_or_else(|err| panic!("scratch_base: cannot create '{}': {err}", base.display()));
-    // Canonical, because a consumer comparing it with a working directory's real path (git's ceiling
-    // directories do) would otherwise miss when the target directory is reached through a symlink.
     base.canonicalize()
         .unwrap_or_else(|err| panic!("scratch_base: cannot resolve '{}': {err}", base.display()))
 }

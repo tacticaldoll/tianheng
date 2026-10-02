@@ -455,7 +455,8 @@ fn no_ambient_channel_moves_what_the_examples_suite_builder_reads() {
     };
     let inventory = shengmo::hermetic_probe::read(&root_of);
 
-    let root = std::env::temp_dir().join(format!("examples-suite-channels-{}", std::process::id()));
+    let root =
+        xingbiao::scratch_base().join(format!("examples-suite-channels-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     // `xingbiao::claim_scratch` owns this elsewhere and `shengmo` cannot reach it without a dependency
     // edge, so the property it holds — a scratch root that refuses to adopt a pre-existing path — is held
