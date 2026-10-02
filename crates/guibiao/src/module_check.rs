@@ -311,6 +311,14 @@ struct Inline<'a> {
 }
 
 impl<'a> InlinePrefix<'a> {
+    /// The confinement this prefix carries, or `None` when the rule is no inline confinement.
+    fn inline(&self) -> Option<&Inline<'a>> {
+        let InlinePrefix::Inline(inline) = self else {
+            return None;
+        };
+        Some(inline)
+    }
+
     /// Read an inline confinement's declaration, refusing every misdeclaration the boundary alone decides — a
     /// blank or non-canonical prefix, and `confine_inline_call` over `crate` or at `ScanDepth::Shallow` — before
     /// any root is walked, so a scan refusal in some file cannot stand in front of the line the operator must
@@ -855,35 +863,46 @@ fn suggested_module_path(package: &Value, candidate: &Path) -> String {
     compilation_unit_label(package, candidate).unwrap_or_else(|| xingbiao::path_label(candidate))
 }
 
-/// Judge one compiled root against the boundary, over the root's shared scan. [`RootScan`] owns
-/// the walk and the unit scan — custom target roots relative to `src_dir` map to `crate`, roots
-/// outside the package manifest directory error as configuration errors, and sibling compilation
-/// unit roots are excluded from module discovery to prevent duplicate violations — and its refusal
-/// order holds here: the caller obtains the scan before this runs, so a walk refusal and a file the
-/// unit scan cannot read both surface ahead of whether the governed module exists. What remains in this function is the boundary's own: the
-/// governed set at the declared depth, the module-absence outcome, and the dispatch to the rule's
-/// family. Inline modules own no source file and cannot be governed targets (exit 2). An inline
-/// target is present in its root rather than absent from it, so that refusal is returned at once:
-/// deferring it, a sibling root backing the same path with a file would absorb it and leave the
-/// inline body unobserved behind a clean report.
-///
-/// A root without the governed module reports [`RootOutcome::ModuleAbsent`]. Whether it is judged
-/// first is the rule's [`Perimeter`]: under `GovernedModule` it holds nothing the rule governs and is
-/// not; under `WholeRoot` it is judged through the same dispatch as a governed root, with an empty
-/// permitted region. The caller keeps those findings only when some root is governed, so a package where
-/// no root has the module is still a constitution error.
-///
-/// `confine_inline_call` judges the complement of `must_not_call_inline`'s set: every file of the root whose
-/// module is outside the permitted subtree. An inline finding carries its file's module, and every inline child of
-/// a file lies within that file's module's subtree, so excluding a file by its module is exact under the subtree
-/// depth. It is not under `ScanDepth::Shallow`, where the permitted region is the anchored module alone and the
-/// permitted file's inline children fall outside it, so a shallow declaration is refused rather than judged.
+/// Judge one compiled root by deriving its membership, deciding its outcome, then dispatching its rule family.
 fn check_one_root(
     root: &RootScan,
     package: &Value,
     boundary: &ModuleBoundary,
     inline_prefix: &InlinePrefix,
 ) -> Result<RootJudgement, String> {
+    let facts = collect_root_facts(root, boundary, inline_prefix);
+    match decide_root_outcome(root, package, boundary, &facts)? {
+        RootDecision::Absent(reason) => Ok(RootJudgement {
+            outcome: RootOutcome::ModuleAbsent(reason),
+            declared: facts.declared,
+            items: facts.items,
+            violations: Vec::new(),
+        }),
+        RootDecision::Judge(outcome) => {
+            dispatch_root_rule_family(root, package, boundary, inline_prefix, facts, outcome)
+        }
+    }
+}
+
+/// The root-level sets derived from one shared scan and one boundary.
+struct RootFacts {
+    declared: std::collections::BTreeSet<String>,
+    items: std::collections::BTreeSet<String>,
+    governed_module: String,
+    governed: Vec<(PathBuf, String)>,
+}
+
+/// Derive the governed set and root-level declared and item sets from the shared scan. [`RootScan`]
+/// owns the walk and unit scan — custom target roots relative to `src_dir` map to `crate`, roots
+/// outside the package manifest directory error as configuration errors, and sibling compilation
+/// unit roots are excluded from module discovery to prevent duplicate violations. The caller obtains
+/// that scan before this step, so a walk refusal and a file the unit scan cannot read both surface
+/// ahead of whether the governed module exists.
+fn collect_root_facts(
+    root: &RootScan,
+    boundary: &ModuleBoundary,
+    inline_prefix: &InlinePrefix,
+) -> RootFacts {
     let declared = root.reachable.iter().cloned().collect();
     let governed_module = canonical_module_path(&boundary.module);
     let governed = governed_files(
@@ -897,26 +916,48 @@ fn check_one_root(
         root.root_relative.as_deref(),
         boundary.depth,
     );
-    let rule = boundary.rule.label();
-    let inline = match inline_prefix {
-        InlinePrefix::NotInline => None,
-        InlinePrefix::Inline(inline) => Some(inline),
-    };
+    let inline = inline_prefix.inline();
     let items = if inline.is_some() {
         root.item_definitions().iter().cloned().collect()
     } else {
         std::collections::BTreeSet::new()
     };
 
+    RootFacts {
+        declared,
+        items,
+        governed_module,
+        governed,
+    }
+}
+
+/// Decide whether this root contains the governed module and whether its perimeter still judges it.
+/// Inline modules own no source file and cannot be governed targets (exit 2). An inline target is
+/// present in its root rather than absent from it, so its refusal returns at once: deferring it lets
+/// a sibling root backing the same path with a file absorb it and leave the inline body unobserved
+/// behind a clean report.
+///
+/// A root without the governed module reports [`RootOutcome::ModuleAbsent`]. Under
+/// [`Perimeter::GovernedModule`] it holds nothing the rule governs and is not judged; under
+/// [`Perimeter::WholeRoot`] it is judged through the same dispatch as a governed root, with an
+/// empty permitted region. The caller keeps those findings only when some root is governed, so a
+/// package where no root has the module is still a constitution error.
+fn decide_root_outcome(
+    root: &RootScan,
+    package: &Value,
+    boundary: &ModuleBoundary,
+    facts: &RootFacts,
+) -> Result<RootDecision, String> {
     let outcome = match (
-        governed.is_empty(),
-        root.inline_only.get(&governed_module),
+        facts.governed.is_empty(),
+        root.inline_only.get(&facts.governed_module),
         boundary.rule.perimeter(),
     ) {
         (true, Some(candidate), _) => {
-            let leaf = governed_module
+            let leaf = facts
+                .governed_module
                 .rsplit_once("::")
-                .map_or(governed_module.as_str(), |(_, leaf)| leaf);
+                .map_or(facts.governed_module.as_str(), |(_, leaf)| leaf);
             let suggested_path = suggested_module_path(package, candidate);
             return Err(inline_module_target_error(
                 &boundary.module,
@@ -927,15 +968,10 @@ fn check_one_root(
             ));
         }
         (true, None, Perimeter::GovernedModule) => {
-            return Ok(RootJudgement {
-                outcome: RootOutcome::ModuleAbsent(unknown_module_error(
-                    &boundary.module,
-                    &boundary.crate_package,
-                )),
-                declared,
-                items,
-                violations: Vec::new(),
-            });
+            return Ok(RootDecision::Absent(unknown_module_error(
+                &boundary.module,
+                &boundary.crate_package,
+            )));
         }
         (true, None, Perimeter::WholeRoot) => RootOutcome::ModuleAbsent(unknown_module_error(
             &boundary.module,
@@ -944,6 +980,34 @@ fn check_one_root(
         (false, _, _) => RootOutcome::Governed,
     };
 
+    Ok(RootDecision::Judge(outcome))
+}
+
+/// Dispatch this root to its rule family, in precedence order: an inbound rule
+/// (`MustNotBeImportedBy` / `MustOnlyBeImportedBy`), then `ConfineExternalCrate`, then an inline
+/// confinement, then an outbound rule.
+/// `confine_inline_call` judges the complement of `must_not_call_inline`'s set: every file of the
+/// root whose module is outside the permitted subtree. An inline finding carries its file's module,
+/// and every inline child of a file lies within that file's module subtree, so excluding a file by
+/// its module is exact under subtree depth. It is not exact under `ScanDepth::Shallow`, where the
+/// permitted region is the anchored module alone and its inline children fall outside it, so a
+/// shallow declaration is refused rather than judged.
+fn dispatch_root_rule_family(
+    root: &RootScan,
+    package: &Value,
+    boundary: &ModuleBoundary,
+    inline_prefix: &InlinePrefix,
+    facts: RootFacts,
+    outcome: RootOutcome,
+) -> Result<RootJudgement, String> {
+    let RootFacts {
+        declared,
+        items,
+        governed_module,
+        governed,
+    } = facts;
+    let rule = boundary.rule.label();
+    let inline = inline_prefix.inline();
     let inbound = matches!(
         &boundary.rule,
         ModuleRule::MustNotBeImportedBy { .. } | ModuleRule::MustOnlyBeImportedBy { .. }
@@ -1000,4 +1064,12 @@ fn check_one_root(
         items,
         violations,
     })
+}
+
+/// A root either ends here, as an absence no rule family is dispatched for — which carries only the
+/// absence's reason, so an absence reported as governed is unconstructible — or continues through its
+/// rule family with the outcome that dispatch will report.
+enum RootDecision {
+    Absent(String),
+    Judge(RootOutcome),
 }
