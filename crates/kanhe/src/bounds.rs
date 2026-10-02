@@ -156,9 +156,7 @@ pub fn observation_bounds() -> Vec<BoundDecl> {
             Extent::Reached(Reached::UnderReacts {
                 because: "the reader joins a chain `rustfmt` broke and decides one logical line, so a \
                           consumer reached through a binding is outside what it can see. Following the \
-                          binding is name resolution, which no reader over text performs. Measured when \
-                          this was written: no site in the tree binds a `split(..).next()` and consumes it \
-                          later"
+                          binding is name resolution, which no reader over text performs"
                     .into(),
                 owner: Owner::Engine,
             }),

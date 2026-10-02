@@ -3455,8 +3455,14 @@ consumer for an undemonstrated deduplication.
   what it does to the `Option` — thirteen suffixes and three enclosing constructs — on one logical line.
   *Observation source:* the round that added the reaction listed four suffixes and two constructs, and a
   review then found two live sites using a fifth and a sixth, one of them in a published crate. Widening the
-  vocabulary closed those; what stays open is reach, not vocabulary. Measured when this was written: no site
-  in the tree binds a `split(…).next()` and consumes it on a later statement. *Current reaction or bound:*
+  vocabulary closed those; what stays open is reach, not vocabulary. Measured 2026-10-02, at the squash
+  `refactor: read a split's first segment as always present`, by
+  `git grep -nE 'let (mut )?[a-z_]+ = .*\.r?split\([^)]*\)\s*;' -- 'crates/*.rs'`: five sites bind a split, and
+  none reaches a branch only an absent first item could take. Two take the first `next()` with `.expect`; three
+  compare it to a value — `== Some("crate")` in `guibiao` and `hunyi`, a tuple pattern in `hermetic_invocations`
+  — so their `false` and their `else` are reached by a different first segment. The reader refuses `== Some(` on
+  one logical line, so those three are what it would refuse were the binding inlined; read through the binding
+  they keep no dead branch, which is why that repair left them. *Current reaction or bound:*
   `repository-checks/the-consumer-stands-on-a-later-statement-a-stated-bound`. *Risk:* a dead default written
   through a binding passes, and it reads to a later maintainer as though the empty case happens. Bounded by
   the reader joining chains `rustfmt` broke, which is where the shape usually lands. *Next trigger:* a site
@@ -3477,8 +3483,9 @@ consumer for an undemonstrated deduplication.
   reachable from a history that begins there. Both passed
   `no_branch_reads_an_always_some_value_as_if_it_could_be_absent`, as the bound declares. The bound is kept,
   because following the binding is the name resolution this entry says a reader over text is the wrong instrument
-  for, and two sites a grep finds do not make that instrument right. The two sites are repaired by a change of
-  their own.
+  for, and two sites a grep finds do not make that instrument right. Both are repaired by the squash
+  `refactor: read a split's first segment as always present`, and the measurement in this entry's head is the
+  re-run after it.
 
 - **WATCH: the early-exit consumers the pipeline reader names.** *Observed pressure:* adopting
   `defaults.run.shell: bash -euo pipefail {0}` made a consumer that stops before its producer finishes fail

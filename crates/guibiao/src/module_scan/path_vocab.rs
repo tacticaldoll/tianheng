@@ -156,9 +156,9 @@ fn is_symbol_path_spelling(written: &str) -> bool {
         return false;
     }
     let mut segments = raw.split("::");
-    let Some(head) = segments.next() else {
-        return false;
-    };
+    let head = segments
+        .next()
+        .expect("`split` yields at least one segment");
     let under_sysroot = sysroot_crate(canonical_segment(head)).is_some();
     is_identifier(head)
         && !is_disallowed_symbol_head(head, is_global)

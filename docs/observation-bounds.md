@@ -473,7 +473,7 @@ fallback used where no manifest exists, which the register spec describes.
 
 ### `repository-checks/the-consumer-stands-on-a-later-statement-a-stated-bound`
 
-> the reaction reports nothing. It joins a chain `rustfmt` broke and reads one logical line, so a consumer reached through a binding is outside what a line-scoped reader can decide; following the binding is name resolution, which no reader over text performs. Measured when this was written: no site in the tree binds a `split(…).next()` and consumes it later
+> the reaction reports nothing. It joins a chain `rustfmt` broke and reads one logical line, so a consumer reached through a binding is outside what a line-scoped reader can decide; following the binding is name resolution, which no reader over text performs
 
 - **unpinned**, tracked by: `BACKLOG.md` — *the always-Some consumer reached through a binding*
 
