@@ -1,5 +1,40 @@
 use crate::hermetic_git::hermetic;
+use crate::hermetic_git::scratch_ceiling;
 use std::process::Command;
+
+/// The ceiling is the directory the fixture helper places roots under — two statements of one layout rule,
+/// held equal.
+#[test]
+fn ceiling_is_the_directory_fixture_roots_live_under() {
+    assert_eq!(scratch_ceiling(), xingbiao::scratch_base());
+}
+
+/// A fixture that runs `git` without its own `git init` does not reach the outer repository.
+///
+/// The control is the same command without the builder, which does answer the outer repository: the
+/// assertion is a **difference**, so it cannot pass because discovery was never going to find one.
+#[test]
+fn a_fixture_without_its_own_repository_does_not_reach_the_outer_one() {
+    let root = xingbiao::scratch_root("kanhe-ceiling");
+    let toplevel = |mut command: Command| {
+        command
+            .args(["rev-parse", "--show-toplevel"])
+            .current_dir(root.path())
+            .output()
+            .expect("run git")
+    };
+    let bare = toplevel(Command::new("git"));
+    assert!(
+        bare.status.success(),
+        "control: a root under the build directory sits inside the outer repository, so bare git finds it"
+    );
+    let isolated = toplevel(hermetic("git"));
+    assert!(
+        !isolated.status.success(),
+        "the builder stops discovery at the scratch base, found {}",
+        String::from_utf8_lossy(&isolated.stdout)
+    );
+}
 
 /// The load-bearing half of [`hermetic`], as a case rather than as a sentence.
 ///

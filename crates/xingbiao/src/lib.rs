@@ -520,7 +520,10 @@ pub fn scratch_base() -> PathBuf {
     let base = scratch_base_for(&exe).unwrap_or_else(|why| panic!("{why}"));
     std::fs::create_dir_all(&base)
         .unwrap_or_else(|err| panic!("scratch_base: cannot create '{}': {err}", base.display()));
-    base
+    // Canonical, because a consumer comparing it with a working directory's real path (git's ceiling
+    // directories do) would otherwise miss when the target directory is reached through a symlink.
+    base.canonicalize()
+        .unwrap_or_else(|err| panic!("scratch_base: cannot resolve '{}': {err}", base.display()))
 }
 
 /// The base for the executable at `exe`, or why its path is not a cargo test layout.
