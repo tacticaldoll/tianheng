@@ -31,8 +31,8 @@ serde_json = { workspace = true }
 toml_edit = { workspace = true }
 
 [dev-dependencies]
-# The shared fixture-scratch-root claim (`claim_scratch`), so a test's temp directory refuses to adopt a
-# pre-existing symlink rather than writing through it.
+# The fixture root (`xingbiao::scratch_root`), so a test's scratch lives in the build directory under a name
+# unique per call, and refuses to adopt a pre-existing symlink rather than writing through it.
 xingbiao = { workspace = true }
 # A real Rust parser for kanhe's own test-only source scanners — the test sources naming `syn::` are the
 # set — replacing hand-rolled lexing. Dev-only: kanhe's crate boundary (crates/shengmo/src/law.rs) restricts

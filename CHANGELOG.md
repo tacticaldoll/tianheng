@@ -656,15 +656,19 @@ them.
   `XID_Continue` rather than by excluding one character at a time; the edge was refused under the accepted law and
   `syn` still is. `self_law_amendment.rs` names the change, and its licence was already reviewed in `deny.toml`.
 
-- **Test fixtures live inside the build directory.** Every fixture root comes from `xingbiao::scratch_root` or
-  `xingbiao::scratch_base`, which is `tmp/` beside the running test binary's profile directory, found at run time
-  from the executable's path and never from `TMPDIR`; an executable outside cargo's test layout is a refusal naming
-  its path. Measured 2026-10-02: when the system temporary directory became mode 755 and root-owned, every fixture
-  test failed, and so did the harness's own temporary files. `kanhe::hermetic_git::hermetic` sets
-  `GIT_CEILING_DIRECTORIES` to that directory, so a fixture running `git` without its own `git init` is not answered
-  by this repository, and the workspace `exclude` gains `target` so a fixture manifest written there does not
-  make `cargo metadata` exit 101. `crates/kanhe/tests/scratch_roots.rs` holds every tracked Rust file to the
-  helper, with the loop it shares with `hermetic_invocations`. No adopter-visible behavior moves.
+- **Test fixtures live inside the build directory, under a name no caller composes.** Every fixture root comes from
+  `xingbiao::scratch_root`, which names it `<label>-<pid>-<counter>` under `tmp/` beside the running test binary's
+  profile directory, found at run time from the executable's path and never from `TMPDIR`; an executable outside
+  cargo's test layout is a refusal naming its path. Measured 2026-10-02: when the system temporary directory became
+  mode 755 and root-owned, every fixture test failed, and so did the harness's own temporary files. A name composed
+  from a label and the process id was unique only while no two tests chose one label; two guibiao tests that shared
+  a corpus builder's label removed each other's files, and the counter makes that unreachable.
+  `kanhe::hermetic_git::hermetic` sets `GIT_CEILING_DIRECTORIES` to that directory, so a fixture running `git`
+  without its own `git init` is not answered by this repository, and the workspace `exclude` gains `target` so a
+  fixture manifest written there does not make `cargo metadata` exit 101. `crates/kanhe/tests/scratch_roots.rs`
+  holds every tracked Rust file to the helper, with the loop it shares with `hermetic_invocations`: none asks the
+  system for a temporary directory, and none outside `crates/xingbiao` names `scratch_base` or `scratch_ceiling`
+  except the files its declared set names with why. No adopter-visible behavior moves.
 
 ## [0.7.1] - 2026-09-27
 

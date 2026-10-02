@@ -2709,22 +2709,31 @@ constructing a `bash` SHALL be held to the builder's file alone, in both directi
   from bash rather than listed, and the names the builder hands back
 - **PINNED-BY** `the_bash_builder_hands_on_only_what_it_names`
 
-### Requirement: A fixture root SHALL be the helper's, never the system temporary directory's
+### Requirement: A fixture root SHALL be the helper's, never one a caller names or the system's
 
-Every fixture root a tracked Rust file builds SHALL come from `xingbiao::scratch_root` or `xingbiao::scratch_base`,
-which place it under the build directory — where the user owns the directory and `cargo clean` reaches it — and
-no tracked Rust file SHALL ask the system for its temporary directory. A root there is claimable by anyone who can
-write the directory, and a fixture stops running when that directory stops being writable. The helper finds the
-build directory from the running executable's path and not from `TMPDIR`, and an executable outside cargo's test
-layout is a refusal naming its path, so there is one behaviour and not a second one that depends on the
-environment.
+Every fixture root a tracked Rust file builds SHALL come from `xingbiao::scratch_root`, which places it under the
+build directory — where the user owns the directory and `cargo clean` reaches it — and names it
+`<label>-<pid>-<counter>`, so two roots built from one label in one process are two directories and no caller
+composes a name; and no tracked Rust file SHALL ask the system for its temporary directory. A root there is
+claimable by anyone who can write the directory, and a fixture stops running when that directory stops being
+writable. The helper finds the build directory from the running executable's path and not from `TMPDIR`, and an
+executable outside cargo's test layout is a refusal naming its path, so there is one behaviour and not a second
+one that depends on the environment.
 
 The tracked Rust files that name the system temporary directory SHALL be held to a declared set, in both
 directions, by the reader and the loop that hold the `git` constructions: every tracked `.rs` file is read, and a
 file that cannot be parsed is refused rather than reported clean. The reader names a path whose last segment is
 `temp_dir`, however it is qualified, imported or renamed on import, and a read of `TMPDIR` through `var`,
-`var_os`, `env!` or `option_env!`. The declared set is empty. This check decides *who constructs a root* and never
-whether a run is isolated.
+`var_os`, `env!` or `option_env!`. The declared set is empty.
+
+No tracked Rust file outside `crates/xingbiao` SHALL name `scratch_base` or `scratch_ceiling`, the second being
+`kanhe`'s restatement of the first's layout rule, which its normal edges cannot take from the helper. The files
+that do SHALL be held to a second declared set, each with why, in both directions, by the same reader and loop
+asked a different question: a path whose last segment is either word, however it is qualified, imported or
+renamed on import. The question is one identifier, which a parse tree answers; whether a name is unique is not
+asked, because the helper's counter makes it so. The comparison first requires that a file under
+`crates/xingbiao` still names the base, so an exclusion of the owner that holds nothing is refused. This check
+decides *who constructs a root and who names the base* and never whether a run is isolated.
 
 #### Scenario: A file builds a root from the system temporary directory
 
@@ -2753,13 +2762,48 @@ whether a run is isolated.
 - **THEN** the file is reported
 - **PINNED-BY** `a_read_of_tmpdir_is_read`
 
+#### Scenario: A file names the helper's base directory instead of taking a root from the helper
+
+- **WHEN** a tracked Rust file outside `crates/xingbiao` calls `scratch_base` or `scratch_ceiling`, imports
+  either, or passes either as a value
+- **THEN** it is named in the second declared set with why, and the comparison is two-directional — a site that
+  gains one must be named, and a name that outlives its site must go. The comparison first requires that a file
+  under `crates/xingbiao` still names the base, so an exclusion of the owner that holds nothing is refused
+- **PINNED-BY** `every_fixture_root_is_taken_from_the_helper_and_never_named_by_a_caller`
+
+#### Scenario: A call, import or rename of the base is read
+
+- **WHEN** a file writes `scratch_base()` or `scratch_ceiling()` under any qualification, passes either as a
+  value, or imports either, alone, in a group, or renamed on import
+- **THEN** the file is reported as naming the helper's base directory, because a later call under the new name
+  carries no path to read
+- **PINNED-BY** `a_call_to_the_helpers_base_is_read`
+- **PINNED-BY** `an_imported_or_renamed_base_is_read`
+
+#### Scenario: Each question reads its own words
+
+- **WHEN** a file calls `scratch_root`, takes a root from a guard, or names only `temp_dir` or `TMPDIR`
+- **THEN** the base question reports none of them, and the system-temporary-directory question reports a file that
+  names only the base no more than the base question reports `temp_dir`
+- **PINNED-BY** `taking_a_root_from_the_helper_is_not_read_as_naming_the_base`
+- **PINNED-BY** `each_question_reads_only_its_own_words`
+
+#### Scenario: The base named in prose, a string or a method is not read
+
+- **WHEN** `scratch_base` appears in a comment, a doc comment or a string literal, or is the name of a method
+- **THEN** the file is not reported: a comment is what a lexer discards, a literal is one token, and a method of
+  that name is not the function the helper exports
+- **PINNED-BY** `the_base_named_in_a_comment_a_string_or_a_method_is_not_read`
+
 #### Scenario: A file this reader cannot decide is refused
 
 - **WHEN** a tracked Rust file does not parse, or carries a macro body that is neither an expression list nor
-  statements and names `temp_dir` or the `TMPDIR` variable
+  statements and names `temp_dir`, `scratch_base`, `scratch_ceiling` or the `TMPDIR` variable
 - **THEN** the check refuses, because a file it could not read is not a file that builds no root
 - **PINNED-BY** `a_file_the_root_reader_cannot_parse_is_undecidable`
+- **PINNED-BY** `a_file_the_base_reader_cannot_parse_is_undecidable`
 - **PINNED-BY** `an_unclassifiable_macro_body_naming_the_system_temp_is_undecidable`
+- **PINNED-BY** `an_unclassifiable_macro_body_naming_the_base_is_undecidable`
 
 #### Scenario: A root reached through a value is not read — a stated bound
 
@@ -2779,6 +2823,22 @@ whether a run is isolated.
   the temporary files a child process writes for itself — a script's `mktemp`, rustc and cargo — which this check
   does not govern
 - **PINNED-BY** `naming_temp_dir_in_a_comment_a_string_or_a_child_environment_is_not_read`
+
+#### Scenario: A root composed without naming the helper is not read — a stated bound
+
+- **WHEN** a root is composed from the running executable's path, from `CARGO_TARGET_TMPDIR`, or from any path
+  that does not spell `scratch_base` or `scratch_ceiling`
+- **THEN** nothing reads it. The reader asks whether a file names one of two words and not whether a value is a
+  fixture root, which is a question about meaning; `scratch_ceiling` is the instance this tree holds, a layout
+  rule derived from the executable's path under a name the reader happens to know
+- **PINNED-BY** `a_root_composed_without_naming_the_helper_is_not_read`
+
+#### Scenario: A second naming in a declared file is not separated from the declared one — a stated bound
+
+- **WHEN** a file declared in the second set names the base again, for a purpose its declaration does not give
+- **THEN** nothing reads it. The answer is one reading per file, so a declaration is a path and every naming in
+  that file stands behind it
+- **PINNED-BY** `a_second_naming_in_a_declared_file_is_not_separated_from_the_first`
 
 ### Requirement: A comment paragraph SHALL NOT be written twice in a row
 
