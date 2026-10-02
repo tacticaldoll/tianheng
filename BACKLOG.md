@@ -528,6 +528,30 @@ consumer for an undemonstrated deduplication.
 
 ### WATCH
 
+- **圭表's libc check retains a latency regression after gated-glob resolution settles.** *Class:* WATCH.
+  *Observed pressure:* measured on a registry crate, with no adopter latency requirement. *Observation source:*
+  measured 2026-10-02 using a release probe calling `guibiao::check` on libc 0.2.189 with one
+  `ModuleBoundary::in_crate("libc").module("crate").must_not_call_inline("core::mem")` boundary, under
+  `ulimit -v 4000000` and `timeout 120`: the handoff records 1.21 s before the regression; the repaired resolver's
+  isolated run takes 7.64 s and 201,744 KiB peak RSS, returning violations. The timings come from
+  `/usr/bin/time`, rather than the probe's process status, which is zero even when its product outcome is
+  violations. The earlier 1.21 s is a recorded baseline, not a fresh same-toolchain comparison.
+  An isolated instrumented copy counts 68,835 denotations, 8,062 graph readings, 122,225 hazard queries and
+  684,002 target queries; 111,929 hazard queries have distinct `(glob, prefix, viewer)` keys. Its denotation memo
+  retains 131,393 readable paths and 136,536 report candidates across 66,569 keys. Nested timer sums overlap and
+  cannot establish which reader dominates elapsed time. *Current reaction or bound:* per-reading, glob-graph
+  and denotation-memo budgets in `crates/guibiao/src/module_scan/resolve.rs` refuse excess retention, and
+  `foreign_candidates_beside_local_ones_are_terminal_for_every_reader` excludes terminal foreign paths from
+  hazard work; these protect retention and verdicts, not a libc latency target. *Risk:* about sixfold slower
+  checking against the recorded baseline; caching every hazard tuple would save few queries and could increase
+  retention. Viewer-dependent visibility and terminal-candidate handling must survive an optimization.
+  *Promotion trigger:* an adopter's reproducible check exceeds its stated latency budget, or a same-toolchain
+  comparison with non-overlapping profiling identifies avoidable repeated work on libc and demonstrates a
+  reduction without moving corpus verdicts or exceeding the retained-data budgets; either makes a bounded
+  performance repair READY-PATCH. *Version class:* patch for an optimization preserving verdicts, refusal
+  limits and public interfaces. *Authority:* the steward's request to track this measured regression, and
+  `inline-symbol-path-confinement`'s requirement that a large source is read in time its size bounds.
+
 - **圭表 lexes a source twice for each root that compiles it: once in the walk and once in the unit scan.**
   *Class:* WATCH. *Observed pressure:* none from an adopter; the steward named sharing the token tree as the step
   after the per-root scan, 2026-10-01. *Observation source:* `collect_children` in
