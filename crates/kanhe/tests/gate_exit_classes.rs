@@ -369,16 +369,73 @@ const CHANNEL_CONTROL: &str = "crates/kanhe/src/tests/hermetic_git.rs";
 const CHANNEL_CONTROL_PINS: &str =
     "an_ignore_file_outside_the_repository_cannot_reach_a_hermetic_command";
 
+/// What a token stream writes: an ignore-sensitive subcommand marker, a `Command::new`, and a literal naming the
+/// setting — one reading, used for the control's body and for every other file's executed text.
+///
+/// **The setting is a literal whose value begins with it** — `core.excludesFile` as a key or
+/// `core.excludesFile=…` as a value — so a sentence mentioning the setting in a message is not read as naming
+/// it. Every attribute, outer or inner, is skipped, so doc prose is not read at all.
+#[derive(Default)]
+struct TokenReads {
+    marker: bool,
+    spawn: bool,
+    neutralised: bool,
+}
+
+fn token_reads(stream: proc_macro2::TokenStream, found: &mut TokenReads) {
+    use proc_macro2::{Delimiter, TokenTree};
+
+    let tokens: Vec<TokenTree> = stream.into_iter().collect();
+    let mut at = 0;
+    while at < tokens.len() {
+        match &tokens[at] {
+            TokenTree::Punct(hash) if hash.as_char() == '#' => {
+                let bang =
+                    matches!(tokens.get(at + 1), Some(TokenTree::Punct(p)) if p.as_char() == '!');
+                let group = at + 1 + usize::from(bang);
+                if matches!(tokens.get(group), Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Bracket)
+                {
+                    at = group + 1;
+                    continue;
+                }
+            }
+            TokenTree::Group(group) => token_reads(group.stream(), found),
+            TokenTree::Literal(literal) => {
+                if let Ok(text) = syn::parse_str::<syn::LitStr>(&literal.to_string()) {
+                    let value = text.value();
+                    if AMBIENT_IGNORE_READS
+                        .iter()
+                        .any(|marker| marker.trim_matches('"') == value)
+                    {
+                        found.marker = true;
+                    }
+                    if value.trim_start().starts_with(NEUTRALISER) {
+                        found.neutralised = true;
+                    }
+                }
+            }
+            TokenTree::Ident(word) if word == "Command" => {
+                if matches!(
+                    (tokens.get(at + 1), tokens.get(at + 2), tokens.get(at + 3)),
+                    (Some(TokenTree::Punct(a)), Some(TokenTree::Punct(b)), Some(TokenTree::Ident(new)))
+                        if a.as_char() == ':' && b.as_char() == ':' && new == "new"
+                ) {
+                    found.spawn = true;
+                }
+            }
+            _ => {}
+        }
+        at += 1;
+    }
+}
+
 /// Whether the body of the function `name` in `text` runs an ignore-sensitive read through a `Command` it
 /// builds itself without naming [`NEUTRALISER`]: `None` when no function of that name is found.
 ///
 /// **The control's body, not its file.** The file holds other directions, and one of them naming the setting
 /// for a reason of its own is no evidence about the control. The marker and the bare `Command::new` must both
-/// be written in that body: a read moved into a helper is outside it, and the pin then names the helper.
-///
-/// **The setting is a literal whose value begins with it** — `core.excludesFile` as a key or
-/// `core.excludesFile=…` as a value — so an assertion message mentioning the setting in a sentence is not read
-/// as naming it. Every attribute in the body, outer or inner, is skipped.
+/// be written in that body: a read moved into a helper is outside it, and the pin then names the helper. The
+/// body is read by [`token_reads`].
 fn runs_the_read_bare(text: &str, name: &str) -> Option<bool> {
     use proc_macro2::{Delimiter, TokenStream, TokenTree};
 
@@ -408,61 +465,10 @@ fn runs_the_read_bare(text: &str, name: &str) -> Option<bool> {
         None
     }
 
-    #[derive(Default)]
-    struct Read {
-        marker: bool,
-        spawn: bool,
-        neutralised: bool,
-    }
-
-    fn read(stream: TokenStream, found: &mut Read) {
-        let tokens: Vec<TokenTree> = stream.into_iter().collect();
-        let mut at = 0;
-        while at < tokens.len() {
-            match &tokens[at] {
-                TokenTree::Punct(hash) if hash.as_char() == '#' => {
-                    let bang = matches!(tokens.get(at + 1), Some(TokenTree::Punct(p)) if p.as_char() == '!');
-                    let group = at + 1 + usize::from(bang);
-                    if matches!(tokens.get(group), Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Bracket)
-                    {
-                        at = group + 1;
-                        continue;
-                    }
-                }
-                TokenTree::Group(group) => read(group.stream(), found),
-                TokenTree::Literal(literal) => {
-                    if let Ok(text) = syn::parse_str::<syn::LitStr>(&literal.to_string()) {
-                        let value = text.value();
-                        if AMBIENT_IGNORE_READS
-                            .iter()
-                            .any(|marker| marker.trim_matches('"') == value)
-                        {
-                            found.marker = true;
-                        }
-                        if value.trim_start().starts_with(NEUTRALISER) {
-                            found.neutralised = true;
-                        }
-                    }
-                }
-                TokenTree::Ident(word) if word == "Command" => {
-                    if matches!(
-                        (tokens.get(at + 1), tokens.get(at + 2), tokens.get(at + 3)),
-                        (Some(TokenTree::Punct(a)), Some(TokenTree::Punct(b)), Some(TokenTree::Ident(new)))
-                            if a.as_char() == ':' && b.as_char() == ':' && new == "new"
-                    ) {
-                        found.spawn = true;
-                    }
-                }
-                _ => {}
-            }
-            at += 1;
-        }
-    }
-
     let stream: TokenStream = text.parse().ok()?;
     let body = body_of(stream, name)?;
-    let mut found = Read::default();
-    read(body, &mut found);
+    let mut found = TokenReads::default();
+    token_reads(body, &mut found);
     Some(found.marker && found.spawn && !found.neutralised)
 }
 
@@ -574,8 +580,9 @@ struct Ambient {
 /// that pins its decisions.
 ///
 /// [`CHANNEL_CONTROL`] is set aside before the file-wide check for [`NEUTRALISER`], and its exception is
-/// answered by its pinned direction's body alone. Every other file is judged at file granularity, over its
-/// executed text, so the doc comments naming a subcommand are not read as calls.
+/// answered by its pinned direction's body alone. Every other file is judged at file granularity: its markers and
+/// spawns over its executed text, so the doc comments naming a subcommand are not read as calls, and the setting
+/// by [`token_reads`], the one reading of it the control's body is judged by too.
 fn ambient_reads(files: impl IntoIterator<Item = (String, String)>) -> Ambient {
     let mut found = Ambient {
         reading: 0,
@@ -597,7 +604,16 @@ fn ambient_reads(files: impl IntoIterator<Item = (String, String)>) -> Ambient {
             found.control = Some(runs_the_read_bare(&text, CHANNEL_CONTROL_PINS));
             continue;
         }
-        if lines.iter().any(|line| line.contains(NEUTRALISER)) {
+        let mut written = TokenReads::default();
+        token_reads(
+            text.parse().unwrap_or_else(|err| {
+                panic!(
+                    "cannot lex {path}, so whether it names `{NEUTRALISER}` was never read: {err}"
+                )
+            }),
+            &mut written,
+        );
+        if written.neutralised {
             continue;
         }
         if !lines.iter().any(|line| opens(line, "Command::new(")) {
