@@ -4158,41 +4158,37 @@ cannot read as a queue holding work that is already done.
   it. Every other file stays at file granularity, a bound the guard's doc records with its measurement:
   per-function refuses directions whose bare spawn re-executes the test binary or reads another channel, and
   per-construction is a data-flow question the control itself answers through a closure. The record's *Shape*
-  asked for the read rather than the file; what was built is the read for the one file where the defect was. The
-  record as filed: *Observed pressure:* `no_judgement_reads_an_ambient_ignore_file` decides per **file**: a file
-  carrying an `AMBIENT_IGNORE_READS` marker is skipped the moment any line in it spells `NEUTRALISER`, and
-  `CHANNEL_CONTROL` must reach the branch past that skip for its exception to be held as still needed. Adding an
-  unrelated direction that spells the setting to the control file therefore short-circuits the whole file, and the
-  guard refuses with *it no longer runs an ignore-sensitive read through a `Command` of its own* — which is
-  **false**: `an_ignore_file_outside_the_repository_cannot_reach_a_hermetic_command` is still there and still runs
-  one. *Observation source:* met while converging the publish gate's decode policy, where a new direction in that
-  file passed `-c core.excludesFile=/dev/null` for fidelity with the caller it mirrors.
-
-  *Current reaction or bound:* none, and the call site was moved rather than the reader — the new direction
-  passes no flag, because the builder already names the setting and the fixture's exclusion is a `.gitignore`
-  that no excludes setting reaches. The reason is recorded in the direction so the next author does not
-  rediscover it by the same refusal. *Risk:* it fails **closed** rather than open, so this is noise and not a
-  false negative — but the repair its own message names is *remove the exception*, and removing it would take
-  out a live control. A guard whose diagnosis inverts the fix is worse than a silent one.
-
-  *Promotion trigger:* a second file needing both a neutralised and a non-neutralised ignore-sensitive read,
-  or any further direction in the control file that has cause to spell the setting. *Version class:* patch;
-  `crates/kanhe` is `publish = false`. *Authority:* `repository-checks`.
-
+  asked for the read rather than the file, and what was built is narrower: per-function, for the control alone,
+  with a table holding each decision about it. The trigger's other half, a second file needing both a neutralised
+  and a non-neutralised ignore-sensitive read, is held by that declared bound rather than closed. The record as
+  filed: *Observed pressure:* `no_judgement_reads_an_ambient_ignore_file` decides per **file**: a file carrying an
+  `AMBIENT_IGNORE_READS` marker is skipped the moment any line in it spells `NEUTRALISER`, and `CHANNEL_CONTROL`
+  must reach the branch past that skip for its exception to be held as still needed. Adding an unrelated direction
+  that spells the setting to the control file therefore short-circuits the whole file, and the guard refuses with
+  *it no longer runs an ignore-sensitive read through a `Command` of its own* — which is **false**:
+  `an_ignore_file_outside_the_repository_cannot_reach_a_hermetic_command` is still there and still runs one.
+  *Observation source:* met while converging the publish gate's decode policy, where a new direction in that file
+  passed `-c core.excludesFile=/dev/null` for fidelity with the caller it mirrors.  *Current reaction or bound:*
+  none, and the call site was moved rather than the reader — the new direction passes no flag, because the builder
+  already names the setting and the fixture's exclusion is a `.gitignore` that no excludes setting reaches. The
+  reason is recorded in the direction so the next author does not rediscover it by the same refusal. *Risk:* it
+  fails **closed** rather than open, so this is noise and not a false negative — but the repair its own message
+  names is *remove the exception*, and removing it would take out a live control. A guard whose diagnosis inverts
+  the fix is worse than a silent one.  *Promotion trigger:* a second file needing both a neutralised and a
+  non-neutralised ignore-sensitive read, or any further direction in the control file that has cause to spell the
+  setting. *Version class:* patch; `crates/kanhe` is `publish = false`. *Authority:* `repository-checks`.
   **Shape.** The unit that pairs is the call site and the unit iterated is the file. The reader already has a
-  line-level view — it collects `lines` and asks `opens(line, "Command::new(")` per line — so the skip is the
-  only step that leaves it: decide neutralisation for the read rather than for the file, by asking whether
-  the setting is spelled within the construction whose marker matched, and the control's two commands become
-  two answers instead of one.
-
-- ~~**`examples/observer-participant`'s own test fixture was not migrated to `xingbiao::claim_scratch`,
-  unlike every other scratch-root claim in the workspace.**~~ *Class:* ACCEPTED DEBT — closed on 2026-10-02 by
-  the pre-cut reading of the window rooted at the `v0.7.1` snapshot: the risk it priced no longer exists. *test:
-  keep every fixture root inside the build directory* moved `Fixture::new`'s root from `temp_dir()` to
-  `env!("CARGO_TARGET_TMPDIR")`, a directory cargo creates inside the target directory the user owns, as
-  `xingbiao::scratch_base`'s is, so no other user of the machine can plant a symlink there first.
-  The `remove_dir_all` then `create_dir_all` sequence remains, and without another user able to reach the
-  directory it is not the race below. The record as filed: *Observed pressure:*
+  line-level view — it collects `lines` and asks `opens(line, "Command::new(")` per line — so the skip is the only
+  step that leaves it: decide neutralisation for the read rather than for the file, by asking whether the setting
+  is spelled within the construction whose marker matched, and the control's two commands become two answers
+  instead of one.  - ~~**`examples/observer-participant`'s own test fixture was not migrated to
+  `xingbiao::claim_scratch`, unlike every other scratch-root claim in the workspace.**~~ *Class:* ACCEPTED DEBT —
+  closed on 2026-10-02 by the pre-cut reading of the window rooted at the `v0.7.1` snapshot: the risk it priced no
+  longer exists. *test: keep every fixture root inside the build directory* moved `Fixture::new`'s root from
+  `temp_dir()` to `env!("CARGO_TARGET_TMPDIR")`, a directory cargo creates inside the target directory the user
+  owns, as `xingbiao::scratch_base`'s is, so no other user of the machine can plant a symlink there first. The
+  `remove_dir_all` then `create_dir_all` sequence remains, and without another user able to reach the directory it
+  is not the race below. The record as filed: *Observed pressure:*
   an adversarial review of the whole `0.5.0` window found `examples/observer-participant/tests/
   reaction.rs`'s `Fixture::new` still does `remove_dir_all` then `create_dir_all(root.join("src"))` on a
   predictable `temp_dir().join(format!("house-rules-{name}-{pid}"))` path — the exact symlink-adoption
