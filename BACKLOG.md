@@ -431,8 +431,8 @@ consumer for an undemonstrated deduplication.
   `[Unreleased]`'s `### Migration` carries no step for it, while the 64-link chain cap beside it has one. The
   repair, *ask for fewer branching imports, globs or re-exports*, is stated in that change's marked `### Changed`
   entry, so the information is unannounced in Migration rather than absent from the notes, which is the
-  distinction this condition draws. The instance is repaired by adding the step before the cut, in a change of its
-  own. No second unmarked breaking entry appeared: every `!` squash in the window maps to a marked entry.
+  distinction this condition draws. The squash *docs: give the budget refusal a migration step and state set
+  claims by their owner* adds the step. No second unmarked breaking entry appeared: every `!` squash in the window maps to a marked entry.
 
 - **A claim about this tree, written as prose, is held only where its author declared it.** *Class:*
   ACCEPTED DEBT — **reclassified from READY-PATCH on 2026-09-25**, on the measured reason at the end of this
@@ -1417,9 +1417,10 @@ consumer for an undemonstrated deduplication.
   below*, and another names the *`SemanticBoundaries` construction step below*, both pointing into
   `### Migration`, the shape this entry calls fragile; a third, *in the next entry*, stays within one group and
   is the sound kind. `git show v0.7.1:CHANGELOG.md | grep -c 'migration below\|construction step below'`
-  answers `0`, so they are new. Both resolve today. The two are repaired before the cut by naming the step they
-  point at, in a change of its own; the reaction this entry would need, one that tells a reference within a
-  group from one across groups, is the design decision that keeps it open here.
+  answers `0`, so they are new. The squash *docs: give the budget refusal a migration step and state set claims
+  by their owner* repairs both by naming the step they point at, which closes the instances and not this entry:
+  the reaction it would need, one that tells a reference within a group from one across groups, is the design
+  decision that keeps it open here.
 
 - **An item inserted between another item's `///` and its `fn` takes that item's doc.** *Class:* READY-PATCH,
   promoted from WATCH when its trigger fired, as the paragraph closing this entry records.

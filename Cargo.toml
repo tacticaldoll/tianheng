@@ -21,7 +21,8 @@ members = ["crates/xuanji", "crates/xingbiao", "crates/hunyi", "crates/guibiao",
 # keeps this workspace from absorbing their deliberate faults — `members` above is an explicit list
 # with no globs, so nothing under these trees is inferred into it.
 #
-# **`exclude` is a second line for `examples/` only, and cargo offers none for the in-repo fixtures.**
+# **`exclude` is a second line only for a package outside every member's directory, and cargo offers none for
+# the in-repo fixtures.**
 # Measured, on a package carrying no `[workspace]` of its own:
 #
 #   exclude entry                          package location            result
