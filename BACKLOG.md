@@ -1476,40 +1476,6 @@ consumer for an undemonstrated deduplication.
 
 ### READY-PATCH
 
-- **A changelog entry that refers to another by position breaks when the entries are regrouped.** *Class:*
-  READY-PATCH, promoted from WATCH on 2026-10-02 when its trigger fired. *Observed pressure:* six positional
-  cross-references in one `[Unreleased]` section; **three were broken** when
-  found. Two had been wrong before anything moved — "the previous entry's own repair" pointed at
-  `assert_projection_matches`, which has nothing to do with the repair it describes, and "a regression the
-  previous entry introduced" attributed the shared exit-contract backstop to the entry beside it rather than to
-  the backstop. The third was broken by merging the section's duplicate group headings: an entry saying "the
-  entry below" pointed into `Documentation`, which the merge moved from last to first. *Observation source:* the
-  closing review of the 0.5.0 window, sweeping `[Unreleased]` for positional references after the group merge;
-  each antecedent was resolved by reading it rather than assumed. *Current reaction or bound:* none. The group
-  merge's own verification compared the **multiset of lines** before and after, which is correct for "no entry
-  text was lost" and structurally blind to "an entry still points at what it meant". *Risk:* an adopter follows
-  a reference to the wrong entry, or to none — and a changelog is the one document written for people outside
-  this repository. *Promotion trigger:* a positional reference appearing again after this sweep. Not a count:
-  the sweep is the control, exactly as *Every normative SHALL either has a reaction or is a declared bound*
-  sets it up. *Why not simply forbidden:*
-  three of the six resolve soundly and one of them is load-bearing — an entry citing the bullet immediately
-  after it, within one group, which any regroup preserves. And references *into* `Documentation` are now
-  structurally safe, since it is the first group and everything else is below it. A rule refusing "above" and
-  "below" outright would refuse those three, so the rule has to distinguish a reference within a group from one
-  across groups, which is a design decision rather than a grep. *Version class:* documentation only; no
-  published surface. *Authority:* `release-coherence`, which owns what `CHANGELOG.md` must be true of, and the
-  duplicate-group-heading merge whose line-multiset verification is the measured gap.
-
-  **Fired, read 2026-10-02.** A line-joined read of `[Unreleased]` for *above*, *below*, *previous* and *next*
-  finds two references across groups: an entry under `### Semantic` *requires the construction migration
-  below*, and another names the *`SemanticBoundaries` construction step below*, both pointing into
-  `### Migration`, the shape this entry calls fragile; a third, *in the next entry*, stays within one group and
-  is the sound kind. `git show v0.7.1:CHANGELOG.md | grep -c 'migration below\|construction step below'`
-  answers `0`, so they are new. The squash *docs: give the budget refusal a migration step and state set claims
-  by their owner* repairs both by naming the step they point at, which closes the instances and not this entry:
-  the reaction it would need, one that tells a reference within a group from one across groups, is the design
-  decision that keeps it open here.
-
 - **An item inserted between another item's `///` and its `fn` takes that item's doc.** *Class:* READY-PATCH,
   promoted from WATCH when its trigger fired, as the paragraph closing this entry records.
   *Observed pressure:* four instances across two reviews of one pull request, each a new test or helper
@@ -4154,6 +4120,45 @@ Two properties from those windows do not expire with a version, so they stay:
 A closed item leaves the live class it was filed under; it does not stay there struck through. Its
 reproduction record moves here, where closed reproduction records belong, so a live class heading
 cannot read as a queue holding work that is already done.
+
+- ~~**A changelog entry that refers to another by position breaks when the entries are regrouped.**~~ *Class:*
+  READY-PATCH — closed on 2026-10-03 by *fix(kanhe): refuse a CHANGELOG entry that points at another by position*,
+  which takes the route this record declined. The record held that a rule refusing *above* and *below* outright
+  would refuse the sound references too, so the rule had to tell a reference within a group from one across
+  groups. That is a judgement over what a sentence points at, and the reaction asks a question with one syntactic
+  answer instead: in every section still being written, the declared position words are refused, the sound
+  within-group reference and a preposition use included, and the repair is to name the entry meant.
+  `release-coherence` states what it refuses beyond the property. The record as filed: *Observed pressure:* six
+  positional cross-references in one `[Unreleased]` section; **three were broken** when found. Two had been wrong
+  before anything moved — "the previous entry's own repair" pointed at `assert_projection_matches`, which has
+  nothing to do with the repair it describes, and "a regression the previous entry introduced" attributed the
+  shared exit-contract backstop to the entry beside it rather than to the backstop. The third was broken by
+  merging the section's duplicate group headings: an entry saying "the entry below" pointed into `Documentation`,
+  which the merge moved from last to first. *Observation source:* the closing review of the 0.5.0 window, sweeping
+  `[Unreleased]` for positional references after the group merge; each antecedent was resolved by reading it
+  rather than assumed. *Current reaction or bound:* none. The group merge's own verification compared the
+  **multiset of lines** before and after, which is correct for "no entry text was lost" and structurally blind to
+  "an entry still points at what it meant". *Risk:* an adopter follows a reference to the wrong entry, or to none
+  — and a changelog is the one document written for people outside this repository. *Promotion trigger:* a
+  positional reference appearing again after this sweep. Not a count: the sweep is the control, exactly as *Every
+  normative SHALL either has a reaction or is a declared bound* sets it up. *Why not simply forbidden:* three of
+  the six resolve soundly and one of them is load-bearing — an entry citing the bullet immediately after it,
+  within one group, which any regroup preserves. And references *into* `Documentation` are now structurally safe,
+  since it is the first group and everything else is below it. A rule refusing "above" and "below" outright would
+  refuse those three, so the rule has to distinguish a reference within a group from one across groups, which is a
+  design decision rather than a grep. *Version class:* documentation only; no published surface. *Authority:*
+  `release-coherence`, which owns what `CHANGELOG.md` must be true of, and the duplicate-group-heading merge whose
+  line-multiset verification is the measured gap.
+
+  **Fired, read 2026-10-02.** A line-joined read of `[Unreleased]` for *above*, *below*, *previous* and *next*
+  finds two references across groups: an entry under `### Semantic` *requires the construction migration
+  below*, and another names the *`SemanticBoundaries` construction step below*, both pointing into
+  `### Migration`, the shape this entry calls fragile; a third, *in the next entry*, stays within one group and
+  is the sound kind. `git show v0.7.1:CHANGELOG.md | grep -c 'migration below\|construction step below'`
+  answers `0`, so they are new. The squash *docs: give the budget refusal a migration step and state set claims
+  by their owner* repairs both by naming the step they point at, which closes the instances and not this entry:
+  the reaction it would need, one that tells a reference within a group from one across groups, is the design
+  decision that keeps it open here.
 
 - ~~**The ambient-ignore guard reads files where its property belongs to call sites, and says something false when
   one file holds both kinds.**~~ *Class:* READY-PATCH — closed on 2026-10-03 by *test(kanhe): judge the
