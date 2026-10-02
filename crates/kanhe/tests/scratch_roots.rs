@@ -6,8 +6,8 @@
 //! construction and not by the labels their callers happened to choose. A tracked Rust file that asks the
 //! system for its temporary directory builds a root outside that, and a root there is claimable by anyone who
 //! can write the directory and fails with it when the directory stops being writable. A tracked Rust file that
-//! composes a name under `xingbiao::scratch_base` builds a root the counter does not name, and two tests that
-//! chose one label removed each other's files.
+//! composes a name under `xingbiao::scratch_base` builds a root the counter does not name, whose name is unique
+//! only while no two callers choose one label.
 //!
 //! **This file answers two questions — which tracked files construct a root from the system, and which name
 //! the helper's base directory instead of taking a root from it — and never whether a run is isolated, nor

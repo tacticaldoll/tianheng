@@ -1055,8 +1055,8 @@ are the drift a seam is supposed to end.
 **The reaction.** A fixture root is made by `xingbiao::scratch_root(label)`, a guard removed on drop that names the
 root `<label>-<pid>-<counter>` under `tmp/` beside the running test binary's profile directory. The counter makes two
 roots distinct whatever labels their callers chose, so a caller composes no name, and
-`crates/kanhe/tests/scratch_roots.rs` holds every tracked Rust file to that with two questions, each one identifier
-a parse tree answers: none asks the system for its temporary directory or reads `TMPDIR`, and none outside
+`crates/kanhe/tests/scratch_roots.rs` holds every tracked Rust file to that with two questions a parse tree answers:
+none asks the system for its temporary directory or reads `TMPDIR`, and none outside
 `crates/xingbiao` names `scratch_base` or `scratch_ceiling`, except the files its second declared set names with why.
 `kanhe`'s normal edges may not reach `xingbiao`, so `scratch_ceiling` restates the layout rule for git's ceiling and
 for the publish gate's signature scratch, and a direction holds the restatement equal to the helper's; those files are
@@ -1074,7 +1074,7 @@ writable.
 built from a path another function passes in, a root composed from a path that spells neither word (the executable's
 path, `CARGO_TARGET_TMPDIR`), a second naming in a file the second declared set already names, `temp_dir` named in a
 comment or a string, and `TMPDIR` set on a child's environment. The temporary files a child process writes for
-themselves are outside it and are filed in `BACKLOG.md`.
+itself are outside it and are filed in `BACKLOG.md`.
 
 ## Versioning — SemVer honesty (the modou lesson)
 

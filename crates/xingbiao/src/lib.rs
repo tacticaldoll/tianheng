@@ -517,9 +517,9 @@ pub fn claim_scratch(path: &Path) -> std::io::Result<()> {
 /// temporary directory, because a fallback is a second behaviour that depends on the environment.
 ///
 /// **Fixture code takes a root from [`scratch_root`] and does not name a path under this.** A name composed
-/// from a label alone is unique only while no two callers choose one label, and two tests that did removed
-/// each other's files; [`scratch_root`] appends a per-process counter. A repository check holds every file
-/// outside this crate to that.
+/// from a label alone is unique only while no two callers choose one label; [`scratch_root`] appends a
+/// per-process counter. A repository check holds every file outside this crate to that, apart from a declared
+/// set that says why.
 #[doc(hidden)]
 pub fn scratch_base() -> PathBuf {
     let exe = std::env::current_exe().unwrap_or_else(|err| {
