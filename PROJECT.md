@@ -243,8 +243,10 @@ Record significant decisions here (the *why*; specs and code carry the *what*).
   The projection gained nineteen lines, fourteen of them these two entries, with their own targets, rules and
   severities. What was recorded as a relocation was a formation, and a formation carries its own acceptance.
 
-  Accepted as declared: **繩墨 may depend on 天衡 and serde_json only; 勘合 on 繩墨, 天衡 and serde_json
-  only.** Both at `enforce`. Both crates ship in no package, so no adopter is reached either way. The cost
+  Accepted as declared: **each one's direct normal edges are the closed allowlist its own boundary names**,
+  both at `enforce` — `AGENTS.self-law.md` projects the two memberships and
+  `crates/kanhe/tests/self_law_amendment.rs` holds them, so neither is restated here to drift away from the
+  law. Both crates ship in no package, so no adopter is reached either way. The cost
   accepted with them is the ordinary one: a later edge from either to a dimension is an amendment, not a
   commit.
 

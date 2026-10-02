@@ -1183,6 +1183,15 @@ consumer for an undemonstrated deduplication.
   a site the always-Some sweep of 2026-09-01 did not report stood when it ran is not reachable from a history that
   begins at `v0.6.0`. The per-entry record is in the squash that carries this sentence.
 
+  The 2026-10-03 reading covered `v0.7.1` through the squash *fix: refuse a fixture label the base would not
+  contain, and narrow two over-wide claims*, reading every live entry whole: no entry changed state. The
+  set-membership sweep it carries found one false claim — `PROJECT.md`'s acceptance of the 繩墨/勘合 dependency
+  boundaries restated 勘合's allowlist without `toml_edit`, and now names the law as its owner instead of
+  restating it. An action falling behind an advisory, the validator's payload, a `TMPDIR` run for a child's
+  write, and a clause-by-clause audit of the window's new `SHALL`s were unobserved. The never-released-version
+  sweep is owed once the workspace version moves, so it is re-run in the squash that moves it rather than
+  here. The per-entry record is in the squash that carries this sentence.
+
 - **A codename index for a defect lives in the half of the corpus `doc_provenance` declares out of scope,
   and the token that would find it is shared with a measurement that must stay.** *Class:* WATCH — the
   class is emptied and the emptying has no reaction behind it. *Observed pressure:* swept over every
