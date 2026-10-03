@@ -893,7 +893,7 @@ fn a_path_remapped_child_nested_in_an_inline_parent_is_followed() {
     );
     assert_eq!(
         remapped,
-        vec![(target.clone(), "crate::parent::child".to_string())],
+        vec![(target, "crate::parent::child".to_string())],
         "resolved from src/parent/, not src/: {remapped:?}"
     );
     assert!(

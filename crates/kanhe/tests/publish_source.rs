@@ -1005,9 +1005,8 @@ fn crowded(name: &str, count: usize) -> (xingbiao::ScratchRoot, PathBuf) {
 fn a_repository_whose_ignored_set_outgrows_a_pipe_is_still_answered() {
     let (_root, repo) = crowded("crowded-pipe", OUTGROWS_A_PIPE);
     let (tx, rx) = std::sync::mpsc::channel();
-    let judging = repo.clone();
     std::thread::spawn(move || {
-        let _ = tx.send(hidden_by_the_checkout(&judging).map_err(|refusal| refusal.message));
+        let _ = tx.send(hidden_by_the_checkout(&repo).map_err(|refusal| refusal.message));
     });
     let answered = rx.recv_timeout(std::time::Duration::from_secs(60));
     let hidden = match answered {

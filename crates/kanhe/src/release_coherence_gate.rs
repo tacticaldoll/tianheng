@@ -1816,7 +1816,7 @@ pub(crate) fn require_example_pins(
                 // The package, and the key where they differ: a renamed dependency reported by its key alone
                 // sends a reader looking for a crate the manifest does not name.
                 let named = if package == key {
-                    package.clone()
+                    package
                 } else {
                     format!("{package} (as `{key}`)")
                 };

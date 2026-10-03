@@ -201,7 +201,7 @@ fn a_released_section_rewritten_after_its_tag_is_a_violation() {
         .find(&heading)
         .expect("the fixture dates its release section");
     let body_start = at + text[at..].find("\n\n").expect("the heading ends its line") + 2;
-    let mut rewritten = text.clone();
+    let mut rewritten = text;
     rewritten.insert_str(body_start, "- **Written in after the release.**\n");
     std::fs::write(&path, rewritten).expect("the fixture changelog is writable");
     // Amended rather than committed on top, so the release commit stays HEAD and the state stays Snapshot.

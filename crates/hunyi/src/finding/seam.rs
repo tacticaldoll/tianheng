@@ -60,7 +60,7 @@ pub(crate) enum MemberKind {
 }
 
 impl MemberKind {
-    pub(super) fn as_str(&self) -> &'static str {
+    pub(super) fn as_str(self) -> &'static str {
         match self {
             Self::Field => "field",
             Self::Variant => "variant",
