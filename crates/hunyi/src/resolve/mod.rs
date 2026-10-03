@@ -303,7 +303,7 @@ fn collect_use_tree(tree: &syn::UseTree, prefix: String, map: &mut UseMap) {
             let ident = strip_raw(&name.ident.to_string());
             if ident == "self" {
                 if let Some(last) = prefix.rsplit("::").next().filter(|s| !s.is_empty()) {
-                    push_candidate(map, last.to_string(), prefix.clone());
+                    push_candidate(map, last.to_string(), prefix);
                 }
             } else {
                 push_candidate(map, ident.clone(), join(&prefix, &ident));
@@ -315,7 +315,7 @@ fn collect_use_tree(tree: &syn::UseTree, prefix: String, map: &mut UseMap) {
             if alias == "_" {
             } else if ident == "self" {
                 if !prefix.is_empty() {
-                    push_candidate(map, alias, prefix.clone());
+                    push_candidate(map, alias, prefix);
                 }
             } else {
                 push_candidate(map, alias, join(&prefix, &ident));

@@ -31,6 +31,10 @@ them.
 
 ## [Unreleased]
 
+### Hygiene
+
+- Eliminate redundant clones and optimize value passing for a `Copy` type across the workspace.
+
 ## [0.8.0] - 2026-10-03
 
 ### Semantic
