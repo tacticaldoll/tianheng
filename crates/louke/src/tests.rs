@@ -186,14 +186,12 @@ fn registered_crossing_identity_survives_registry_reorder_and_unrelated_insertio
         .unwrap()
         .unwrap()
         .0
-        .id()
-        .clone();
+        .id();
     let reordered_id = check_crossing("seam", TypeId::of::<Infra>(), &reordered)
         .unwrap()
         .unwrap()
         .0
-        .id()
-        .clone();
+        .id();
     assert_eq!(first_id, reordered_id);
 }
 

@@ -3192,7 +3192,7 @@ fn an_inline_mods_absolute_path_base_is_inherited_by_its_children() {
         Outcome::Violations(report) => report
             .violations
             .iter()
-            .find_map(|v| v.rule.contains("string literal").then(|| v.id().clone()))
+            .find_map(|v| v.rule.contains("string literal").then(|| v.id()))
             .unwrap_or_else(|| panic!("{label}: expected an un-auditable probe violation")),
         other => panic!("{label}: expected Violations, got {other:?}"),
     };
@@ -3251,7 +3251,7 @@ fn a_nested_absolute_path_literal_now_agrees_across_checkouts() {
         Outcome::Violations(report) => report
             .violations
             .iter()
-            .find_map(|v| v.rule.contains("string literal").then(|| v.id().clone()))
+            .find_map(|v| v.rule.contains("string literal").then(|| v.id()))
             .unwrap_or_else(|| panic!("{label}: expected an un-auditable probe violation")),
         other => panic!("{label}: expected Violations, got {other:?}"),
     };

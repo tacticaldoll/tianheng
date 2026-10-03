@@ -1611,7 +1611,7 @@ fn a_participant_carrying_no_subject_cannot_be_folded_into_a_clean_verdict() {
         ),
         (
             "beside another carrying nothing",
-            merge_outcomes(silent.clone(), silent.clone()),
+            merge_outcomes(silent.clone(), silent),
         ),
     ] {
         match merged {
@@ -2581,7 +2581,7 @@ fn nearest_manifest_walks_up_to_the_nearest_cargo_toml() {
     // past the first hit to the outer one.
     std::fs::write(inner.join("Cargo.toml"), "[workspace]\n").expect("write inner manifest");
     assert_eq!(
-        nearest_manifest_from(leaf.clone()),
+        nearest_manifest_from(leaf),
         Some(inner.join("Cargo.toml")),
         "the nearest manifest wins over a farther ancestor",
     );

@@ -856,7 +856,7 @@ pub(super) fn an_unreadable_reachable_source_file_is_a_scan_error() {
     let mut violations = Vec::new();
     let refusal = check_module_boundary(&metadata, &boundary, &mut violations)
         .expect_err("an unreadable reachable file must be a scan error");
-    assert!(refusal.to_string().contains("other.rs"), "{refusal}");
+    assert!(refusal.contains("other.rs"), "{refusal}");
 }
 
 #[test]
